@@ -28,8 +28,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "black==24.3.0",
-    "isort==5.13.2",
+    "black==26.5.1",
+    "isort==9.0.1",
     "mypy>=1.9",
     "pre-commit>=3.7",
     "pytest>=8.0",
