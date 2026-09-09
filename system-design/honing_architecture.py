@@ -99,7 +99,7 @@ ax.text(50, 79.3, "HONING — System Design", ha="center", fontsize=19, fontweig
 ax.text(
     50,
     76.6,
-    "Reef spine (Scenario / Gate / Commit / versioned releases)  +  Prune plane  +  "
+    "Versioned spine (Scenario / Gate / Commit / releases)  +  Prune plane  +  "
     "Algo x UpdatePolicy x Rollout matrix  +  3-phase harness co-adaptation",
     ha="center",
     fontsize=9.5,
