@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: {interval: monthly}
+    commit-message: {prefix: "ci"}
+  - package-ecosystem: pip
+    directory: "/"
+    schedule: {interval: monthly}
+    commit-message: {prefix: "build"}
+    groups:
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]

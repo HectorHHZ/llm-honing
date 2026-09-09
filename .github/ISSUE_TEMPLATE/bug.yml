@@ -1,0 +1,30 @@
+name: Bug report
+description: Reproducible incorrect behavior
+title: "[Bug] "
+labels: ["type: bug", "status: needs-triage"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: The incorrect behavior, and what you expected instead.
+    validations: {required: true}
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The smallest complete steps, config, or script that shows the problem.
+      render: shell
+    validations: {required: true}
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Honing commit, Python version, OS, accelerator, and relevant package versions.
+    validations: {required: true}
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output. Remove credentials, tokens, and private data first.
+      render: shell

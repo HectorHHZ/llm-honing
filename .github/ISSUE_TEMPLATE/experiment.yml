@@ -1,0 +1,28 @@
+name: Experiment
+description: A benchmark, reproduction, or empirical question
+title: "[Experiment] "
+labels: ["type: experiment", "status: needs-triage"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: The empirical question, stated so that a result can answer it either way.
+    validations: {required: true}
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: Pinned model, dataset, workload, baseline, hardware, and seeds.
+    validations: {required: true}
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Metrics and success criteria
+      description: What is measured, and what result would settle the question.
+    validations: {required: true}
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Retained evidence
+      description: Where the raw runs, logs, and artifacts will be kept.

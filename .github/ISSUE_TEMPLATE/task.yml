@@ -1,0 +1,17 @@
+name: Task
+description: Scoped refactoring, cleanup, documentation, CI, or project work
+title: "[Task] "
+labels: ["type: task", "status: needs-triage"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What should change, and what is explicitly out of scope.
+    validations: {required: true}
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      description: The observable condition that closes this task.
+    validations: {required: true}

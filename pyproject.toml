@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-honing"
+description = "Continual specialization infra: a large model that sheds its own dead weight while it learns"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dynamic = ["version"]
+authors = [{ name = "Haoze He" }]
+keywords = ["llm", "pruning", "post-training", "moe", "continual-learning", "distillation"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    # sync with requires-python and the CI matrix in .github/workflows/ci.yml
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "black==24.3.0",
+    "isort==5.13.2",
+    "mypy>=1.9",
+    "pre-commit>=3.7",
+    "pytest>=8.0",
+    "pytest-cov",
+    "ruff==0.16.6",
+]
+# Diagram sources under system-design/ render with matplotlib alone.
+docs = ["matplotlib>=3.8"]
+
+[project.urls]
+Homepage = "https://github.com/HectorHHZ/llm-honing"
+Issues = "https://github.com/HectorHHZ/llm-honing/issues"
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0.dev0"
+
+[tool.setuptools.packages.find]
+include = ["honing", "honing.*"]
+
+[tool.isort]
+profile = "black"          # black-compatible
+line_length = 119          # keep in sync with [tool.black] and [tool.ruff]
+py_version = 310
+known_first_party = ["honing"]
+src_paths = ["honing", "tests"]
+
+[tool.black]
+line_length = 119
+
+[tool.ruff]
+target-version = "py310"   # sync with requires-python
+line-length = 119          # sync with [tool.black] and [tool.isort]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "B",       # flake8-bugbear
+    "UP",      # pyupgrade
+    "C4",      # flake8-comprehensions
+    "SIM",     # flake8-simplify
+    "RET",     # flake8-return
+    "PERF",    # perflint
+    "LOG",     # flake8-logging
+    "N",       # pep8-naming
+    "RUF",     # ruff
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Diagram sources set the matplotlib backend before importing pyplot, which
+# necessarily puts an import after a statement.
+"system-design/*.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["honing"]
+strict_equality = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "unit: no I/O beyond a temporary directory; runs everywhere",
+    "integration: several components together; may start subprocesses",
+    "gpu: requires an accelerator; skipped in CI",
+    "slow: takes more than roughly ten seconds",
+]
+
+[tool.coverage.run]
+source = ["honing"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true

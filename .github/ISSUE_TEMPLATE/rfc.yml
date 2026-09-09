@@ -1,0 +1,44 @@
+name: RFC proposal
+description: A durable architecture, interface, or policy decision
+title: "[RFC] "
+labels: ["type: rfc", "status: needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue *is* the RFC and its decision record. It must be explicitly
+        accepted before its implementation counts as approved direction.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is wrong or missing today, and why the current design cannot absorb it.
+    validations: {required: true}
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The design. Include the protocols, types, and configuration it introduces or changes.
+    validations: {required: true}
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Effect on the design principles
+      description: How this interacts with P1-P5 in system-design/system-design.md. Say which, if any, it weakens.
+    validations: {required: true}
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: Effects on persisted formats, HoneRelease, configuration, and existing deployments.
+    validations: {required: true}
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else was weighed, and why this option wins.
+    validations: {required: true}
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and open questions
