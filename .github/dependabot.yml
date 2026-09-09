@@ -1,13 +1,31 @@
 version: 2
 updates:
+  # One grouped pull request per ecosystem per month. Ungrouped updates opened
+  # five separate pull requests for the initial commit alone, which is more
+  # review surface than a dependency bump is worth.
   - package-ecosystem: github-actions
     directory: "/"
     schedule: {interval: monthly}
     commit-message: {prefix: "ci"}
+    groups:
+      github-actions:
+        patterns: ["*"]
+
   - package-ecosystem: pip
     directory: "/"
     schedule: {interval: monthly}
     commit-message: {prefix: "build"}
     groups:
-      python-minor-and-patch:
-        update-types: ["minor", "patch"]
+      python-tooling:
+        patterns: ["*"]
+
+  # The formatter versions live in two files (see tests/test_tooling_pins.py).
+  # Without this ecosystem the pip updates above would move one copy and leave
+  # the other behind, so CI and a developer's machine would format differently.
+  - package-ecosystem: pre-commit
+    directory: "/"
+    schedule: {interval: monthly}
+    commit-message: {prefix: "build"}
+    groups:
+      pre-commit-hooks:
+        patterns: ["*"]

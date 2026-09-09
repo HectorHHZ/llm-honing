@@ -40,7 +40,12 @@ jobs:
   commit-subject:
     # A squash merge derives the commit subject from the pull request title, so
     # the title is what has to satisfy the commit rules.
-    if: github.event_name == 'pull_request'
+    #
+    # A bot's title is written by the tool, not by a contributor, and its wording
+    # is not configurable: Dependabot always capitalizes "Bump ...". That is the
+    # same reason check_commit_message.py exempts the subjects git generates, so
+    # bot-authored pull requests are exempt here rather than permanently red.
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

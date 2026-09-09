@@ -111,6 +111,10 @@ Rules the CI check enforces:
 Keep each commit a single logical change. Rebase to clean up work-in-progress
 commits before requesting review; do not merge `main` into your branch.
 
+Bot-authored pull requests are exempt from the subject check. A dependency
+bot's title is written by the tool and its wording is not configurable, for the
+same reason the checker exempts the subjects git itself generates.
+
 ## Pull requests
 
 Branch from `main` and name the branch `<type>/<short-slug>`, e.g.
