@@ -16,10 +16,6 @@ Three framings of the same mechanism:
 | **Practitioners** | A general model becomes a specialized model through use. It keeps the capacity that matters, drops what it doesn't, and delivers similar or better in-domain intelligence at a fraction of serving cost. |
 | **Decision makers** | Your AI gets smarter for your business while getting cheaper to run — instead of paying forever for an oversized general model. Because honing runs on your own servers, proprietary data never leaves your infrastructure. |
 
-> **Status.** This directory is a design specification, not an implementation. Interfaces
-> below are the contract to build against. Comparison claims about Reef are verified
-> against its source at `016b4670`; see [Where Honing goes beyond Reef](#where-honing-goes-beyond-reef).
-
 ---
 
 ## The five planes
