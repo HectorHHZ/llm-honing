@@ -16,7 +16,8 @@ classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
+    # No license classifier: PEP 639 superseded it, and setuptools rejects a
+    # classifier alongside the `license` expression above.
     # sync with requires-python and the CI matrix in .github/workflows/ci.yml
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
