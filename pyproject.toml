@@ -28,8 +28,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "black==24.3.0",
-    "isort==5.13.2",
+    "black==26.5.1",
+    "isort==9.0.1",
     "mypy>=1.9",
     "pre-commit>=3.7",
     "pytest>=8.0",
@@ -58,6 +58,10 @@ src_paths = ["honing", "tests"]
 
 [tool.black]
 line_length = 119
+# Without this, black infers a target from the running interpreter and formats
+# for a Python newer than the project supports; 26.5.1 warns that its own AST
+# safety check cannot then verify the result. Sync with requires-python.
+target-version = ["py310"]
 
 [tool.ruff]
 target-version = "py310"   # sync with requires-python
