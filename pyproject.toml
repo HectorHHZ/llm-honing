@@ -43,6 +43,13 @@ docs = ["matplotlib>=3.8"]
 Homepage = "https://github.com/HectorHHZ/llm-honing"
 Issues = "https://github.com/HectorHHZ/llm-honing/issues"
 
+# Slime is the one training-framework dependency, pinned by commit. It is installed
+# only inside the supported GPU image, with `uv pip install --no-deps --group runtime`,
+# so it does not replace that image's CUDA-specific torch, SGLang, and Megatron.
+# Only modules under honing/backends/ may import it (tests/contracts/test_boundaries.py).
+[dependency-groups]
+runtime = ["slime @ git+https://github.com/THUDM/slime.git@41014d1f29e201137fdffce737bb8bac65bc5219"]
+
 [tool.setuptools_scm]
 fallback_version = "0.0.0.dev0"
 
