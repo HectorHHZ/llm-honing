@@ -13,7 +13,7 @@ body:
     id: proposal
     attributes:
       label: Proposed capability
-      description: What it would do, and which plane owns it (core / compression / train / data / harness / campaign / serve).
+      description: What it would do, and which plane owns it (prune / train / data / harness / serve / core).
     validations: {required: true}
   - type: textarea
     id: alternatives

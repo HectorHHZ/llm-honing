@@ -18,5 +18,5 @@ def test_the_package_docstring_names_the_planes() -> None:
     # The module docstring is the first thing a reader of the source sees; it
     # must stay in step with the planes the specification defines.
     docstring = honing.__doc__ or ""
-    for plane in ("core", "compression", "train", "data", "harness", "campaign", "serve"):
+    for plane in ("prune", "train", "data", "harness", "serve"):
         assert f"``{plane}``" in docstring, f"the {plane!r} plane is not described"

@@ -3,12 +3,10 @@
 Thank you for helping build Honing. Contributions can include bug reports,
 documentation, tests, benchmarks, code, design proposals, and reviews.
 
-The specification in [`system-design/`](system-design/) is the contract
-implementations are built against. The core contracts and a walking skeleton
-that runs a campaign across every plane with fakes exist today; each plane is
-made real by replacing its fake while the skeleton keeps passing. A change to
-behavior and a change to the specification are reviewed with the same
-seriousness.
+Honing is currently at the design stage: the specification in
+[`system-design/`](system-design/) is the contract implementations are built
+against. A change to behavior and a change to that specification are reviewed
+with the same seriousness.
 
 ## Before you start
 
@@ -34,17 +32,15 @@ type prefix:
 | `[RFC]` | A durable architecture, interface, or policy decision |
 
 Write the rest of the title as a concise outcome, normally beginning with a
-verb: `[Feature] Add expert-drop scoring over router activation counts`. Do not
-add a second bracketed tag for an area or status — labels carry those
-dimensions:
+verb: `[Feature] Add expert-drop pruning method`. Do not add a second bracketed
+tag for an area or status — labels carry those dimensions:
 
-- `area: core` — contracts, gate, selectors, release chain
-- `area: compression` — pruning scorers, selectors, and editors; quantization; plans
-- `area: train` — algorithms, update policies, numerics, and training backends
+- `area: prune` — pruning methods, plans, manifests, and the standalone CLI
+- `area: train` — algorithms, update policies, and training backends
 - `area: data` — data providers, contracts, and dataset manifests
-- `area: harness` — harness specs, episode runners, and evolution methods
-- `area: campaign` — scheduling and the ordering rules every move passes
+- `area: harness` — harness evolution and co-adaptation phases
 - `area: serve` — serving, runtimes, and telemetry collection
+- `area: core` — scenario lifecycle, gate, commit protocol, release chain
 - `area: docs` — design specification and user documentation
 - `area: ci` — automation, CI, and developer tooling
 
@@ -56,12 +52,9 @@ Security vulnerabilities do not belong in public issues. Follow
 Open an RFC issue before implementing a change that:
 
 - adds a new top-level package under `honing`;
-- adds or changes a protocol in `honing/core/protocols.py` (`ModelSource`,
-  `DataProvider`, `RolloutProvider`, `Trainer`, `ImportanceScorer`,
-  `PruneSelector`, `ModelEditor`, `Quantizer`, `EpisodeRunner`,
-  `EvolveMethod`, `CoAdaptScheduler`, and the rest);
-- changes a persisted format, a wire contract, or the shape of `HoneRelease`;
-- adds a training-framework dependency, or imports one outside `honing/backends/`;
+- adds or changes a plane's public protocol (`PruneMethod`, `DataProvider`,
+  `UpdatePolicy`, `RolloutProvider`, `ModelSource`);
+- changes a persisted format, wire contract, or the shape of `HoneRelease`;
 - alters one of the five design principles in `system-design/system-design.md`; or
 - establishes a project-wide policy that will constrain later work.
 
@@ -99,15 +92,13 @@ Types:
 | `ci` | Workflows and developer automation |
 | `chore` | Routine maintenance with no source effect |
 
-Scopes are the plane or area the change belongs to: `core`, `compression`,
-`train`, `data`, `harness`, `campaign`, `serve`, `design` (the specification
-under `system-design/`), `docs`, and `ci`. Omit the scope when a change is
-genuinely repository-wide.
+Scopes are the plane or area the change belongs to: `prune`, `train`, `data`,
+`harness`, `serve`, `core`, `design` (the specification under `system-design/`),
+`docs`, and `ci`. Omit the scope when a change is genuinely repository-wide.
 
 ```
-feat(compression): add expert-drop scoring over router activation counts
+feat(prune): add expert-drop analysis over router activation counts
 fix(train): reject a sparse-mask policy whose selection spans pruned experts
-feat(campaign): refuse a quantize step whose scheme differs from qat
 docs(design): record the co-adaptation invariant for harness releases
 ```
 
@@ -127,7 +118,7 @@ same reason the checker exempts the subjects git itself generates.
 ## Pull requests
 
 Branch from `main` and name the branch `<type>/<short-slug>`, e.g.
-`feat/expert-drop` or `docs/compression-plane-contract`. The pull request title
+`feat/expert-drop` or `docs/prune-plane-contract`. The pull request title
 follows the same Conventional Commits format as a commit subject, because the
 merge commit is derived from it.
 
@@ -172,16 +163,6 @@ uv pip install -e ".[dev]"
 pre-commit install
 ```
 
-The base install and the full test suite need no GPU and no training framework.
-Slime, the one training dependency, is pinned by commit in the `runtime`
-dependency group and is installed only inside the supported GPU image:
-
-```bash
-uv pip install --no-deps --group runtime
-```
-
-`--no-deps` keeps the image's CUDA-specific torch, SGLang, and Megatron in place.
-
 The usual local checks, which are also what CI runs:
 
 ```bash
@@ -209,30 +190,21 @@ hand-format against these tools.
 Beyond mechanical style, the conventions that matter most here:
 
 - **Make contracts explicit.** A plane's public surface is a named `Protocol`
-  in `honing/core/protocols.py`, not a bag of callables. State the invariant a
-  class maintains in its docstring.
-- **Respect the dependency boundary.** `honing/core` imports only the standard
-  library, planes depend on `honing.core` and never on each other, and only
-  `honing/backends/` may import a training framework. `tests/contracts/` checks
-  all three.
-- **Refuse early.** A combination that cannot work is a `ContractError` at
-  construction or a `CampaignRuleError` before any weights are touched, never a
-  failure hours into a job.
+  with meaningful methods, not a bag of callables. State the invariant a class
+  maintains in its docstring.
 - **Annotate new and changed interfaces.** Do not reach for `Any` to avoid
   describing a type unless the boundary is genuinely dynamic.
 - **Comment the *why*.** A comment that restates the code earns nothing; a
   comment recording why an ordering or a rejection is necessary earns its place.
+- **Keep I/O and framework integration at the edges,** so that core behavior is
+  testable with ordinary Python objects.
 - **Name for readers.** Include units or representation where ambiguity could
-  cause a bug: `timeout_seconds`, `keep_ratio`, `checkpoint_path`. Prefer plain
-  terms such as manifest, record, and metadata over coined vocabulary.
+  cause a bug: `timeout_seconds`, `keep_ratio`, `checkpoint_path`.
 
 ## Tests
 
-Every behavior change needs a test, and every public protocol needs a fake in
-`tests/fakes/` and an entry in `tests/contracts/test_core_protocols.py`. A new
-plane feature should keep `tests/test_walking_skeleton.py` passing; replacing a
-fake with a real implementation is how a plane becomes real. Tests carry one of
-the markers declared in `pyproject.toml`:
+Every behavior change needs a test, and every public protocol needs a contract
+test. Tests carry one of the markers declared in `pyproject.toml`:
 
 | Marker | Meaning |
 | --- | --- |

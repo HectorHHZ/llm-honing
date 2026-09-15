@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 TYPES = ("feat", "fix", "docs", "test", "refactor", "perf", "build", "ci", "chore")
-SCOPES = ("compression", "train", "data", "harness", "campaign", "serve", "core", "design", "docs", "ci")
+SCOPES = ("prune", "train", "data", "harness", "serve", "core", "design", "docs", "ci")
 MAX_SUBJECT = 72
 
 #: type(scope)!: summary — the scope and the breaking-change marker are optional.
