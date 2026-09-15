@@ -6,7 +6,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
 
 OUT = Path(__file__).with_suffix(".png")
 
@@ -14,8 +14,9 @@ OUT = Path(__file__).with_suffix(".png")
 C = {
     "data": ("#dbe7f4", "#3d6fa8"),  # blue
     "train": ("#fdeeda", "#d07b19"),  # orange
-    "prune": ("#fbe3e0", "#c0392b"),  # red
+    "compression": ("#fbe3e0", "#c0392b"),  # red
     "harness": ("#e0f0ee", "#2a8a80"),  # teal
+    "campaign": ("#fdf5d3", "#a67c00"),  # amber
     "gate": ("#e6f0dd", "#4c8a35"),  # green
     "serve": ("#ececec", "#7f7f7f"),  # gray (reserved)
     "model": ("#efe6f5", "#7d4fa0"),  # purple
@@ -23,14 +24,14 @@ C = {
     "sub": "#57606a",
 }
 
-fig, ax = plt.subplots(figsize=(17.5, 12.6), dpi=180)
+fig, ax = plt.subplots(figsize=(17.5, 13.4), dpi=180)
 ax.set_xlim(0, 100)
-ax.set_ylim(0, 81)
+ax.set_ylim(-3.5, 86)
 ax.axis("off")
 fig.patch.set_facecolor("white")
 
 
-def box(x, y, w, h, kind, title, lines=(), dashed=False, tfs=10.5, lfs=7.9, lh=1.5):
+def box(x, y, w, h, kind, title, lines=(), dashed=False, tfs=10.5, lfs=7.6, lh=1.45):
     fc, ec = C[kind]
     ax.add_patch(
         FancyBboxPatch(
@@ -46,13 +47,13 @@ def box(x, y, w, h, kind, title, lines=(), dashed=False, tfs=10.5, lfs=7.9, lh=1
         )
     )
     ax.text(
-        x + w / 2, y + h - 1.1, title, ha="center", va="top", fontsize=tfs, fontweight="bold", color=C["ink"], zorder=3
+        x + w / 2, y + h - 1.0, title, ha="center", va="top", fontsize=tfs, fontweight="bold", color=C["ink"], zorder=3
     )
     for i, ln in enumerate(lines):
-        ax.text(x + w / 2, y + h - 3.0 - i * lh, ln, ha="center", va="top", fontsize=lfs, color=C["sub"], zorder=3)
+        ax.text(x + w / 2, y + h - 2.8 - i * lh, ln, ha="center", va="top", fontsize=lfs, color=C["sub"], zorder=3)
 
 
-def arrow(p0, p1, color, label=None, rad=0.0, lw=2.0, dashed=False, lab=(0, 0), fs=8.0):
+def arrow(p0, p1, color, label=None, rad=0.0, lw=2.0, dashed=False, lab=(0, 0), fs=7.8):
     ax.add_patch(
         FancyArrowPatch(
             p0,
@@ -94,13 +95,29 @@ def polyline(pts, color, dashed=False, lw=1.9):
     )
 
 
+def note(x, y, text, color, fs=7.4, rotation=0):
+    ax.text(
+        x,
+        y,
+        text,
+        ha="center",
+        va="center",
+        fontsize=fs,
+        color=color,
+        fontweight="bold",
+        rotation=rotation,
+        zorder=5,
+        bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "none", "alpha": 0.9},
+    )
+
+
 # ---------------------------------------------------------------- title
-ax.text(50, 79.3, "HONING — System Design", ha="center", fontsize=19, fontweight="bold", color=C["ink"])
+ax.text(50, 84.6, "HONING — System Design", ha="center", fontsize=19, fontweight="bold", color=C["ink"])
 ax.text(
     50,
-    76.6,
-    "Versioned spine (Scenario / Gate / Commit / releases)  +  Prune plane  +  "
-    "Algo x UpdatePolicy x Rollout matrix  +  3-phase harness co-adaptation",
+    82.0,
+    "Planes meet only through honing.core contracts  ·  every step is one UpdateCandidate  ·  "
+    "one gate  ·  one release chain  ·  Slime is the one training dependency",
     ha="center",
     fontsize=9.5,
     color=C["sub"],
@@ -110,269 +127,285 @@ ax.text(
 # ---------------------------------------------------------------- top row
 box(
     2,
-    64,
-    26.5,
-    10.5,
+    68.5,
+    22,
+    11,
     "data",
     "DATA PLANE",
     [
-        "two sources, one TrainingBatch:",
-        "FeedbackProvider (online):",
-        "records + receipts + /hone/report",
-        "DatasetProvider (offline):",
-        "SFT · preference pairs · distill sets",
-        "DataContract checked at boot",
+        "one TrainingBatch, two sources:",
+        "DatasetProvider (offline)",
+        "SFT · preferences · distill sets",
+        "FeedbackProvider (online)",
+        "RolloutProvider: samples name",
+        "their release and harness",
     ],
-    lfs=7.4,
-    lh=1.32,
+    lfs=7.2,
+    lh=1.3,
 )
 
 box(
-    31.5,
-    64,
-    28.5,
-    10.5,
+    26.5,
+    68.5,
+    33,
+    11,
     "model",
     "MODEL SOURCE",
     [
-        "DirectCheckpoint(",
-        "    open-source ckpt )   — train as-is",
-        "PrunedInit(",
-        "    large MoE → one-shot prune )",
-        "either way: init model = release 0",
+        "open checkpoint, used as-is",
+        "or CompressedInit: a large model thinned first",
+        "",
+        "master weights: HF safetensors",
+        "(the one format every editor and trainer reads)",
     ],
-    lfs=7.4,
+    lfs=7.3,
     lh=1.32,
 )
 
+# ---------------------------------------------------------------- compression plane (right column)
+box(64, 44.5, 34, 35, "compression", "COMPRESSION PLANE   (standalone)", [], tfs=10.5)
 box(
-    67,
-    47,
-    31,
-    27.5,
-    "prune",
-    "PRUNE PLANE   (standalone system)",
+    66,
+    58.5,
+    30,
+    17.5,
+    "compression",
+    "PRUNE",
     [
-        "PruneMethod registry:",
-        "expert-drop (MoE router stats) · layer-drop",
-        "width / head · structured sparsity",
-        "distill-then-prune",
-        "",
-        "analyze(model, telemetry) → PrunePlan",
-        "(declarative, audited manifest)",
-        "modes:  one-shot CLI | init pipeline | in-loop",
-        "HonePolicy: trigger · max_regression",
-        "· recovery · capacity floor",
+        "ImportanceScorer → PruneSelector → ModelEditor",
+        "signals: telemetry · calibration · weights · gradients",
+        "removes: layers · experts · heads",
+        "FFN / hidden channels · parameter masks",
+        "PrunePlan (before, after, scores) kept on the release",
+        "v1: uniform layers, refused before editing",
+        "recovery = a Train job (RecoverySpec)",
     ],
-    lfs=7.6,
-    lh=1.42,
+    tfs=9.2,
+    lfs=7.1,
+    lh=1.4,
+)
+box(
+    66,
+    46,
+    30,
+    11,
+    "compression",
+    "QUANTIZE",
+    [
+        "Quantizer (PTQ): master → ServingWeights",
+        "never modifies the master",
+        "one QuantScheme shared with QAT and the engine",
+        "a cut makes serving weights stale",
+    ],
+    tfs=9.2,
+    lfs=7.1,
+    lh=1.4,
 )
 
-# ---------------------------------------------------------------- left column
+# ---------------------------------------------------------------- harness (left column)
 box(
     2,
+    17.5,
     20,
-    20,
-    38,
+    46.5,
     "harness",
     "HARNESS EVOLVE",
-    ["cordis engine: propose /", "gate / publish — GEPA,", "SkillClaw, Meta-H, self-prop."],
-    lfs=7.4,
-    lh=1.32,
+    ["HarnessSpec: files per agent", "EvolveMethod: propose · record", "EpisodeRunner on slime.agent"],
+    lfs=7.2,
+    lh=1.3,
 )
 box(
-    4,
-    43.5,
-    16,
-    6.3,
+    3.8,
+    47.5,
+    16.4,
+    7.2,
     "harness",
     "PRE — before training",
-    ["optimize prompts/skills on base;", "better data distribution first"],
-    tfs=8.6,
-    lfs=7.1,
-    lh=1.35,
+    ["instructions and skills", "searched on the base model"],
+    tfs=8.4,
+    lfs=7.0,
+    lh=1.3,
 )
 box(
-    4,
-    35,
-    16,
-    7.5,
+    3.8,
+    37.5,
+    16.4,
+    8.2,
     "harness",
     "DURING — co-adapt",
-    ["CoAdaptScheduler alternation;", "1 train window = 1 harness", "release (mixed batch discarded)"],
-    tfs=8.6,
-    lfs=7.1,
-    lh=1.35,
+    ["retuned between train windows;", "one harness release per window", "(mixed batches refused)"],
+    tfs=8.4,
+    lfs=7.0,
+    lh=1.3,
 )
 box(
-    4,
-    27,
-    16,
-    6.5,
+    3.8,
+    28.0,
+    16.4,
+    7.7,
     "harness",
-    "POST — final polish",
-    ["evolve against frozen", "pruned weights"],
-    tfs=8.6,
-    lfs=7.1,
-    lh=1.35,
+    "POST — the harness that ships",
+    ["evolved against the", "serving weights"],
+    tfs=8.4,
+    lfs=7.0,
+    lh=1.3,
 )
-ax.text(
-    12,
-    25.4,
-    "all phases' candidates settle",
-    ha="center",
-    fontsize=7.6,
-    color=C["harness"][1],
-    fontweight="bold",
-    zorder=3,
-)
-ax.text(
-    12, 23.9, "through the same gate  →", ha="center", fontsize=7.6, color=C["harness"][1], fontweight="bold", zorder=3
-)
+ax.text(12, 24.6, "gate episodes and training", ha="center", fontsize=7.2, color=C["harness"][1], fontweight="bold")
+ax.text(12, 23.2, "rollouts use the same runner", ha="center", fontsize=7.2, color=C["harness"][1], fontweight="bold")
+ax.text(12, 20.4, "methods plug in: GEPA,", ha="center", fontsize=7.0, color=C["sub"])
+ax.text(12, 19.1, "SkillClaw, Meta-Harness, ...", ha="center", fontsize=7.0, color=C["sub"])
 
 # ---------------------------------------------------------------- center pipeline
+# The dashed outline marks the training backends: the only code allowed to import a framework.
+ax.add_patch(
+    Rectangle((25.4, 44.2), 35.2, 21.0, fill=False, edgecolor=C["sub"], linewidth=1.2, linestyle=(0, (2, 2)), zorder=1)
+)
+ax.text(26.0, 64.3, "honing/backends/", ha="left", va="center", fontsize=7.0, color=C["sub"], style="italic", zorder=5)
+
 box(
-    26,
-    40,
-    36,
-    17.5,
+    26.5,
+    45.2,
+    33,
+    17.4,
     "train",
-    "TRAIN PLANE   (Slime / Megatron backend)",
+    "TRAIN PLANE",
     [
-        "Algo zoo:  SFT · Distill · OPSD · GKD · PPO · GRPO · DPO",
-        "Update policy:  full · LoRA · sparse-mask (⇄ PrunePlan repr.)",
-        "RolloutProvider:  Harness episodes | Direct (SGLang) | none",
-        "TeacherBinding:  endpoint | local engine | lineage:parent",
-        "loss families load in driver/workers only — never in service",
+        "algorithm: SFT · distill · OPD · GKD · PPO · GRPO · DPO",
+        "update policy: full · LoRA · param subset · sparse mask",
+        "numerics: bf16 · fp8 · fake-quant QAT (QuantScheme)",
+        "rollout: harness episodes · direct · none",
+        "teacher: lineage · release · external  (engine / in-process)",
+        "Slime runs all but DPO  ·  DPO: local trainer",
+        "safetensors ⇄ torch_dist around each Slime job",
+        "BackendSupport declares what each backend can do",
     ],
-    lfs=7.7,
-    lh=1.62,
+    tfs=10.0,
+    lfs=7.2,
+    lh=1.58,
 )
 
 box(
-    26,
-    31,
-    36,
-    6,
-    "gate",
-    "GATE  —  one gate for every candidate",
-    ["candidate vs incumbent on eval tasks · CandidateSelector · max_regression"],
-    lfs=7.6,
+    26.5,
+    35.6,
+    33,
+    6.2,
+    "campaign",
+    "CAMPAIGN   —   scheduler + ordering rules",
+    ["every move becomes one candidate; rules refuse it", "before any weight is trained, edited, or quantized"],
+    tfs=9.4,
+    lfs=7.2,
+    lh=1.35,
 )
 
 box(
-    26,
-    20.5,
-    36,
-    7.5,
+    26.5,
+    26.6,
+    33,
+    6.2,
     "gate",
-    "COMMIT  /  RELEASE CHAIN",
+    "GATE   —   one gate for every candidate",
+    ["scores serving weights when they exist (what ships)", "win/loss for quality · no-regression for cost"],
+    tfs=9.4,
+    lfs=7.2,
+    lh=1.35,
+)
+
+box(
+    26.5,
+    14.6,
+    33,
+    9.2,
+    "gate",
+    "RELEASE CHAIN",
     [
-        "HoneRelease = weights ⊕ prune-manifest ⊕ harness  (joint rollback)",
-        "durable-before-compaction · pending→promote · honing curve",
+        "HoneRelease = master ⊕ serving ⊕ architecture",
+        "⊕ transforms ⊕ harness ⊕ method state",
+        "record written before the head moves",
+        "joint rollback  ·  honing curve",
     ],
-    lfs=7.6,
+    tfs=9.6,
+    lfs=7.2,
+    lh=1.4,
 )
 
 box(
-    26,
-    8.5,
-    36,
-    7.5,
+    26.5,
+    3.6,
+    33,
+    7.6,
     "serve",
-    "SERVE PLANE   (reserved — phase 2)",
-    [
-        "SGLang engines (shared with rollout) · /v1/* routes · Surface protocols",
-        "transport-free RequestService ⇒ /v1 mounts later, no train/prune change",
-    ],
+    "SERVE PLANE   (reserved)",
+    ["loads serving weights when they exist", "SGLang engines shared with rollout · /v1 routes"],
     dashed=True,
-    lfs=7.4,
+    tfs=9.4,
+    lfs=7.2,
+    lh=1.4,
 )
 
 box(
-    67,
-    8.5,
-    31,
-    11,
-    "prune",
+    64,
+    3.6,
+    34,
+    11.5,
+    "compression",
     "TELEMETRY STORE",
     [
-        "router / expert activation stats, aggregated",
-        "ring buffer (not SQLite records); collected at",
-        "serving AND rollout — same SGLang engines",
+        "per-expert routing counts, layer activation norms",
+        "aggregated per window, not stored per request",
+        "filled by rollout and serving engines alike",
     ],
-    tfs=9.5,
-    lfs=7.6,
-    lh=1.5,
+    tfs=9.4,
+    lfs=7.2,
+    lh=1.45,
 )
 
 # ---------------------------------------------------------------- arrows
-# data -> train
-arrow((15, 64), (30, 55.5), C["data"][1], "TrainingBatch", rad=-0.12, lab=(3.5, -1.6))
-# model -> train
-arrow((45, 64), (45, 57.5), C["model"][1], "init model", lab=(6.2, 0.6))
-# model -> prune (one-shot)
-arrow((60.4, 69.5), (66.6, 69.5), C["prune"][1], None, dashed=True)
-ax.text(63.5, 71.6, "one-shot", ha="center", fontsize=7.2, color=C["prune"][1], fontweight="bold", zorder=5)
-ax.text(63.5, 70.4, "prune", ha="center", fontsize=7.2, color=C["prune"][1], fontweight="bold", zorder=5)
-# train -> gate
-arrow((42, 40), (42, 37), C["train"][1], "trained candidate", lab=(8.6, 0))
-# prune -> gate (in-loop candidate) via right channel
-polyline([(70, 47), (64.6, 43.5), (64.6, 34.5), (62.2, 34)], C["prune"][1])
-ax.text(
-    66.1,
-    39.3,
-    "pruned candidate (in-loop)",
-    rotation=90,
-    ha="center",
-    va="center",
-    fontsize=7.0,
-    color=C["prune"][1],
-    fontweight="bold",
-    zorder=5,
-)
-# harness -> gate
-arrow((22, 30.5), (26, 33), C["harness"][1], None)
+# data -> train: leaves the data box's right edge so it never crosses the records loop on the left channel
+arrow((24.2, 71.0), (29.5, 62.9), C["data"][1], None, rad=0.25)
+note(33.8, 66.4, "TrainingBatch", C["data"][1], fs=7.2)
+# model source -> train
+arrow((47, 68.5), (47, 63.0), C["model"][1], "release 0", lab=(5.2, 0.4))
+# model source -> compression (compressed init)
+arrow((59.9, 74), (63.6, 74), C["compression"][1], None, dashed=True)
+note(61.8, 71.4, "Compressed\nInit", C["compression"][1], fs=6.2)
+# train -> campaign
+arrow((43, 45.2), (43, 42.2), C["train"][1], "train / recovery candidate", lab=(0, 0), fs=7.2)
+# compression -> campaign
+polyline([(64.0, 50.0), (62.2, 48.5), (62.2, 39.2), (59.9, 38.7)], C["compression"][1])
+note(62.2, 43.8, "prune / quantize\ncandidate", C["compression"][1], fs=6.8, rotation=90)
+# harness -> campaign
+arrow((22.2, 38.7), (26.1, 38.7), C["harness"][1], None)
 # phase attach hints
-arrow((20, 47), (26, 49.5), C["harness"][1], None, rad=-0.1, dashed=True, lw=1.4)
-arrow((20, 39), (26, 43.5), C["harness"][1], None, rad=-0.08, dashed=True, lw=1.4)
-# gate -> commit
-arrow((42, 31), (42, 28), C["gate"][1], "selected", lab=(5.4, 0))
-# commit -> serve
-arrow((42, 20.5), (42, 16), C["serve"][1], "activate (reserved)", dashed=True, lab=(9.2, 0))
+arrow((20.2, 51), (26.1, 54.5), C["harness"][1], None, rad=-0.1, dashed=True, lw=1.3)
+arrow((20.2, 41.6), (26.1, 48.0), C["harness"][1], None, rad=-0.08, dashed=True, lw=1.3)
+# campaign -> gate
+arrow((43, 35.6), (43, 33.2), C["campaign"][1], "passed the rules", lab=(7.4, 0), fs=7.2)
+# gate -> release
+arrow((43, 26.6), (43, 24.2), C["gate"][1], "selected", lab=(5.0, 0), fs=7.2)
+# release -> serve
+arrow((43, 14.6), (43, 11.6), C["serve"][1], "activate (reserved)", dashed=True, lab=(8.4, 0), fs=7.2)
 # serve -> telemetry
-arrow((62, 12.5), (67, 13.2), C["prune"][1], None, lw=1.8)
-# telemetry -> prune plane
-arrow((82.5, 19.5), (82.5, 47), C["prune"][1], None, lw=2.0)
-ax.text(88.6, 33, "utilization window", ha="center", fontsize=7.6, color=C["prune"][1], fontweight="bold", zorder=5)
-ax.text(88.6, 31.5, "→ analyze()", ha="center", fontsize=7.6, color=C["prune"][1], fontweight="bold", zorder=5)
-# serve -> data (records loop) via left channel
-polyline([(26, 12.5), (23.2, 14.5), (23.2, 60.5), (9.5, 64)], C["data"][1], dashed=True, lw=1.7)
-ax.text(
-    13.5,
-    61.4,
-    "records + receipts (loop)",
-    ha="center",
-    fontsize=7.3,
-    color=C["data"][1],
-    fontweight="bold",
-    zorder=5,
-    bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "none", "alpha": 0.9},
-)
+arrow((59.9, 7.5), (63.6, 8.2), C["compression"][1], None, lw=1.8)
+# telemetry -> compression
+arrow((81, 15.1), (81, 44.1), C["compression"][1], None, lw=2.0)
+note(87.8, 30.5, "utilization window\n→ ImportanceScorer", C["compression"][1], fs=7.3)
+# serve -> data: the records loop, through the left channel
+polyline([(26.1, 7.5), (23.3, 9.5), (23.3, 66.0), (15.0, 68.3)], C["data"][1], dashed=True, lw=1.6)
+note(17.2, 66.3, "records + receipts", C["data"][1], fs=6.8)
 
 # ---------------------------------------------------------------- footnotes
 notes = [
-    "①  A prune step IS an UpdateCandidate — the gate / commit / rollback machinery is"
-    " shared verbatim across weight training, pruning, and harness evolution.",
-    "②  sparse-mask tuning and PrunePlan share one param-selection representation: masked"
-    " training is reversible prune rehearsal, made structural after repeated gate wins.",
-    '③  The release chain doubles as a teacher registry: TeacherBinding "lineage:parent"'
-    " serves the pre-prune ancestor for OPSD/GKD recovery — no extra deployment.",
-    "④  Honing curve = release-chain metrics over time (params, $/1k tok, latency,"
-    " in-domain score) — GET /hone/curve.",
+    "①  A training step, a prune, a quantization, and a harness change are each one UpdateCandidate:"
+    " one gate, one commit record, one rollback.",
+    "②  One QuantScheme is shared by fake-quant training, export, and the serving engine; exporting under"
+    " another scheme is refused before quantizing.",
+    "③  After a shape-changing cut, the recovery teacher (typically the pre-cut release) is served by its own"
+    " engine, since an in-process teacher must share the student's shape.",
+    "④  v1: uniform layers only · DPO in a local trainer · Slime is the only framework dependency"
+    " (Reef is a design reference, not imported).",
 ]
-for i, note in enumerate(notes):
-    ax.text(2, 5.6 - i * 1.7, note, fontsize=8.2, color=C["ink"])
+for i, text in enumerate(notes):
+    ax.text(2, 1.0 - i * 1.55, text, fontsize=8.0, color=C["ink"])
 
 fig.savefig(OUT, bbox_inches="tight", facecolor="white")
 print(f"saved {OUT}")

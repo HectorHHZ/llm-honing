@@ -1,20 +1,23 @@
-"""Dependency boundaries, checked mechanically so they cannot erode quietly.
+"""Dependency and vocabulary boundaries, checked mechanically so they cannot erode quietly.
 
 - ``honing.core`` imports only the standard library, so every plane can depend
   on it without pulling in a framework.
 - Only ``honing/backends/`` may import a training framework. Slime is the one
   dependency; Reef is a design reference and is never imported.
+- Retired design terms stay out of code and the specification.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
 
 import pytest
 
 FRAMEWORKS = {"slime", "slime_plugins", "megatron", "sglang", "reef", "reef_client"}
+RETIRED_TERMS = re.compile(r"\b(provenance|evidence|ledger|sidecar)\b", re.IGNORECASE)
 
 
 def imported_top_levels(path: Path) -> set[str]:
@@ -62,3 +65,20 @@ def test_only_backend_packages_import_a_training_framework(repo_root: Path) -> N
         if path.relative_to(package).parts[0] != "backends" and imported_top_levels(path) & FRAMEWORKS
     }
     assert offenders == {}, f"framework imports outside honing/backends/: {offenders}"
+
+
+@pytest.mark.unit
+def test_retired_terms_stay_out_of_code_and_the_specification(repo_root: Path) -> None:
+    scanned = [
+        *sorted((repo_root / "honing").rglob("*.py")),
+        *sorted((repo_root / "system-design").glob("*.md")),
+        *sorted((repo_root / "system-design").glob("*.py")),
+        repo_root / "README.md",
+    ]
+    hits = [
+        f"{path.relative_to(repo_root)}:{number}: {line.strip()}"
+        for path in scanned
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        if RETIRED_TERMS.search(line)
+    ]
+    assert hits == [], "use 'manifest', 'record', 'metadata', or 'importance' instead:\n" + "\n".join(hits)
