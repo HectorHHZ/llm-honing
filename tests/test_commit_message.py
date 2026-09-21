@@ -18,9 +18,8 @@ check = check_commit_message.check
 @pytest.mark.parametrize(
     "subject",
     [
-        "feat(compression): add expert-drop scoring over router activation counts",
+        "feat(prune): add expert-drop analysis over router activation counts",
         "fix(train): reject a sparse-mask selection spanning pruned experts",
-        "feat(campaign): refuse a quantize step whose scheme differs from qat",
         "docs(design): record the co-adaptation invariant for harness releases",
         "chore: update the pinned pre-commit hooks",  # scope is optional
         "ci(ci): pin the checkout action by major version",
@@ -32,15 +31,13 @@ def test_a_conforming_subject_passes(subject: str) -> None:
 
 @pytest.mark.unit
 def test_an_unknown_type_is_rejected() -> None:
-    problems = check("feature(compression): add expert drop")
+    problems = check("feature(prune): add expert drop")
     assert any("unknown type" in problem for problem in problems)
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("scope", ["pruning", "prune"])
-def test_an_unknown_scope_is_rejected(scope: str) -> None:
-    # `prune` was retired when the plane became Compression; a stale habit must fail loudly.
-    problems = check(f"feat({scope}): add expert drop")
+def test_an_unknown_scope_is_rejected() -> None:
+    problems = check("feat(pruning): add expert drop")
     assert any("unknown scope" in problem for problem in problems)
 
 
@@ -52,19 +49,19 @@ def test_a_subject_without_a_type_is_rejected() -> None:
 
 @pytest.mark.unit
 def test_an_overlong_subject_is_rejected() -> None:
-    subject = "feat(compression): " + "x" * check_commit_message.MAX_SUBJECT
+    subject = "feat(prune): " + "x" * check_commit_message.MAX_SUBJECT
     problems = check(subject)
     assert any("the limit is" in problem for problem in problems)
 
 
 @pytest.mark.unit
 def test_a_trailing_period_is_rejected() -> None:
-    assert any("period" in problem for problem in check("feat(compression): add expert drop."))
+    assert any("period" in problem for problem in check("feat(prune): add expert drop."))
 
 
 @pytest.mark.unit
 def test_a_capitalized_summary_is_rejected() -> None:
-    assert any("capital" in problem for problem in check("feat(compression): Add expert drop"))
+    assert any("capital" in problem for problem in check("feat(prune): Add expert drop"))
 
 
 @pytest.mark.unit
@@ -79,8 +76,8 @@ def test_a_breaking_change_needs_its_footer() -> None:
     "subject",
     [
         "Merge branch 'main' into feat/expert-drop",
-        'Revert "feat(compression): add expert drop"',
-        "fixup! feat(compression): add expert drop",
+        'Revert "feat(prune): add expert drop"',
+        "fixup! feat(prune): add expert drop",
     ],
 )
 def test_git_generated_subjects_pass_unchanged(subject: str) -> None:

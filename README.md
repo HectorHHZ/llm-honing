@@ -8,49 +8,37 @@ real data, it keeps the capacity that carries the work, removes what it no
 longer needs, and publishes each result as a versioned, rollback-able release.
 The model gets better in-domain while getting cheaper to run.
 
-> **Status: skeleton.** The contracts every plane is built against
-> (`honing/core`), the gate and release chain (`honing/release`), and the
-> campaign with its ordering rules (`honing/campaign`) are implemented. A
-> walking skeleton runs a full campaign — train, prune with recovery, quantize,
-> evolve the harness, roll back — with every other plane faked on a CPU. Planes
-> become real one at a time; see the implementation steps in the design document.
+> **Status: design stage.** The specification in [`system-design/`](system-design/)
+> is complete and is the contract implementations are built against. Code lands
+> plane by plane; see the implementation phases in the design document.
 
 ## Start here
 
 | Document | What it covers |
 | --- | --- |
-| [`system-design/README.md`](system-design/README.md) | What Honing is, the planes, its dependency on Slime, and how it compares to inference engines, RL frameworks, and Reef |
-| [`system-design/system-design.md`](system-design/system-design.md) | Subsystem contracts, the coupling model, the ordering rules, worked lifecycles, and the implementation steps |
+| [`system-design/README.md`](system-design/README.md) | What Honing is, the five planes, and how it compares to inference engines, RL frameworks, and Reef |
+| [`system-design/system-design.md`](system-design/system-design.md) | Subsystem contracts, the coupling model, worked lifecycles, HTTP surface, and the phased plan |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Issue, commit, and pull request conventions; development setup |
 
 ![Honing system design](system-design/honing_architecture.png)
 
-## The planes
+## The five planes
 
 | Plane | Owns |
 | --- | --- |
-| **Core** | The value types and protocols every plane is built against; imports only the standard library |
-| **Model Source** | Where the initial model comes from — an open checkpoint, or a large model compressed first |
-| **Data** | Online feedback and offline datasets, behind one batch type |
-| **Train** | Algorithm, update policy, numerics, rollout source, and teacher as independent choices |
-| **Compression** | Pruning (score, select, edit) and quantization; usable standalone |
-| **Harness Evolve** | Harness specs, episode runs, and evolution methods before, during, and after training |
-| **Campaign** | Which move comes next, and the rules each move must pass before it touches weights |
-| **Serve** | Live traffic and artifact activation (reserved) |
+| **Model Source** | Where the initial trainable model comes from — an open checkpoint, or a large model thinned first |
+| **Data Plane** | Online feedback and offline datasets, behind one batch type |
+| **Train Plane** | Algorithm × gradient update policy × rollout source, as three orthogonal registries |
+| **Prune Plane** | Structural capacity reduction and its audit trail; usable standalone |
+| **Harness Evolve** | Composition search, run before, during, and after weight training |
+| **Serve Plane** | Live traffic and artifact activation (reserved) |
 
 The idea that keeps this small enough to build:
 
-> **Every step is an update candidate.** A training step, a prune, a
-> quantization, and a harness change all pass the same gate and settle into the
-> same release chain. A bad prune is a rejected candidate or a rolled-back
-> release, not a new failure mode.
-
-## Dependencies
-
-[Slime](https://github.com/THUDM/slime) is the one training-framework
-dependency, pinned by commit and imported only under `honing/backends/`. Reef
-informs the design but is not a dependency. The reasoning, and what Slime does
-and does not supply, is in [`system-design/README.md`](system-design/README.md#dependencies).
+> **A prune step *is* an update candidate.** Evaluation, publication,
+> provenance, and rollback are shared across weight training, pruning, and
+> harness evolution rather than reimplemented per plane. A bad prune is a
+> rejected candidate or a rolled-back release, not a new failure mode.
 
 ## Development
 
@@ -62,8 +50,6 @@ pre-commit install
 pre-commit run --all-files
 pytest
 ```
-
-No GPU is needed for the test suite.
 
 ## License
 
