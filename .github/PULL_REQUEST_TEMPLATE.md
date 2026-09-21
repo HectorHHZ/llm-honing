@@ -1,6 +1,6 @@
 <!--
 Title this pull request as a Conventional Commit subject, e.g.
-  feat(prune): add expert-drop analysis over router activation counts
+  feat(compression): add expert-drop scoring over router activation counts
 Merges are squashed, so this title becomes the commit subject.
 -->
 
