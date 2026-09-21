@@ -8,22 +8,29 @@ each result as a versioned, rollback-able release.
 The design specification lives in ``system-design/`` at the repository root and
 is the contract this package is built against. The planes it defines:
 
-``prune``
-    Structural capacity reduction as an independent system: pruning methods,
-    declarative plans, and the manifest chain that records every cut.
+``core``
+    The contracts every plane is built against: value types and protocols,
+    importing nothing outside the standard library (``honing.core``).
+``compression``
+    Structural pruning (score, select, edit) and post-training quantization,
+    with the plan each release records.
 ``train``
-    Training algorithm, gradient update policy, and rollout source as three
-    orthogonal registries.
+    Algorithm, update policy, numerics, rollout source, and teacher as
+    independent choices. Slime runs most algorithms; DPO runs in a local trainer.
 ``data``
     Online feedback and offline datasets behind one batch type.
 ``harness``
-    Composition search, run before, during, and after weight training.
+    Harness specs, the episode runner, and pluggable evolution methods, run
+    before, during, and after weight training.
+``campaign``
+    The scheduler that picks the next move and the ordering rules every move
+    must pass (``honing.campaign``).
 ``serve``
-    Live traffic and artifact activation. Reserved; see phase 10 of the plan.
+    Live traffic and artifact activation. Reserved.
 
-The one invariant that shapes the rest: a prune step *is* an update candidate,
-so evaluation, publication, provenance, and rollback are shared with weight
-training and harness evolution rather than reimplemented per plane.
+Every plane produces the same update candidate, so one gate and one release
+chain (``honing.release``) evaluate, publish, and roll back weights, pruning,
+quantization, and harness changes alike.
 """
 
 from importlib.metadata import PackageNotFoundError, version
