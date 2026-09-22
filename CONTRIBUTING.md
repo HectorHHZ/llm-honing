@@ -157,6 +157,9 @@ When an AI tool makes a non-trivial contribution:
 - run the relevant checks and report their actual results; and
 - remove speculative fixes, unrelated cleanup, and unnecessary abstractions.
 
+Generated prose carries its own tells. [Writing style](#writing-style) lists
+the ones to remove before you submit.
+
 AI assistance does not lower the bar for tests, documentation, security, or
 long-term maintenance.
 
@@ -225,6 +228,147 @@ Beyond mechanical style, the conventions that matter most here:
 - **Name for readers.** Include units or representation where ambiguity could
   cause a bug: `timeout_seconds`, `keep_ratio`, `checkpoint_path`. Prefer plain
   terms such as manifest, record, and metadata over coined vocabulary.
+
+## Writing style
+
+Prose here is read by someone deciding something: whether a bug is real,
+whether a design holds, whether a pull request is safe to merge. Issue and
+pull request bodies, docstrings, comments, and the documents under
+[`system-design/`](system-design/) are held to the standard code is.
+
+This section restates the pattern list from
+[Humanizer](https://github.com/blader/humanizer) (MIT), whose patterns come
+from Wikipedia's
+[Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing),
+maintained by WikiProject AI Cleanup. One idea explains nearly all of them. A
+language model writes whatever is most likely to come next, so it makes the
+choice that fits the widest range of readers and subjects; a person writes for
+one reader and one subject. Every pattern below is a form of that default
+choice. Cite them in review by number, as in "§1" or "§19".
+
+Two rules follow. Every sentence you keep must add something the reader did
+not already have, and a tell counts in proportion to how rarely a careful
+writer would make it on purpose. The patterns are ordered by strength and
+frequency: §1 to §5 justify an edit on a single sighting, and one marked
+*weak alone* counts only when several tells share a passage.
+
+### How to revise
+
+1. **Mark the tells.** Read the whole text once and mark every pattern,
+   strongest first. Look at paragraph shape as well as sentences: a contrast
+   split across two sentences, three parallel examples, or the same closer
+   after every section is the same tell at a larger scale.
+2. **Draft the rewrite.** Keep every supported claim. Shorten, merge, split,
+   and restructure freely, but do not add a fact, name, number, date, quote,
+   citation, or benchmark result unless it comes from a source you have. When
+   a sentence needs a detail you do not have, ask for it or write the simpler
+   sentence.
+3. **Check the draft.** Ask whether the rewrite added or dropped any fact,
+   ranking, or simultaneity claim; the shape edits under §6, §8, and §19 drop
+   those most often. Then search for the five tells that most often survive a
+   rewrite: a not-X-but-Y contrast, a one-line closer, a dash, a triad, and a
+   bold label.
+4. **Write the final version.** State each point naturally instead of patching
+   flagged phrases one at a time. If a sentence stays awkward, rewrite the
+   paragraph around its main point.
+
+### A. Staging instead of stating (§1 to §5)
+
+The strongest and most frequent tells. Act on one sighting.
+
+| # | Pattern | Watch for | Write instead |
+| --- | --- | --- | --- |
+| 1 | Not X but Y | "not just / not only / not merely X, but Y"; "it's not X, it's Y"; "X rather than Y"; the contrast split across two sentences ("This does not mean X. It means Y."); a clipped negative tail (", no guessing") | The point, stated directly. Keep a contrast only when the negative half corrects a belief the reader actually holds, or when both halves carry information |
+| 2 | One-line closers and dramatic fragments | A one-sentence paragraph restating the one before it; "That is the real win."; "Read that again."; the same closer after several sections; a row of fragments ("No prior. No nostalgia."); one word in ALL CAPS or with periods between words | Cut a closer that repeats. Merge a row of fragments into one sentence with a specific claim. A short sentence is fine when it carries a new fact |
+| 3 | Sayings that sound deep | "the real question is", "at its core", "what really matters", "fundamentally", "the deeper issue", "X is the Y of Z", "the language of", "the currency of", "the architecture of" | The specific claim the saying is dressing up |
+| 4 | Staged run-up before the point | "Let's dive in", "let's break this down", "here's what you need to know", "without further ado", "Honestly?", "Look,", "Here's the thing", "Real talk" | Remove the run-up and make the point. "Honestly" inside a casual sentence is ordinary; the tell is the standalone opener before a routine claim |
+| 5 | Arguing with no one | "This isn't (mainly) about", "I'm not saying", "To be clear", "Don't get me wrong", "Some might say... but", "A tempting approach would be", "You might think... but" | Delete the defense; if it holds a real claim, state the claim. Keep an objection the text answers in full, and an option a reader would actually weigh |
+
+### B. Rhythm by rule (§6 to §11)
+
+A person may do any one of these on purpose, so the weaker ones need company.
+
+| # | Pattern | Watch for | Write instead |
+| --- | --- | --- | --- |
+| 6 | Forced triads | Three items in a sentence ("innovation, inspiration, and insights"); three parallel examples; three short facts followed by a lesson | The number of items the meaning needs. Merge the examples or develop the strongest one. Keep three when three are real |
+| 7 | Repeated sentence openings | Several sentences in a row starting with the same subject, often a pronoun | Merge the sentences, change the subject, or begin with the action. Repetition used deliberately for rhythm is not a tell |
+| 8 | Dashes as the universal connector (*weak alone*) | Em dash (—), en dash (–), spaced dash, or double hyphen (` -- `) used as a connector | A period, comma, colon, or parentheses, or a rewritten sentence. Leave dashes and hyphens inside code, inline code, commands, paths, and URLs alone |
+| 9 | Stacked qualifiers (*weak alone*) | "could potentially", "might arguably", "it's also possible", "in some cases it may", "to be fair" | Only the qualifiers the source supports. Keep scope statements, safety notices, and real corrections; "perhaps" and "tends to" are human habits |
+| 10 | Hyphenated pairs everywhere (*weak alone*) | third-party, cross-functional, data-driven, real-time, long-term, end-to-end, hyphenated in every position | The hyphen only where grammar needs it: "a high-quality report" but "the report is high quality" |
+| 11 | Passive voice and missing subjects (*weak alone*) | "No configuration file needed"; "The results are preserved automatically" | Active voice when it makes the actor and the action clearer |
+
+### C. Inflation and borrowed authority (§12 to §18)
+
+The fact underneath is usually sound. Keep it and remove the dressing.
+
+| # | Pattern | Watch for | Write instead |
+| --- | --- | --- | --- |
+| 12 | Overused AI words | actually, additionally, align with, bolstered, crucial, deep dive, delve, emphasizing, enduring, enhance, fostering, garner, highlight (verb), interplay, intricate, key (adjective), landscape (abstract), meticulous, pivotal, quietly, showcase, tapestry, testament, underscore (verb), valuable, vibrant | Plain words. This is the only vocabulary list; a formal word outside it is not a tell by itself. Figurative *gate* and *robust* count, but their technical senses here (the release gate, a robust estimator) do not |
+| 13 | Inflated significance | "stands as a testament", "a pivotal moment", "plays a key role", "underscores its importance", "reflects a broader", "evolving landscape"; stock "Challenges and Legacy" or "Future Outlook" sections; "the future looks bright", "a step in the right direction" | The fact, without the significance. End on the last concrete fact; if the source states real plans, use those |
+| 14 | Vague connection or association | "associated with", "in association with", "connected to", "in connection with", "linked to", "tied to" | The relationship the source actually gives. If the source does not say, keep the vague wording rather than inventing a role |
+| 15 | Shallow -ing riders | "highlighting", "underscoring", "emphasizing", "ensuring", "reflecting", "symbolizing", "contributing to", "showcasing" bolted onto a simple fact | The fact alone. Keep the rider only when the source supports what it claims |
+| 16 | Sales language | boasts, vibrant, rich (figurative), profound, exemplifies, commitment to, nestled, in the heart of, groundbreaking, renowned, diverse array, breathtaking, must-visit, stunning | What the thing is |
+| 17 | Borrowed authority | "experts argue", "observers have cited", "industry reports", "some critics"; a list of prestige outlets; follower counts | The named source and what it said, or nothing. Never invent a source. A missing citation alone is not a tell; most writing is unsourced |
+| 18 | Avoiding is, are, and has | serves as, stands as, functions as, operates as, marks, represents; boasts, features, offers, maintains; refers to | is, are, has |
+
+### D. Formatting by rule (§19 to §21)
+
+Templates and editors also produce clean formatting. The tell is decoration on
+every item.
+
+| # | Pattern | Watch for | Write instead |
+| --- | --- | --- | --- |
+| 19 | Bold as decoration | Bold applied with no reason; a vertical list where every item gets a bold label and a colon | No bold. Turn a labeled list into prose when the labels carry no information of their own; keep a label that names a distinct thing |
+| 20 | Decorative headings | Title Case On Every Main Word; emoji or arrows (→) in headings and list items; a horizontal rule between every section; a top-level heading repeating the document's own title | Sentence case, no decoration, no rules, the title stated once |
+| 21 | Curly quotation marks (*weak alone*) | Curly quotes where the writer or the target format uses straight ones | Straight quotes. Most editors auto-curl, so this is weak by itself |
+
+### E. Leftovers from the chat and the draft (§22 to §25)
+
+Remove these outright. Nothing here needs rewriting.
+
+| # | Pattern | Watch for | Write instead |
+| --- | --- | --- | --- |
+| 22 | Chatbot residue | "Great question!", "Of course!", "Certainly!", "You're absolutely right", "I hope this helps", "Would you like...", "Should I continue?", "let me know", "here is a..." | The content, with the wrapper deleted. This is the most certain tell in the list and the easiest to miss when it wraps real content |
+| 23 | Knowledge-limit disclaimers and guesses | "as of [date]", "up to my last training update", "while specific details are limited", "based on available information", "not widely documented", "it is believed that", "likely began" | What the source does or does not show, or nothing. Never present a guess as a fact |
+| 24 | A heading repeated in the first sentence | A heading followed by a one-line paragraph that restates it before the real content begins | The content. Let the heading do the work |
+| 25 | Writing about the previous version | "This function was added to replace the previous approach, which caused O(n²)" | What the code does now. The previous version belongs in commit messages, change logs, release notes, and migration guides |
+
+### What this means here
+
+Three of the patterns land on this repository harder than the rest:
+
+- **§25 governs docstrings and comments.** A docstring says what the object
+  does and what invariant it maintains now. History belongs in the commit
+  message, and a rule that was reversed belongs in the RFC that reversed it.
+- **§17 and step 2 are the Verification rule.** A claim that checks pass,
+  without the command and its real output, is borrowed authority. The pull
+  request template asks for the output for this reason.
+- **§12 has a local exception.** *Gate*, *robust*, and *key* are ordinary
+  technical terms in this codebase. The watch list targets the figurative use,
+  not `honing/release/gate.py`.
+
+Do not sand off the writing in the process. Keep the specific detail, the
+unresolved tension, the first-person choice you can explain, and the aside
+that carries real information. Leave a watched phrase alone inside a
+quotation, a title, a proper name, or a passage discussing the phrase rather
+than using it. Removing tells is half the job; the result still has to sound
+like a person wrote it.
+
+### Using the skill
+
+Humanizer is also installable, so an agent can apply the list for you. In
+Claude Code:
+
+```text
+/plugin marketplace add blader/humanizer
+/plugin install humanizer@humanizer
+```
+
+It answers to `/humanizer:humanizer`. Paste a passage and it returns a draft,
+the tells that survived, and a final version; name a file and it rewrites the
+prose in place, leaving code blocks, commands, paths, YAML metadata, and link
+targets untouched. Give it a few paragraphs of your own writing first if you
+want the result to sound like you rather than like no one.
 
 ## Tests
 

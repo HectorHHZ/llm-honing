@@ -21,7 +21,7 @@ The model gets better in-domain while getting cheaper to run.
 | --- | --- |
 | [`system-design/README.md`](system-design/README.md) | What Honing is, the planes, its dependency on Slime, and how it compares to inference engines, RL frameworks, and Reef |
 | [`system-design/system-design.md`](system-design/system-design.md) | Subsystem contracts, the coupling model, the ordering rules, worked lifecycles, and the implementation steps |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Issue, commit, and pull request conventions; development setup |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Issue, commit, and pull request conventions; writing style; development setup |
 
 ![Honing system design](system-design/honing_architecture.png)
 
