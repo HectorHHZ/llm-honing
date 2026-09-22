@@ -157,6 +157,9 @@ When an AI tool makes a non-trivial contribution:
 - run the relevant checks and report their actual results; and
 - remove speculative fixes, unrelated cleanup, and unnecessary abstractions.
 
+Generated prose carries its own tells. [Writing style](#writing-style) lists
+the ones to remove before you submit.
+
 AI assistance does not lower the bar for tests, documentation, security, or
 long-term maintenance.
 
@@ -225,6 +228,67 @@ Beyond mechanical style, the conventions that matter most here:
 - **Name for readers.** Include units or representation where ambiguity could
   cause a bug: `timeout_seconds`, `keep_ratio`, `checkpoint_path`. Prefer plain
   terms such as manifest, record, and metadata over coined vocabulary.
+
+## Writing style
+
+Prose here is read by someone deciding something: whether a bug is real,
+whether a design holds, whether a pull request is safe to merge. Issue and
+pull request bodies, docstrings, comments, and the documents under
+[`system-design/`](system-design/) are held to the standard code is.
+
+The checklist below is condensed from
+[Humanizer](https://github.com/blader/humanizer) (MIT), an agent skill whose
+pattern list comes from Wikipedia's
+[Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing).
+One idea explains nearly all of it. A language model writes whatever is most
+likely to come next, so it makes the choice that fits the widest range of
+readers and subjects; a person writes for one reader and one subject. Each
+family below is a form of that default choice.
+
+| Family | What it looks like | What to write instead |
+| --- | --- | --- |
+| Staging instead of stating | "It's not just X, it's Y"; a one-line closer after every section; "At its core"; "Let's dive in"; rebutting an objection nobody raised | The claim itself, once |
+| Rhythm by rule | Three items where the meaning has two; several sentences opening the same way; dashes used as the universal connector | The number of items the meaning needs; periods, commas, colons, parentheses |
+| Inflation and borrowed authority | "a pivotal moment"; "delve", "robust", "landscape", "underscore"; "experts believe"; "serves as" instead of "is" | The fact, the named source, the plain verb |
+| Formatting by rule | Bold on every list label; Title Case headings; emoji and arrows | Sentence case, prose, bold only where it carries information |
+| Leftovers | "Great question!", "I hope this helps"; "as of my last update"; a heading restated in its first sentence | Delete them; nothing here needs rewriting |
+
+Five of these justify an edit the first time you see them: the not-X-but-Y
+contrast, the one-line closer, the deep-sounding saying, the staged run-up,
+and the argument with no one. The weaker signals, a dash, a stacked qualifier,
+a hyphenated pair, a passive sentence, a curly quote, count only when several
+share a passage, because a careful writer uses any one of them on purpose.
+
+Two of the patterns hit this repository more than most prose:
+
+- **Do not describe the previous version.** A docstring or comment says what
+  the code does now. "This replaces the old loop that was O(n²)" belongs in
+  the commit message or the release notes, not next to the function.
+- **Do not invent a supporting fact.** A name, number, date, quote, citation,
+  or benchmark result must come from a source you have. When a sentence needs
+  a detail you do not have, ask for it or write the simpler sentence. This is
+  the same rule the pull request template states for **Verification**: a claim
+  that tests pass, without the command and its real output, is not evidence.
+
+Do not sand off the writing in the process. Keep the specific detail, the
+unresolved tension, the first-person choice you can explain, and the aside
+that carries real information. Leave a watched phrase alone inside a
+quotation, a title, a proper name, or a passage discussing the phrase rather
+than using it. Removing tells is half the job; the result still has to sound
+like a person wrote it.
+
+The skill itself is worth installing if you draft with an agent. In Claude
+Code:
+
+```text
+/plugin marketplace add blader/humanizer
+/plugin install humanizer@humanizer
+```
+
+It answers to `/humanizer:humanizer`, rewrites a pasted passage or a named
+file, changes prose only, and leaves code blocks, commands, paths, YAML
+metadata, and link targets untouched. Give it a few paragraphs of your own
+writing first if you want the result to sound like you.
 
 ## Tests
 
