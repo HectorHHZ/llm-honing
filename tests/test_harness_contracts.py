@@ -202,7 +202,8 @@ def test_published_and_rejected_candidates_both_carry_the_gate_result(tmp_path: 
     fixture.campaign.run(ScriptedScheduler([Move(kind="train")]))
     fixture.campaign.run(ScriptedScheduler([Move(kind="harness")]))
 
-    gated = [record for record in _records(fixture.campaign.chain.record_path) if record["op"] in {"publish", "reject"}]
+    records = _records(fixture.campaign.chain.record_path)
+    gated = [record for record in records if record["op"] in {"publish", "reject"}]
     rejected, published = (record["candidate"] for record in gated[1:])
     assert [record["op"] for record in gated] == ["publish", "reject", "publish"]
     for candidate in (rejected, published):
