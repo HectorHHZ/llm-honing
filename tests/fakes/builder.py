@@ -10,8 +10,6 @@ from honing.core import (
     BackendSupport,
     CompressionBudget,
     EvolveMethod,
-    HarnessPhase,
-    HarnessPhaseConfig,
     PruneSelector,
     QuantScheme,
     RecoverySpec,
@@ -67,7 +65,6 @@ def build_campaign(
     recovery: RecoverySpec | None = None,
     rollout: RolloutProvider | None = None,
     method: EvolveMethod | None = None,
-    phases: dict[HarnessPhase, HarnessPhaseConfig] | None = None,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake."""
     world = FakeWorld()
@@ -97,7 +94,7 @@ def build_campaign(
             quantizer=quantizer,
             telemetry=FixedTelemetryStore(skewed_expert_telemetry(small_moe())),
         ),
-        harness=HarnessComponents(runner=runner, grader=grader, method=method, tasks=TASKS, phases=phases or {}),
+        harness=HarnessComponents(runner=runner, grader=grader, method=method, tasks=TASKS),
         defaults=CampaignDefaults(
             train=TrainJobSpec(algorithm="sft", steps=10),
             budget=CompressionBudget(keep_ratio=0.75),

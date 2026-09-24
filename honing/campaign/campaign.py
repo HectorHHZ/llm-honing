@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from honing.campaign import rules
@@ -21,8 +21,7 @@ from honing.core import (
     EvaluationResult,
     EvolveContext,
     EvolveMethod,
-    HarnessPhase,
-    HarnessPhaseConfig,
+    HarnessMoveConfig,
     HarnessSpec,
     HoneRelease,
     ImportanceScorer,
@@ -64,11 +63,7 @@ class CompressionComponents:
 
 @dataclass(frozen=True)
 class HarnessComponents:
-    """The Harness plane a campaign uses.
-
-    ``phases`` gives a harness move that names a phase its own tasks. A move
-    with no phase, or a phase with no entry, uses ``tasks``.
-    """
+    """The Harness plane a campaign uses. A move's :class:`~honing.core.HarnessMoveConfig` overrides it."""
 
     runner: EpisodeRunner
     grader: TaskGrader
@@ -76,15 +71,10 @@ class HarnessComponents:
     tasks: tuple[Task, ...]
     episode_budget: int = 0
     samples_per_task: int = 1
-    phases: Mapping[HarnessPhase, HarnessPhaseConfig] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         require(len(self.tasks) > 0, "a campaign needs at least one task")
         require(self.samples_per_task > 0, "samples_per_task must be > 0")
-
-    def tasks_for(self, phase: HarnessPhase | None) -> tuple[Task, ...]:
-        config = None if phase is None else self.phases.get(phase)
-        return self.tasks if config is None else config.tasks
 
 
 @dataclass(frozen=True)
@@ -287,17 +277,20 @@ class Campaign:
         method, runner = harness.method, harness.runner
         if head.harness is None:
             raise ContractError("the head has no harness to evolve; start the campaign with a harness seed")
+        config = move.harness if move.harness is not None else HarnessMoveConfig()
+        if config.method is not None and config.method != method.name:
+            raise ContractError(f"the move is for method {config.method!r}, but the campaign runs {method.name!r}")
         state = self._method_state(head)
         rules.method_state_schema_matches(state, method.name, method.state_schema_version)
         context = EvolveContext(
             current=head.harness,
             policy=head.policy(),
-            tasks=harness.tasks_for(move.phase),
+            tasks=config.tasks or harness.tasks,
             records=self._recent_records,
             state=state,
             runner=runner,
             grader=harness.grader,
-            episode_budget=harness.episode_budget,
+            episode_budget=harness.episode_budget if config.episode_budget is None else config.episode_budget,
         )
         result = method.propose(context)
         proposal = result.proposal
@@ -310,7 +303,7 @@ class Campaign:
                 reason=reason,
                 state=result.state,
                 episodes_spent=result.episodes_spent,
-                phase=move.phase,
+                label=config.label,
             )
             self._pending_method_state = result.state
             return StepOutcome(move=move, decision=None, evaluation=None, release=None, skipped_reason=reason)
@@ -324,6 +317,7 @@ class Campaign:
             trained_numerics=head.trained_numerics,
             method_state=result.state,
             metrics={**_size_metrics(head.master), "method_episodes": float(result.episodes_spent)},
+            move_label=config.label,
         )
         self._check_candidate(candidate)
         evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)

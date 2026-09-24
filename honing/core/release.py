@@ -83,5 +83,9 @@ class HoneRelease:
     def metrics(self) -> Mapping[str, float]:
         return self.candidate.metrics
 
+    @property
+    def move_label(self) -> str | None:
+        return self.candidate.move_label
+
     def policy(self) -> PolicyRef:
         return self.candidate.policy()

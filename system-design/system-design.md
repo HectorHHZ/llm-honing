@@ -78,7 +78,7 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `data` | `DataContract`, `PolicySample`, `PreferencePair`, `TrainingBatch` |
 | `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `ALGORITHM_REQUIREMENTS` |
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
-| `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessPhaseConfig`, `RunnerSupport`, `MethodRequirements` |
+| `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
 | `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the method-state rules (`validate_method_state`) |
 | `candidate` | `UpdateCandidate`, `PolicyRef`, `EvaluationResult`, `SelectionDecision` |
 | `release` | `HoneRelease` |
@@ -385,9 +385,13 @@ edited, or quantized**, so a refused step costs no compute and leaves nothing be
 | `method_state_schema_matches` | method state written under a schema the method does not read, for example after a rollback | at start; before each proposal |
 
 A harness method's state is carried across rejected and skipped steps in memory and
-published with the next accepted release, whatever its kind. A harness move may name its
-phase; `HarnessComponents.phases` gives each phase its own tasks, and the phase scheduler
-will enforce each phase's budgets.
+published with the next accepted release, whatever its kind.
+
+**Phases belong to the scheduler, not to core.** A harness move carries a
+`HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the
+campaign's defaults for that move only. The campaign records the label on the candidate as
+`move_label` and never interprets it. Which phase comes next, and each phase's total
+budget, are decided by the scheduler, which reads the labels back from the releases.
 
 The default scheduling policy (planned): pre-training harness pass → *N* training commits
 → when utilization is stable, prune with recovery → retune the harness → repeat until the

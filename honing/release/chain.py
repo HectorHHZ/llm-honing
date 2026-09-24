@@ -26,7 +26,6 @@ from types import MappingProxyType
 from honing.core import (
     CandidateKind,
     ContractError,
-    HarnessPhase,
     HoneRelease,
     ReleaseError,
     SelectionDecision,
@@ -116,7 +115,7 @@ class ReleaseChain:
         reason: str,
         state: Mapping[str, object],
         episodes_spent: int,
-        phase: HarnessPhase | None = None,
+        label: str | None = None,
     ) -> None:
         """Record a harness attempt that proposed nothing. The head does not move.
 
@@ -133,7 +132,7 @@ class ReleaseChain:
                 "op": "skip",
                 "parent_id": parent_id,
                 "method": method,
-                "phase": phase,
+                "label": label,
                 "reason": reason,
                 "episodes_spent": episodes_spent,
                 "method_state": dict(state),

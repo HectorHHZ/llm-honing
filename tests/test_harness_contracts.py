@@ -18,7 +18,7 @@ from honing.core import (
     EvaluationResult,
     EvolveContext,
     HarnessFile,
-    HarnessPhaseConfig,
+    HarnessMoveConfig,
     HarnessProposal,
     HarnessSpec,
     MethodRequirements,
@@ -83,14 +83,15 @@ def test_a_skip_records_its_state_and_the_episodes_it_spent(tmp_path: Path) -> N
     fixture = build_campaign(tmp_path, method=method)
     head = fixture.campaign.chain.head()
 
-    (outcome,) = fixture.campaign.run(ScriptedScheduler([Move(kind="harness", phase="pre_training")]))
+    move = Move(kind="harness", harness=HarnessMoveConfig(label="pre_training"))
+    (outcome,) = fixture.campaign.run(ScriptedScheduler([move]))
 
     assert outcome.skipped_reason == "minibatch proposed nothing"
     assert fixture.campaign.chain.head() is head
     skip = _records(fixture.campaign.chain.record_path)[-1]
     assert skip["op"] == "skip"
     assert skip["episodes_spent"] == 1
-    assert skip["phase"] == "pre_training"
+    assert skip["label"] == "pre_training"
     assert skip["parent_id"] == head.release_id
     assert skip["method_state"] == {"schema_version": 1, "scores": [0.5]}
 
@@ -176,23 +177,42 @@ def build_policy(world: FakeWorld):  # type: ignore[no-untyped-def]
     return PolicyRef(snapshot.checkpoint, snapshot.architecture, "master")
 
 
-# ------------------------------------------------------------ proposal 5: phases and gate statistics
+# ------------------------------------------------------------ proposal 5: per-move config and gate statistics
 
 
 @pytest.mark.unit
-def test_a_phase_move_uses_that_phase_s_tasks(tmp_path: Path) -> None:
+def test_a_move_config_overrides_the_tasks_and_budget_for_that_move_only(tmp_path: Path) -> None:
     method = MinibatchMethod(propose_anything=False)
-    phase_tasks = (Task(task_id="phase-only", prompt="x"),)
-    fixture = build_campaign(
-        tmp_path,
-        method=method,
-        phases={"post_training": HarnessPhaseConfig(tasks=phase_tasks, max_proposals=1, max_episodes=4)},
-    )
+    move_tasks = (Task(task_id="move-only", prompt="x"),)
+    fixture = build_campaign(tmp_path, method=method)
+    config = HarnessMoveConfig(tasks=move_tasks, episode_budget=4, label="post_training")
 
-    fixture.campaign.run(ScriptedScheduler([Move(kind="harness", phase="post_training"), Move(kind="harness")]))
+    fixture.campaign.run(ScriptedScheduler([Move(kind="harness", harness=config), Move(kind="harness")]))
 
-    assert method.contexts[0].tasks == phase_tasks
-    assert method.contexts[1].tasks == TASKS
+    assert (method.contexts[0].tasks, method.contexts[0].episode_budget) == (move_tasks, 4)
+    assert (method.contexts[1].tasks, method.contexts[1].episode_budget) == (TASKS, 0)
+
+
+@pytest.mark.unit
+def test_the_move_label_is_published_on_the_release(tmp_path: Path) -> None:
+    fixture = build_campaign(tmp_path, method=MinibatchMethod())
+    move = Move(kind="harness", harness=HarnessMoveConfig(label="during_training"))
+
+    (outcome,) = fixture.campaign.run(ScriptedScheduler([move]))
+
+    assert outcome.release is not None and outcome.release.move_label == "during_training"
+    assert _records(fixture.campaign.chain.record_path)[-1]["candidate"]["move_label"] == "during_training"
+
+
+@pytest.mark.unit
+def test_a_move_for_another_method_is_refused(tmp_path: Path) -> None:
+    method = MinibatchMethod()
+    fixture = build_campaign(tmp_path, method=method)
+
+    with pytest.raises(ContractError, match="the campaign runs 'minibatch'"):
+        fixture.campaign.run(ScriptedScheduler([Move(kind="harness", harness=HarnessMoveConfig(method="gepa"))]))
+
+    assert method.contexts == []
 
 
 @pytest.mark.unit

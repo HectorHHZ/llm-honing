@@ -198,26 +198,29 @@ class ProposeResult:
         require(self.episodes_spent >= 0, f"episodes_spent must be >= 0, got {self.episodes_spent}")
 
 
-HarnessPhase = Literal["pre_training", "during_training", "post_training"]
-
-
 @dataclass(frozen=True)
-class HarnessPhaseConfig:
-    """The tasks and budgets one harness phase runs with.
+class HarnessMoveConfig:
+    """What one harness move runs with, overriding the campaign's defaults for that move only.
 
-    ``max_proposals`` and ``max_episodes`` are totals for the phase. The
-    campaign reads the tasks today; enforcing the budgets belongs to the phase
-    scheduler.
+    ``tasks`` empty and ``episode_budget`` ``None`` mean the campaign's own.
+    ``method`` names the method the move is for; ``None`` means the campaign's
+    method. ``label`` is the scheduler's name for the move, such as a phase: the
+    campaign records it on the candidate and never interprets it, so phases and
+    their total budgets stay a scheduler concern.
     """
 
-    tasks: tuple[Task, ...]
-    max_proposals: int
-    max_episodes: int
+    tasks: tuple[Task, ...] = ()
+    episode_budget: int | None = None
+    method: str | None = None
+    label: str | None = None
 
     def __post_init__(self) -> None:
-        require(len(self.tasks) > 0, "a harness phase needs at least one task")
-        require(self.max_proposals > 0, f"max_proposals must be > 0, got {self.max_proposals}")
-        require(self.max_episodes >= 0, f"max_episodes must be >= 0, got {self.max_episodes}")
+        require(
+            self.episode_budget is None or self.episode_budget >= 0,
+            f"episode_budget must be >= 0, got {self.episode_budget}",
+        )
+        require(self.method is None or bool(self.method), "HarnessMoveConfig.method must name a method or be None")
+        require(self.label is None or bool(self.label), "HarnessMoveConfig.label must be a name or None")
 
 
 @dataclass(frozen=True)
