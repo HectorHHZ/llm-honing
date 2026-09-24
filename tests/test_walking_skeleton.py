@@ -57,7 +57,7 @@ def test_a_campaign_crosses_every_plane(tmp_path: Path) -> None:
 
     # Harness: a new spec, the method's state published with it, the weights unchanged.
     assert evolved.harness != init.harness
-    assert evolved.method_state == {"proposals": 1, "accepted": 1}
+    assert evolved.method_state == {"schema_version": 1, "proposals": 1, "accepted": 1, "attempts": 1}
     assert evolved.master == quantized.master and evolved.serving == quantized.serving
 
     # The honing curve has one point per release, and the size falls at the cut.
@@ -92,7 +92,7 @@ def test_a_rejected_candidate_leaves_the_head_serving(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_a_method_with_nothing_to_propose_skips_without_touching_the_chain(tmp_path: Path) -> None:
+def test_a_method_with_nothing_to_propose_is_recorded_without_moving_the_head(tmp_path: Path) -> None:
     campaign = build_campaign(tmp_path).campaign
     campaign.run(ScriptedScheduler([Move(kind="harness")]))
     head = campaign.chain.head()
@@ -101,6 +101,7 @@ def test_a_method_with_nothing_to_propose_skips_without_touching_the_chain(tmp_p
 
     assert outcome.skipped_reason == "append_instruction proposed nothing"
     assert campaign.chain.head() is head
+    assert _ops(campaign.chain.record_path)[-1] == "skip"
 
 
 @pytest.mark.unit

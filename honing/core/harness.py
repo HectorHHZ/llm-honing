@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal, get_args
@@ -94,24 +95,81 @@ class Task:
 
 
 @dataclass(frozen=True)
-class EpisodeRecord:
-    """The outcome of one episode: a score, optional feedback, and where its transcript lives.
+class EpisodeOutcome:
+    """What one episode produced, before anyone judged it.
 
-    ``transcript_location`` points at the agent's own readable transcript, which
-    reflection-based methods read. ``samples_location`` points at token-level
-    training samples and is set only when the episode was a training rollout.
+    A runner only runs the agent; grading is task-specific and belongs to a
+    :class:`~honing.core.protocols.TaskGrader`. ``transcript_location`` points
+    at the agent's own readable transcript, and ``workspace_location`` at the
+    files it left behind, which a grader may inspect.
     """
 
     task_id: str
     spec_id: str
     policy_checksum: str
-    score: float
-    feedback: str | None = None
+    exit_code: int
+    final_output: str = ""
     transcript_location: str | None = None
-    samples_location: str | None = None
+    workspace_location: str | None = None
 
     def __post_init__(self) -> None:
-        require(math.isfinite(self.score), f"an episode score must be finite, got {self.score}")
+        require(bool(self.task_id), "EpisodeOutcome.task_id must be set")
+
+
+@dataclass(frozen=True)
+class Grade:
+    """A grader's verdict on one episode.
+
+    ``score`` is in ``[0, 1]`` for every grader, because selectors compare
+    candidate and incumbent task by task and need one scale to do it.
+    ``feedback`` is the text a reflective method reads.
+    """
+
+    score: float
+    feedback: str | None = None
+
+    def __post_init__(self) -> None:
+        require(
+            math.isfinite(self.score) and 0.0 <= self.score <= 1.0,
+            f"a grade's score must be in [0, 1], got {self.score}",
+        )
+
+
+@dataclass(frozen=True)
+class EpisodeRecord:
+    """One graded episode: the outcome a runner produced and the grade a grader gave it.
+
+    ``samples_location`` points at token-level training samples and is set only
+    when the episode was a training rollout.
+    """
+
+    outcome: EpisodeOutcome
+    grade: Grade
+    samples_location: str | None = None
+
+    @property
+    def task_id(self) -> str:
+        return self.outcome.task_id
+
+    @property
+    def spec_id(self) -> str:
+        return self.outcome.spec_id
+
+    @property
+    def policy_checksum(self) -> str:
+        return self.outcome.policy_checksum
+
+    @property
+    def score(self) -> float:
+        return self.grade.score
+
+    @property
+    def feedback(self) -> str | None:
+        return self.grade.feedback
+
+    @property
+    def transcript_location(self) -> str | None:
+        return self.outcome.transcript_location
 
 
 @dataclass(frozen=True)
@@ -120,6 +178,46 @@ class HarnessProposal:
 
     spec: HarnessSpec
     note: str = ""
+
+
+@dataclass(frozen=True)
+class ProposeResult:
+    """What one call to a method's ``propose`` produced.
+
+    ``state`` is returned whether or not there is a proposal, because an attempt
+    that proposes nothing has still spent episodes and advanced the method.
+    ``episodes_spent`` is how many episodes the attempt ran itself, so a
+    restarted campaign can enforce its budgets from the commit record.
+    """
+
+    proposal: HarnessProposal | None
+    state: Mapping[str, object]
+    episodes_spent: int = 0
+
+    def __post_init__(self) -> None:
+        require(self.episodes_spent >= 0, f"episodes_spent must be >= 0, got {self.episodes_spent}")
+
+
+HarnessPhase = Literal["pre_training", "during_training", "post_training"]
+
+
+@dataclass(frozen=True)
+class HarnessPhaseConfig:
+    """The tasks and budgets one harness phase runs with.
+
+    ``max_proposals`` and ``max_episodes`` are totals for the phase. The
+    campaign reads the tasks today; enforcing the budgets belongs to the phase
+    scheduler.
+    """
+
+    tasks: tuple[Task, ...]
+    max_proposals: int
+    max_episodes: int
+
+    def __post_init__(self) -> None:
+        require(len(self.tasks) > 0, "a harness phase needs at least one task")
+        require(self.max_proposals > 0, f"max_proposals must be > 0, got {self.max_proposals}")
+        require(self.max_episodes >= 0, f"max_episodes must be >= 0, got {self.max_episodes}")
 
 
 @dataclass(frozen=True)

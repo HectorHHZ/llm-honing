@@ -18,6 +18,7 @@ from honing.core.compression import TransformManifest
 from honing.core.errors import require, require_choice
 from honing.core.harness import EpisodeRecord, HarnessSpec
 from honing.core.numerics import NumericsPolicy
+from honing.core.state import validate_method_state
 from honing.core.structure import ArchitectureSpec
 from honing.core.weights import CheckpointRef, ModelSnapshot, ServingWeights
 
@@ -45,7 +46,7 @@ class UpdateCandidate:
     ``trained_numerics`` records the precision the master was last trained in,
     so a later quantize step can be checked against it. ``method_state`` is the
     harness evolution method's own state, published and rolled back with the
-    rest of the release.
+    rest of the release; see :mod:`honing.core.state` for what it may hold.
     """
 
     kind: CandidateKind
@@ -62,6 +63,7 @@ class UpdateCandidate:
         require_choice(self.kind, get_args(CandidateKind), "UpdateCandidate.kind")
         require((self.kind == "init") == (self.parent_id is None), "only the initial candidate has no parent")
         require(all(math.isfinite(value) for value in self.metrics.values()), "candidate metrics must be finite")
+        validate_method_state(self.method_state)
 
     @property
     def evaluated_variant(self) -> PolicyVariant:

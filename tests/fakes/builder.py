@@ -9,6 +9,9 @@ from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, H
 from honing.core import (
     BackendSupport,
     CompressionBudget,
+    EvolveMethod,
+    HarnessPhase,
+    HarnessPhaseConfig,
     PruneSelector,
     QuantScheme,
     RecoverySpec,
@@ -27,7 +30,7 @@ from tests.fakes.compression import (
     skewed_expert_telemetry,
 )
 from tests.fakes.data import ListDatasetProvider, token_batch
-from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeEpisodeRunner
+from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeEpisodeRunner, FakeTaskGrader
 from tests.fakes.model import SLIME_LIKE, FakeModelSource, FakeTrainer, FakeWorld, small_moe
 
 TASKS = (
@@ -50,7 +53,8 @@ class CampaignFixture:
     editor: UniformExpertEditor
     quantizer: FakeQuantizer
     runner: FakeEpisodeRunner
-    method: AppendInstructionMethod
+    grader: FakeTaskGrader
+    method: EvolveMethod
     data: ListDatasetProvider
 
 
@@ -62,18 +66,21 @@ def build_campaign(
     prune_selector: PruneSelector | None = None,
     recovery: RecoverySpec | None = None,
     rollout: RolloutProvider | None = None,
+    method: EvolveMethod | None = None,
+    phases: dict[HarnessPhase, HarnessPhaseConfig] | None = None,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake."""
     world = FakeWorld()
     trainer = FakeTrainer(world, support=support, gain=trainer_gain)
     runner = FakeEpisodeRunner(world)
-    method = AppendInstructionMethod()
+    grader = FakeTaskGrader()
+    method = method if method is not None else AppendInstructionMethod()
     editor = UniformExpertEditor(world)
     quantizer = FakeQuantizer(world)
     data = ListDatasetProvider([token_batch()])
 
     gate = Gate(
-        EpisodeEvaluator(runner, TASKS),
+        EpisodeEvaluator(runner, grader, TASKS),
         default_selector=WinLossSelector(),
         # Cost-driven changes need only avoid regressing; quality-driven ones must win.
         selectors={"prune": NoRegressionSelector(0.05), "quantize": NoRegressionSelector(0.05)},
@@ -90,7 +97,7 @@ def build_campaign(
             quantizer=quantizer,
             telemetry=FixedTelemetryStore(skewed_expert_telemetry(small_moe())),
         ),
-        harness=HarnessComponents(runner=runner, method=method, tasks=TASKS),
+        harness=HarnessComponents(runner=runner, grader=grader, method=method, tasks=TASKS, phases=phases or {}),
         defaults=CampaignDefaults(
             train=TrainJobSpec(algorithm="sft", steps=10),
             budget=CompressionBudget(keep_ratio=0.75),
@@ -104,4 +111,4 @@ def build_campaign(
         rollout=rollout,
     )
     campaign.start(FakeModelSource(world), work_dir, harness_seed=SEED_HARNESS)
-    return CampaignFixture(campaign, world, trainer, editor, quantizer, runner, method, data)
+    return CampaignFixture(campaign, world, trainer, editor, quantizer, runner, grader, method, data)

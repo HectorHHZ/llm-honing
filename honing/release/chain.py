@@ -1,9 +1,13 @@
 """The ordered releases of one campaign, and the commit record written ahead of every change.
 
 The record is an append-only JSON-lines file. Each operation (publish, reject,
-rollback) is written and flushed to disk before the in-memory head moves, so a
-crash between the two leaves a record describing a change that did not take
-effect, never a head that points at something no record describes.
+skip, rollback) is written and flushed to disk before the in-memory head moves,
+so a crash between the two leaves a record describing a change that did not
+take effect, never a head that points at something no record describes.
+
+Every value in the record must be one JSON can represent exactly. A value of a
+type the encoder does not know is an error, not a string: a record that quietly
+stringified a set could not restore it on rollback.
 
 Recovering a chain from its record is not implemented yet; the ordering that
 makes recovery possible is.
@@ -17,8 +21,18 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
-from honing.core import CandidateKind, HoneRelease, ReleaseError, SelectionDecision, UpdateCandidate
+from honing.core import (
+    CandidateKind,
+    ContractError,
+    HarnessPhase,
+    HoneRelease,
+    ReleaseError,
+    SelectionDecision,
+    UpdateCandidate,
+    validate_method_state,
+)
 
 
 @dataclass(frozen=True)
@@ -31,10 +45,17 @@ class CurvePoint:
     metrics: Mapping[str, float]
 
 
+_SCALARS = (str, int, float, bool)
+
+
 def _json_default(value: object) -> object:
-    if isinstance(value, (set, frozenset)):
-        return sorted(str(item) for item in value)
-    return str(value)
+    """Encode the few non-JSON types the record holds, and refuse everything else."""
+    if isinstance(value, MappingProxyType):
+        return dict(value)
+    if isinstance(value, (set, frozenset)) and all(isinstance(item, _SCALARS) for item in value):
+        # Sorted so the same set always writes the same line.
+        return sorted(value, key=lambda item: (type(item).__name__, item))
+    raise TypeError(f"the commit record cannot hold a {type(value).__name__}: {value!r}")
 
 
 def _candidate_record(candidate: UpdateCandidate) -> dict[str, object]:
@@ -85,6 +106,38 @@ class ReleaseChain:
         """Record a rejected candidate. The head does not move."""
         self._append_record(
             {"op": "reject", "candidate": _candidate_record(candidate), "decision": dataclasses.asdict(decision)}
+        )
+
+    def record_skip(
+        self,
+        *,
+        parent_id: str,
+        method: str,
+        reason: str,
+        state: Mapping[str, object],
+        episodes_spent: int,
+        phase: HarnessPhase | None = None,
+    ) -> None:
+        """Record a harness attempt that proposed nothing. The head does not move.
+
+        The attempt may still have run episodes and advanced the method, so its
+        state and the episodes it spent are recorded the way a rejection's are.
+        """
+        if parent_id != self.head().release_id:
+            raise ReleaseError(f"the attempt ran on {parent_id}, but the head is now {self.head().release_id}")
+        if episodes_spent < 0:
+            raise ContractError(f"episodes_spent must be >= 0, got {episodes_spent}")
+        validate_method_state(state)
+        self._append_record(
+            {
+                "op": "skip",
+                "parent_id": parent_id,
+                "method": method,
+                "phase": phase,
+                "reason": reason,
+                "episodes_spent": episodes_spent,
+                "method_state": dict(state),
+            }
         )
 
     def rollback(self, release_id: str) -> HoneRelease:
