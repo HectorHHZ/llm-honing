@@ -258,6 +258,12 @@ All 24 map/seat action hashes differ, which does not establish independence. Fro
 sources are identified in each run manifest; formatting and documentation in
 this PR do not retroactively change those manifests.
 
+A subsequent four-case ablation changed only one queue-advice sentence while
+keeping the weights and inference fixed. Wins remained 3/4, with identical
+ending ticks and root-wait counts. Three cases never encountered the changed
+advice; the fourth encountered it and changed some actions but still reached
+the tick limit. This does not establish a benefit from that single sentence.
+
 ### Optional long-term log storage
 
 Completed, audited and independently replay-verified decision logs can be

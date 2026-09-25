@@ -70,8 +70,8 @@ the sorted mapping of native weight filenames to their hashes; it is explicitly
 not a single-file weight hash or a trained checkpoint's promotion evidence.
 Prepared manifests are left unchanged and retain their preparation-time status.
 
-A server smoke check also loaded both pinned upstream models and executed three
-real forwards per family on recorded normal-view training requests (root, target
+A server smoke check also loaded both pinned upstream models and answered three
+requests per family using real inference on recorded normal-view training requests (root, target
 and actor choices). Every offered choice retained a probability; no context
 records were trimmed. Peak native input length was 1,454 tokens for NanoJev and
 1,787 for Jev-Omni, within the explicit 2,048-token limit. This validates the
