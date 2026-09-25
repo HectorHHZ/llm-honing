@@ -150,3 +150,12 @@ npm run test:engine
 The engine suite checks normal-view isolation, staging, parameter coverage,
 production controls, ownership/visibility checks, and observed state changes.
 Its scripted choices are explicitly test fixtures, not model match results.
+
+## Compressed decision logs
+
+Pass `--decision-log=gzip` to `npm run match -- ...` to write
+`decisions.jsonl.gz` directly with bounded stream buffering. The default remains
+plain JSONL. The compressed stream must finish successfully before `result.json`
+is written; `decision-log.json` records its decoded byte count, row count and
+SHA-256. Existing action audits, replay verification and offline labeling read
+both formats. This changes log storage only, not observations or model choices.

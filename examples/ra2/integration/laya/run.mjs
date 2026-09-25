@@ -14,6 +14,7 @@ import { CatalogPolicy, PARAMETER_LIMIT } from "./catalog-policy.mjs";
 import { LayaPolicy, validateAction } from "./policy.mjs";
 import { rowsOf } from "./context.mjs";
 import { LayaClient } from "./client.mjs";
+import { CompressedDecisionLog } from "./decision-log.mjs";
 import { predictStaged, STAGED_PROTOCOL, MAX_STAGES } from "./staged.mjs";
 import { Ra2Engine, GAME_DIR } from "../dependencies.mjs";
 const args = Object.fromEntries(
@@ -56,13 +57,16 @@ if (
     throw new Error(
         "ticks must be positive; seed integer; decision interval must be a positive multiple of cadence",
     );
+const decisionLogFormat = args["decision-log"] ?? "plain";
+if (!["plain", "gzip"].includes(decisionLogFormat))
+    throw new Error("decision-log must be plain or gzip");
 const out = resolve(ROOT, args.out ?? `runs/match-${layaSeat}-seed${seed}`);
 if (existsSync(out))
     throw new Error(
         `Output already exists; choose a new run directory: ${out}`,
     );
 mkdirSync(out, { recursive: true });
-let engine, meta, client, step, laya, baseline;
+let engine, meta, client, step, laya, baseline, decisionLog;
 const start = performance.now();
 const frames = [];
 let inferenceCalls = 0;
@@ -161,6 +165,7 @@ try {
             "token_budget.py",
             "client.mjs",
             "run.mjs",
+            "decision-log.mjs",
         ].map((f) => "integration/laya/" + f),
     ];
     for (const file of sourceFiles) {
@@ -178,6 +183,7 @@ try {
     );
     const manifest = {
         implementationSha256,
+        decisionLogFormat,
         protocol:
             decisionMode === "staged"
                 ? STAGED_PROTOCOL
@@ -209,6 +215,10 @@ try {
         startedAt: new Date().toISOString(),
     };
     writeFileSync(out + "/manifest.json", JSON.stringify(manifest, null, 2));
+    if (decisionLogFormat === "gzip")
+        decisionLog = new CompressedDecisionLog(out + "/decisions.jsonl.gz");
+    const appendDecision = (row) =>
+        decisionLog ? decisionLog.append(row) : append("decisions.jsonl", row);
     console.log(JSON.stringify({ event: "started", out, ...manifest }));
     capture();
     while (!step.done) {
@@ -267,7 +277,7 @@ try {
             decisionMode === "staged"
                 ? { leafQuestions: packet.questions }
                 : { questions: packet.questions };
-        append("decisions.jsonl", {
+        await appendDecision({
             tick: at,
             seat: layaSeat,
             decisionMode,
@@ -342,6 +352,11 @@ try {
             );
         }
     }
+    if (decisionLog)
+        writeFileSync(
+            out + "/decision-log.json",
+            JSON.stringify(await decisionLog.close(), null, 2),
+        );
     const result = {
         ...manifest,
         tick: step.tick,
@@ -388,6 +403,15 @@ try {
     );
     throw e;
 } finally {
+    if (decisionLog) {
+        // The normal path closes before result.json. On earlier match failure,
+        // finish or reject the stream without losing the original error.
+        try {
+            await decisionLog.close();
+        } catch (error) {
+            console.error("Decision log failed:", error.message);
+        }
+    }
     client?.close();
     if (engine) await engine.shutdown();
     meta?.dispose();
