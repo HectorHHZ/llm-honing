@@ -172,3 +172,10 @@ target carries these facts, even when the compact context lists only a few
 enemies. Hidden, radar-only and remembered targets contribute no new facts;
 geometric distance is not path length or a claim about weapon range. This
 changes input descriptions, not available commands or the chosen target.
+
+Protocol v1.6 limits target menus to eight choices plus cancellation, using
+additional pages to retain every target. Attack labels avoid repeating actors
+already bound in the preceding stage. This respects Laya's unchanged 48-token
+per-option and 512-token question budgets; over-budget requests still fail
+before inference instead of silently truncating. Target page headings name
+the first and last targets; full facts appear on the target selection page.

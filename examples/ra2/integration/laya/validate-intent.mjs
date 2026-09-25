@@ -195,7 +195,7 @@ try {
         assert(
             c.label.includes(`HP ${target.health}; at ${target.x},${target.y}`),
         );
-        assert(c.label.includes("straight-line distance"));
+        assert(c.label.includes("direct "));
     }
     assert.equal(
         packet.availability.find((x) => x.id === 29).status,

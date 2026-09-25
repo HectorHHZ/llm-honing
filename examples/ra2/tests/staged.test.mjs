@@ -343,3 +343,58 @@ verifyStagedTrace(sameTargetActors, groundedPage, assert);
 ok(
     "actor page descriptions identify owned units even when all target labels match",
 );
+
+const richTargets = fixturePacket([
+    fixtureGroup(
+        "targets",
+        Array.from({ length: 13 }, (_, i) => ({
+            key: `target-${i}`,
+            label: `Attack ore refinery with harvester #${
+                2147483600 + i
+            }; HP 99999; at 255,255; direct 0.0-360.6 cells`,
+            actorLabel: "All 64 Rhino tank units",
+            action: {
+                function: 23,
+                unit_tags: [1],
+                target_unit_tag: 2147483600 + i,
+            },
+        })),
+    ),
+]);
+const budgetRequests = [];
+for (const leaf of richTargets.groups[0].choices.filter((c) => c.action)) {
+    const result = await predictStaged(richTargets, {
+        predict: async (request) => {
+            budgetRequests.push(request);
+            for (const group of request.groups)
+                if (group.dimension === "target") {
+                    assert(group.choices.length <= 9);
+                    for (const choice of group.choices.filter(
+                        (c) => c.kind === "choose",
+                    )) {
+                        if (choice.label.startsWith("More target options:"))
+                            assert(!choice.label.includes("HP"));
+                        else assert(choice.label.includes("HP 99999"));
+                    }
+                }
+            return prediction(
+                request,
+                (group) =>
+                    group.choices.find((c) => c.leafKeys.includes(leaf.key))
+                        .key,
+            );
+        },
+    });
+    assert.equal(result.resolvedAnswers.targets.choice, leaf.key);
+    verifyStagedTrace(richTargets, result, assert);
+}
+ok(
+    "eight-choice target pages preserve full facts, all leaf bindings and access to thirteen targets",
+);
+if (process.env.RA2_TEST_TARGET_REQUESTS) {
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(
+        process.env.RA2_TEST_TARGET_REQUESTS,
+        JSON.stringify(budgetRequests),
+    );
+}

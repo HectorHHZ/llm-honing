@@ -23,11 +23,11 @@ test("each visible target has current HP, position and distance from the chosen 
     const before = structuredClone({ frame, action });
     assert.equal(
         attackTargetFacts(frame, action),
-        "HP 144; at 6,8; straight-line distance 5.0-10.0 cells from selected units",
+        "HP 144; at 6,8; direct 5.0-10.0 cells",
     );
     assert.equal(
         attackTargetFacts(frame, { ...action, unit_tags: [2] }),
-        "HP 144; at 6,8; straight-line distance 5.0 cells from selected units",
+        "HP 144; at 6,8; direct 5.0 cells",
     );
     assert.deepEqual({ frame, action }, before);
 });

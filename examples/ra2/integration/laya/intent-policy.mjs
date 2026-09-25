@@ -611,7 +611,16 @@ export class IntentPolicy extends CatalogPolicy {
         // lists only a few enemies. Labels do not select or change an action.
         for (const c of leaves.filter((c) => c.action.function === 23)) {
             const facts = attackTargetFacts(this.frame, c.action);
-            if (facts) c.label += `; ${facts}`;
+            if (facts) {
+                const target = this.frame.visible.find(
+                    (u) => u.tag === c.action.target_unit_tag,
+                );
+                // Actors are bound in the prior stage. Repeating their names
+                // here can exceed Laya's 48-token per-option limit.
+                c.label = `Attack ${this.role(target.name)} #${
+                    target.tag
+                }; ${facts}`;
+            }
         }
         // Root labels describe only currently grounded choices, not unavailable strategic wishes.
         const byIntent = new Map();
@@ -834,7 +843,7 @@ export class IntentPolicy extends CatalogPolicy {
                       {
                           id: "next_action",
                           hierarchy: "intent-function",
-                          contextVersion: 3,
+                          contextVersion: 2,
                           waitLabel,
                           instructions:
                               "Choose the next action that advances your strategic objective. Keep useful processes running and protect the means to win.",

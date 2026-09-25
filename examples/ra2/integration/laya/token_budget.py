@@ -16,11 +16,13 @@ def prepare_request(agent, parts, questions, max_len, head_max_len, build_sequen
         instructions = agent.tok(question["t"] + " question: " + question["ins"], add_special_tokens=False)[
             "input_ids"
         ]
-        if (
-            any(len(token) > 48 for token in tokens)
-            or len(instructions) + sum(1 + len(t) for t in tokens) > head_max_len
-        ):
-            raise ValueError(f"Question {key} exceeds lossless option/instruction budget")
+        longest_option = max((len(token) for token in tokens), default=0)
+        question_tokens = len(instructions) + sum(1 + len(token) for token in tokens)
+        if longest_option > 48 or question_tokens > head_max_len:
+            raise ValueError(
+                f"Question {key} exceeds lossless option/instruction budget "
+                f"(longest option {longest_option}/48 tokens; question {question_tokens}/{head_max_len})"
+            )
     while True:
         state = "\n".join(text for key in sections for text in retained[key])
         state_ids = agent.tok(state, add_special_tokens=False)["input_ids"]

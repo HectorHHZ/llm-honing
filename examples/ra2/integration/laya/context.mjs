@@ -345,9 +345,9 @@ export function attackTargetFacts(frame, action) {
             const nearest = Math.min(...distances).toFixed(1);
             const farthest = Math.max(...distances).toFixed(1);
             facts.push(
-                `straight-line distance ${
+                `direct ${
                     nearest === farthest ? nearest : `${nearest}-${farthest}`
-                } cells from selected units`,
+                } cells`,
             );
         }
     }

@@ -1,6 +1,6 @@
 // Conditional model calls over a frozen set of grounded leaf actions.
 // This module has no engine, observer, GPU, or game-clock handle.
-export const STAGED_PROTOCOL = "laya-normal-staged-v1.5";
+export const STAGED_PROTOCOL = "laya-normal-staged-v1.6";
 export const MAX_STAGES = 8;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const actorKey = (c) => JSON.stringify(c.action.unit_tags ?? []);
@@ -182,8 +182,11 @@ export class StagedDecision {
             if (this.answers[id]) continue;
             const { dimension, buckets: rawBuckets } = branch(state);
             dimensions[id] = dimension;
-            const paged = rawBuckets.length > 12,
-                width = paged ? Math.ceil(rawBuckets.length / 12) : 1;
+            // Rich target facts must fit the fixed 512-token question head.
+            // Smaller target pages preserve all leaves via follow-up calls.
+            const capacity = dimension === "target" ? 8 : 12;
+            const paged = rawBuckets.length > capacity,
+                width = paged ? Math.ceil(rawBuckets.length / capacity) : 1;
             const buckets = [];
             for (let i = 0; i < rawBuckets.length; i += width)
                 buckets.push(rawBuckets.slice(i, i + width).flat());
@@ -204,7 +207,10 @@ export class StagedDecision {
             for (const [pageIndex, leaves] of buckets.entries()) {
                 const smallLabel = (members) =>
                     dimensionLabel(dimension, members)
-                        .replace(/; cost .*/, "")
+                        .replace(
+                            dimension === "target" ? /;.*/ : /; cost .*/,
+                            "",
+                        )
                         .slice(0, 64);
                 // Summarize the parameter actually being selected. Leaf labels
                 // start with a target and can be identical across actor pages.
@@ -244,7 +250,11 @@ export class StagedDecision {
                                   : dimension === "confirmation"
                                   ? "whether to confirm this action"
                                   : "the remaining parameters"
-                          }, or cancel that pending action.`,
+                          }, or cancel that pending action.${
+                              dimension === "target"
+                                  ? " Direct distance is straight-line cells from selected actors, not weapon range."
+                                  : ""
+                          }`,
                 choices,
             });
         }
