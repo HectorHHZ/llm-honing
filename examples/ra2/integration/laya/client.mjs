@@ -6,6 +6,8 @@ export class LayaClient {
         gpu = "0",
         model = "english",
         python = process.env.LAYA_PYTHON ?? "python3",
+        checkpointManifest = undefined,
+        spawnProcess = spawn,
     } = {}) {
         this.seq = 0;
         this.pending = new Map();
@@ -14,16 +16,24 @@ export class LayaClient {
             this.readyResolve = resolve;
             this.readyReject = reject;
         });
-        this.process = spawn(
+        const workerEnv = {
+            ...process.env,
+            LAYA_GPU: String(gpu),
+            LAYA_MODEL_TYPE: model,
+        };
+        if (checkpointManifest === null)
+            delete workerEnv.LAYA_CHECKPOINT_MANIFEST;
+        else if (checkpointManifest !== undefined) {
+            if (typeof checkpointManifest !== "string" || !checkpointManifest)
+                throw new Error("Invalid per-player checkpoint manifest");
+            workerEnv.LAYA_CHECKPOINT_MANIFEST = checkpointManifest;
+        }
+        this.process = spawnProcess(
             python,
             ["-u", ROOT + "integration/laya/worker.py"],
             {
                 cwd: ROOT,
-                env: {
-                    ...process.env,
-                    LAYA_GPU: String(gpu),
-                    LAYA_MODEL_TYPE: model,
-                },
+                env: workerEnv,
                 stdio: ["pipe", "pipe", "inherit"],
             },
         );

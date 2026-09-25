@@ -184,5 +184,7 @@ Experimental `--family=nanojev` and `--family=jev-omni` use the same staged game
 interface with pinned native choice workers. The default family remains Laya.
 See the [native client setup and evidence limits](integration/models/README.md)
 for prepared manifests, compatible Python environments and independent native
-input verification. Native training, qualification and cross-model self-play
-are not established by the current interface and inference checks.
+input verification. The optional native-head trainer performs real gradient
+updates and verifies saved weights in a fresh process. The duel runner supports
+two model-controlled seats with equal command budgets. These capabilities do
+not establish full-match performance, repeated self-play learning, or a champion.

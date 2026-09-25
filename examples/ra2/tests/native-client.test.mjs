@@ -1,4 +1,6 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
+import { decisionClientOptions } from "../integration/models/factory.mjs";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
@@ -9,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
     NativeClient,
+    verifyNativeMetadata,
     bridgeNativePrediction,
     verifyNativeRecord,
 } from "../integration/models/client.mjs";
@@ -120,7 +123,7 @@ function response(packet, family, id = 1) {
         latencyMs: 1,
     };
 }
-function fakeSpawn(family, mutate = (r) => r) {
+function fakeSpawn(family, mutate = (r) => r, metadataMutate = (m) => m) {
     const process = new EventEmitter();
     process.stdin = new PassThrough();
     process.stdout = new PassThrough();
@@ -142,8 +145,10 @@ function fakeSpawn(family, mutate = (r) => r) {
         process.command = args;
         queueMicrotask(() =>
             process.stdout.write(
-                JSON.stringify({ ready: true, metadata: metadata(family) }) +
-                    "\n",
+                JSON.stringify({
+                    ready: true,
+                    metadata: metadataMutate(metadata(family)),
+                }) + "\n",
             ),
         );
         return process;
@@ -409,4 +414,138 @@ test("native dispatch is explicit and leaves default Laya selection unchanged", 
     assert.throws(() =>
         decisionClientOptions({ "native-max-length": "2048" }, "intent"),
     );
+});
+
+function learnedMetadata(runtime, manifestPath) {
+    const headSha256 = "a".repeat(64);
+    const effective = createHash("sha256")
+        .update(
+            JSON.stringify({
+                baseWeightSetSha256: runtime.weightSetSha256,
+                nativeHeadSha256: headSha256,
+            }),
+        )
+        .digest("hex");
+    return {
+        ...runtime,
+        checkpointKind: "trained-native-decision-head",
+        baseModel: {
+            repo: "fixture-upstream",
+            revision: "fixture-revision",
+            weightSetSha256: runtime.weightSetSha256,
+        },
+        repo: "local:ra2/trained-native-decision-head",
+        revision: effective,
+        weightSetSha256: effective,
+        learnedHead: {
+            manifestPath,
+            headSha256,
+            manifestSha256: "b".repeat(64),
+            independentVerificationSha256: "c".repeat(64),
+            trainingScope: "native-head-only",
+            actualOptimizerSteps: 8,
+        },
+    };
+}
+
+test("learned native head gets a new composite identity and cannot claim upstream provenance", () => {
+    const value = learnedMetadata(
+        metadata("jev-omni"),
+        "/fixture/trained/checkpoint.json",
+    );
+    verifyNativeMetadata(value, "jev-omni", 2048);
+    assert.notEqual(value.weightSetSha256, value.baseModel.weightSetSha256);
+    for (const change of [
+        (x) => {
+            x.weightSetSha256 = x.baseModel.weightSetSha256;
+        },
+        (x) => {
+            x.learnedHead.actualOptimizerSteps = 0;
+        },
+        (x) => {
+            delete x.learnedHead;
+        },
+        (x) => {
+            x.learnedHead.independentVerificationSha256 = "missing";
+        },
+        (x) => {
+            x.repo = "fixture-upstream";
+        },
+    ]) {
+        const copy = structuredClone(value);
+        change(copy);
+        assert.throws(() => verifyNativeMetadata(copy, "jev-omni", 2048));
+    }
+    assert.throws(
+        () =>
+            decisionClientOptions(
+                { family: "laya", "head-manifest": "/fixture/head" },
+                "intent",
+            ),
+        /Native settings/,
+    );
+    const routed = decisionClientOptions(
+        { family: "jev-omni", "head-manifest": "/fixture/head" },
+        "intent",
+    );
+    assert.equal(routed.headManifest, "/fixture/head");
+});
+
+test("requested learned head must be explicitly loaded by the worker", async () => {
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "ra2-native-head-client-"),
+    );
+    const file = path.join(directory, "checkpoint.json");
+    fs.writeFileSync(file, "{}\n");
+    try {
+        for (const family of ["nanojev", "jev-omni"]) {
+            const client = new NativeClient(
+                { ...options(family), headManifest: file },
+                fakeSpawn(
+                    family,
+                    (r) => r,
+                    (m) => learnedMetadata(m, fs.realpathSync(file)),
+                ),
+            );
+            try {
+                const runtime = await client.ready;
+                assert.equal(
+                    runtime.learnedHead.manifestPath,
+                    fs.realpathSync(file),
+                );
+                assert(client.process.command[1].includes("--head-manifest"));
+                assert(
+                    client.process.command[1].includes(fs.realpathSync(file)),
+                );
+                await client.predict(request);
+            } finally {
+                client.close();
+            }
+            const missing = new NativeClient(
+                { ...options(family), headManifest: file },
+                fakeSpawn(family),
+            );
+            await assert.rejects(missing.ready, /different checkpoint kind/);
+            const unexpected = new NativeClient(
+                options(family),
+                fakeSpawn(
+                    family,
+                    (r) => r,
+                    (m) => learnedMetadata(m, file),
+                ),
+            );
+            await assert.rejects(unexpected.ready, /different checkpoint kind/);
+            const wrong = new NativeClient(
+                { ...options(family), headManifest: file },
+                fakeSpawn(
+                    family,
+                    (r) => r,
+                    (m) => learnedMetadata(m, "/wrong/checkpoint.json"),
+                ),
+            );
+            await assert.rejects(wrong.ready, /another learned head/);
+        }
+    } finally {
+        fs.rmSync(directory, { recursive: true });
+    }
 });

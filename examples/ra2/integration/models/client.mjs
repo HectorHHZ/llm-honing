@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { ROOT } from "../paths.mjs";
@@ -23,6 +25,44 @@ export function verifyNativeMetadata(metadata, family, maxLength) {
     assert.equal(metadata.forwardAutocast, "bfloat16");
     assert(Object.keys(metadata.verifiedFilesSha256).length > 0);
     assert(Object.values(metadata.verifiedFilesSha256).every(hash));
+    if (metadata.learnedHead !== undefined) {
+        assert.equal(metadata.checkpointKind, "trained-native-decision-head");
+        const head = metadata.learnedHead,
+            base = metadata.baseModel;
+        assert(hash(base?.weightSetSha256));
+        assert(
+            hash(head.headSha256) &&
+                hash(head.manifestSha256) &&
+                hash(head.independentVerificationSha256),
+        );
+        assert.equal(head.trainingScope, "native-head-only");
+        assert(
+            Number.isInteger(head.actualOptimizerSteps) &&
+                head.actualOptimizerSteps > 0,
+        );
+        assert(
+            typeof head.manifestPath === "string" &&
+                head.manifestPath.length > 0,
+        );
+        const expected = createHash("sha256")
+            .update(
+                JSON.stringify({
+                    baseWeightSetSha256: base.weightSetSha256,
+                    nativeHeadSha256: head.headSha256,
+                }),
+            )
+            .digest("hex");
+        assert.equal(metadata.weightSetSha256, expected);
+        assert.equal(metadata.revision, expected);
+        assert.equal(metadata.repo, "local:ra2/trained-native-decision-head");
+    } else {
+        assert(
+            [undefined, "prepared-upstream-model"].includes(
+                metadata.checkpointKind,
+            ),
+        );
+        assert.equal(metadata.baseModel, undefined);
+    }
 }
 
 export function verifyNativePrediction(packet, response, metadata) {
@@ -155,6 +195,7 @@ export class NativeClient {
         {
             family,
             preparedManifest,
+            headManifest,
             sourceRoot,
             gpu = "0",
             maxLength = 2048,
@@ -176,6 +217,9 @@ export class NativeClient {
             );
         if (!Number.isInteger(maxLength) || maxLength <= 0)
             throw new Error("Invalid native input limit");
+        this.headManifest = headManifest
+            ? realpathSync(headManifest)
+            : undefined;
         this.seq = 0;
         this.lastResponse = 0;
         this.pending = new Map();
@@ -199,6 +243,8 @@ export class NativeClient {
             String(maxLength),
         ];
         if (sourceRoot) command.push("--source-root", sourceRoot);
+        if (this.headManifest)
+            command.push("--head-manifest", this.headManifest);
         this.process = spawnProcess(python, command, {
             cwd: ROOT,
             env: process.env,
@@ -229,6 +275,17 @@ export class NativeClient {
                         "Native worker sent a second ready record",
                     );
                     verifyNativeMetadata(response.metadata, family, maxLength);
+                    assert.equal(
+                        Boolean(response.metadata.learnedHead),
+                        Boolean(this.headManifest),
+                        "Native worker loaded a different checkpoint kind",
+                    );
+                    if (this.headManifest)
+                        assert.equal(
+                            response.metadata.learnedHead.manifestPath,
+                            this.headManifest,
+                            "Native worker loaded another learned head",
+                        );
                     this.metadata = response.metadata;
                     this.resolveReady(this.metadata);
                     return;

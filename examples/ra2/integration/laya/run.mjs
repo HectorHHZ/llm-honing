@@ -159,6 +159,7 @@ try {
         ...(clientOptions.family !== "laya"
             ? [
                   "integration/models/worker.py",
+                  "integration/models/head_checkpoint.py",
                   "integration/models/provenance.py",
                   "integration/models/choice_protocol.py",
                   "integration/models/upstream_adapters.py",

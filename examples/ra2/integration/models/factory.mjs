@@ -9,6 +9,7 @@ export function decisionClientOptions(args, candidateMode) {
         throw new Error("Unknown decision model family");
     if (family === "laya") {
         if (
+            args["head-manifest"] ||
             args["prepared-manifest"] ||
             args["source-root"] ||
             args["native-max-length"]
@@ -38,6 +39,7 @@ export function decisionClientOptions(args, candidateMode) {
         preparedManifest:
             args["prepared-manifest"] ?? ROOT + `.cache/models/${family}.json`,
         sourceRoot: family === "nanojev" ? sourceRoot : undefined,
+        headManifest: args["head-manifest"],
         maxLength,
     };
 }

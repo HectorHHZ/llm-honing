@@ -15,6 +15,14 @@ const lines = (name) =>
         .map(JSON.parse);
 const result = JSON.parse(readFileSync(dir + "/result.json", "utf8")),
     actions = lines("actions.jsonl");
+const policySeat = result.policySeat ?? result.layaSeat;
+assert(["red", "blue"].includes(policySeat), "Missing policy seat");
+if (result.policySeat && result.layaSeat)
+    assert.equal(
+        result.policySeat,
+        result.layaSeat,
+        "Contradictory policy seats",
+    );
 const selectedModelActions = [];
 let decisionCount = 0,
     selectedCount = 0,
@@ -129,7 +137,7 @@ for await (const line of createInterface({
     selectedModelActions.push(
         ...d.selected.map((c) => ({ tick: d.tick, action: c.action })),
     );
-    assert.equal(d.seat, result.layaSeat);
+    assert.equal(d.seat, policySeat);
     assert.equal(d.tick, i * result.cadenceTicks);
     if (result.candidateMode === "intent") {
         assert(
@@ -205,7 +213,7 @@ assert.equal(
     "Recorded decisions do not cover every simulation cadence",
 );
 const modelActions = actions
-    .filter((a) => a.seat === result.layaSeat)
+    .filter((a) => a.seat === policySeat)
     .map((a) => ({ tick: a.tick, action: a.action }));
 assert.deepEqual(
     modelActions,
@@ -232,7 +240,8 @@ const audit = {
     passed: true,
     protocol: result.protocol,
     tick: result.tick,
-    layaSeat: result.layaSeat,
+    policySeat,
+    ...(result.layaSeat ? { layaSeat: result.layaSeat } : {}),
     cadenceTicks: result.cadenceTicks,
     decisions: decisionCount,
     inferenceCalls: calls,
@@ -263,10 +272,10 @@ const audit = {
             : []),
         "actual model text matches retained context",
         "binary target decisions equal mapped normalized means of two actual model calls",
-        "submitted Laya actions exactly equal selected leaves",
+        "submitted model actions exactly equal selected leaves",
         "all actors owned and targets currently observable",
         "options and essential context never silently truncated",
-        `engine cadence ${result.cadenceTicks} ticks; Laya interval ${
+        `engine cadence ${result.cadenceTicks} ticks; model interval ${
             result.decisionInterval ?? result.cadenceTicks
         } ticks; per-seat raw cap ${result.maxActionsPerSeat} verified`,
         "recorded receipts agree with aggregate stats",

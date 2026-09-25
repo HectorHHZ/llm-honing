@@ -202,6 +202,7 @@ def main():
     parser.add_argument("--family", choices=["nanojev", "jev-omni"], required=True)
     parser.add_argument("--prepared-manifest", type=Path, required=True)
     parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--head-manifest", type=Path)
     parser.add_argument("--gpu", required=True)
     parser.add_argument("--max-length", type=int, default=2048)
     args = parser.parse_args()
@@ -216,6 +217,11 @@ def main():
     )
     pins = read_json((ROOT / "league/model-sources.json").read_text())
     manifest, metadata = verify_prepared(args.prepared_manifest, args.family, pins)
+    parent_metadata = dict(metadata)
+    if args.head_manifest is not None:
+        from .head_checkpoint import trained_runtime
+
+        metadata = trained_runtime(parent_metadata, args.head_manifest)
     source = None
     if args.family == "nanojev":
         if args.source_root is None:
@@ -230,6 +236,13 @@ def main():
             torch.set_num_threads(4)
             torch.manual_seed(1)
             adapter = load_native(args.family, manifest, source, args.max_length)
+            if args.head_manifest is not None:
+                from .head_checkpoint import load_head_artifact, trained_runtime
+
+                load_head_artifact(adapter, args.family, args.head_manifest, parent_metadata)
+                # Recheck the artifact after loading so ready cannot describe changed files.
+                if trained_runtime(parent_metadata, args.head_manifest)["learnedHead"] != metadata["learnedHead"]:
+                    raise ValueError("Learned native head changed while loading")
         metadata.update(
             protocol="native-choice-jsonl-v1",
             gpu=args.gpu,

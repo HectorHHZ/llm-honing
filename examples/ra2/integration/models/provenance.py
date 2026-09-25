@@ -12,6 +12,12 @@ from .worker import load_module, verify_nano_source, verify_prepared
 def verify_runtime(runtime, pins):
     family = runtime.get("family")
     manifest, expected = verify_prepared(Path(runtime["preparedManifestPath"]), family, pins)
+    if runtime.get("learnedHead") is not None:
+        from .head_checkpoint import trained_runtime
+
+        expected = trained_runtime(expected, Path(runtime["learnedHead"]["manifestPath"]))
+    elif runtime.get("checkpointKind") not in {None, "prepared-upstream-model"}:
+        raise ValueError("Trained native runtime is missing its learned artifact")
     for key, value in expected.items():
         if runtime.get(key) != value:
             raise ValueError(f"Recorded native runtime provenance differs: {key}")

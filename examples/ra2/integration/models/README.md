@@ -2,9 +2,9 @@
 
 The experimental NanoJev and Jev-Omni clients implement the same staged choice
 interface as Laya and are selectable in the RA2 match runner. The default
-controller remains Laya. Native training and promotion are not implemented;
-interface tests and inference checks do not establish native game performance,
-migration qualification or self-play results.
+controller remains Laya. A bounded head-only trainer and a two-model duel runner
+are available below. Full native adaptation, promotion and repeated self-play
+learning remain incomplete; interface checks do not establish game performance.
 
 `NanoJevChoices` wraps the official NanoJev `DecisionPredictor` and
 `prepare_examples`. It preserves the offered candidate IDs and order, measures
@@ -38,7 +38,8 @@ model execution. Neither kind of check is a model inference or game evaluation.
 `worker.py` provides a separate JSONL process for the pinned upstream native APIs.
 The common client factory connects it to the RA2 match runner. The worker has
 CPU transport/provenance tests; those tests do not load models or establish
-native game performance. Training and promotion still require separate work.
+native game performance. Promotion still requires full, independently verified
+games under the registered evaluation protocol.
 
 Run from the RA2 example directory with a compatible, separately configured
 Python environment and a prepared local model manifest:
@@ -139,7 +140,7 @@ mapping and the complete staged action-to-audit path. The latter is a synthetic
 transcript, not an engine game. A separate real-weight client smoke check
 (`diagnostic-v52-native-client-20260925`) reproduced all three earlier requests
 per family with identical choices and probabilities through the JavaScript
-transport. Full native game evaluation, learning and qualification remain pending.
+transport. Full native game evaluation and qualification remain pending.
 
 
 The production factory was then checked on four recorded training requests per
@@ -156,5 +157,101 @@ permuted request passed the action audit and independent native re-encoding;
 both replays reproduced their recorded engine hashes. Both reached the short
 cap without an engine winner. These two technical smoke runs are explicitly
 excluded from training, promotion and full-match win-rate evidence. Original
-upstream weights are still unadapted; no native learning or cross-model
-self-play has been completed.
+upstream weights were used in those runs; the subsequent training and duel
+checks below have separate identities and evidence limits.
+
+
+## Two-model games
+
+`duel.mjs` connects any pair of Laya, NanoJev and Jev-Omni to separate seats.
+Both normal-view packets are frozen before either model predicts. Both choices
+are resolved before advancing the engine. Each model gets one command per
+3-tick decision; neither sees the other model's choices or hidden observation.
+This differs from baseline matches, where Supalosa keeps its 16-command cap.
+
+Reserve two GPUs from your allowed pool. The group wrapper acquires both UUID
+leases together, releasing a partial acquisition immediately to avoid deadlock.
+The example pool below is illustrative; supply the GPUs allocated to your job.
+
+```bash
+python league/gpu_group.py --pool 0 1 --record runs/duel-resources.json -- \
+  node integration/models/duel.mjs \
+  --red-family=nanojev --red-gpu={gpu0} \
+  --red-prepared-manifest=.cache/models/nanojev.json \
+  --red-source-root=/path/to/pinned/NanoJev \
+  --blue-family=jev-omni --blue-gpu={gpu1} \
+  --blue-prepared-manifest=.cache/models/jev-omni.json \
+  --map=mp03t4.map --seed=104 --ticks=600 --out=runs/native-duel-smoke
+python league/verify_duel.py --match runs/native-duel-smoke
+```
+
+For a Laya seat use `--red-family=laya --red-model=typed-decisions` and an
+explicit `--red-checkpoint-manifest=upstream` or trained manifest path (use
+`blue-` for the other seat). Each seat has its own decision log, provenance and
+action audit; both share one engine replay. Verification also reconstructs the
+actual native inputs. Required Python environments and game assets are the
+same as baseline verification. A short capped game is a technical check, not
+a full-match win-rate result. Playing a duel does not train either model.
+
+## Native training data and head updates
+
+`league/export_native_training.py` accepts a checked training-source registry
+through `--data-check`. The registry must declare `passed: true`,
+`developmentOrHeldoutUsed: false` and `trainingSources`, with each source's
+`path`, `map`, `seed`, `seat`, `manifestSha256` and `samplesSha256`. The exporter
+rechecks those files, episode identities and source snapshots, rejects episodes
+outside `league/protocol.json`'s training split, and requires explicit teacher
+or DAgger labels. Evaluation games and privileged observations are not labels.
+This registry is an input contract, not an automatically generated curriculum.
+
+The exporter packs every row with the official family-specific tokenizer. It
+preserves essential state and all options, rejects conflicting labels, and
+removes duplicate encoded inputs across splits. Its `dev.jsonl` is classifier
+validation from training seed 105, not the game's development or sealed tests.
+The separate verifier reconstructs every packed row and the removal decisions.
+Neither command loads a model or allocates a GPU.
+
+Run these commands with the configured model Python from `examples/ra2`:
+
+```bash
+"$RA2_NATIVE_PYTHON" league/export_native_training.py --family nanojev \
+  --data-check /path/to/verified-training-sources.json \
+  --prepared-manifest .cache/models/nanojev.json \
+  --source-root /path/to/pinned/NanoJev --out runs/nanojev-supervision
+"$RA2_NATIVE_PYTHON" league/verify_native_training_export.py \
+  --directory runs/nanojev-supervision
+"$RA2_NATIVE_PYTHON" league/train_native_head.py --family nanojev \
+  --prepared-manifest .cache/models/nanojev.json \
+  --source-root /path/to/pinned/NanoJev --data-dir runs/nanojev-supervision \
+  --steps 8 --batch-questions 4 --head-lr 0.0001 --gpu 0 \
+  --out runs/nanojev-head
+"$RA2_NATIVE_PYTHON" league/verify_native_head.py \
+  --directory runs/nanojev-head --gpu 0
+```
+
+Use `--family jev-omni` and its prepared manifest for Jev-Omni; omit
+`--source-root`. Use fresh family-specific output directories and an available
+reserved GPU. The default 32 distinct training rows and eight optimizer steps
+are a gradient/reload diagnostic, not full training or validation-based model
+selection. The trainer chooses a seeded sample with stage coverage, freezes
+all backbone parameters, preserves runtime buffers, and updates native head
+parameters with AdamW. It checks differentiable logits against the official
+predictor before and after updates. Stored artifacts include head safetensors,
+parent and data hashes, selected rows, optimizer-step records and probe logits.
+The independent verifier loads the original parent and saved head in a fresh
+process, checks frozen body/buffers, and reproduces every probe exactly.
+
+To use a verified head in a baseline game, add
+`--head-manifest=runs/nanojev-head/checkpoint.json` to the corresponding native
+match command above. A duel accepts `--red-head-manifest` and
+`--blue-head-manifest`. Prepared base weights remain required. The worker refuses
+missing independent verification, altered head tensors or a different parent.
+Learned weights receive a distinct composite identity; manifests retain the
+upstream identity separately. There is no silent fallback to the original head.
+
+Verified server diagnostics have completed actual eight-step head updates for
+both families and independent fresh-process reloads. Three 600-tick duels also
+exercised Laya/NanoJev, Laya/Jev-Omni and NanoJev/Jev-Omni. These demonstrate
+learning and game plumbing separately, not learning from those duels, native
+transfer success, stable wins, or a qualified champion. Repeated cross-model
+learning and a portable end-to-end optimization command remain future work.
