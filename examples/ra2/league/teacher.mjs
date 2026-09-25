@@ -1,6 +1,6 @@
 // Training-data teacher only. Never used as a fallback for evaluated models.
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-export const TEACHER_VERSION = "normal-macro-v10";
+export const TEACHER_VERSION = "normal-macro-v11-visible-cleanup";
 export class MacroTeacher {
     constructor() {
         this.lastCombat = -150;
@@ -129,10 +129,17 @@ export class MacroTeacher {
                 distance(u, base) < 25 ||
                 (armed(u) && army.some((a) => distance(a, u) <= 12)),
         );
+        // A visible mobile survivor, including an undeployed MCV, can keep
+        // the game alive after the visible buildings have been destroyed.
+        const buildings = policy.frame.visible.filter(
+            (u) => rule(u).type === 2,
+        );
         const targets = (
             threats.length
                 ? threats
-                : policy.frame.visible.filter((u) => rule(u).type === 2)
+                : buildings.length
+                ? buildings
+                : policy.frame.visible
         )
             .slice()
             .sort(

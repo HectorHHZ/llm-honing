@@ -176,3 +176,81 @@ test("teacher revisits stale public locations and excludes the offered home sear
     assert.equal(teacher.choose(policy, packet).key, "stale");
     assert.equal(JSON.stringify([...policy.searchVisits]), before);
 });
+
+function cleanupPacket() {
+    const tags = [10, 11, 12, 13, 14];
+    return {
+        groups: [
+            {
+                choices: [
+                    { key: "wait", action: null },
+                    {
+                        key: "search",
+                        label: "map waypoint",
+                        action: { function: 22, unit_tags: tags, world: 2020 },
+                    },
+                    {
+                        key: "mcv",
+                        label: "visible construction vehicle",
+                        action: {
+                            function: 23,
+                            unit_tags: tags,
+                            target_unit_tag: 999,
+                        },
+                    },
+                    {
+                        key: "building",
+                        label: "visible power plant",
+                        action: {
+                            function: 23,
+                            unit_tags: tags,
+                            target_unit_tag: 998,
+                        },
+                    },
+                    {
+                        key: "threat",
+                        label: "visible tank",
+                        action: {
+                            function: 23,
+                            unit_tags: tags,
+                            target_unit_tag: 997,
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+}
+
+test("teacher attacks a visible distant unarmed survivor before searching", () => {
+    const policy = state(),
+        teacher = new MacroTeacher();
+    policy.frame.visible = [
+        { name: "SMCV", tag: 999, x: 80, y: 80, health: 700 },
+    ];
+    policy.meta.techno.set("SMCV", { type: 0 });
+    const packet = cleanupPacket();
+    assert.equal(teacher.choose(policy, packet).key, "mcv");
+    // The same offered tag is not selected once it is no longer visible.
+    policy.frame.visible = [];
+    assert.equal(teacher.choose(policy, packet).key, "search");
+});
+
+test("visible survivor cleanup preserves building and immediate threat precedence", () => {
+    const policy = state(),
+        teacher = new MacroTeacher();
+    policy.meta.techno.set("NAPOWR", { type: 2 });
+    policy.frame.visible = [
+        { name: "SMCV", tag: 999, x: 80, y: 80, health: 1 },
+        { name: "NAPOWR", tag: 998, x: 80, y: 70, health: 500 },
+    ];
+    assert.equal(teacher.choose(policy, cleanupPacket()).key, "building");
+    policy.frame.visible.push({
+        name: "HTNK",
+        tag: 997,
+        x: 5,
+        y: 5,
+        health: 400,
+    });
+    assert.equal(teacher.choose(policy, cleanupPacket()).key, "threat");
+});
