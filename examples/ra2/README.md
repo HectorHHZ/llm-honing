@@ -6,7 +6,9 @@ API calls into engine actions. A local Python worker scores Laya's choices;
 the runner records the exact context, choices, receipts, and replay.
 
 This is a standalone experiment example. It does not implement Honing's
-`EpisodeRunner`, change core protocols, train weights, or enter a campaign.
+`EpisodeRunner` or change core protocols. The optional [learning loop](league/README.md)
+trains local Laya weights and supervises development matches; it remains separate
+from the installed Honing campaign API.
 The engine package, RA2 assets, upstream bot, and model weights are external
 inputs. They are not redistributed here. Supalosa's strategy is unchanged.
 

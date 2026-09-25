@@ -173,3 +173,28 @@ def test_compression_never_discards_original_for_mismatching_archive(tmp_path):
     with pytest.raises(ValueError, match="original retained"):
         storage.compress(tmp_path)
     assert original.read_bytes() == b"original"
+
+
+@pytest.mark.unit
+def test_gpu_binding_uses_available_allowed_device_and_preserves_plan(tmp_path, monkeypatch):
+    campaign = load("campaign")
+
+    def gpu_query(argv, **kwargs):
+        if "--query-gpu=index,uuid" in argv:
+            return "1, uuid-one\n5, uuid-five\n"
+        return "uuid-five\n"
+
+    monkeypatch.setattr(campaign.subprocess, "check_output", gpu_query)
+    command = [
+        sys.executable,
+        "-c",
+        "import sys; from pathlib import Path; Path('result').write_text(sys.argv[-1])",
+        "--gpu=5",
+    ]
+    spec = {"id": "gpu-job", "gpu": "5", "command": command, "cwd": str(tmp_path), "result": str(tmp_path / "result")}
+    (tmp_path / "plan.json").write_text(json.dumps({"jobs": [spec]}))
+    campaign.run(tmp_path, 2, ["1", "5"])
+    assert (tmp_path / "result").read_text() == "--gpu=1"
+    binding = json.loads((tmp_path / "status/gpu-job.execution.json").read_text())
+    assert binding["requestedGpu"] == "5" and binding["assignedGpu"] == "1"
+    assert json.loads((tmp_path / "jobs/gpu-job.json").read_text()) == spec

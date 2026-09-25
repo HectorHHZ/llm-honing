@@ -26,12 +26,12 @@ def identity(pid):
 
 def execute(root, job):
     spec = json.loads((root / "jobs" / f"{job}.json").read_text())
+    execution = root / "status" / f"{job}.execution.json"
+    command = json.loads(execution.read_text())["command"] if execution.exists() else spec["command"]
     started = time.time()
     with (root / "logs" / f"{job}.log").open("ab") as log:
         try:
-            result = subprocess.run(
-                spec["command"], cwd=spec["cwd"], stdout=log, stderr=subprocess.STDOUT, check=False
-            )
+            result = subprocess.run(command, cwd=spec["cwd"], stdout=log, stderr=subprocess.STDOUT, check=False)
             code, error = result.returncode, None
         except Exception as exc:
             code, error = 127, str(exc)
@@ -41,7 +41,22 @@ def execute(root, job):
     )
 
 
-def run(root, concurrency):
+def gpu_command(command, gpu):
+    out = list(command)
+    changed = False
+    for i, argument in enumerate(out):
+        if argument.startswith("--gpu="):
+            out[i] = "--gpu=" + gpu
+            changed = True
+        elif argument == "--gpu" and i + 1 < len(out):
+            out[i + 1] = gpu
+            changed = True
+    if not changed:
+        raise ValueError("GPU job must expose a --gpu argument for recorded resource binding")
+    return out
+
+
+def run(root, concurrency, gpu_pool=None):
     import fcntl
 
     with (root / "controller.lock").open("a") as lock:
@@ -91,7 +106,11 @@ def run(root, concurrency):
                 raise RuntimeError(f"Jobs need inspection: {failed}")
             if not running and not pending:
                 return
-            reserved = {str(j["gpu"]) for j in jobs if j["id"] in running and "gpu" in j}
+            reserved = set()
+            for job in jobs:
+                if job["id"] in running and "gpu" in job:
+                    live = json.loads((root / "status" / f"{job['id']}.live.json").read_text())
+                    reserved.add(str(live.get("assignedGpu", job["gpu"])))
             busy = set()
             if any("gpu" in j for j in pending):
                 devices = subprocess.check_output(
@@ -108,11 +127,30 @@ def run(root, concurrency):
             for j in ready:
                 if not slots:
                     break
-                gpu = str(j["gpu"]) if "gpu" in j else None
-                if gpu is not None and gpu in (reserved | busy):
-                    continue
-                if gpu is not None:
+                requested = str(j["gpu"]) if "gpu" in j else None
+                gpu = requested
+                command = j["command"]
+                if requested is not None:
+                    pool = [str(x) for x in (gpu_pool or [requested])]
+                    if requested not in pool:
+                        raise ValueError("Requested GPU outside allowed pool")
+                    ordered = [requested] + [x for x in pool if x != requested]
+                    gpu = next((x for x in ordered if x not in (reserved | busy)), None)
+                    if gpu is None:
+                        continue
                     reserved.add(gpu)
+                    command = gpu_command(command, gpu)
+                save(
+                    root / "status" / f"{j['id']}.execution.json",
+                    {
+                        "requestedGpu": requested,
+                        "assignedGpu": gpu,
+                        "allowedGpuPool": gpu_pool,
+                        "command": command,
+                        "plannedCommand": j["command"],
+                        "boundAt": time.time(),
+                    },
+                )
                 slots -= 1
                 process = subprocess.Popen(
                     [sys.executable, str(Path(__file__).resolve()), "worker", "--root", str(root), "--job", j["id"]],
@@ -122,6 +160,7 @@ def run(root, concurrency):
                     root / "status" / f"{j['id']}.live.json",
                     {
                         "pid": process.pid,
+                        "assignedGpu": gpu,
                         "processStart": identity(process.pid),
                         "specSha256": hashlib.sha256(json.dumps(j, sort_keys=True).encode()).hexdigest(),
                     },
@@ -135,13 +174,14 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--job")
     parser.add_argument("--concurrency", type=int, default=3)
+    parser.add_argument("--gpu-pool", nargs="+")
     args = parser.parse_args()
     if args.mode == "worker":
         execute(args.root.resolve(), args.job)
     else:
         if not 1 <= args.concurrency <= 3:
             raise ValueError("Concurrency must be between one and three")
-        run(args.root.resolve(), args.concurrency)
+        run(args.root.resolve(), args.concurrency, args.gpu_pool)
 
 
 if __name__ == "__main__":

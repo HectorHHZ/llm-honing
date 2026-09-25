@@ -15,6 +15,7 @@ from pathlib import Path
 from campaign import run, save
 
 ROOT = Path(__file__).resolve().parents[1]
+GPU_POOL = None
 
 
 def digest(path):
@@ -29,7 +30,7 @@ def phase(directory, jobs, concurrency):
         raise ValueError("Cannot change a persisted phase plan")
     if not file.exists():
         save(file, plan)
-    run(directory, concurrency)
+    run(directory, concurrency, GPU_POOL)
 
 
 def match_jobs(directory, checkpoint, cases, gpus, split, ticks):
@@ -81,6 +82,8 @@ def verification_jobs(matches, split):
 
 
 def optimize(args):
+    global GPU_POOL
+    GPU_POOL = args.gpus
     args.root.mkdir(parents=True, exist_ok=True)
     protocol = json.loads((ROOT / "league/protocol.json").read_text())
     conf = {

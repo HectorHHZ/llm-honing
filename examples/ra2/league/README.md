@@ -23,7 +23,8 @@ cross-model self-play. `protocol.json` records the completion requirements.
   collect new learner training episodes, annotate, aggregate and train again.
   No teacher participates in the learned policy's actions.
 - Immutable job plans, Linux process-start identity checks, dependency ordering,
-  GPU occupancy checks, per-GPU worker locks, completed-job resume and failure
+  GPU occupancy checks, recorded assignment within an explicit allowed GPU pool,
+  per-GPU worker locks, completed-job resume and failure
   records. A vanished job requires inspection. Partial optimizer-state resume
   is not implemented; completed checkpoints/jobs can be resumed.
 - Independent action/context audits and replay hash verification. The evidence
@@ -76,6 +77,10 @@ A generic campaign root contains `plan.json` with `jobs`, each specifying `id`,
 `command` as an argv list, `cwd`, and expected `result`. Optional `gpu` and
 `dependsOn` fields constrain dispatch. Execute with
 `python league/campaign.py run --root /absolute/campaign --concurrency 3`.
+Add `--gpu-pool 1 5` to let a pending GPU job use either available device.
+The requested device stays in the immutable plan; `status/*.execution.json`
+records the assigned device and actual command. Running jobs are never moved.
+Without a pool, each job waits for its requested GPU.
 Process completion plus a result file is **not** a win or promotion.
 
 ## Evidence and limitations
