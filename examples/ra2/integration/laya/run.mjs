@@ -1,3 +1,4 @@
+import { PermutationClient } from "./permutation-client.mjs";
 import {
     writeFileSync,
     appendFileSync,
@@ -147,6 +148,7 @@ try {
             args.model ??
             (candidateMode === "intent" ? "typed-decisions" : "english"),
     });
+    client = new PermutationClient(client);
     const runtime = await client.ready;
     const sourceFiles = [
         "README.md",
@@ -164,6 +166,7 @@ try {
             "worker.py",
             "token_budget.py",
             "client.mjs",
+            "permutation-client.mjs",
             "run.mjs",
             "decision-log.mjs",
         ].map((f) => "integration/laya/" + f),
@@ -285,6 +288,10 @@ try {
             availability: packet.availability,
             actorExclusions: packet.actorExclusions,
             normalUnits: laya.frame.rows,
+            policyMemory: {
+                kind: "normal-public-search-v1",
+                searchVisits: [...(laya.searchVisits ?? new Map())],
+            },
             ownVectors: {
                 minerals: laya.obs.vectors.minerals,
                 power_cap: laya.obs.vectors.power_cap,

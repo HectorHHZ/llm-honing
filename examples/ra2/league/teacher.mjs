@@ -1,12 +1,12 @@
 // Training-data teacher only. Never used as a fallback for evaluated models.
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-export const TEACHER_VERSION = "normal-macro-v4";
+export const TEACHER_VERSION = "normal-macro-v10";
 export class MacroTeacher {
     constructor() {
         this.lastCombat = -150;
         this.lastGather = new Map();
         this.lastDeploy = -150;
-        this.searched = new Set();
+        this.searched = new Map();
     }
     observe(actions, tick) {
         for (const action of actions) {
@@ -115,12 +115,33 @@ export class MacroTeacher {
         const army = own.filter(
             (u) => u.name === "HTNK" && u.health > 0 && !u.is_in_cargo,
         );
+        const armed = (u) =>
+            [rule(u).primary, rule(u).secondary]
+                .filter(Boolean)
+                .some(
+                    (name) =>
+                        Number(policy.meta.rules?.getWeapon(name)?.damage) > 0,
+                );
+        const priority = (u) =>
+            u.name === "HTNK" ? 0 : u.name === "SHK" ? 1 : armed(u) ? 2 : 3;
         const threats = policy.frame.visible.filter(
-            (u) => distance(u, base) < 25,
+            (u) =>
+                distance(u, base) < 25 ||
+                (armed(u) && army.some((a) => distance(a, u) <= 12)),
         );
-        const targets = threats.length
-            ? threats
-            : policy.frame.visible.filter((u) => rule(u).type === 2);
+        const targets = (
+            threats.length
+                ? threats
+                : policy.frame.visible.filter((u) => rule(u).type === 2)
+        )
+            .slice()
+            .sort(
+                (a, b) =>
+                    priority(a) - priority(b) ||
+                    a.health - b.health ||
+                    a.tag - b.tag,
+            );
+        const targetRank = new Map(targets.map((u, i) => [u.tag, i]));
         if (army.length >= 4 || threats.length) {
             const ids = new Set(targets.map((u) => u.tag));
             const attacks = chooseFn(23)
@@ -133,10 +154,35 @@ export class MacroTeacher {
                 )
                 .sort(
                     (a, b) =>
+                        targetRank.get(a.action.target_unit_tag) -
+                            targetRank.get(b.action.target_unit_tag) ||
                         b.action.unit_tags.length - a.action.unit_tags.length,
                 );
             if (attacks[0]) {
-                return attacks[0];
+                const target = targets.find(
+                    (u) => u.tag === attacks[0].action.target_unit_tag,
+                );
+                // Reinforcements should keep travelling after a short-lived
+                // target dies. Use only an already offered, observed point.
+                const distant =
+                    target &&
+                    army.filter((u) => distance(u, target) > 12).length >
+                        army.length / 2;
+                const advance = distant
+                    ? chooseFn(22)
+                          .filter(
+                              (c) =>
+                                  c.action.unit_tags.every((t) =>
+                                      army.some((u) => u.tag === t),
+                                  ) && distance(point(c), target) < 2,
+                          )
+                          .sort(
+                              (a, b) =>
+                                  b.action.unit_tags.length -
+                                  a.action.unit_tags.length,
+                          )[0]
+                    : null;
+                return advance ?? attacks[0];
             }
             // A bounded individual-actor list can omit tank Attack_Unit leaves.
             // Use a currently offered tank squad AttackMove at a visible target.
@@ -157,17 +203,23 @@ export class MacroTeacher {
             if (assault) return assault;
         }
         if (army.length >= 5) {
-            const candidates = chooseFn(22).filter((c) =>
-                c.action.unit_tags.every((t) => army.some((u) => u.tag === t)),
+            const candidates = chooseFn(22).filter(
+                (c) =>
+                    !c.label.includes("(own base)") &&
+                    c.action.unit_tags.every((t) =>
+                        army.some((u) => u.tag === t),
+                    ),
             );
             // A public location is searched only after our army actually reaches it.
             // No opponent start, privileged unit position or god-view data is used.
-            for (const c of candidates) {
-                if (army.some((u) => distance(u, point(c)) < 8))
-                    this.searched.add(c.action.world);
-            }
+            const visits = policy.searchVisits ?? this.searched;
+            if (!policy.searchVisits)
+                for (const c of candidates) {
+                    if (army.some((u) => distance(u, point(c)) < 8))
+                        visits.set(c.action.world, policy.tick);
+                }
             const rank = (c) => {
-                if (this.searched.has(c.action.world)) return 3;
+                if (visits.has(c.action.world)) return 3;
                 if (c.label.includes("unexplored possible enemy base"))
                     return 0;
                 if (c.label.includes("last seen")) return 1;
@@ -176,6 +228,10 @@ export class MacroTeacher {
             const scout = candidates.sort(
                 (a, b) =>
                     rank(a) - rank(b) ||
+                    // Revisit the least recently observed public location after
+                    // the first sweep, instead of repeatedly choosing near home.
+                    (visits.get(a.action.world) ?? -1) -
+                        (visits.get(b.action.world) ?? -1) ||
                     b.action.unit_tags.length - a.action.unit_tags.length ||
                     distance(point(a), base) - distance(point(b), base),
             )[0];

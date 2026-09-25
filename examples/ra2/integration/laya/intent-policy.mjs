@@ -28,6 +28,7 @@ export class IntentPolicy extends CatalogPolicy {
                 "decisionInterval must be a positive multiple of 3",
             );
         this.commandHistory = [];
+        this.lastAcceptedCombat = null;
         this.effects = [];
         this.previousNormal = null;
         this.macroHistory = [];
@@ -106,12 +107,18 @@ export class IntentPolicy extends CatalogPolicy {
             workers = this.frame.own.filter(
                 (u) => this.meta.techno.get(u.name)?.harvester,
             );
-        const working = workers.filter(
-            (u) => !u.is_idle && [46, 47].includes(u.order_id_0),
+        const working = workers.filter((u) =>
+            [u.order_id_0, u.order_id_1].some((order) =>
+                [46, 47].includes(order),
+            ),
         );
         const needsMining = workers.filter(
             (u) =>
-                u.is_idle || [0, 20, 21, 22, 23, 26, 27].includes(u.order_id_0),
+                ![u.order_id_0, u.order_id_1].some((order) =>
+                    [46, 47].includes(order),
+                ) &&
+                (u.is_idle ||
+                    [0, 20, 21, 22, 23, 26, 27].includes(u.order_id_0)),
         );
         const offered = new Set(leaves.map((c) => c.action.function));
         const first = this.macroHistory[0] ?? {
@@ -160,9 +167,12 @@ export class IntentPolicy extends CatalogPolicy {
             objective =
                 "Restore recurring income now: select Support, then gather ore with idle or diverted harvesters. Move and Force-move do not collect ore and replace mining orders. Leave Gather/Dock orders running long enough to return ore to a refinery.";
         else if (v.minerals < 100 && stalls.length)
-            objective = offered.has(46)
-                ? "Production is stalled with almost no credits. Check harvesters and restore ore collection using Support/gather ore. More tank orders cannot fund existing orders. Keep the refinery and miners."
-                : "Production is stalled with almost no credits. Restore an income source using offered normal-view choices. More tank orders cannot fund existing orders.";
+            objective =
+                working.length === workers.length && workers.length > 0
+                    ? "Production has almost no credits, but observed miners already have Gather/Dock orders. Let them finish the mining loop; avoid replacing these orders. Keep the useful queue short and funded."
+                    : offered.has(46)
+                    ? "Production is stalled with almost no credits. Check harvesters and restore ore collection using Support/gather ore. More tank orders cannot fund existing orders. Keep the refinery and miners."
+                    : "Production is stalled with almost no credits. Restore an income source using offered normal-view choices. More tank orders cannot fund existing orders.";
         else if (peak > v.army_count && v.army_count < 8 && !v.units_truncated)
             objective = queuedMilitary
                 ? "The observed army count fell. Reinforcements are already queued: maintain mining and let production advance; regroup surviving combat units."
@@ -264,13 +274,17 @@ export class IntentPolicy extends CatalogPolicy {
             ? `Issue no new command; ${queueName(paused[0])} remains paused`
             : active.length
             ? v.army_count >= 8
-                ? "Wait one second; leave the army on its existing orders"
+                ? `Wait ${(this.decisionInterval / 15).toFixed(
+                      1,
+                  )} seconds; leave the army on its existing orders`
                 : `Continue ${active
                       .map((q) => queueName(q))
                       .join(
                           " and ",
                       )} production and existing orders without interruption`
-            : "Wait one second; build no army or new buildings";
+            : `Wait ${(this.decisionInterval / 15).toFixed(
+                  1,
+              )} seconds; build no army or new buildings`;
         const leaves = [];
         let excludedDeploy = 0;
         const actorExclusions = [];
@@ -532,8 +546,21 @@ export class IntentPolicy extends CatalogPolicy {
                         "public possible starting position",
                         layerAt(this.obs, "visibility_map", a.world) === 2
                             ? "currently visible public spawn"
+                            : layerAt(this.obs, "visibility_map", a.world) === 1
+                            ? "previously explored public spawn; now fogged"
                             : "unexplored possible enemy base",
                     );
+                    if (this.publicSearchPoints?.has(a.world)) {
+                        const visited = this.searchVisits.get(a.world);
+                        c.label +=
+                            visited === undefined
+                                ? "; no recorded troop visit"
+                                : visited === this.tick
+                                ? "; own combat troops nearby now"
+                                : `; troops visited ${Math.floor(
+                                      (this.tick - visited) / 15,
+                                  )}s ago`;
+                    }
                 }
                 if (fn === 20)
                     c.functionLabel =
@@ -604,6 +631,43 @@ export class IntentPolicy extends CatalogPolicy {
             c.label = `Attack visible ${this.role(target.name)} #${
                 target.tag
             } with ${units.length} ${this.role(name)} units`;
+            c.key = `L${leaves.length + 1}`;
+            leaves.push(c);
+        }
+        // Combine only actors already offered for this exact action/target.
+        // The model must still select this squad and its target explicitly.
+        const mixed = new Map();
+        for (const leaf of leaves.filter((c) =>
+            [22, 23].includes(c.action.function),
+        )) {
+            const key = `${leaf.action.function}:${
+                leaf.action.world ?? leaf.action.target_unit_tag
+            }`;
+            if (!mixed.has(key))
+                mixed.set(key, { sample: leaf, tags: new Set() });
+            for (const tag of leaf.action.unit_tags) {
+                const unit = own.find((u) => u.tag === tag);
+                if (unit && !rule(unit).harvester && rule(unit).type !== 2)
+                    mixed.get(key).tags.add(tag);
+            }
+        }
+        for (const { sample, tags } of mixed.values()) {
+            const units = [...tags]
+                .slice(0, 64)
+                .map((tag) => own.find((u) => u.tag === tag));
+            if (new Set(units.map((u) => u.name)).size < 2) continue;
+            const c = structuredClone(sample);
+            c.action.unit_tags = units.map((u) => u.tag);
+            c.actorLabel = `Combined ${units.length} eligible combat units; harvesters excluded`;
+            c.label = `${
+                sample.action.function === 22
+                    ? "Attack-move"
+                    : "Attack visible target"
+            } with ${units.length} combined combat units; ${sample.label}`;
+            c.intent = {
+                id: "combat",
+                label: "Command military units to scout and fight",
+            };
             c.key = `L${leaves.length + 1}`;
             leaves.push(c);
         }
@@ -807,6 +871,7 @@ export class IntentPolicy extends CatalogPolicy {
             parts.essential[3],
             parts.essential[4],
             parts.essential[7],
+            "Search labels distinguish unseen, previously explored/fogged and currently visible public locations. A troop visit records our own nearby combat units, not enemy absence. When searching without visible enemies, try unvisited or stale sectors instead of repeatedly sending troops to a clear point already beside them.",
             "A finished building must be placed before it can work. Queued production continues while combat troops scout and attack. Ore harvesters collect income; use military units for distant attacks.",
             "Keep useful buildings and the construction yard functioning. Build an income source, military production, and an army; use the army to find and destroy enemy buildings.",
             parts.essential[8],
@@ -820,6 +885,17 @@ export class IntentPolicy extends CatalogPolicy {
                     : x,
             );
         parts.essential.push(macro.rules);
+        const previous = this.lastAcceptedCombat;
+        parts.essential.push(
+            previous
+                ? `Last accepted military combat command: ${(
+                      (this.tick - previous.tick) /
+                      15
+                  ).toFixed(1)}s ago, ${
+                      previous.label
+                  }. Receipt confirms processing only, not damage or arrival. Existing orders continue. Normally allow about 10s before replacing useful combat orders unless a new visible threat or idle troops need attention.`
+                : "No military combat command has been accepted yet. Existing orders continue between decisions.",
+        );
         const types = [...new Set(own.map((u) => u.name))];
         parts.details = types
             .filter((n) => this.meta.techno.get(n)?.type !== 2)
@@ -835,6 +911,9 @@ export class IntentPolicy extends CatalogPolicy {
                     .map((u) => `${u.x},${u.y}`)
                     .join("; ")}.`;
             });
+        parts.details.push(
+            "Search and cleanup: public starts are only possible enemy locations. Enemies may expand elsewhere. If fighting ends without engine victory, use public map waypoints to search additional sectors; do not repeatedly return the army to your own base. Four offered public grid waypoints rotate every 60 game seconds. A remembered enemy has unknown current survival.",
+        );
         parts.logs = parts.logs.slice(-3);
         // One decision per second by default. The engine and opponent still step every three ticks.
         const groups =
@@ -843,7 +922,7 @@ export class IntentPolicy extends CatalogPolicy {
                       {
                           id: "next_action",
                           hierarchy: "intent-function",
-                          contextVersion: 2,
+                          contextVersion: 6,
                           waitLabel,
                           instructions:
                               "Choose the next action that advances your strategic objective. Keep useful processes running and protect the means to win.",
@@ -897,6 +976,8 @@ export class IntentPolicy extends CatalogPolicy {
     receipts(tick, results) {
         for (let i = 0; i < this.pending.length; i++) {
             const c = this.pending[i];
+            if (results?.[i]?.accepted && [22, 23].includes(c.action.function))
+                this.lastAcceptedCombat = { tick, label: c.label };
             this.commandHistory.push({
                 tick,
                 function: c.action.function,

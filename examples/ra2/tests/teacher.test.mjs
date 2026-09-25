@@ -117,3 +117,62 @@ test("teacher uses an offered squad move when tank attack actors were omitted", 
     };
     assert.equal(teacher.choose(policy, packet).key, "assault");
 });
+
+test("teacher uses offered attack-move while most reinforcements are distant", () => {
+    const teacher = new MacroTeacher(),
+        policy = state();
+    policy.meta.techno.set("NAPOWR", { type: 2 });
+    policy.frame.visible = [
+        { tag: 999, name: "NAPOWR", x: 30, y: 0, health: 100 },
+    ];
+    const tags = [10, 11, 12, 13, 14];
+    const attack = {
+        key: "target",
+        label: "visible power plant",
+        action: { function: 23, unit_tags: tags, target_unit_tag: 999 },
+    };
+    const advance = {
+        key: "advance",
+        label: "visible target location",
+        action: { function: 22, unit_tags: tags, world: 30 },
+    };
+    const packet = {
+        groups: [{ choices: [{ key: "A", action: null }, attack, advance] }],
+    };
+    assert.equal(teacher.choose(policy, packet).key, "advance");
+    for (const tag of tags.slice(0, 3))
+        policy.frame.own.find((u) => u.tag === tag).x = 25;
+    assert.equal(teacher.choose(policy, packet).key, "target");
+    packet.groups[0].choices.pop();
+    for (const tag of tags) policy.frame.own.find((u) => u.tag === tag).x = 0;
+    assert.equal(teacher.choose(policy, packet).key, "target");
+});
+
+test("teacher revisits stale public locations and excludes the offered home search", () => {
+    const teacher = new MacroTeacher(),
+        policy = state();
+    policy.searchVisits = new Map([
+        [20, 150],
+        [50, 30],
+    ]);
+    const make = (key, world, label) => ({
+        key,
+        label,
+        action: { function: 22, unit_tags: [10, 11, 12, 13, 14], world },
+    });
+    const packet = {
+        groups: [
+            {
+                choices: [
+                    { key: "A", action: null },
+                    make("home", 0, "(own base)"),
+                    make("recent", 20, "map waypoint"),
+                    make("stale", 50, "map waypoint"),
+                ],
+            },
+        ],
+    };
+    const before = JSON.stringify([...policy.searchVisits]);
+    assert.equal(teacher.choose(policy, packet).key, "stale");
+    assert.equal(JSON.stringify([...policy.searchVisits]), before);
+});

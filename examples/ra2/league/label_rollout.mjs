@@ -18,10 +18,16 @@ import {
 } from "../integration/laya/staged.mjs";
 import { MacroTeacher, TEACHER_VERSION } from "./teacher.mjs";
 import { openLog } from "../integration/laya/jsonl.mjs";
+import { sampleCorrection } from "./label_sampling.mjs";
 const args = Object.fromEntries(
     process.argv.slice(2).map((x) => x.replace(/^--/, "").split("=")),
 );
 assert(args.match && args.out, "Use --match=... --out=...");
+const samplingMode = args.sampling ?? "actions-periodic";
+assert(
+    ["actions-periodic", "transition-periodic"].includes(samplingMode),
+    "Unknown sampling mode",
+);
 const input = resolve(args.match),
     out = resolve(args.out);
 const result = JSON.parse(readFileSync(input + "/result.json"));
@@ -49,6 +55,7 @@ const sourceSha256 = {};
 for (const rel of [
     "league/label_rollout.mjs",
     "league/teacher.mjs",
+    "league/label_sampling.mjs",
     "integration/laya/staged.mjs",
     "integration/laya/jsonl.mjs",
 ]) {
@@ -62,6 +69,7 @@ const manifest = {
     notModelEvaluation: true,
     split: "train",
     teacher: TEACHER_VERSION,
+    samplingMode,
     map: result.map,
     seed: result.seed,
     seat: result.layaSeat,
@@ -86,6 +94,7 @@ for (const line of readFileSync(input + "/actions.jsonl", "utf8")
 }
 const meta = await loadMetadata(result.map),
     teacher = new MacroTeacher();
+let previousDesiredSignature = null;
 let decisions = 0,
     samples = 0,
     disagreements = 0;
@@ -124,6 +133,24 @@ try {
                 ),
             },
         };
+        if (d.candidates.some((g) => g.contextVersion >= 5)) {
+            assert(
+                d.policyMemory?.kind === "normal-public-search-v1",
+                "Shared-search context requires recorded normal search memory; use the v29 recorder for learner rollouts",
+            );
+            assert(Array.isArray(d.policyMemory.searchVisits));
+            for (const [world, tick] of d.policyMemory.searchVisits)
+                assert(
+                    Number.isInteger(world) &&
+                        world >= 0 &&
+                        world < policy.facade.res ** 2 &&
+                        Number.isInteger(tick) &&
+                        tick >= 0 &&
+                        tick <= d.tick,
+                    "Invalid recorded normal search visit",
+                );
+            policy.searchVisits = new Map(d.policyMemory.searchVisits);
+        }
         const packet = {
             tick: d.tick,
             groups: d.candidates,
@@ -139,7 +166,15 @@ try {
         disagreements += Number(differs);
         decisions++;
         // Include transitions and periodic corrections, with the learner's actual history.
-        if (d.tick < 600 || actual.length || d.tick % 30 === 0) {
+        if (
+            sampleCorrection(
+                d.tick,
+                actual,
+                desired,
+                previousDesiredSignature,
+                samplingMode,
+            )
+        ) {
             const prediction = await predictStaged(packet, {
                 predict: async (req) => {
                     const answers = Object.fromEntries(
@@ -178,6 +213,7 @@ try {
             });
             verifyStagedTrace(packet, prediction, assert);
         }
+        previousDesiredSignature = JSON.stringify(desired);
         // Only executed learner actions affect cooldowns. Advice is never executed.
         teacher.observe(actual, d.tick);
     }

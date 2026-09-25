@@ -214,3 +214,41 @@ original overlap audit and post-variant collision/deduplication counts. Compare
 this setting with the same parent, data, optimizer, validation and live policy;
 report any changed training-example count instead of assuming a matched sample
 budget. Actual game audits and replay verification still determine promotion.
+
+
+### Normal-view search and two-order target inference
+
+The runtime now retains normal-observation troop visits to public map locations,
+rotates four public search waypoints every60 game seconds, preserves actor-type
+coverage in crowded menus, and offers explicit mixed combat squads that exclude
+harvesters. It reads both visible order slots to avoid interrupting Gather/Dock
+loops. Context includes accepted combat-order age and the actual wait duration
+for the configured cadence. Visits do not prove enemy absence, and receipts do
+not prove arrival or damage. These observations advise the model; they do not
+submit actions.
+
+For a staged target question containing Cancel A and exactly two action targets,
+the Laya client evaluates both target orders with identical retained context.
+It maps the second probability vector back to the original target identities,
+normalizes upstream rounding, averages probabilities and selects the largest.
+Cancel stays fixed; other questions retain one native forward. This adds model
+compute, not extra commands or a local action-selection fallback. Both raw
+responses, the permutation, derived scores and native forward count are logged.
+Audit recomputes the choice and rejects changed context or incomplete evidence.
+Historical single-order matches must use their recorded older verifier.
+
+A paired development experiment used the same three cases and matched context,
+candidates, cadence and18,000-tick budget across four arms:
+
+| Weights | Single order | Two-order target mean |
+| --- | --- | --- |
+| Parent2ed46ac9 |0/3 |3/3 |
+| Adaptedcf9c42e6 |1/3 |2/3 |
+
+Every match passed action audit and independent replay verification. These are
+three reused development cases, not independent samples or proof of stability.
+The weight and inference effects are not additive in this small comparison.
+The parent plus two-order method is undergoing the complete24-case development
+matrix; no qualification or final test result is claimed. Frozen experimental
+sources are identified in each run manifest; formatting and documentation in
+this PR do not retroactively change those manifests.

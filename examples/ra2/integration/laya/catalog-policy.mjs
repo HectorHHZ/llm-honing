@@ -112,7 +112,19 @@ export class CatalogPolicy extends LayaPolicy {
                         a.health_ratio - b.health_ratio ||
                         a.tag - b.tag,
                 );
-            if (single) return shortlist(ordered, name).map((u) => [u]);
+            if (single) {
+                // Cover eligible unit types before filling remaining individual slots.
+                const representatives = new Map();
+                for (const unit of ordered)
+                    if (!representatives.has(unit.name))
+                        representatives.set(unit.name, unit);
+                const first = [...representatives.values()],
+                    used = new Set(first.map((u) => u.tag));
+                return shortlist(
+                    [...first, ...ordered.filter((u) => !used.has(u.tag))],
+                    name,
+                ).map((u) => [u]);
+            }
             const byType = new Map();
             for (const u of ordered) {
                 if (!byType.has(u.name)) byType.set(u.name, []);
@@ -170,7 +182,64 @@ export class CatalogPolicy extends LayaPolicy {
                 )
                     point(c, "map waypoint");
             }
-        const worldTargets = shortlist([...points.values()], "world_waypoints");
+        // Reserve public-map search coverage instead of permanently keeping only
+        // the first grid cells. This uses public geometry and the game clock only.
+        const allPoints = [...points.values()];
+        this.publicSearchPoints ??= new Set();
+        this.searchVisits ??= new Map();
+        const scoutingUnits = own.filter(
+            (u) => u.can_move && armed(u) && !rule(u).harvester,
+        );
+        for (const p of allPoints) {
+            if (
+                ["map waypoint", "public possible starting position"].includes(
+                    p.label,
+                )
+            )
+                this.publicSearchPoints.add(p.world);
+        }
+        // Record only normal-view own combat positions at public locations.
+        // Nearby troops establish a visit, not that the whole sector is clear.
+        for (const world of this.publicSearchPoints)
+            if (
+                scoutingUnits.some(
+                    (u) =>
+                        distance(u, {
+                            x: world % r,
+                            y: Math.floor(world / r),
+                        }) < 8,
+                )
+            )
+                this.searchVisits.set(world, this.tick);
+        const priorityPoints = allPoints.filter(
+            (p) => p.label !== "map waypoint",
+        );
+        const gridPoints = allPoints.filter((p) => p.label === "map waypoint");
+        const offset = gridPoints.length
+            ? (Math.floor(this.tick / 900) * 4) % gridPoints.length
+            : 0;
+        const rotated = gridPoints
+            .slice(offset)
+            .concat(gridPoints.slice(0, offset));
+        const worldTargets = [
+            ...priorityPoints.slice(
+                0,
+                PARAMETER_LIMIT - Math.min(4, gridPoints.length),
+            ),
+            ...rotated.slice(0, 4),
+        ];
+        for (const point of allPoints) {
+            if (worldTargets.length >= PARAMETER_LIMIT) break;
+            if (!worldTargets.some((p) => p.world === point.world))
+                worldTargets.push(point);
+        }
+        if (allPoints.length > worldTargets.length)
+            omitted.push({
+                group: "world_waypoints",
+                available: allPoints.length,
+                offered: worldTargets.length,
+                scope: "parameter_candidates_only",
+            });
         const ore = shortlist(
             [...new Set(meta.tiles.map((t) => f.cell(t.rx, t.ry)))]
                 .filter(

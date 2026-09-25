@@ -1,3 +1,4 @@
+import { verifyEnsemble } from "./permutation-client.mjs";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -34,9 +35,16 @@ const latencies = [],
     functionCounts = {};
 function auditCall(record, stageIndex = 1) {
     if (!Object.keys(record.questions).length) return;
-    calls++;
-    latencies.push(record.latencyMs);
-    trimmed += record.trimmed.length;
+    verifyEnsemble(record);
+    calls += record.forwardCalls ?? 1;
+    const forwards = record.ensemble
+        ? [record.ensemble.original, record.ensemble.swapped]
+        : [record];
+    latencies.push(...forwards.map((r) => r.latencyMs));
+    for (const r of forwards)
+        for (const a of Object.values(r.tokenAudit))
+            peakTokens = Math.max(peakTokens, a.inputTokens);
+    trimmed += record.trimmed.length * (record.forwardCalls ?? 1);
     // The actual model text must include exactly the retained recorded context.
     const retained = structuredClone(record.contextParts);
     for (const removed of record.trimmed) {
@@ -130,8 +138,13 @@ for await (const line of createInterface({
             d,
             assert,
         );
-        assert.equal(d.inferenceCalls, d.stages.length);
-        parameterCalls += Math.max(0, d.stages.length - 1);
+        assert.equal(
+            d.inferenceCalls,
+            d.stages.reduce((n, s) => n + (s.forwardCalls ?? 1), 0),
+        );
+        parameterCalls += d.stages
+            .slice(1)
+            .reduce((n, s) => n + (s.forwardCalls ?? 1), 0);
         maxStages = Math.max(maxStages, d.stages.length);
         for (const stage of d.stages) auditCall(stage, stage.stageIndex);
     } else {
@@ -206,6 +219,8 @@ const audit = {
     parameterCalls,
     maxStagesObserved: maxStages,
     choiceQuestions: questions,
+    latencyUnit: "native_model_forward",
+    choiceCountUnit: "canonical_staged_choice",
     waitChoices: waits,
     rootQuestions,
     rootWaitChoices: rootWaits,
@@ -227,6 +242,7 @@ const audit = {
               ]
             : []),
         "actual model text matches retained context",
+        "binary target decisions equal mapped normalized means of two actual model calls",
         "submitted Laya actions exactly equal selected leaves",
         "all actors owned and targets currently observable",
         "options and essential context never silently truncated",

@@ -394,7 +394,7 @@ export async function predictStaged(packet, client) {
         stages,
         resolvedAnswers: session.resolvedAnswers(),
         selectionPath: session.history,
-        inferenceCalls: stages.length,
+        inferenceCalls: stages.reduce((n, s) => n + (s.forwardCalls ?? 1), 0),
         latencyMs: stages.reduce((n, s) => n + s.latencyMs, 0),
     };
 }
