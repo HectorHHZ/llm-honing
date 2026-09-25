@@ -37,6 +37,11 @@ cross-model self-play. `protocol.json` records the completion requirements.
 - Final-gate aggregation rejects incomplete matrices, teacher controllers,
   mismatched protocols, unverified matches, truncations and mixed checkpoints.
   The development loop never automatically consumes the sealed final test.
+  A separate final driver first re-audits the full 24-case development matrix,
+  requires its win-rate/map/seat floors, then reserves all held-out cases in a
+  durable project ledger before launching any match. Only an identical
+  checkpoint, source fingerprint, protocol and output directory may resume.
+  A changed protocol name or threshold cannot recycle already consumed cases.
 
 Both players use normal observations and a three-tick decision cadence. The
 learned controller selects one command per decision; the original baseline can
@@ -83,6 +88,27 @@ records the assigned device and actual command. Running jobs are never moved.
 Without a pool, each job waits for its requested GPU.
 Process completion plus a result file is **not** a win or promotion.
 
+## Explicit final evaluation
+
+Only after a candidate passes all development cases, run:
+
+```bash
+python league/final_gate.py --root runs/final-candidate \
+  --checkpoint runs/selected/checkpoint.json --gpus 1 5 \
+  --development-matches runs/dev-matrix/*
+```
+
+The default protocol requires 24 unique development games (two maps, six seeds,
+both seats), all from the same checkpoint and policy source. The final driver
+recomputes audits/replay evidence before reservation. Its ledger is
+`.cache/league/sealed-consumption.json`; preserve that file across attempts.
+Errors also consume the reserved cases. Exact resumes keep the immutable plan;
+using a new output directory is a new attempt and is rejected. This protects
+experiment discipline, not against an operator deleting or replacing the ledger.
+Final verification jobs run before dispatching additional ready matches so
+completed large logs are compressed promptly. The driver currently supports
+Laya; passing this final gate alone does not complete the cross-model objective.
+
 ## Evidence and limitations
 
 Server experiment artifacts are under ignored `runs/`. The first pilot trained
@@ -102,8 +128,8 @@ Remaining before full delivery:
 
 1. Establish stable Laya wins and test them on fresh held-out cases; improve
    combat/search labels as supported by development evidence.
-2. Add sealed-test consumption protection, complete promotion/reporting and
-   interruption recovery for partially completed optimizer jobs.
+2. Exercise the final driver on a qualifying learned checkpoint, complete
+   cross-model promotion/reporting and partial-optimizer interruption recovery.
 3. Integrate and train NanoJev and Jev-Omni after establishing Laya. Source/model
    pins in `model-sources.json` are discovery records, not completed integration.
 4. Complete at least two actual learning generations from cross-model self-play,

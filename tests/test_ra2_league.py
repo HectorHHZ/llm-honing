@@ -198,3 +198,75 @@ def test_gpu_binding_uses_available_allowed_device_and_preserves_plan(tmp_path, 
     binding = json.loads((tmp_path / "status/gpu-job.execution.json").read_text())
     assert binding["requestedGpu"] == "5" and binding["assignedGpu"] == "1"
     assert json.loads((tmp_path / "jobs/gpu-job.json").read_text()) == spec
+
+
+@pytest.mark.unit
+def test_sealed_cases_are_consumed_before_launch_and_exact_resume_is_allowed(tmp_path):
+    sealed = load("sealed")
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    ledger = tmp_path / "heldout.json"
+    record = sealed.reserve(ledger, protocol, "a" * 64, "b" * 64, tmp_path / "final")
+    assert record["consumedBeforeLaunch"]
+    resumed = sealed.reserve(ledger, protocol, "a" * 64, "b" * 64, tmp_path / "final")
+    assert resumed["id"] == record["id"]
+    assert len(json.loads(ledger.read_text())["reservations"]) == 1
+    for checkpoint, source, directory in [
+        ("c" * 64, "b" * 64, "final"),
+        ("a" * 64, "c" * 64, "final"),
+        ("a" * 64, "b" * 64, "second-attempt"),
+    ]:
+        with pytest.raises(ValueError, match="already consumed"):
+            sealed.reserve(ledger, protocol, checkpoint, source, tmp_path / directory)
+    # Renaming the protocol or weakening its threshold must not recycle cases.
+    protocol["version"] = "renamed"
+    protocol["sealedTest"]["minimumWinRate"] = 0.1
+    with pytest.raises(ValueError, match="already consumed"):
+        sealed.reserve(ledger, protocol, "a" * 64, "b" * 64, tmp_path / "final")
+
+
+@pytest.mark.unit
+def test_sealed_matrix_rejects_training_overlap_and_duplicate_cases():
+    sealed = load("sealed")
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    protocol["sealedTest"]["seeds"][0] = protocol["train"]["seeds"][0]
+    with pytest.raises(ValueError, match="overlap"):
+        sealed.cases(protocol)
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    protocol["sealedTest"]["maps"].append(protocol["sealedTest"]["maps"][0])
+    with pytest.raises(ValueError, match="unique"):
+        sealed.cases(protocol)
+
+
+@pytest.mark.unit
+def test_final_driver_requires_full_development_success_before_reservation(monkeypatch):
+    monkeypatch.syspath_prepend(str(LEAGUE))
+    final = load("final_gate")
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    rows = [
+        {
+            "map": m,
+            "seed": seed,
+            "seat": seat,
+            "split": "dev",
+            "checkpointSha256": "checkpoint",
+            "controller": "model",
+            "normalView": True,
+            "auditPassed": True,
+            "replayVerified": True,
+            "fallbackCount": 0,
+            "error": None,
+            "ended": True,
+            "truncated": False,
+            "outcome": {seat: 1},
+        }
+        for m in protocol["dev"]["maps"]
+        for seed in protocol["dev"]["seeds"]
+        for seat in ("red", "blue")
+    ]
+    assert final.development_gate(rows, protocol, "checkpoint")["passed"]
+    with pytest.raises(ValueError, match="complete unique"):
+        final.development_gate(rows[:4], protocol, "checkpoint")
+    with pytest.raises(ValueError, match="provenance"):
+        final.development_gate(rows, protocol, "other-checkpoint")
+    with pytest.raises(ValueError, match="win rate"):
+        final.development_gate([dict(r, ended=False, truncated=True) for r in rows], protocol, "checkpoint")
