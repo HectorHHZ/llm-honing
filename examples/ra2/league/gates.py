@@ -13,6 +13,34 @@ def wilson_lower(wins, total, z=1.959963984540054):
     )
 
 
+def trajectory_diversity(records):
+    """Count recorded action traces, not RNG-dependent final simulation hashes."""
+    groups = {}
+    missing = 0
+    for record in records:
+        checksum = record.get("artifacts", {}).get("actions.jsonl")
+        if not checksum:
+            missing += 1
+            continue
+        key = (record["map"], record["seat"], checksum)
+        groups.setdefault(key, []).append(record["seed"])
+    return {
+        "games": len(records),
+        "recordedGames": len(records) - missing,
+        "missingActionTraces": missing,
+        "uniqueMapSeatActionTraces": len(groups),
+        "repeatedTraceGroups": [
+            {"map": key[0], "seat": key[1], "actionTraceSha256": key[2], "seeds": sorted(seeds)}
+            for key, seeds in sorted(groups.items())
+            if len(seeds) > 1
+        ],
+        "interpretation": (
+            "Identical traces expose repeated behavior; different traces do not establish independent scenarios. "
+            "Wilson remains a descriptive operational gate, not a generalization or independence guarantee."
+        ),
+    }
+
+
 def tick_budget_matches(record, spec):
     """Longer-horizon diagnostics must not count toward a shorter-budget gate."""
     return (
@@ -77,5 +105,6 @@ def evaluate_gate(records, protocol):
         "wins": wins,
         "winRate": rate,
         "wilsonLower95": lower,
+        "trajectoryDiversity": trajectory_diversity(records),
         "failures": sorted(set(failures)),
     }

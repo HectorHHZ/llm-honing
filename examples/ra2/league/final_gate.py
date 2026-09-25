@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 
-from gates import evaluate_gate, tick_budget_matches
+from gates import evaluate_gate, tick_budget_matches, trajectory_diversity
 from optimize import match_jobs, verification_jobs
 from sealed import checksum, reserve
 from storage import digest
@@ -54,7 +54,12 @@ def development_gate(records, protocol, checkpoint):
             count = sum(r[key] == value for r in records)
             if wins / count < threshold:
                 raise ValueError("Development map/seat win rate is insufficient")
-    return {"games": len(records), "wins": len(winners), "passed": True}
+    return {
+        "games": len(records),
+        "wins": len(winners),
+        "passed": True,
+        "trajectoryDiversity": trajectory_diversity(records),
+    }
 
 
 def phase(root, jobs, concurrency, gpu_pool):

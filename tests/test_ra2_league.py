@@ -308,3 +308,21 @@ def test_tick_budget_requires_recorded_limit_and_a_valid_terminal_tick():
         {"maxTicks": 18000, "tick": True},
     ]:
         assert not gate.tick_budget_matches(record, spec)
+
+
+@pytest.mark.unit
+def test_diversity_reports_duplicate_actions_across_seeds_not_different_final_hashes():
+    gate = load("gates")
+    rows = [
+        {"map": "m", "seat": "red", "seed": seed, "hash": seed, "artifacts": {"actions.jsonl": "same"}}
+        for seed in (1000, 1001)
+    ]
+    rows.append({"map": "m", "seat": "blue", "seed": 1000, "artifacts": {"actions.jsonl": "same"}})
+    rows.append({"map": "m", "seat": "blue", "seed": 1001})
+    result = gate.trajectory_diversity(rows)
+    assert result["recordedGames"] == 3
+    assert result["missingActionTraces"] == 1
+    assert result["uniqueMapSeatActionTraces"] == 2
+    assert result["repeatedTraceGroups"] == [
+        {"map": "m", "seat": "red", "actionTraceSha256": "same", "seeds": [1000, 1001]}
+    ]

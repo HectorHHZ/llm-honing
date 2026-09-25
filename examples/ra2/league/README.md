@@ -144,3 +144,8 @@ Evaluation evidence must record the configured `maxTicks`, and its final tick
 must fit the split's budget. Longer-horizon diagnostics are separate results;
 they cannot satisfy a shorter development gate. Historical matches without a
 recorded limit remain historical evidence and must be rerun for promotion.
+
+The final report also groups identical recorded action traces by map and seat.
+Different simulation hashes can reflect different RNG state despite identical
+commands; neither seed counts nor distinct command traces prove independent
+scenarios. The Wilson threshold is a descriptive operational check only.
