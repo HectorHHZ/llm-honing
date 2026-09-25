@@ -248,7 +248,31 @@ candidates, cadence and18,000-tick budget across four arms:
 Every match passed action audit and independent replay verification. These are
 three reused development cases, not independent samples or proof of stability.
 The weight and inference effects are not additive in this small comparison.
-The parent plus two-order method is undergoing the complete24-case development
-matrix; no qualification or final test result is claimed. Frozen experimental
+The parent plus two-order method then completed the full 24-case development
+matrix: 13 wins and 11 tick-limit nonwins. Results were 11/12 on mp03t4 and
+2/12 on mp06t2; red won 8/12 and blue 5/12. All actions and independent
+replays passed verification, with no fallback. The initial three pilot games
+are included once in the 24; they are not additional evidence. The complete
+development gate failed, so no qualification or final cases were consumed.
+All 24 map/seat action hashes differ, which does not establish independence. Frozen experimental
 sources are identified in each run manifest; formatting and documentation in
 this PR do not retroactively change those manifests.
+
+### Optional long-term log storage
+
+Completed, audited and independently replay-verified decision logs can be
+converted from gzip to zstd with the optional `zstd` CLI. The utility checks the
+full decoded SHA256 against the existing evidence before removing the redundant
+gzip copy. It retains the evidence file and previous physical-storage metadata.
+Current Python readers use the CLI; current JavaScript readers require Node
+22.15 or newer for zstd. Plain and gzip reading still works on earlier Node 22.
+
+```bash
+python league/archive_logs.py /path/to/verified/match
+python league/archive_logs.py --restore-gzip /path/to/verified/match
+```
+
+Restore gzip before running an unchanged frozen historical auditor or any older
+consumer that only understands gzip. Restoration verifies the decoded content
+again and keeps the zstd copy. Run the original auditor from its recorded source
+revision; storage conversion does not change or replace gameplay evidence.

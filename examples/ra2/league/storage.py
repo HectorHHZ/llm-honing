@@ -1,14 +1,39 @@
 """Losslessly compress completed decision logs, verifying decoded content before unlink."""
 
 import argparse
+import contextlib
 import gzip
 import hashlib
 import json
+import subprocess
+import tempfile
 from pathlib import Path
 
 
+@contextlib.contextmanager
+def zstd_content(path):
+    with tempfile.TemporaryFile() as error:
+        process = subprocess.Popen(["zstd", "-q", "-dc", "--", str(path)], stdout=subprocess.PIPE, stderr=error)
+        try:
+            yield process.stdout
+            process.stdout.close()
+            if process.wait(timeout=10) != 0:
+                error.seek(0)
+                raise ValueError("Invalid zstd archive: " + error.read(2048).decode(errors="replace"))
+        finally:
+            process.stdout.close()
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+
 def open_content(path):
-    return path.open("rb") if path.exists() else gzip.open(str(path) + ".gz", "rb")
+    if path.exists():
+        return path.open("rb")
+    gzip_path = Path(str(path) + ".gz")
+    if gzip_path.exists():
+        return gzip.open(gzip_path, "rb")
+    return zstd_content(Path(str(path) + ".zst"))
 
 
 def digest(path):
@@ -27,6 +52,9 @@ def compress(match):
     if not source.exists():
         if target.exists():
             return {"alreadyCompressed": True, "path": str(target)}
+        archive = Path(str(source) + ".zst")
+        if archive.exists():
+            return {"alreadyCompressed": True, "format": "zstd-jsonl", "path": str(archive)}
         raise FileNotFoundError(source)
     original_size = source.stat().st_size
     original_hash = digest(source)
