@@ -180,3 +180,10 @@ retains that original hash and permits unrelated held-out planning changes only
 when the installed training/development settings and gameplay rules still match.
 For a legacy run with no snapshot, recovery requires the exact file whose hash
 was recorded in `config.json`; never rewrite the old configuration to bypass it.
+
+Protocol v3 broadens the training map pool with six public stock/tournament maps
+before any held-out evaluation is consumed. Development, qualification and final
+test maps, seeds, budgets and thresholds stay fixed. Existing experiments use
+their frozen protocol; new curriculum data must pass the updated training split
+checks. Demonstration wins remain training evidence and never count as model
+wins or qualification results.

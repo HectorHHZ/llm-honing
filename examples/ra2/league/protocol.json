@@ -1,5 +1,5 @@
 {
-  "version": "ra2-league-v2",
+  "version": "ra2-league-v3",
   "objective": "A learned champion that reliably defeats pinned Supalosa, with Laya, NanoJev, Jev-Omni and repeated cross-model learning in a reproducible pipeline.",
   "view": "normal",
   "cadenceTicks": 3,
@@ -10,7 +10,13 @@
   "train": {
     "maps": [
       "mp03t4.map",
-      "mp06t2.map"
+      "mp06t2.map",
+      "tn01t2.map",
+      "tn04t2.map",
+      "mp09t3.map",
+      "mp01t4.map",
+      "mp10s4.map",
+      "mp33u4.map"
     ],
     "seeds": [
       100,
@@ -133,5 +139,6 @@
     "minimumPerSeatWinRate": 0.85,
     "consumeOnce": true
   },
-  "qualificationNote": "Laya qualifies on three reserved maps before cross-model transfer. Final champion uses the separate original sealedTest maps. Both stages consume their cases once; no held-out match has yet been launched when this split was introduced."
+  "qualificationNote": "Laya qualifies on three reserved maps before cross-model transfer. Final champion uses the separate original sealedTest maps. Both stages consume their cases once; no held-out match has yet been launched when this split was introduced.",
+  "curriculumNote": "Before any held-out consumption, six additional public stock/tournament training maps were registered to broaden geography beyond the two development maps. Existing frozen experiments retain their original protocol snapshots. Development, Laya qualification, final test, seeds, tick budgets and promotion thresholds are unchanged."
 }
