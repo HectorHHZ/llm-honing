@@ -1,0 +1,103 @@
+# RA2 automatic optimization league (in development)
+
+The target is a learned champion that reliably beats pinned Supalosa, transfers
+the workflow to Laya, NanoJev and Jev-Omni, and improves through repeated
+cross-model self-play. `protocol.json` records the completion requirements.
+**No checkpoint currently satisfies the full objective.**
+
+## Implemented workflow
+
+- A normal-view, training-only macro teacher and staged-label collector. Teacher
+  demonstrations are never counted as model evaluations or deployed fallbacks.
+- Offline DAgger annotations of a learner's training episodes, using only its
+  recorded normal observations, legal candidates and actual action history.
+  The annotation process cannot influence the recorded match. Development and
+  sealed-test maps/seeds are rejected as training inputs.
+- Laya cross-entropy training, optionally initialized from a verified trained
+  parent. Source snapshots, data hashes, parent lineage and weight hashes are
+  recorded. Token packing matches inference and retains complete options.
+  Duplicate training inputs and validation overlaps are removed; conflicting
+  labels fail the run. The marker batching/model APIs follow the upstream
+  Apache-2.0 [fine-tuning example](https://github.com/NandhaKishorM/laya/blob/970dc8c5f63d7b886a68409493f37d569424f933/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb).
+- A generation loop: train, evaluate both seats on two development maps, audit,
+  collect new learner training episodes, annotate, aggregate and train again.
+  No teacher participates in the learned policy's actions.
+- Immutable job plans, Linux process-start identity checks, dependency ordering,
+  GPU occupancy checks, per-GPU worker locks, completed-job resume and failure
+  records. A vanished job requires inspection. Partial optimizer-state resume
+  is not implemented; completed checkpoints/jobs can be resumed.
+- Independent action/context audits and replay hash verification. The evidence
+  builder checks checkpoint/source artifacts, split membership, normal vision,
+  engine/baseline versions and cadence. Decision logs are streamed because full
+  episodes can exceed Node's single-string size limit.
+- Final-gate aggregation rejects incomplete matrices, teacher controllers,
+  mismatched protocols, unverified matches, truncations and mixed checkpoints.
+  The development loop never automatically consumes the sealed final test.
+
+Both players use normal observations and a three-tick decision cadence. The
+learned controller selects one command per decision; the original baseline can
+submit up to sixteen. This is equal vision/cadence, not equal command throughput.
+
+## Run and resume
+
+First configure the external dependencies from the example README. Replay
+verification requires the separately supplied protocol-2 Python SDK/runtime;
+set `RA2_REPLAY_PYTHON` to that environment's Python. Assets, engine binaries,
+weights, private paths and experiment outputs are not included in Git.
+
+```bash
+# Collect separate training episodes, including a validation episode.
+node league/collect.mjs --map=mp03t4.map --seed=104 --seat=red --out=runs/demo-red
+node league/collect.mjs --map=mp06t2.map --seed=105 --seat=blue --out=runs/demo-validation
+node league/collect.mjs --map=mp06t2.map --seed=106 --seat=red --out=runs/demo-other-map
+
+# Produce an initial checkpoint.
+"$LAYA_PYTHON" league/train_laya.py \
+  --matches runs/demo-red runs/demo-validation runs/demo-other-map \
+  --validation-seed=105 --gpu=1 --out=runs/bootstrap
+
+# Run three development learning generations. Repeat this exact command to
+# resume completed jobs after inspecting any failed/vanished process.
+python league/optimize.py --root runs/learning-cycle \
+  --initial-checkpoint runs/bootstrap/checkpoint.json \
+  --data runs/demo-red runs/demo-validation runs/demo-other-map \
+  --validation-seed=105 --gpus 1 5 --generations 3
+
+# Evaluate a selected trained checkpoint with no teacher/fallback.
+LAYA_CHECKPOINT_MANIFEST="$PWD/runs/bootstrap/checkpoint.json" \
+  npm run match -- --model=typed-decisions --gpu=1 --seed=1000 --out=runs/eval
+python league/verify_artifacts.py --match runs/eval --split dev
+```
+
+A generic campaign root contains `plan.json` with `jobs`, each specifying `id`,
+`command` as an argv list, `cwd`, and expected `result`. Optional `gpu` and
+`dependsOn` fields constrain dispatch. Execute with
+`python league/campaign.py run --root /absolute/campaign --concurrency 3`.
+Process completion plus a result file is **not** a win or promotion.
+
+## Evidence and limitations
+
+Server experiment artifacts are under ignored `runs/`. The first pilot trained
+on three demonstrations (1,307 staged labels). Its internal validation contained
+172 exact overlaps among 451 unique inputs, so the reported high label accuracy
+is not evidence of generalization. Its three actual learned-policy development
+games all reached 18,000 ticks without winning and produced no military units.
+It repeatedly expanded refineries. Subsequent training uses deduplication,
+transient deployment/construction states and learner-state corrections.
+
+The operational final gate is at least 90% wins in the complete 96-case matrix,
+with per-map/per-seat floors and a Wilson lower-bound check. Repeated seeds can
+be correlated, so the interval is descriptive; trajectory diversity must also
+be reported. Scores cannot convert ties, caps or failures into wins.
+
+Remaining before full delivery:
+
+1. Establish stable Laya wins and test them on fresh held-out cases; improve
+   combat/search labels as supported by development evidence.
+2. Add sealed-test consumption protection, complete promotion/reporting and
+   interruption recovery for partially completed optimizer jobs.
+3. Integrate and train NanoJev and Jev-Omni after establishing Laya. Source/model
+   pins in `model-sources.json` are discovery records, not completed integration.
+4. Complete at least two actual learning generations from cross-model self-play,
+   a full cross-play matrix, baseline regression checks and final champion gate.
+5. Deliver the verified champion, full lineage and one-command reproduction.

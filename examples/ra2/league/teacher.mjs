@@ -1,0 +1,154 @@
+// Training-data teacher only. Never used as a fallback for evaluated models.
+const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+export class MacroTeacher {
+    constructor() {
+        this.lastCombat = -150;
+        this.lastGather = new Map();
+        this.lastDeploy = -150;
+    }
+    observe(actions, tick) {
+        for (const action of actions) {
+            if ([22, 23].includes(action.function)) this.lastCombat = tick;
+            if (action.function === 28) this.lastDeploy = tick;
+            if (action.function === 46)
+                for (const tag of action.unit_tags)
+                    this.lastGather.set(tag, tick);
+        }
+    }
+    choose(policy, packet) {
+        const choices = packet.groups.flatMap((g) => g.choices),
+            leaves = choices.filter((c) => c.action),
+            wait = choices.find((c) => !c.action);
+        const own = policy.frame.own,
+            v = policy.obs.vectors,
+            r = policy.facade.res,
+            rule = (u) => policy.meta.techno.get(u.name) ?? {};
+        const completed = own.filter(
+            (u) => rule(u).type !== 2 || u.build_progress === 100,
+        );
+        const count = (n) => own.filter((u) => u.name === n).length;
+        const base = own.find((u) => rule(u).constructionYard) ??
+            own[0] ?? { x: 0, y: 0 };
+        const point = (c) => ({
+            x: c.action.world % r,
+            y: Math.floor(c.action.world / r),
+        });
+        const fn = (n) =>
+            policy.catalog.functions.find((f) => f.name === n)?.id;
+        const pick = (n) => leaves.find((c) => c.action.function === fn(n));
+        const chooseFn = (id) => leaves.filter((c) => c.action.function === id);
+        const queued = (q) => v.production.find((x) => x.queue === q);
+        const emit = (c) => c ?? wait;
+        const place = chooseFn(60).sort(
+            (a, b) => distance(point(a), base) - distance(point(b), base),
+        )[0];
+        if (place) return place;
+        const deploy = chooseFn(28).find((c) =>
+            c.action.unit_tags.some((t) =>
+                own.find(
+                    (u) =>
+                        u.tag === t &&
+                        policy.meta.general.baseUnit.includes(u.name) &&
+                        u.is_idle,
+                ),
+            ),
+        );
+        if (deploy && policy.tick - this.lastDeploy >= 90) return deploy;
+        if (!count("NACNST")) return wait;
+        if (!count("NAPOWR")) return emit(pick("Build_NAPOWR"));
+        if (!count("NAREFN")) return emit(pick("Build_NAREFN"));
+        // Check both current and next tasks before interrupting an automatic mining loop.
+        const idle = new Set(
+            completed
+                .filter(
+                    (u) =>
+                        rule(u).harvester &&
+                        u.is_idle &&
+                        ![46, 47].includes(u.order_id_0) &&
+                        ![46, 47].includes(u.order_id_1) &&
+                        policy.tick - (this.lastGather.get(u.tag) ?? -150) >=
+                            150,
+                )
+                .map((u) => u.tag),
+        );
+        const gather = chooseFn(46)
+            .filter((c) => c.action.unit_tags.every((t) => idle.has(t)))
+            .sort((a, b) => {
+                const actor = (c) =>
+                    own.find((u) => u.tag === c.action.unit_tags[0]);
+                return (
+                    distance(point(a), actor(a)) - distance(point(b), actor(b))
+                );
+            })[0];
+        if (gather) return gather;
+        const resume = chooseFn(63)[0];
+        if (resume) return resume;
+        if (v.is_low_power || v.power_cap - v.power_used < 20) {
+            const c = pick("Build_NAPOWR");
+            if (c) return c;
+        }
+        if (!count("NAHAND")) return emit(pick("Build_NAHAND"));
+        if (!count("NAWEAP")) return emit(pick("Build_NAWEAP"));
+        if (v.worker_count < 3 && (queued("vehicles")?.size ?? 0) < 1) {
+            const c = pick("Train_HARV");
+            if (c) return c;
+        }
+        if ((queued("vehicles")?.size ?? 0) < 2) {
+            const c = pick("Train_HTNK");
+            if (c) return c;
+        }
+        if (v.minerals > 2500 && v.worker_count < 5) {
+            const c = pick("Build_NAREFN");
+            if (c) return c;
+        }
+        if (v.minerals > 3000 && (queued("infantry")?.size ?? 0) < 2) {
+            const c = pick("Train_E2");
+            if (c) return c;
+        }
+        if (policy.tick - this.lastCombat < 150) return wait;
+        const army = own.filter(
+            (u) => u.name === "HTNK" && u.health > 0 && !u.is_in_cargo,
+        );
+        const threats = policy.frame.visible.filter(
+            (u) => distance(u, base) < 25,
+        );
+        const targets = threats.length
+            ? threats
+            : policy.frame.visible.filter((u) => rule(u).type === 2);
+        if (army.length >= 4 || threats.length) {
+            const ids = new Set(targets.map((u) => u.tag));
+            const attacks = chooseFn(23)
+                .filter(
+                    (c) =>
+                        ids.has(c.action.target_unit_tag) &&
+                        c.action.unit_tags.every((t) =>
+                            army.some((u) => u.tag === t),
+                        ),
+                )
+                .sort(
+                    (a, b) =>
+                        b.action.unit_tags.length - a.action.unit_tags.length,
+                );
+            if (attacks[0]) {
+                return attacks[0];
+            }
+        }
+        if (army.length >= 5) {
+            const scout = chooseFn(22)
+                .filter((c) =>
+                    c.action.unit_tags.every((t) =>
+                        army.some((u) => u.tag === t),
+                    ),
+                )
+                .sort(
+                    (a, b) =>
+                        b.action.unit_tags.length - a.action.unit_tags.length ||
+                        distance(point(b), base) - distance(point(a), base),
+                )[0];
+            if (scout) {
+                return scout;
+            }
+        }
+        return wait;
+    }
+}

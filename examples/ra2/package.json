@@ -2,14 +2,18 @@
   "name": "honing-ra2-example",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "match": "node integration/laya/run.mjs",
     "audit": "node integration/laya/audit.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:engine": "node integration/laya/validate.mjs && node integration/laya/validate-staged.mjs && node integration/laya/validate-catalog.mjs && node integration/laya/validate-intent.mjs",
-    "format": "prettier --write 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs'",
-    "format:check": "prettier --check 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs'"
+    "format": "prettier --write 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs' 'league/**/*.mjs'",
+    "format:check": "prettier --check 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs' 'league/**/*.mjs'"
   },
-  "devDependencies": {"prettier":"3.0.3"}
+  "devDependencies": {
+    "prettier": "3.0.3"
+  }
 }

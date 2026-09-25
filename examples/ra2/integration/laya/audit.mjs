@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import { STAGED_PROTOCOL, verifyStagedTrace } from "./staged.mjs";
 const dir = resolve(process.argv[2]);
@@ -10,8 +11,12 @@ const lines = (name) =>
         .filter(Boolean)
         .map(JSON.parse);
 const result = JSON.parse(readFileSync(dir + "/result.json", "utf8")),
-    decisions = lines("decisions.jsonl"),
     actions = lines("actions.jsonl");
+const selectedModelActions = [];
+let decisionCount = 0,
+    selectedCount = 0,
+    droppedCount = 0,
+    omittedCount = 0;
 let calls = 0,
     questions = 0,
     waits = 0,
@@ -87,8 +92,19 @@ function auditCall(record, stageIndex = 1) {
         peakTokens = Math.max(peakTokens, a.inputTokens);
     }
 }
-for (let i = 0; i < decisions.length; i++) {
-    const d = decisions[i];
+for await (const line of createInterface({
+    input: createReadStream(dir + "/decisions.jsonl"),
+    crlfDelay: Infinity,
+})) {
+    if (!line.trim()) continue;
+    const d = JSON.parse(line),
+        i = decisionCount++;
+    selectedCount += d.selected.length;
+    droppedCount += d.dropped.length;
+    omittedCount += d.omitted.length;
+    selectedModelActions.push(
+        ...d.selected.map((c) => ({ tick: d.tick, action: c.action })),
+    );
     assert.equal(d.seat, result.layaSeat);
     assert.equal(d.tick, i * result.cadenceTicks);
     if (result.candidateMode === "intent") {
@@ -159,9 +175,7 @@ const modelActions = actions
     .map((a) => ({ tick: a.tick, action: a.action }));
 assert.deepEqual(
     modelActions,
-    decisions.flatMap((d) =>
-        d.selected.map((c) => ({ tick: d.tick, action: c.action })),
-    ),
+    selectedModelActions,
     "unselected model action inserted",
 );
 for (const seat of ["red", "blue"]) {
@@ -186,7 +200,7 @@ const audit = {
     tick: result.tick,
     layaSeat: result.layaSeat,
     cadenceTicks: result.cadenceTicks,
-    decisions: decisions.length,
+    decisions: decisionCount,
     inferenceCalls: calls,
     parameterCalls,
     maxStagesObserved: maxStages,
@@ -196,9 +210,9 @@ const audit = {
     rootWaitChoices: rootWaits,
     parameterQuestions,
     cancelledParameterChoices: parameterCancels,
-    selectedActions: decisions.reduce((s, d) => s + d.selected.length, 0),
-    droppedActions: decisions.reduce((s, d) => s + d.dropped.length, 0),
-    omittedCandidateGroups: decisions.reduce((s, d) => s + d.omitted.length, 0),
+    selectedActions: selectedCount,
+    droppedActions: droppedCount,
+    omittedCandidateGroups: omittedCount,
     trimmedStateItems: trimmed,
     peakInputTokens: peakTokens,
     latencyMs: { p50: pct(0.5), p95: pct(0.95), max: pct(1) },

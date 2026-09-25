@@ -2,6 +2,7 @@
 
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import subprocess
@@ -52,6 +53,22 @@ def main():
         for key in ("repo", "revision"):
             if model[key] != pins["models"][model_type][key]:
                 raise ValueError("Model config differs from pins.json")
+        checkpoint_manifest = os.environ.get("LAYA_CHECKPOINT_MANIFEST")
+        if checkpoint_manifest:
+            trained = json.loads(Path(checkpoint_manifest).read_text())
+            if trained.get("kind") != "trained-laya" or trained.get("sourceRevision") != revision:
+                raise ValueError("Unrecognized trained checkpoint provenance")
+            if trained.get("parent", {}).get("revision") != pins["models"][model_type]["revision"]:
+                raise ValueError("Trained checkpoint parent does not match selected model")
+            weight_file = Path(trained["path"]) / "model.safetensors"
+            checksum = hashlib.sha256()
+            with weight_file.open("rb") as weights:
+                for block in iter(lambda: weights.read(8 * 1024 * 1024), b""):
+                    checksum.update(block)
+            if checksum.hexdigest() != trained["weightsSha256"]:
+                raise ValueError("Trained checkpoint weight hash mismatch")
+            model = {key: trained[key] for key in ("repo", "revision", "path", "weightsSha256", "parent")}
+            model["trainingManifestSha256"] = hashlib.sha256(Path(checkpoint_manifest).read_bytes()).hexdigest()
         with contextlib.redirect_stdout(sys.stderr):
             import laya
             import torch
