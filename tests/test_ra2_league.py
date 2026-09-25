@@ -184,6 +184,7 @@ def test_compression_never_discards_original_for_mismatching_archive(tmp_path):
 @pytest.mark.unit
 def test_gpu_binding_uses_available_allowed_device_and_preserves_plan(tmp_path, monkeypatch):
     campaign = load("campaign")
+    monkeypatch.setenv("LAYA_LOCK_DIR", str(tmp_path / "locks"))
 
     def gpu_query(argv, **kwargs):
         if "--query-gpu=index,uuid" in argv:
@@ -385,3 +386,119 @@ def test_qualification_gate_uses_its_own_matrix_and_budget():
         "tick_budget_mismatch"
         in gate.evaluate_gate([dict(r, maxTicks=36000) for r in rows], protocol, "layaQualification")["failures"]
     )
+
+
+@pytest.mark.unit
+def test_gpu_lease_detects_cpu_preparation_and_survives_fd_handoff(tmp_path, monkeypatch):
+    import fcntl
+    import subprocess
+
+    campaign = load("campaign")
+    monkeypatch.setenv("LAYA_LOCK_DIR", str(tmp_path))
+    with (tmp_path / "uuid-one.lock").open("a") as worker:
+        fcntl.flock(worker, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert campaign.try_device_lease("uuid-one") is None
+    lease = campaign.try_device_lease("uuid-one")
+    assert lease is not None
+    # Use a real child and pipe to prove the parent can hand off its lock
+    # across exec without a gap while another controller probes admission.
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import sys; print('ready', flush=True); sys.stdin.readline()"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+        pass_fds=(lease.fileno(),),
+    )
+    lease.close()
+    try:
+        assert child.stdout.readline().strip() == "ready"
+        assert campaign.try_device_lease("uuid-one") is None
+    finally:
+        child.communicate("finish\n", timeout=5)
+    with campaign.try_device_lease("uuid-one") as available:
+        assert available is not None
+
+
+@pytest.mark.unit
+def test_gpu_scheduler_skips_worker_lock_even_when_nvidia_reports_idle(tmp_path, monkeypatch):
+    import fcntl
+
+    campaign = load("campaign")
+    directory = tmp_path / "locks"
+    directory.mkdir()
+    monkeypatch.setenv("LAYA_LOCK_DIR", str(directory))
+    monkeypatch.setattr(
+        campaign.subprocess,
+        "check_output",
+        lambda args, **kw: "1, uuid-one\n5, uuid-five\n" if "--query-gpu=index,uuid" in args else "",
+    )
+    command = [sys.executable, "-c", "from pathlib import Path; Path('result').write_text('ok')", "--gpu=1"]
+    spec = {"id": "gpu-job", "gpu": "1", "command": command, "cwd": str(tmp_path), "result": str(tmp_path / "result")}
+    (tmp_path / "plan.json").write_text(json.dumps({"jobs": [spec]}))
+    with (directory / "uuid-one.lock").open("a") as worker:
+        fcntl.flock(worker, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        campaign.run(tmp_path, 1, ["1", "5"])
+    binding = json.loads((tmp_path / "status/gpu-job.execution.json").read_text())
+    assert binding["assignedGpu"] == "5"
+    assert (tmp_path / "result").read_text() == "ok"
+
+
+@pytest.mark.unit
+def test_worker_from_older_controller_acquires_lease_for_bound_device(tmp_path, monkeypatch):
+    campaign = load("campaign")
+    monkeypatch.setenv("LAYA_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.setattr(
+        campaign.subprocess,
+        "check_output",
+        lambda args, **kw: "1, uuid-one\n5, uuid-five\n" if "--query-gpu=index,uuid" in args else "",
+    )
+    for directory in ("jobs", "logs", "status"):
+        (tmp_path / directory).mkdir()
+    command = [sys.executable, "-c", "from pathlib import Path; Path('result').write_text('ok')"]
+    spec = {"id": "gpu-job", "gpu": "1", "command": command, "cwd": str(tmp_path), "result": str(tmp_path / "result")}
+    (tmp_path / "jobs/gpu-job.json").write_text(json.dumps(spec))
+    (tmp_path / "status/gpu-job.execution.json").write_text(json.dumps({"assignedGpu": "5", "command": command}))
+    campaign.execute(tmp_path, "gpu-job")
+    assert json.loads((tmp_path / "status/gpu-job.exit.json").read_text())["exitCode"] == 0
+    assert (tmp_path / "locks/uuid-five.dispatch.lock").exists()
+    assert not (tmp_path / "locks/uuid-one.dispatch.lock").exists()
+    with campaign.try_device_lease("uuid-five") as available:
+        assert available is not None
+
+
+@pytest.mark.unit
+def test_development_resume_preserves_original_protocol_across_heldout_changes(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(LEAGUE))
+    optimize = load("optimize")
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    current = tmp_path / "installed.json"
+    current.write_text(json.dumps(protocol))
+    root = tmp_path / "run"
+    root.mkdir()
+    assert optimize.archived_protocol(root, current) == protocol
+    original_hash = optimize.digest(root / "protocol.json")
+    protocol["qualificationNote"] = "New descriptive metadata outside this development loop"
+    current.write_text(json.dumps(protocol))
+    assert optimize.archived_protocol(root, current)["qualificationNote"] != protocol["qualificationNote"]
+    assert optimize.digest(root / "protocol.json") == original_hash
+    protocol["dev"]["maxTicks"] *= 2
+    current.write_text(json.dumps(protocol))
+    with pytest.raises(ValueError, match="differs"):
+        optimize.archived_protocol(root, current)
+
+
+@pytest.mark.unit
+def test_legacy_resume_requires_exact_protocol_recovery_before_snapshot(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(LEAGUE))
+    optimize = load("optimize")
+    current = tmp_path / "installed.json"
+    current.write_bytes((LEAGUE / "protocol.json").read_bytes())
+    root = tmp_path / "run"
+    root.mkdir()
+    (root / "config.json").write_text(json.dumps({"protocolSha256": "wrong"}))
+    with pytest.raises(ValueError, match="recover the exact"):
+        optimize.archived_protocol(root, current)
+    assert not (root / "protocol.json").exists()
+    (root / "config.json").write_text(json.dumps({"protocolSha256": optimize.digest(current)}))
+    optimize.archived_protocol(root, current)
+    assert (root / "protocol.json").read_bytes() == current.read_bytes()

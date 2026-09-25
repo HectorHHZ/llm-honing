@@ -22,6 +22,38 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def archived_protocol(root, current_path):
+    """Retain the original protocol across unrelated held-out planning changes."""
+    saved = root / "protocol.json"
+    config_path = root / "config.json"
+    if not saved.exists():
+        if config_path.exists():
+            expected = json.loads(config_path.read_text())["protocolSha256"]
+            if digest(current_path) != expected:
+                raise ValueError("Missing original protocol snapshot; recover the exact config-matching file")
+        temporary = root / "protocol.json.tmp"
+        temporary.write_bytes(current_path.read_bytes())
+        temporary.replace(saved)
+    protocol = json.loads(saved.read_text())
+    current = json.loads(current_path.read_text())
+    # Training and verification commands still use the installed protocol.
+    # Held-out stages are not consumed by this development-only loop.
+    keys = (
+        "train",
+        "dev",
+        "view",
+        "engineCommit",
+        "baselineRevision",
+        "cadenceTicks",
+        "engineActionCap",
+        "modelCommandsPerDecision",
+        "baselineCommandsPerDecision",
+    )
+    if any(protocol.get(key) != current.get(key) for key in keys):
+        raise ValueError("Installed training/development protocol differs from the archived experiment")
+    return protocol
+
+
 def phase(directory, jobs, concurrency):
     directory.mkdir(parents=True, exist_ok=True)
     plan = {"version": 1, "jobs": jobs}
@@ -85,7 +117,7 @@ def optimize(args):
     global GPU_POOL
     GPU_POOL = args.gpus
     args.root.mkdir(parents=True, exist_ok=True)
-    protocol = json.loads((ROOT / "league/protocol.json").read_text())
+    protocol = archived_protocol(args.root, ROOT / "league/protocol.json")
     conf = {
         "version": 1,
         "initialCheckpoint": str(args.initial_checkpoint),
@@ -96,7 +128,7 @@ def optimize(args):
         "gpus": args.gpus,
         "epochs": args.epochs,
         "validationSeed": args.validation_seed,
-        "protocolSha256": digest(ROOT / "league/protocol.json"),
+        "protocolSha256": digest(args.root / "protocol.json"),
     }
     path = args.root / "config.json"
     if path.exists() and json.loads(path.read_text()) != conf:

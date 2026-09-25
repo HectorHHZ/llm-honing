@@ -1,11 +1,15 @@
 """Durable process supervision for immutable experiment job plans."""
 
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -24,15 +28,69 @@ def identity(pid):
         return None
 
 
-def execute(root, job):
+def device_uuid(gpu):
+    devices = subprocess.check_output(["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader"], text=True)
+    for row in devices.splitlines():
+        index, uuid = (part.strip() for part in row.split(","))
+        if index == str(gpu):
+            return uuid
+    raise ValueError(f"GPU index {gpu} not found")
+
+
+def try_device_lease(uuid):
+    """Reserve across controllers, including workers still loading on the CPU."""
+    directory = Path(os.environ.get("LAYA_LOCK_DIR", Path(tempfile.gettempdir()) / f"laya-{os.getuid()}"))
+    directory.mkdir(parents=True, exist_ok=True)
+    lease = (directory / f"{uuid}.dispatch.lock").open("a")
+    try:
+        fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Existing model workers may predate dispatch leases. Their own UUID
+        # lock covers data preparation even when nvidia-smi has no process yet.
+        with (directory / f"{uuid}.lock").open("a") as worker:
+            fcntl.flock(worker, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lease.close()
+        return None
+    except BaseException:
+        lease.close()
+        raise
+    return lease
+
+
+def wait_device_lease(gpu):
+    """Compatibility for already-running controllers without FD handoff."""
+    uuid = device_uuid(gpu)
+    while True:
+        lease = try_device_lease(uuid)
+        if lease is not None:
+            used = subprocess.check_output(
+                ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"], text=True
+            )
+            if uuid not in used:
+                return lease
+            lease.close()
+        time.sleep(1)
+
+
+def execute(root, job, lease_fd=None):
     spec = json.loads((root / "jobs" / f"{job}.json").read_text())
     execution = root / "status" / f"{job}.execution.json"
-    command = json.loads(execution.read_text())["command"] if execution.exists() else spec["command"]
+    binding = json.loads(execution.read_text()) if execution.exists() else {}
+    command = binding.get("command", spec["command"])
     started = time.time()
     with (root / "logs" / f"{job}.log").open("ab") as log:
         try:
-            result = subprocess.run(command, cwd=spec["cwd"], stdout=log, stderr=subprocess.STDOUT, check=False)
-            code, error = result.returncode, None
+            if lease_fd is not None:
+                if lease_fd < 3:
+                    raise ValueError("Invalid inherited lease descriptor")
+                lease = os.fdopen(lease_fd, "a")
+            elif "gpu" in spec:
+                lease = wait_device_lease(binding.get("assignedGpu", spec["gpu"]))
+            else:
+                lease = contextlib.nullcontext()
+            with lease:
+                result = subprocess.run(command, cwd=spec["cwd"], stdout=log, stderr=subprocess.STDOUT, check=False)
+                code, error = result.returncode, None
         except Exception as exc:
             code, error = 127, str(exc)
     save(
@@ -57,8 +115,6 @@ def gpu_command(command, gpu):
 
 
 def run(root, concurrency, gpu_pool=None):
-    import fcntl
-
     with (root / "controller.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         jobs = json.loads((root / "plan.json").read_text())["jobs"]
@@ -112,6 +168,7 @@ def run(root, concurrency, gpu_pool=None):
                     live = json.loads((root / "status" / f"{job['id']}.live.json").read_text())
                     reserved.add(str(live.get("assignedGpu", job["gpu"])))
             busy = set()
+            uuids = {}
             if any("gpu" in j for j in pending):
                 devices = subprocess.check_output(
                     ["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader"], text=True
@@ -119,7 +176,8 @@ def run(root, concurrency, gpu_pool=None):
                 used = subprocess.check_output(
                     ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"], text=True
                 )
-                busy = {row.split(",")[0].strip() for row in devices.splitlines() if row.split(",")[1].strip() in used}
+                uuids = dict(tuple(part.strip() for part in row.split(",")) for row in devices.splitlines())
+                busy = {index for index, uuid in uuids.items() if uuid in used}
             slots = max(0, concurrency - len(running))
             ready = [j for j in pending if all(name in done for name in j.get("dependsOn", []))]
             if not ready and pending and not running:
@@ -130,12 +188,20 @@ def run(root, concurrency, gpu_pool=None):
                 requested = str(j["gpu"]) if "gpu" in j else None
                 gpu = requested
                 command = j["command"]
+                lease = None
                 if requested is not None:
                     pool = [str(x) for x in (gpu_pool or [requested])]
                     if requested not in pool:
                         raise ValueError("Requested GPU outside allowed pool")
                     ordered = [requested] + [x for x in pool if x != requested]
-                    gpu = next((x for x in ordered if x not in (reserved | busy)), None)
+                    gpu = None
+                    for candidate in ordered:
+                        if candidate in (reserved | busy) or candidate not in uuids:
+                            continue
+                        lease = try_device_lease(uuids[candidate])
+                        if lease is not None:
+                            gpu = candidate
+                            break
                     if gpu is None:
                         continue
                     reserved.add(gpu)
@@ -152,10 +218,26 @@ def run(root, concurrency, gpu_pool=None):
                     },
                 )
                 slots -= 1
-                process = subprocess.Popen(
-                    [sys.executable, str(Path(__file__).resolve()), "worker", "--root", str(root), "--job", j["id"]],
-                    start_new_session=True,
-                )
+                worker_command = [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "worker",
+                    "--root",
+                    str(root),
+                    "--job",
+                    j["id"],
+                ]
+                descriptors = ()
+                if lease is not None:
+                    descriptors = (lease.fileno(),)
+                    worker_command += ["--lease-fd", str(lease.fileno())]
+                try:
+                    process = subprocess.Popen(worker_command, start_new_session=True, pass_fds=descriptors)
+                finally:
+                    # Close only this reference; explicitly unlocking would
+                    # also release the shared lock inherited by the child.
+                    if lease is not None:
+                        lease.close()
                 save(
                     root / "status" / f"{j['id']}.live.json",
                     {
@@ -173,11 +255,12 @@ def main():
     parser.add_argument("mode", choices=["run", "worker"])
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--job")
+    parser.add_argument("--lease-fd", type=int)
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--gpu-pool", nargs="+")
     args = parser.parse_args()
     if args.mode == "worker":
-        execute(args.root.resolve(), args.job)
+        execute(args.root.resolve(), args.job, args.lease_fd)
     else:
         if not 1 <= args.concurrency <= 3:
             raise ValueError("Concurrency must be between one and three")

@@ -28,7 +28,8 @@ cross-model self-play. `protocol.json` records the completion requirements.
   No teacher participates in the learned policy's actions.
 - Immutable job plans, Linux process-start identity checks, dependency ordering,
   GPU occupancy checks, recorded assignment within an explicit allowed GPU pool,
-  per-GPU worker locks, completed-job resume and failure
+  per-GPU worker locks, cross-controller dispatch leases handed to workers
+  across process startup, completed-job resume and failure
   records. A vanished job requires inspection. Partial optimizer-state resume
   is not implemented; completed checkpoints/jobs can be resumed.
 - Independent action/context audits and replay hash verification. The evidence
@@ -166,3 +167,16 @@ sources cannot reuse cases already consumed by that stage. A failed held-out
 stage remains consumed and must not silently become a new development set.
 The driver currently supports Laya checkpoints; other model adapters and
 cross-model training remain required work.
+
+GPU dispatch also checks model-worker locks during CPU-side preparation, when
+`nvidia-smi` can still report no process. A separate shared lease is acquired
+before dispatch and handed to the campaign worker through an inherited file
+descriptor; it lasts for the whole job. Already-running older controllers gain
+the lease check when their next worker starts. This coordinates this user's
+campaigns, not unrelated cluster users or an external scheduler reservation.
+
+Development loops archive the exact protocol bytes under their run root. Resume
+retains that original hash and permits unrelated held-out planning changes only
+when the installed training/development settings and gameplay rules still match.
+For a legacy run with no snapshot, recovery requires the exact file whose hash
+was recorded in `config.json`; never rewrite the old configuration to bypass it.
