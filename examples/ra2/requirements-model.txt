@@ -1,0 +1,2 @@
+# Install in a dedicated environment with the CUDA torch build for your host.
+laya @ git+https://github.com/NandhaKishorM/laya.git@970dc8c5f63d7b886a68409493f37d569424f933

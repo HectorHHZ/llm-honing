@@ -1,0 +1,510 @@
+{
+  "description": "Paired checkpoint comparison on frozen v22 experimental integration. Three prespecified seat/seed pairs. Only checkpoint changed. Integration was then made portable for this example; full matches precede that packaging, which has separate engine and frozen-model checks.",
+  "settings": {
+    "map": "mp03t4.map",
+    "maxTicks": 18000,
+    "engineCadence": 3,
+    "layaInterval": 3,
+    "layaCommandCap": 1,
+    "baselineCommandCap": 16,
+    "view": "normal",
+    "credits": 10000,
+    "countries": [
+      "Russians",
+      "Russians"
+    ],
+    "startUnits": 0,
+    "shortGame": true,
+    "superWeapons": false,
+    "crates": false,
+    "selection": "argmax",
+    "dtype": "bfloat16",
+    "maxLen": 2048,
+    "headMaxLen": 512
+  },
+  "runs": [
+    {
+      "model": "english",
+      "modelRevision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+      "run": "seed1-red",
+      "seed": 1,
+      "seat": "red",
+      "ticks": 18000,
+      "ended": false,
+      "truncated": true,
+      "outcome": {
+        "red": 0,
+        "blue": 0
+      },
+      "miningIncome": 0,
+      "remainingCredits": 400,
+      "unitsBuilt": {
+        "building": 16,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsKilled": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsLost": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "lastNormalOwn": {
+        "NACNST": 1,
+        "NAPOWR": 16
+      },
+      "decisionCount": 6000,
+      "inferenceCalls": 7090,
+      "noCommandCount": 5957,
+      "submittedCommands": 43,
+      "functionCounts": {
+        "27": 2,
+        "28": 9,
+        "1006": 16,
+        "60": 16
+      },
+      "lastCommandTick": 6084,
+      "hash": {
+        "tick": 18000,
+        "hash": 2757447356
+      },
+      "actionAuditPassed": true,
+      "replayHashVerified": true,
+      "engine": {
+        "version": "0.1.0",
+        "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+        "builtAt": "2026-09-24T03:05:22.565Z",
+        "target": "bun-linux-x64"
+      },
+      "experimentalSourceSha256": {
+        "integration/adapter.mjs": "718b81ed70c7638dc73a71fc170051ee6fe7f831df2e9e430e76b40e5ba4da93",
+        "integration/metadata.mjs": "e3a67102363df008b98286562cf38e240383f758b6d6f73f6a3a4c709707a2f9",
+        "integration/laya/context.mjs": "ae5da211f9ac86092b6b88e1cafc169fcaa533561d60adcf57ce8c44480e6f8c",
+        "integration/laya/policy.mjs": "262224ace71d7657bc195b191648ae76bc965c8e35789970c06dc802fe93ce6e",
+        "integration/laya/catalog-policy.mjs": "5a487eecb2f0ec120a557a368375066a5a164e01fc1e0a4274cba4130366edcb",
+        "integration/laya/intent-policy.mjs": "0a1c123f46ef8ee8252e6c12ccce292385464ce1e7c5b69c91bd02704fb3a3b8",
+        "integration/laya/staged.mjs": "69d68f75d0e22ab2797442d8bc3bab2de8412ae7f7d37020d1cb609313f24e62",
+        "integration/laya/worker.py": "44ee6fc60df236fe96b61b53abfca7e307758379ed80641e2f594abf671a6410",
+        "integration/laya/client.mjs": "e9ab5400edd76de497a48ecb0823e07be46c0240c8db9d8ae19a365f665bf6a2",
+        "integration/laya/run.mjs": "254d9a0e8154ad574390059201ab1cac608bd167e59463006a7d6c7fffacfd9f",
+        "integration/laya/DESIGN.md": "eb13963062c3a35e5622ccc535a1d7aa7464556c175f9edcb686c308f1cf701f",
+        "integration/laya/STAGED.md": "61fa023621adaf470fd95ab2ef3a9c6fc5f16c5efb28c9d0cf08d7be8d42e616",
+        "integration/laya/INTENT.md": "897edddd2854287e0dbd98ba3ff5886a82322a904adc6b67554d61c34dd0da61"
+      }
+    },
+    {
+      "model": "english",
+      "modelRevision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+      "run": "seed1-blue",
+      "seed": 1,
+      "seat": "blue",
+      "ticks": 18000,
+      "ended": false,
+      "truncated": true,
+      "outcome": {
+        "red": 0,
+        "blue": 0
+      },
+      "miningIncome": 0,
+      "remainingCredits": 400,
+      "unitsBuilt": {
+        "building": 16,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsKilled": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsLost": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "lastNormalOwn": {
+        "NACNST": 1,
+        "NAPOWR": 16
+      },
+      "decisionCount": 6000,
+      "inferenceCalls": 6559,
+      "noCommandCount": 5957,
+      "submittedCommands": 43,
+      "functionCounts": {
+        "27": 2,
+        "28": 9,
+        "1006": 16,
+        "60": 16
+      },
+      "lastCommandTick": 6081,
+      "hash": {
+        "tick": 18000,
+        "hash": 1162283705
+      },
+      "actionAuditPassed": true,
+      "replayHashVerified": true,
+      "engine": {
+        "version": "0.1.0",
+        "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+        "builtAt": "2026-09-24T03:05:22.565Z",
+        "target": "bun-linux-x64"
+      },
+      "experimentalSourceSha256": {
+        "integration/adapter.mjs": "718b81ed70c7638dc73a71fc170051ee6fe7f831df2e9e430e76b40e5ba4da93",
+        "integration/metadata.mjs": "e3a67102363df008b98286562cf38e240383f758b6d6f73f6a3a4c709707a2f9",
+        "integration/laya/context.mjs": "ae5da211f9ac86092b6b88e1cafc169fcaa533561d60adcf57ce8c44480e6f8c",
+        "integration/laya/policy.mjs": "262224ace71d7657bc195b191648ae76bc965c8e35789970c06dc802fe93ce6e",
+        "integration/laya/catalog-policy.mjs": "5a487eecb2f0ec120a557a368375066a5a164e01fc1e0a4274cba4130366edcb",
+        "integration/laya/intent-policy.mjs": "0a1c123f46ef8ee8252e6c12ccce292385464ce1e7c5b69c91bd02704fb3a3b8",
+        "integration/laya/staged.mjs": "69d68f75d0e22ab2797442d8bc3bab2de8412ae7f7d37020d1cb609313f24e62",
+        "integration/laya/worker.py": "44ee6fc60df236fe96b61b53abfca7e307758379ed80641e2f594abf671a6410",
+        "integration/laya/client.mjs": "e9ab5400edd76de497a48ecb0823e07be46c0240c8db9d8ae19a365f665bf6a2",
+        "integration/laya/run.mjs": "254d9a0e8154ad574390059201ab1cac608bd167e59463006a7d6c7fffacfd9f",
+        "integration/laya/DESIGN.md": "eb13963062c3a35e5622ccc535a1d7aa7464556c175f9edcb686c308f1cf701f",
+        "integration/laya/STAGED.md": "61fa023621adaf470fd95ab2ef3a9c6fc5f16c5efb28c9d0cf08d7be8d42e616",
+        "integration/laya/INTENT.md": "897edddd2854287e0dbd98ba3ff5886a82322a904adc6b67554d61c34dd0da61"
+      }
+    },
+    {
+      "model": "english",
+      "modelRevision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+      "run": "seed2-red",
+      "seed": 2,
+      "seat": "red",
+      "ticks": 18000,
+      "ended": false,
+      "truncated": true,
+      "outcome": {
+        "red": 0,
+        "blue": 0
+      },
+      "miningIncome": 0,
+      "remainingCredits": 400,
+      "unitsBuilt": {
+        "building": 16,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsKilled": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsLost": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "lastNormalOwn": {
+        "NACNST": 1,
+        "NAPOWR": 16
+      },
+      "decisionCount": 6000,
+      "inferenceCalls": 7090,
+      "noCommandCount": 5957,
+      "submittedCommands": 43,
+      "functionCounts": {
+        "27": 2,
+        "28": 9,
+        "1006": 16,
+        "60": 16
+      },
+      "lastCommandTick": 6084,
+      "hash": {
+        "tick": 18000,
+        "hash": 3138886705
+      },
+      "actionAuditPassed": true,
+      "replayHashVerified": true,
+      "engine": {
+        "version": "0.1.0",
+        "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+        "builtAt": "2026-09-24T03:05:22.565Z",
+        "target": "bun-linux-x64"
+      },
+      "experimentalSourceSha256": {
+        "integration/adapter.mjs": "718b81ed70c7638dc73a71fc170051ee6fe7f831df2e9e430e76b40e5ba4da93",
+        "integration/metadata.mjs": "e3a67102363df008b98286562cf38e240383f758b6d6f73f6a3a4c709707a2f9",
+        "integration/laya/context.mjs": "ae5da211f9ac86092b6b88e1cafc169fcaa533561d60adcf57ce8c44480e6f8c",
+        "integration/laya/policy.mjs": "262224ace71d7657bc195b191648ae76bc965c8e35789970c06dc802fe93ce6e",
+        "integration/laya/catalog-policy.mjs": "5a487eecb2f0ec120a557a368375066a5a164e01fc1e0a4274cba4130366edcb",
+        "integration/laya/intent-policy.mjs": "0a1c123f46ef8ee8252e6c12ccce292385464ce1e7c5b69c91bd02704fb3a3b8",
+        "integration/laya/staged.mjs": "69d68f75d0e22ab2797442d8bc3bab2de8412ae7f7d37020d1cb609313f24e62",
+        "integration/laya/worker.py": "44ee6fc60df236fe96b61b53abfca7e307758379ed80641e2f594abf671a6410",
+        "integration/laya/client.mjs": "e9ab5400edd76de497a48ecb0823e07be46c0240c8db9d8ae19a365f665bf6a2",
+        "integration/laya/run.mjs": "254d9a0e8154ad574390059201ab1cac608bd167e59463006a7d6c7fffacfd9f",
+        "integration/laya/DESIGN.md": "eb13963062c3a35e5622ccc535a1d7aa7464556c175f9edcb686c308f1cf701f",
+        "integration/laya/STAGED.md": "61fa023621adaf470fd95ab2ef3a9c6fc5f16c5efb28c9d0cf08d7be8d42e616",
+        "integration/laya/INTENT.md": "897edddd2854287e0dbd98ba3ff5886a82322a904adc6b67554d61c34dd0da61"
+      }
+    },
+    {
+      "model": "typed-decisions",
+      "modelRevision": "1a793eb568e6718f15941d08f85432581df534e3",
+      "run": "seed1-red",
+      "seed": 1,
+      "seat": "red",
+      "ticks": 18000,
+      "ended": false,
+      "truncated": true,
+      "outcome": {
+        "red": 0,
+        "blue": 0
+      },
+      "miningIncome": 0,
+      "remainingCredits": 0,
+      "unitsBuilt": {
+        "building": 4,
+        "infantry": 0,
+        "vehicle": 5,
+        "aircraft": 0
+      },
+      "unitsKilled": {
+        "building": 1,
+        "infantry": 12,
+        "vehicle": 2,
+        "aircraft": 0
+      },
+      "unitsLost": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 5,
+        "aircraft": 0
+      },
+      "lastNormalOwn": {
+        "NACNST": 1,
+        "HARV": 1,
+        "NAHAND": 1,
+        "NAWEAP": 1,
+        "NAPOWR": 1,
+        "NAREFN": 1
+      },
+      "decisionCount": 6000,
+      "inferenceCalls": 13614,
+      "noCommandCount": 743,
+      "submittedCommands": 5257,
+      "functionCounts": {
+        "28": 9,
+        "1006": 1,
+        "60": 4,
+        "1012": 1,
+        "1008": 1,
+        "21": 3273,
+        "20": 24,
+        "1011": 1,
+        "2024": 181,
+        "22": 1244,
+        "23": 518
+      },
+      "lastCommandTick": 17997,
+      "hash": {
+        "tick": 18000,
+        "hash": 714843293
+      },
+      "actionAuditPassed": true,
+      "replayHashVerified": true,
+      "engine": {
+        "version": "0.1.0",
+        "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+        "builtAt": "2026-09-24T03:05:22.565Z",
+        "target": "bun-linux-x64"
+      },
+      "experimentalSourceSha256": {
+        "integration/adapter.mjs": "718b81ed70c7638dc73a71fc170051ee6fe7f831df2e9e430e76b40e5ba4da93",
+        "integration/metadata.mjs": "e3a67102363df008b98286562cf38e240383f758b6d6f73f6a3a4c709707a2f9",
+        "integration/laya/context.mjs": "ae5da211f9ac86092b6b88e1cafc169fcaa533561d60adcf57ce8c44480e6f8c",
+        "integration/laya/policy.mjs": "262224ace71d7657bc195b191648ae76bc965c8e35789970c06dc802fe93ce6e",
+        "integration/laya/catalog-policy.mjs": "5a487eecb2f0ec120a557a368375066a5a164e01fc1e0a4274cba4130366edcb",
+        "integration/laya/intent-policy.mjs": "0a1c123f46ef8ee8252e6c12ccce292385464ce1e7c5b69c91bd02704fb3a3b8",
+        "integration/laya/staged.mjs": "69d68f75d0e22ab2797442d8bc3bab2de8412ae7f7d37020d1cb609313f24e62",
+        "integration/laya/worker.py": "44ee6fc60df236fe96b61b53abfca7e307758379ed80641e2f594abf671a6410",
+        "integration/laya/client.mjs": "e9ab5400edd76de497a48ecb0823e07be46c0240c8db9d8ae19a365f665bf6a2",
+        "integration/laya/run.mjs": "254d9a0e8154ad574390059201ab1cac608bd167e59463006a7d6c7fffacfd9f",
+        "integration/laya/DESIGN.md": "eb13963062c3a35e5622ccc535a1d7aa7464556c175f9edcb686c308f1cf701f",
+        "integration/laya/STAGED.md": "61fa023621adaf470fd95ab2ef3a9c6fc5f16c5efb28c9d0cf08d7be8d42e616",
+        "integration/laya/INTENT.md": "897edddd2854287e0dbd98ba3ff5886a82322a904adc6b67554d61c34dd0da61"
+      }
+    },
+    {
+      "model": "typed-decisions",
+      "modelRevision": "1a793eb568e6718f15941d08f85432581df534e3",
+      "run": "seed1-blue",
+      "seed": 1,
+      "seat": "blue",
+      "ticks": 18000,
+      "ended": false,
+      "truncated": true,
+      "outcome": {
+        "red": 0,
+        "blue": 0
+      },
+      "miningIncome": 0,
+      "remainingCredits": 2900,
+      "unitsBuilt": {
+        "building": 5,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsKilled": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "unitsLost": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 0,
+        "aircraft": 0
+      },
+      "lastNormalOwn": {
+        "NACNST": 1,
+        "HARV": 3,
+        "NAPOWR": 1,
+        "NAREFN": 3,
+        "NAHAND": 1
+      },
+      "decisionCount": 6000,
+      "inferenceCalls": 10861,
+      "noCommandCount": 1319,
+      "submittedCommands": 4681,
+      "functionCounts": {
+        "28": 9,
+        "1006": 1,
+        "60": 5,
+        "1012": 3,
+        "21": 4662,
+        "1008": 1
+      },
+      "lastCommandTick": 17997,
+      "hash": {
+        "tick": 18000,
+        "hash": 3872008051
+      },
+      "actionAuditPassed": true,
+      "replayHashVerified": true,
+      "engine": {
+        "version": "0.1.0",
+        "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+        "builtAt": "2026-09-24T03:05:22.565Z",
+        "target": "bun-linux-x64"
+      },
+      "experimentalSourceSha256": {
+        "integration/adapter.mjs": "718b81ed70c7638dc73a71fc170051ee6fe7f831df2e9e430e76b40e5ba4da93",
+        "integration/metadata.mjs": "e3a67102363df008b98286562cf38e240383f758b6d6f73f6a3a4c709707a2f9",
+        "integration/laya/context.mjs": "ae5da211f9ac86092b6b88e1cafc169fcaa533561d60adcf57ce8c44480e6f8c",
+        "integration/laya/policy.mjs": "262224ace71d7657bc195b191648ae76bc965c8e35789970c06dc802fe93ce6e",
+        "integration/laya/catalog-policy.mjs": "5a487eecb2f0ec120a557a368375066a5a164e01fc1e0a4274cba4130366edcb",
+        "integration/laya/intent-policy.mjs": "0a1c123f46ef8ee8252e6c12ccce292385464ce1e7c5b69c91bd02704fb3a3b8",
+        "integration/laya/staged.mjs": "69d68f75d0e22ab2797442d8bc3bab2de8412ae7f7d37020d1cb609313f24e62",
+        "integration/laya/worker.py": "44ee6fc60df236fe96b61b53abfca7e307758379ed80641e2f594abf671a6410",
+        "integration/laya/client.mjs": "e9ab5400edd76de497a48ecb0823e07be46c0240c8db9d8ae19a365f665bf6a2",
+        "integration/laya/run.mjs": "254d9a0e8154ad574390059201ab1cac608bd167e59463006a7d6c7fffacfd9f",
+        "integration/laya/DESIGN.md": "eb13963062c3a35e5622ccc535a1d7aa7464556c175f9edcb686c308f1cf701f",
+        "integration/laya/STAGED.md": "61fa023621adaf470fd95ab2ef3a9c6fc5f16c5efb28c9d0cf08d7be8d42e616",
+        "integration/laya/INTENT.md": "897edddd2854287e0dbd98ba3ff5886a82322a904adc6b67554d61c34dd0da61"
+      }
+    },
+    {
+      "model": "typed-decisions",
+      "modelRevision": "1a793eb568e6718f15941d08f85432581df534e3",
+      "run": "seed2-red",
+      "seed": 2,
+      "seat": "red",
+      "ticks": 18000,
+      "ended": false,
+      "truncated": true,
+      "outcome": {
+        "red": 0,
+        "blue": 0
+      },
+      "miningIncome": 0,
+      "remainingCredits": 0,
+      "unitsBuilt": {
+        "building": 4,
+        "infantry": 0,
+        "vehicle": 5,
+        "aircraft": 0
+      },
+      "unitsKilled": {
+        "building": 1,
+        "infantry": 18,
+        "vehicle": 3,
+        "aircraft": 0
+      },
+      "unitsLost": {
+        "building": 0,
+        "infantry": 0,
+        "vehicle": 5,
+        "aircraft": 0
+      },
+      "lastNormalOwn": {
+        "NACNST": 1,
+        "HARV": 1,
+        "NAHAND": 1,
+        "NAWEAP": 1,
+        "NAPOWR": 1,
+        "NAREFN": 1
+      },
+      "decisionCount": 6000,
+      "inferenceCalls": 14504,
+      "noCommandCount": 743,
+      "submittedCommands": 5257,
+      "functionCounts": {
+        "28": 9,
+        "1006": 1,
+        "60": 4,
+        "1012": 1,
+        "1008": 1,
+        "21": 2423,
+        "20": 24,
+        "1011": 1,
+        "2024": 181,
+        "22": 1799,
+        "23": 813
+      },
+      "lastCommandTick": 17997,
+      "hash": {
+        "tick": 18000,
+        "hash": 3615789747
+      },
+      "actionAuditPassed": true,
+      "replayHashVerified": true,
+      "engine": {
+        "version": "0.1.0",
+        "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+        "builtAt": "2026-09-24T03:05:22.565Z",
+        "target": "bun-linux-x64"
+      },
+      "experimentalSourceSha256": {
+        "integration/adapter.mjs": "718b81ed70c7638dc73a71fc170051ee6fe7f831df2e9e430e76b40e5ba4da93",
+        "integration/metadata.mjs": "e3a67102363df008b98286562cf38e240383f758b6d6f73f6a3a4c709707a2f9",
+        "integration/laya/context.mjs": "ae5da211f9ac86092b6b88e1cafc169fcaa533561d60adcf57ce8c44480e6f8c",
+        "integration/laya/policy.mjs": "262224ace71d7657bc195b191648ae76bc965c8e35789970c06dc802fe93ce6e",
+        "integration/laya/catalog-policy.mjs": "5a487eecb2f0ec120a557a368375066a5a164e01fc1e0a4274cba4130366edcb",
+        "integration/laya/intent-policy.mjs": "0a1c123f46ef8ee8252e6c12ccce292385464ce1e7c5b69c91bd02704fb3a3b8",
+        "integration/laya/staged.mjs": "69d68f75d0e22ab2797442d8bc3bab2de8412ae7f7d37020d1cb609313f24e62",
+        "integration/laya/worker.py": "44ee6fc60df236fe96b61b53abfca7e307758379ed80641e2f594abf671a6410",
+        "integration/laya/client.mjs": "e9ab5400edd76de497a48ecb0823e07be46c0240c8db9d8ae19a365f665bf6a2",
+        "integration/laya/run.mjs": "254d9a0e8154ad574390059201ab1cac608bd167e59463006a7d6c7fffacfd9f",
+        "integration/laya/DESIGN.md": "eb13963062c3a35e5622ccc535a1d7aa7464556c175f9edcb686c308f1cf701f",
+        "integration/laya/STAGED.md": "61fa023621adaf470fd95ab2ef3a9c6fc5f16c5efb28c9d0cf08d7be8d42e616",
+        "integration/laya/INTENT.md": "897edddd2854287e0dbd98ba3ff5886a82322a904adc6b67554d61c34dd0da61"
+      }
+    }
+  ]
+}

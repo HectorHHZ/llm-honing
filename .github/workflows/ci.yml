@@ -80,3 +80,22 @@ jobs:
           python -m pip install -e ".[dev,docs]"
       - name: Test
         run: python -m pytest -m "not gpu" --cov --cov-report=term-missing
+
+  ra2-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: examples/ra2/package-lock.json
+      - name: Check the RA2 example without game assets or models
+        working-directory: examples/ra2
+        run: |
+          npm ci
+          npm test
+          npm run format:check

@@ -68,3 +68,10 @@ No GPU is needed for the test suite.
 ## License
 
 [Apache-2.0](LICENSE)
+
+## Experiment examples
+
+[`examples/ra2`](examples/ra2) runs a local Laya decision checkpoint against
+Supalosa through a separately supplied RA2 headless engine. It includes normal
+observation adapters, staged action selection, command audits, and checkpoint
+comparison records. It is independent of Honing's core campaign contracts.
