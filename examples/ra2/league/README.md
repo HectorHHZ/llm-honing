@@ -138,8 +138,8 @@ Remaining before full delivery:
 3. Integrate and train NanoJev and Jev-Omni after establishing Laya. Source/model
    pins in `model-sources.json` are discovery records, not completed integration.
    [Experimental native choice adapters](../integration/models/README.md) cover
-   lossless packing and answer binding only; game execution and training are
-   still pending.
+   lossless packing, answer binding and a pinned native JSONL worker; actual
+   model/game execution and training are still pending.
 4. Complete at least two actual learning generations from cross-model self-play,
    a full cross-play matrix, baseline regression checks and final champion gate.
 5. Deliver the verified champion, full lineage and one-command reproduction.

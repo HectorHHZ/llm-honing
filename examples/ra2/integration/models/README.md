@@ -32,3 +32,40 @@ choice-ID binding, malformed outputs and prompt drift without model weights.
 A separate server preflight also checked actual pinned tokenizers and the
 Jev-Omni upstream prompt on recorded normal-view RA2 requests, stopping before
 model execution. Neither kind of check is a model inference or game evaluation.
+
+## Experimental native worker
+
+`worker.py` provides a separate JSONL process for the pinned upstream native APIs.
+It is not yet wired into the RA2 match runner, training loop or promotion gates.
+The worker has CPU transport/provenance tests; those tests do not load models or
+establish native game performance.
+
+Run from the RA2 example directory with a compatible, separately configured
+Python environment and a prepared local model manifest:
+
+```bash
+python -m integration.models.worker --family nanojev \
+  --prepared-manifest .cache/models/nanojev.json \
+  --source-root /path/to/pinned/NanoJev --gpu 1 --max-length 2048
+
+python -m integration.models.worker --family jev-omni \
+  --prepared-manifest .cache/models/jev-omni.json --gpu 1 --max-length 2048
+```
+
+Before importing upstream code it verifies registry pins and every prepared
+file hash, including all shards referenced by Jev-Omni's weight index. NanoJev
+also requires an unchanged tracked checkout at its pinned source revision.
+The worker uses the same device UUID lock as the Laya dispatcher, refuses an
+occupied GPU, and sets CUDA visibility before importing Torch. The upstream
+loaders retain FP32 parameters and BF16 forward autocast. Requests preserve the
+native tokenizer/choice representations; no model or action fallback exists.
+
+After successful model loading, stdout emits one `ready` record containing
+verified provenance and runtime settings. Input lines contain exactly `id`,
+`parts` and `questions`; IDs must be positive and strictly increasing. Responses
+retain the request ID, complete native probabilities, packed context and token
+audits. Duplicate JSON fields, nonfinite JSON, replayed IDs or inference errors
+stop the worker. Loader diagnostics go to stderr. A weight-set digest identifies
+the sorted mapping of native weight filenames to their hashes; it is explicitly
+not a single-file weight hash or a trained checkpoint's promotion evidence.
+Prepared manifests are left unchanged and retain their preparation-time status.
