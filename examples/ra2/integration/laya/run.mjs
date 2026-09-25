@@ -194,6 +194,7 @@ try {
         layaSeat,
         baselineSeat: other,
         cadenceTicks: cadence,
+        maxTicks: ticks,
         maxActionsPerSeat: cap,
         seats,
         runtime,

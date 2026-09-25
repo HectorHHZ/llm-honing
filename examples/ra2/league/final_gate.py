@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 
-from gates import evaluate_gate
+from gates import evaluate_gate, tick_budget_matches
 from optimize import match_jobs, verification_jobs
 from sealed import checksum, reserve
 from storage import digest
@@ -28,6 +28,8 @@ def development_gate(records, protocol, checkpoint):
     if len(actual) != len(set(actual)) or set(actual) != expected:
         raise ValueError("Need the complete unique development matrix before consuming sealed cases")
     for record in records:
+        if not tick_budget_matches(record, spec):
+            raise ValueError("Development tick budget mismatch")
         if (
             record.get("split") != "dev"
             or record.get("checkpointSha256") != checkpoint

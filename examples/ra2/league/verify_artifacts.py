@@ -6,6 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
+from gates import tick_budget_matches
 from storage import compress, digest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,8 @@ def verify(match, split, replay_python):
     result = json.loads((match / "result.json").read_text())
     protocol = json.loads((ROOT / "league/protocol.json").read_text())
     spec = protocol[split]
+    if not tick_budget_matches(result, spec):
+        raise ValueError("Tick budget differs from the requested evaluation split, or is not recorded")
     if result["map"] not in spec["maps"] or result["seed"] not in spec["seeds"]:
         raise ValueError("Match does not belong to claimed split")
     if (match / "error.json").exists() or not result.get("normalView") or not result.get("observerDataExcluded"):
@@ -35,7 +38,10 @@ def verify(match, split, replay_python):
     if digest(Path(runtime["path"]) / "model.safetensors") != runtime["weightsSha256"]:
         raise ValueError("Checkpoint artifact mismatch")
     manifest = json.loads((match / "manifest.json").read_text())
-    if any(manifest.get(key) != result.get(key) for key in ("map", "seed", "layaSeat", "runtime", "cadenceTicks")):
+    if any(
+        manifest.get(key) != result.get(key)
+        for key in ("map", "seed", "layaSeat", "runtime", "cadenceTicks", "maxTicks")
+    ):
         raise ValueError("Result differs from initial manifest")
     subprocess.run(
         ["node", str(ROOT / "integration/laya/audit.mjs"), str(match)], check=True, stdout=subprocess.DEVNULL
@@ -72,6 +78,7 @@ def verify(match, split, replay_python):
         "truncated": result["truncated"],
         "outcome": result["outcome"],
         "tick": result["tick"],
+        "maxTicks": result["maxTicks"],
         "engineCommit": result["engine"]["engineCommit"],
         "baselineRevision": pins["supalosa"]["revision"],
         "cadenceTicks": result["cadenceTicks"],

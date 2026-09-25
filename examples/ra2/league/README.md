@@ -139,3 +139,8 @@ Remaining before full delivery:
 4. Complete at least two actual learning generations from cross-model self-play,
    a full cross-play matrix, baseline regression checks and final champion gate.
 5. Deliver the verified champion, full lineage and one-command reproduction.
+
+Evaluation evidence must record the configured `maxTicks`, and its final tick
+must fit the split's budget. Longer-horizon diagnostics are separate results;
+they cannot satisfy a shorter development gate. Historical matches without a
+recorded limit remain historical evidence and must be rerun for promotion.

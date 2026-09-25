@@ -40,6 +40,8 @@ def test_promotion_rejects_teacher_truncation_and_incomplete_matrix():
             "outcome": {seat: 1},
             **{key: protocol[key] for key in ("engineCommit", "baselineRevision", "cadenceTicks", "engineActionCap")},
             "decisionInterval": protocol["cadenceTicks"],
+            "maxTicks": spec["maxTicks"],
+            "tick": spec["maxTicks"] - 3,
         }
         for m in spec["maps"]
         for seed in spec["seeds"]
@@ -55,6 +57,10 @@ def test_promotion_rejects_teacher_truncation_and_incomplete_matrix():
     assert result["wins"] == 0 and not result["passed"]
     bad = [dict(row, checkpointSha256=str(i)) for i, row in enumerate(rows)]
     assert "mixed_checkpoints" in gate.evaluate_gate(bad, protocol)["failures"]
+    assert (
+        "tick_budget_mismatch"
+        in gate.evaluate_gate([dict(r, maxTicks=spec["maxTicks"] * 2) for r in rows], protocol)["failures"]
+    )
     assert 0.89 < gate.wilson_lower(94, 96) < 0.95
     assert (
         "protocol_mismatch" in gate.evaluate_gate([dict(r, engineCommit="other") for r in rows], protocol)["failures"]
@@ -249,6 +255,8 @@ def test_final_driver_requires_full_development_success_before_reservation(monke
             "seat": seat,
             "split": "dev",
             "checkpointSha256": "checkpoint",
+            "maxTicks": protocol["dev"]["maxTicks"],
+            "tick": protocol["dev"]["maxTicks"] - 3,
             "controller": "model",
             "normalView": True,
             "auditPassed": True,
@@ -264,6 +272,8 @@ def test_final_driver_requires_full_development_success_before_reservation(monke
         for seat in ("red", "blue")
     ]
     assert final.development_gate(rows, protocol, "checkpoint")["passed"]
+    with pytest.raises(ValueError, match="tick budget"):
+        final.development_gate([dict(r, maxTicks=36000) for r in rows], protocol, "checkpoint")
     with pytest.raises(ValueError, match="complete unique"):
         final.development_gate(rows[:4], protocol, "checkpoint")
     with pytest.raises(ValueError, match="provenance"):
@@ -282,3 +292,19 @@ def test_training_report_exposes_root_action_failures_despite_high_wait_accuracy
     assert report["root_wait"] == {"correct": 99, "total": 99, "accuracy": 1.0}
     assert report["root_action"] == {"correct": 0, "total": 1, "accuracy": 0.0}
     assert trainer.classification_breakdown([], []) == {}
+
+
+@pytest.mark.unit
+def test_tick_budget_requires_recorded_limit_and_a_valid_terminal_tick():
+    gate = load("gates")
+    spec = {"maxTicks": 18000}
+    assert gate.tick_budget_matches({"maxTicks": 18000, "tick": 16017}, spec)
+    assert gate.tick_budget_matches({"maxTicks": 18000, "tick": 18000}, spec)
+    for record in [
+        {"tick": 16017},
+        {"maxTicks": 36000, "tick": 16017},
+        {"maxTicks": 18000, "tick": 18003},
+        {"maxTicks": 18000, "tick": -1},
+        {"maxTicks": 18000, "tick": True},
+    ]:
+        assert not gate.tick_budget_matches(record, spec)

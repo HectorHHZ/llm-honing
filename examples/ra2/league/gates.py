@@ -13,6 +13,15 @@ def wilson_lower(wins, total, z=1.959963984540054):
     )
 
 
+def tick_budget_matches(record, spec):
+    """Longer-horizon diagnostics must not count toward a shorter-budget gate."""
+    return (
+        record.get("maxTicks") == spec["maxTicks"]
+        and type(record.get("tick")) is int
+        and 0 <= record["tick"] <= spec["maxTicks"]
+    )
+
+
 def evaluate_gate(records, protocol):
     spec = protocol["sealedTest"]
     expected = {(m, s, seat) for m in spec["maps"] for s in spec["seeds"] for seat in spec["seats"]}
@@ -41,6 +50,8 @@ def evaluate_gate(records, protocol):
             for key in ("engineCommit", "baselineRevision", "cadenceTicks", "engineActionCap")
         ):
             failures.append("protocol_mismatch")
+        if not tick_budget_matches(r, spec):
+            failures.append("tick_budget_mismatch")
         if r.get("decisionInterval") != protocol["cadenceTicks"]:
             failures.append("decision_cadence_mismatch")
         if r.get("split") != "sealedTest" or not r.get("checkpointSha256"):
