@@ -190,3 +190,25 @@ test maps, seeds, budgets and thresholds stay fixed. Existing experiments use
 their frozen protocol; new curriculum data must pass the updated training split
 checks. Demonstration wins remain training evidence and never count as model
 wins or qualification results.
+
+
+### Optional training-only parameter-order experiment
+
+`train_laya.py --parameter-shuffle-seed 7` replaces each eligible training
+parameter question with one deterministic permutation of its non-cancel
+options. It remaps the annotation to the same semantic choice. Cancel A, root
+questions, prior commitments, retained context and validation ordering stay
+fixed. The permutation seed depends only on the input, not the gold answer.
+This does not add samples, change runtime menus, reorder live actions or
+introduce a fallback policy. It is disabled by default and does not establish
+a gameplay improvement.
+
+The original encoded inputs are deduplicated and split before variants are
+selected, so reordering cannot disguise an existing training/validation
+overlap. If a resulting training variant collides with retained validation,
+the training example is dropped; validation is not reduced. Conflicting labels
+fail the run. The checkpoint records the shuffle seed, changed-question count,
+original overlap audit and post-variant collision/deduplication counts. Compare
+this setting with the same parent, data, optimizer, validation and live policy;
+report any changed training-example count instead of assuming a matched sample
+budget. Actual game audits and replay verification still determine promotion.

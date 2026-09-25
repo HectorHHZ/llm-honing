@@ -502,3 +502,69 @@ def test_legacy_resume_requires_exact_protocol_recovery_before_snapshot(tmp_path
     (root / "config.json").write_text(json.dumps({"protocolSha256": optimize.digest(current)}))
     optimize.archived_protocol(root, current)
     assert (root / "protocol.json").read_bytes() == current.read_bytes()
+
+
+@pytest.mark.unit
+def test_parameter_shuffle_preserves_answer_meaning_and_committed_context():
+    import copy
+
+    dataset = load("dataset")
+    row = {
+        "stage": 3,
+        "parts": {"essential": ["Previous choice: use squad #7; simulation still paused."]},
+        "questions": {
+            "next_action": {
+                "type": "choice",
+                "instructions": "Choose the destination.",
+                "criteria": {"A": "Cancel this pending action", "B": "Own base", "C": "Unexplored enemy start"},
+            }
+        },
+        "answers": {"next_action": {"choice": "C"}},
+        "chosenLeaf": "L42",
+    }
+    snapshot = copy.deepcopy(row)
+    orders = set()
+    for seed in range(12):
+        variant = dataset.parameter_order_variant(row, seed)
+        q = variant["questions"]["next_action"]
+        orders.add(tuple(q["criteria"].values()))
+        assert list(q["criteria"]) == ["A", "B", "C"]
+        assert q["criteria"]["A"] == row["questions"]["next_action"]["criteria"]["A"]
+        assert q["criteria"][variant["answers"]["next_action"]["choice"]] == "Unexplored enemy start"
+        assert variant["parts"] == row["parts"] and variant["chosenLeaf"] == "L42"
+        assert dataset.parameter_order_variant(row, seed) == variant
+        different_gold = copy.deepcopy(row)
+        different_gold["answers"]["next_action"]["choice"] = "A"
+        other = dataset.parameter_order_variant(different_gold, seed)
+        assert other["questions"] == variant["questions"]  # Gold cannot determine ordering.
+        assert other["answers"]["next_action"]["choice"] == "A"
+    assert len(orders) == 2 and row == snapshot
+    assert dataset.parameter_order_variant({**row, "stage": 1}, 7) == {**row, "stage": 1}
+    with pytest.raises(ValueError, match="nonnegative"):
+        dataset.parameter_order_variant(row, -1)
+
+
+@pytest.mark.unit
+def test_original_overlap_is_removed_before_training_input_reordering():
+    dataset = load("dataset")
+    base = {"ids": [1, 2], "markers": [1], "label": 0}
+    variant = {"ids": [2, 1], "markers": [1], "label": 0}
+    training, validation, overlap = dataset.separate_unique([{**base, "trainingVariant": variant}], [base])
+    assert validation == [] and overlap["removedOverlap"] == 1
+    actual, audit = dataset.select_training_variants(training, validation)
+    assert actual == [variant] and audit["validationUnchanged"]
+
+
+@pytest.mark.unit
+def test_variant_collision_drops_training_and_preserves_novel_validation():
+    dataset = load("dataset")
+    base = {"ids": [1, 2], "markers": [1], "label": 0}
+    novel = {"ids": [2, 1], "markers": [1], "label": 1}
+    other = {"ids": [3, 4], "markers": [1], "label": 0}
+    training, validation, _ = dataset.separate_unique([{**base, "trainingVariant": novel}, other], [novel])
+    actual, audit = dataset.select_training_variants(training, validation)
+    assert actual == [other] and validation == [novel]
+    assert audit["removedVariantValidationOverlap"] == 1
+    assert audit["validationUnchanged"]
+    with pytest.raises(ValueError, match="conflicts with validation"):
+        dataset.select_training_variants([{**base, "trainingVariant": {**novel, "label": 0}}], validation)

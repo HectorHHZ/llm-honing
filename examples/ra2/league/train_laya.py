@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from dataset import separate_unique
+from dataset import parameter_order_variant, select_training_variants, separate_unique
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -97,6 +97,13 @@ def train(args):
     protocol = json.loads((ROOT / "league/protocol.json").read_text())
     items, validation, inputs = [], [], []
     packing = {"maxInputTokens": 0, "trimmedRequests": 0}
+    option_order = {
+        "enabled": args.parameter_shuffle_seed is not None,
+        "seed": args.parameter_shuffle_seed,
+        "scope": "training parameter questions only; root/cancel/validation unchanged",
+        "rawChangedQuestions": 0,
+        "baseInputSplitBeforeReordering": True,
+    }
     for directory in args.matches:
         manifest = json.loads((directory / "manifest.json").read_text())
         result = json.loads((directory / "result.json").read_text())
@@ -140,6 +147,27 @@ def train(args):
             )
             packing["maxInputTokens"] = max(packing["maxInputTokens"], max(v["inputTokens"] for v in audit.values()))
             packing["trimmedRequests"] += bool(trimmed)
+            variant_row = None
+            if (
+                args.parameter_shuffle_seed is not None
+                and manifest["seed"] != args.validation_seed
+                and row["stage"] > 1
+            ):
+                variant_row = parameter_order_variant(row, args.parameter_shuffle_seed)
+                variant_state, variant_audit, variant_trimmed = prepare_request(
+                    formatter,
+                    variant_row["parts"],
+                    variant_row["questions"],
+                    2048,
+                    512,
+                    build_sequence,
+                    render_options,
+                )
+                if variant_state != state or variant_trimmed != trimmed:
+                    raise ValueError("Option reordering changed retained context")
+                packing["maxInputTokens"] = max(
+                    packing["maxInputTokens"], max(v["inputTokens"] for v in variant_audit.values())
+                )
             for key, q in row["questions"].items():
                 if q["type"] != "choice":
                     raise ValueError("Unexpected question type")
@@ -154,8 +182,24 @@ def train(args):
                     else f"parameter_stage_{row['stage']}"
                 )
                 item = {"ids": ids, "markers": markers, "label": label, "qtype": QTYPES["choice"], "bucket": bucket}
+                if variant_row is not None:
+                    changed = variant_row["questions"][key]
+                    variant_ids, variant_markers = build_sequence(
+                        tok, variant_state, Agent._to_internal(changed), 2048, 512
+                    )
+                    assert len(variant_markers) == len(keys)
+                    item["trainingVariant"] = {
+                        "ids": variant_ids,
+                        "markers": variant_markers,
+                        "label": keys.index(variant_row["answers"][key]["choice"]),
+                        "qtype": QTYPES["choice"],
+                        "bucket": bucket,
+                    }
+                    option_order["rawChangedQuestions"] += changed["criteria"] != q["criteria"]
                 (validation if manifest["seed"] == args.validation_seed else items).append(item)
     items, validation, overlap_audit = separate_unique(items, validation)
+    if args.parameter_shuffle_seed is not None:
+        items, option_order["variantAudit"] = select_training_variants(items, validation)
     if not items or len(validation) < 50:
         raise ValueError("Need at least 50 novel validation examples after input deduplication")
     device = "cuda"
@@ -272,6 +316,7 @@ def train(args):
         "trainingScriptSha256": digest(args.out / "source" / "train_laya.py"),
         "data": inputs,
         "packing": packing,
+        "optionOrderTraining": option_order,
         "dataOverlapAudit": overlap_audit,
         "datasetScriptSha256": digest(args.out / "source" / "dataset.py"),
         "validationSeed": args.validation_seed,
@@ -316,9 +361,17 @@ def main():
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--validation-seed", type=int, default=101)
+    p.add_argument(
+        "--parameter-shuffle-seed",
+        type=int,
+        default=None,
+        help="Optional fixed input-seeded reordering of training parameter choices; validation stays unchanged",
+    )
     p.add_argument("--encoder-lr", type=float, default=1e-5)
     p.add_argument("--head-lr", type=float, default=1e-4)
     args = p.parse_args()
+    if args.parameter_shuffle_seed is not None and args.parameter_shuffle_seed < 0:
+        raise ValueError("Parameter shuffle seed must be nonnegative")
     args.out = args.out.resolve()
     args.matches = [x.resolve() for x in args.matches]
     if args.out.exists():
