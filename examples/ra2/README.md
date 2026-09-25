@@ -165,3 +165,10 @@ Actor pages name the first and last owned-unit groups on that page; they no
 longer repeat an enemy-target label that can make several pages look identical.
 Leaf actions, page ordering and bindings are preserved. Because the model-facing
 text changes, compare checkpoints with the exact recorded source snapshot.
+
+Attack target choices also include current normal-view HP, position and the
+straight-line distance range from the selected owned units. Every offered
+target carries these facts, even when the compact context lists only a few
+enemies. Hidden, radar-only and remembered targets contribute no new facts;
+geometric distance is not path length or a claim about weapon range. This
+changes input descriptions, not available commands or the chosen target.

@@ -316,3 +316,40 @@ export function contextParts(
         logs: memory.events.slice(-8).map((e) => `t${e.tick}: ${e.text}`),
     };
 }
+
+// Facts for an offered Attack target, taken only from current normal rows.
+// Distance is geometric, not a pathfinding estimate or a weapon range claim.
+export function attackTargetFacts(frame, action) {
+    const target = frame.visible.find(
+        (u) =>
+            u.tag === action.target_unit_tag &&
+            u.alliance === 4 &&
+            u.display_type === 1 &&
+            !u.is_blip &&
+            u.health > 0,
+    );
+    if (!target) return "";
+    const facts = [`HP ${target.health}`];
+    if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
+        facts.push(`at ${target.x},${target.y}`);
+        const distances = frame.own
+            .filter(
+                (u) =>
+                    u.alliance === 1 &&
+                    action.unit_tags?.includes(u.tag) &&
+                    Number.isFinite(u.x) &&
+                    Number.isFinite(u.y),
+            )
+            .map((u) => Math.hypot(u.x - target.x, u.y - target.y));
+        if (distances.length) {
+            const nearest = Math.min(...distances).toFixed(1);
+            const farthest = Math.max(...distances).toFixed(1);
+            facts.push(
+                `straight-line distance ${
+                    nearest === farthest ? nearest : `${nearest}-${farthest}`
+                } cells from selected units`,
+            );
+        }
+    }
+    return facts.join("; ");
+}

@@ -188,6 +188,15 @@ try {
                 c.action.unit_tags.includes(9003),
         ),
     );
+    const attackLeaves = leaves.filter((c) => c.action.function === 23);
+    assert(attackLeaves.length > 0);
+    for (const c of attackLeaves) {
+        const target = rows.find((u) => u.tag === c.action.target_unit_tag);
+        assert(
+            c.label.includes(`HP ${target.health}; at ${target.x},${target.y}`),
+        );
+        assert(c.label.includes("straight-line distance"));
+    }
     assert.equal(
         packet.availability.find((x) => x.id === 29).status,
         "wait_equivalent",

@@ -1,6 +1,6 @@
 // Coordinated catalog decisions. All engine commands remain model-selected leaves.
 import { CatalogPolicy } from "./catalog-policy.mjs";
-import { countsOf, layerAt } from "./context.mjs";
+import { countsOf, layerAt, attackTargetFacts } from "./context.mjs";
 const countsText = (rows) =>
     Object.entries(countsOf(rows))
         .map(([n, c]) => `${n}:${c}`)
@@ -607,6 +607,12 @@ export class IntentPolicy extends CatalogPolicy {
             c.key = `L${leaves.length + 1}`;
             leaves.push(c);
         }
+        // Keep every offered target self-contained even when compact context
+        // lists only a few enemies. Labels do not select or change an action.
+        for (const c of leaves.filter((c) => c.action.function === 23)) {
+            const facts = attackTargetFacts(this.frame, c.action);
+            if (facts) c.label += `; ${facts}`;
+        }
         // Root labels describe only currently grounded choices, not unavailable strategic wishes.
         const byIntent = new Map();
         for (const c of leaves) {
@@ -828,7 +834,7 @@ export class IntentPolicy extends CatalogPolicy {
                       {
                           id: "next_action",
                           hierarchy: "intent-function",
-                          contextVersion: 2,
+                          contextVersion: 3,
                           waitLabel,
                           instructions:
                               "Choose the next action that advances your strategic objective. Keep useful processes running and protect the means to win.",
