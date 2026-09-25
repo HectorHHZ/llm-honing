@@ -130,6 +130,8 @@ def optimize(args):
         "validationSeed": args.validation_seed,
         "protocolSha256": digest(args.root / "protocol.json"),
     }
+    if args.parameter_shuffle_seed is not None:
+        conf["parameterShuffleSeed"] = args.parameter_shuffle_seed
     path = args.root / "config.json"
     if path.exists() and json.loads(path.read_text()) != conf:
         raise ValueError("Resume arguments or initial data changed")
@@ -165,6 +167,8 @@ def optimize(args):
                 str(checkpoint),
             ],
         }
+        if args.parameter_shuffle_seed is not None:
+            train_job["command"].extend(["--parameter-shuffle-seed", str(args.parameter_shuffle_seed)])
         phase(directory / "training", [train_job], 1)
         checkpoint = trained / "checkpoint.json"
         save(
@@ -250,9 +254,12 @@ def main():
     parser.add_argument("--generations", type=int, default=3)
     parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--validation-seed", type=int, default=105)
+    parser.add_argument("--parameter-shuffle-seed", type=int, default=None)
     args = parser.parse_args()
     if not 1 <= args.generations <= 8 or len(set(args.gpus)) != len(args.gpus):
         raise ValueError("Use 1..8 generations and unique GPU indices")
+    if args.parameter_shuffle_seed is not None and args.parameter_shuffle_seed < 0:
+        raise ValueError("Parameter shuffle seed must be nonnegative")
     args.root, args.initial_checkpoint = args.root.resolve(), args.initial_checkpoint.resolve()
     args.data = [p.resolve() for p in args.data]
     args.root.mkdir(parents=True, exist_ok=True)

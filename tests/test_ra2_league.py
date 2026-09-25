@@ -568,3 +568,56 @@ def test_variant_collision_drops_training_and_preserves_novel_validation():
     assert audit["validationUnchanged"]
     with pytest.raises(ValueError, match="conflicts with validation"):
         dataset.select_training_variants([{**base, "trainingVariant": {**novel, "label": 0}}], validation)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("shuffle_seed", [None, 7])
+def test_optimization_preserves_shuffle_setting_across_resume(tmp_path, monkeypatch, shuffle_seed):
+    from types import SimpleNamespace
+
+    monkeypatch.syspath_prepend(str(LEAGUE))
+    pipeline = load("optimize")
+    installed = tmp_path / "installed"
+    (installed / "league").mkdir(parents=True)
+    (installed / "league/protocol.json").write_text('{"train":{},"dev":{}}')
+    checkpoint = tmp_path / "initial.json"
+    checkpoint.write_text("{}")
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "samples.jsonl").write_text("{}\n")
+    args = SimpleNamespace(
+        root=tmp_path / "run",
+        initial_checkpoint=checkpoint,
+        data=[data],
+        generations=2,
+        gpus=["1"],
+        epochs=4,
+        validation_seed=105,
+        parameter_shuffle_seed=shuffle_seed,
+    )
+    commands = []
+
+    class BeforeTrainingError(Exception):
+        pass
+
+    def phase(directory, jobs, concurrency):
+        commands.append(jobs[0]["command"])
+        raise BeforeTrainingError
+
+    monkeypatch.setattr(pipeline, "ROOT", installed)
+    monkeypatch.setattr(pipeline, "phase", phase)
+    for _ in range(2):
+        with pytest.raises(BeforeTrainingError):
+            pipeline.optimize(args)
+    assert commands[0] == commands[1]
+    config = json.loads((args.root / "config.json").read_text())
+    if shuffle_seed is None:
+        assert "parameterShuffleSeed" not in config  # Preserve legacy default resumes.
+        assert "--parameter-shuffle-seed" not in commands[0]
+    else:
+        assert config["parameterShuffleSeed"] == 7
+        assert commands[0][-2:] == ["--parameter-shuffle-seed", "7"]
+    args.parameter_shuffle_seed = 8
+    with pytest.raises(ValueError, match="Resume arguments"):
+        pipeline.optimize(args)
+    assert json.loads((args.root / "config.json").read_text()) == config

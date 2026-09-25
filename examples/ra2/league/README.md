@@ -199,7 +199,9 @@ parameter question with one deterministic permutation of its non-cancel
 options. It remaps the annotation to the same semantic choice. Cancel A, root
 questions, prior commitments, retained context and validation ordering stay
 fixed. The permutation seed depends only on the input, not the gold answer.
-This does not add samples, change runtime menus, reorder live actions or
+The same flag on `optimize.py` is persisted in the run configuration and passed
+to every generation; changing it requires a new experiment. This does not add
+samples, change runtime menus, reorder live actions or
 introduce a fallback policy. It is disabled by default and does not establish
 a gameplay improvement.
 
