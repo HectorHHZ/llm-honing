@@ -21,7 +21,7 @@ from campaign import run, save
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def development_gate(records, protocol, checkpoint):
+def development_gate(records, protocol, checkpoint, stage="sealedTest"):
     spec = protocol["dev"]
     expected = {(m, seed, seat) for m in spec["maps"] for seed in spec["seeds"] for seat in ("red", "blue")}
     actual = [(r["map"], r["seed"], r["seat"]) for r in records]
@@ -42,7 +42,7 @@ def development_gate(records, protocol, checkpoint):
         ):
             raise ValueError("Development provenance failed")
     winners = [r for r in records if r["ended"] and not r["truncated"] and r["outcome"].get(r["seat"]) == 1]
-    thresholds = protocol["sealedTest"]
+    thresholds = protocol[stage]
     if len(winners) / len(records) < thresholds["minimumWinRate"]:
         raise ValueError("Development win rate is insufficient")
     for key, values, threshold in [
@@ -92,7 +92,7 @@ def finalize(args):
                 if relative.startswith("integration/") and digest(ROOT / relative) != value:
                     raise ValueError("Development policy source differs from final evaluation source")
             records.append(record)
-        preflight = development_gate(records, protocol, weight_hash)
+        preflight = development_gate(records, protocol, weight_hash, args.stage)
         sources = {
             str(p.relative_to(ROOT)): digest(p)
             for p in sorted((ROOT / "integration").rglob("*"))
@@ -101,16 +101,21 @@ def finalize(args):
         sources.update({str(p.relative_to(ROOT)): digest(p) for p in sorted((ROOT / "league").glob("*.py"))})
         sources["pins.json"] = digest(ROOT / "pins.json")
         reservation = reserve(
-            ROOT / ".cache/league/sealed-consumption.json", protocol, weight_hash, checksum(sources), args.root
+            ROOT / ".cache/league/sealed-consumption.json",
+            protocol,
+            weight_hash,
+            checksum(sources),
+            args.root,
+            args.stage,
         )
         save(args.root / "reservation.json", reservation)
         save(args.root / "development-preflight.json", preflight)
         save(args.root / "source-fingerprint.json", sources)
-        spec = protocol["sealedTest"]
+        spec = protocol[args.stage]
         cases = [(m, seed, seat) for m in spec["maps"] for seed in spec["seeds"] for seat in spec["seats"]]
-        jobs = match_jobs(args.root / "matches", args.checkpoint, cases, args.gpus, "sealedTest", spec["maxTicks"])
+        jobs = match_jobs(args.root / "matches", args.checkpoint, cases, args.gpus, args.stage, spec["maxTicks"])
         # Verify/compress each completed match without retaining 96 full decision logs.
-        checks = verification_jobs([Path(job["result"]).parent for job in jobs], "sealedTest")
+        checks = verification_jobs([Path(job["result"]).parent for job in jobs], args.stage)
         for check, match in zip(checks, jobs, strict=True):
             check["dependsOn"] = [match["id"]]
             check["command"] += ["--replay-python", args.replay_python]
@@ -122,7 +127,7 @@ def finalize(args):
                 if relative in sources and sources[relative] != value:
                     raise ValueError("Final match source differs from the consumed reservation")
         report = {
-            **evaluate_gate(evidence, protocol),
+            **evaluate_gate(evidence, protocol, args.stage),
             "checkpoint": str(args.checkpoint),
             "checkpointSha256": weight_hash,
             "reservation": reservation["id"],
@@ -135,6 +140,7 @@ def finalize(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--stage", choices=["layaQualification", "sealedTest"], default="sealedTest")
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--development-matches", type=Path, nargs="+", required=True)

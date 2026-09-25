@@ -50,8 +50,10 @@ def tick_budget_matches(record, spec):
     )
 
 
-def evaluate_gate(records, protocol):
-    spec = protocol["sealedTest"]
+def evaluate_gate(records, protocol, stage="sealedTest"):
+    if stage not in {"layaQualification", "sealedTest"}:
+        raise ValueError("Unknown held-out stage")
+    spec = protocol[stage]
     expected = {(m, s, seat) for m in spec["maps"] for s in spec["seeds"] for seat in spec["seats"]}
     actual = [(r["map"], r["seed"], r["seat"]) for r in records]
     failures = []
@@ -82,7 +84,7 @@ def evaluate_gate(records, protocol):
             failures.append("tick_budget_mismatch")
         if r.get("decisionInterval") != protocol["cadenceTicks"]:
             failures.append("decision_cadence_mismatch")
-        if r.get("split") != "sealedTest" or not r.get("checkpointSha256"):
+        if r.get("split") != stage or not r.get("checkpointSha256"):
             failures.append("missing_test_provenance")
         champions.add(r.get("checkpointSha256"))
         win = valid and r.get("ended") is True and not r.get("truncated") and r.get("outcome", {}).get(r["seat"]) == 1
@@ -100,6 +102,7 @@ def evaluate_gate(records, protocol):
     if any(sum(v) / len(v) < spec["minimumPerSeatWinRate"] for v in seats.values()):
         failures.append("seat_win_gate")
     return {
+        "stage": stage,
         "passed": not failures,
         "games": len(records),
         "wins": wins,

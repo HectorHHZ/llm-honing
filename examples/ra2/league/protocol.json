@@ -1,5 +1,5 @@
 {
-  "version": "ra2-league-v1",
+  "version": "ra2-league-v2",
   "objective": "A learned champion that reliably defeats pinned Supalosa, with Laya, NanoJev, Jev-Omni and repeated cross-model learning in a reproducible pipeline.",
   "view": "normal",
   "cadenceTicks": 3,
@@ -106,5 +106,32 @@
   ],
   "baselineRevision": "165b77a71d0cf5ebd27c65b19d0486bcbae78d0f",
   "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
-  "statisticalCaveat": "Repeated seeds may produce correlated or identical trajectories. Wilson is a descriptive operational gate, not an independence guarantee. Report per-map/seat results and trajectory diversity."
+  "statisticalCaveat": "Repeated seeds may produce correlated or identical trajectories. Wilson is a descriptive operational gate, not an independence guarantee. Report per-map/seat results and trajectory diversity.",
+  "layaQualification": {
+    "maps": [
+      "mp21s2.map",
+      "mp29u2.map",
+      "mp31s2.map"
+    ],
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005
+    ],
+    "seats": [
+      "red",
+      "blue"
+    ],
+    "maxTicks": 18000,
+    "minimumGames": 36,
+    "minimumWinRate": 0.9,
+    "minimumWilsonLower95": 0.8,
+    "minimumPerMapWinRate": 0.8,
+    "minimumPerSeatWinRate": 0.85,
+    "consumeOnce": true
+  },
+  "qualificationNote": "Laya qualifies on three reserved maps before cross-model transfer. Final champion uses the separate original sealedTest maps. Both stages consume their cases once; no held-out match has yet been launched when this split was introduced."
 }

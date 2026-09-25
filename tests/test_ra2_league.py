@@ -326,3 +326,62 @@ def test_diversity_reports_duplicate_actions_across_seeds_not_different_final_ha
     assert result["repeatedTraceGroups"] == [
         {"map": "m", "seat": "red", "actionTraceSha256": "same", "seeds": [1000, 1001]}
     ]
+
+
+@pytest.mark.unit
+def test_laya_qualification_and_final_cases_are_disjoint_and_reserved_separately(tmp_path):
+    sealed = load("sealed")
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    qualification = sealed.cases(protocol, "layaQualification")
+    final = sealed.cases(protocol)
+    assert len(qualification) == 36 and len(final) == 96
+    assert not {c[0] for c in qualification} & {c[0] for c in final}
+    ledger = tmp_path / "heldout.json"
+    first = sealed.reserve(ledger, protocol, "a" * 64, "b" * 64, tmp_path / "qualification", "layaQualification")
+    second = sealed.reserve(ledger, protocol, "c" * 64, "d" * 64, tmp_path / "final")
+    assert first["spec"]["stage"] == "layaQualification"
+    assert second["spec"]["stage"] == "sealedTest"
+    assert len(json.loads(ledger.read_text())["reservations"]) == 2
+    with pytest.raises(ValueError, match="already consumed"):
+        sealed.reserve(ledger, protocol, "c" * 64, "d" * 64, tmp_path / "retry", "layaQualification")
+    protocol["layaQualification"]["maps"][0] = protocol["sealedTest"]["maps"][0]
+    with pytest.raises(ValueError, match="overlap"):
+        sealed.cases(protocol, "layaQualification")
+
+
+@pytest.mark.unit
+def test_qualification_gate_uses_its_own_matrix_and_budget():
+    gate = load("gates")
+    protocol = json.loads((LEAGUE / "protocol.json").read_text())
+    spec = protocol["layaQualification"]
+    rows = [
+        {
+            "map": m,
+            "seed": seed,
+            "seat": seat,
+            "split": "layaQualification",
+            "controller": "model",
+            "normalView": True,
+            "fallbackCount": 0,
+            "auditPassed": True,
+            "replayVerified": True,
+            "error": None,
+            "checkpointSha256": "a" * 64,
+            "ended": True,
+            "truncated": False,
+            "outcome": {seat: 1},
+            "maxTicks": 18000,
+            "tick": 16000,
+            "decisionInterval": 3,
+            **{k: protocol[k] for k in ("engineCommit", "baselineRevision", "cadenceTicks", "engineActionCap")},
+        }
+        for m in spec["maps"]
+        for seed in spec["seeds"]
+        for seat in spec["seats"]
+    ]
+    assert gate.evaluate_gate(rows, protocol, "layaQualification")["passed"]
+    assert not gate.evaluate_gate(rows, protocol)["passed"]
+    assert (
+        "tick_budget_mismatch"
+        in gate.evaluate_gate([dict(r, maxTicks=36000) for r in rows], protocol, "layaQualification")["failures"]
+    )

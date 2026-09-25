@@ -107,7 +107,7 @@ def verify(match, split, replay_python):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--match", type=Path, required=True)
-    parser.add_argument("--split", choices=["train", "dev", "sealedTest"], required=True)
+    parser.add_argument("--split", choices=["train", "dev", "layaQualification", "sealedTest"], required=True)
     parser.add_argument(
         "--replay-python",
         default=os.environ.get("RA2_REPLAY_PYTHON"),

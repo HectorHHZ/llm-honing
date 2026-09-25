@@ -17,14 +17,17 @@ def checksum(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def cases(protocol):
-    test = protocol["sealedTest"]
+def cases(protocol, stage="sealedTest"):
+    if stage not in {"layaQualification", "sealedTest"}:
+        raise ValueError("Unknown held-out stage")
+    test = protocol[stage]
+    other_splits = [s for s in ("train", "dev", "layaQualification", "sealedTest") if s != stage and s in protocol]
     if test.get("consumeOnce") is not True:
         raise ValueError("Sealed protocol must require consumeOnce")
-    if any(set(test["maps"]) & set(protocol[s]["maps"]) for s in ("train", "dev")):
-        raise ValueError("Sealed maps overlap training/development")
-    if any(set(test["seeds"]) & set(protocol[s]["seeds"]) for s in ("train", "dev")):
-        raise ValueError("Sealed seeds overlap training/development")
+    if any(set(test["maps"]) & set(protocol[s]["maps"]) for s in other_splits):
+        raise ValueError("Sealed maps overlap another split")
+    if any(set(test["seeds"]) & set(protocol[s]["seeds"]) for s in other_splits):
+        raise ValueError("Sealed seeds overlap another split")
     result = [(m, seed, seat) for m in test["maps"] for seed in test["seeds"] for seat in test["seats"]]
     if not result or len(result) != len(set(result)) or len(result) < test["minimumGames"]:
         raise ValueError("Sealed matrix must be complete and unique")
@@ -48,13 +51,14 @@ def atomic_save(path, value):
         os.close(descriptor)
 
 
-def reserve(ledger, protocol, checkpoint_sha256, source_sha256, evaluation_root):
+def reserve(ledger, protocol, checkpoint_sha256, source_sha256, evaluation_root, stage="sealedTest"):
     for value in (checkpoint_sha256, source_sha256):
         if not re.fullmatch(r"[0-9a-f]{64}", value):
             raise ValueError("Expected verified SHA256 digests")
-    matrix = cases(protocol)
+    matrix = cases(protocol, stage)
     spec = {
         "protocolSha256": checksum(protocol),
+        "stage": stage,
         "checkpointSha256": checkpoint_sha256,
         "sourceSha256": source_sha256,
         "evaluationRoot": str(Path(evaluation_root).resolve()),

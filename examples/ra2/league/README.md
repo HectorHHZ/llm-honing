@@ -149,3 +149,20 @@ The final report also groups identical recorded action traces by map and seat.
 Different simulation hashes can reflect different RNG state despite identical
 commands; neither seed counts nor distinct command traces prove independent
 scenarios. The Wilson threshold is a descriptive operational check only.
+
+### Separate Laya qualification and final champion evidence
+
+Before any held-out games were launched, protocol v2 reserved an additional
+Laya qualification stage: 3 different maps, 6 seeds and both seats (36 games,
+18,000 ticks). The original final champion set remains 4 maps, 12 seeds and
+both seats (96 games, 36,000 ticks). Both are disjoint from training/development
+and from each other. This prevents Laya qualification from consuming the final
+champion's cases before cross-model learning. No win thresholds were relaxed.
+
+Use `final_gate.py --stage layaQualification` after the complete development
+matrix passes. `--stage sealedTest` remains the default for the final champion.
+Each stage is reserved in the same consumption ledger; changing weights or
+sources cannot reuse cases already consumed by that stage. A failed held-out
+stage remains consumed and must not silently become a new development set.
+The driver currently supports Laya checkpoints; other model adapters and
+cross-model training remain required work.
