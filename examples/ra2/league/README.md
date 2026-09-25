@@ -29,7 +29,10 @@ cross-model self-play. `protocol.json` records the completion requirements.
 - Independent action/context audits and replay hash verification. The evidence
   builder checks checkpoint/source artifacts, split membership, normal vision,
   engine/baseline versions and cadence. Decision logs are streamed because full
-  episodes can exceed Node's single-string size limit.
+  episodes can exceed Node's single-string size limit. Verified completed logs
+  are gzip-compressed without changing their decoded hashes; audits and DAgger
+  readers accept either representation. Compression retains the original if
+  an existing archive differs.
 - Final-gate aggregation rejects incomplete matrices, teacher controllers,
   mismatched protocols, unverified matches, truncations and mixed checkpoints.
   The development loop never automatically consumes the sealed final test.

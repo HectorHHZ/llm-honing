@@ -7,7 +7,6 @@ import {
     appendFileSync,
     mkdirSync,
     existsSync,
-    createReadStream,
 } from "node:fs";
 import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
@@ -17,7 +16,8 @@ import {
     predictStaged,
     verifyStagedTrace,
 } from "../integration/laya/staged.mjs";
-import { MacroTeacher } from "./teacher.mjs";
+import { MacroTeacher, TEACHER_VERSION } from "./teacher.mjs";
+import { openLog } from "../integration/laya/jsonl.mjs";
 const args = Object.fromEntries(
     process.argv.slice(2).map((x) => x.replace(/^--/, "").split("=")),
 );
@@ -42,7 +42,7 @@ mkdirSync(out, { recursive: true });
 const hash = (data) => createHash("sha256").update(data).digest("hex");
 const digestFile = async (path) => {
     const h = createHash("sha256");
-    for await (const block of createReadStream(path)) h.update(block);
+    for await (const block of openLog(path)) h.update(block);
     return h.digest("hex");
 };
 const sourceSha256 = {};
@@ -50,6 +50,7 @@ for (const rel of [
     "league/label_rollout.mjs",
     "league/teacher.mjs",
     "integration/laya/staged.mjs",
+    "integration/laya/jsonl.mjs",
 ]) {
     const bytes = readFileSync(ROOT + rel);
     sourceSha256[rel] = hash(bytes);
@@ -60,7 +61,7 @@ const manifest = {
     kind: "dagger-labels",
     notModelEvaluation: true,
     split: "train",
-    teacher: "normal-macro-v2",
+    teacher: TEACHER_VERSION,
     map: result.map,
     seed: result.seed,
     seat: result.layaSeat,
@@ -90,7 +91,7 @@ let decisions = 0,
     disagreements = 0;
 try {
     for await (const line of createInterface({
-        input: createReadStream(input + "/decisions.jsonl"),
+        input: openLog(input + "/decisions.jsonl"),
         crlfDelay: Infinity,
     })) {
         const d = JSON.parse(line),

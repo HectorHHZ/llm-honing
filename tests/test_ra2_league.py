@@ -142,3 +142,34 @@ def test_campaign_rejects_cyclic_dependencies(tmp_path):
     (tmp_path / "plan.json").write_text(json.dumps({"jobs": jobs}))
     with pytest.raises(ValueError, match="Cyclic"):
         campaign.run(tmp_path, 2)
+
+
+@pytest.mark.unit
+def test_completed_log_compression_preserves_content_hash(tmp_path):
+    storage = load("storage")
+    data = b'{"tick":3,"context":"repeat"}\n' * 100
+    (tmp_path / "result.json").write_text('{"tick": 3, "truncated": true}')
+    log = tmp_path / "decisions.jsonl"
+    log.write_bytes(data)
+    before = storage.digest(log)
+    record = storage.compress(tmp_path)
+    assert not log.exists() and record["losslessVerified"]
+    assert storage.digest(log) == before == record["contentSha256"]
+    with storage.open_content(log) as stream:
+        assert stream.read() == data
+    assert storage.compress(tmp_path)["alreadyCompressed"]
+
+
+@pytest.mark.unit
+def test_compression_never_discards_original_for_mismatching_archive(tmp_path):
+    import gzip
+
+    storage = load("storage")
+    (tmp_path / "result.json").write_text("{}")
+    original = tmp_path / "decisions.jsonl"
+    original.write_bytes(b"original")
+    with gzip.open(tmp_path / "decisions.jsonl.gz", "wb") as stream:
+        stream.write(b"different")
+    with pytest.raises(ValueError, match="original retained"):
+        storage.compress(tmp_path)
+    assert original.read_bytes() == b"original"

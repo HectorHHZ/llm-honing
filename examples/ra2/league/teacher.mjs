@@ -1,10 +1,12 @@
 // Training-data teacher only. Never used as a fallback for evaluated models.
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+export const TEACHER_VERSION = "normal-macro-v4";
 export class MacroTeacher {
     constructor() {
         this.lastCombat = -150;
         this.lastGather = new Map();
         this.lastDeploy = -150;
+        this.searched = new Set();
     }
     observe(actions, tick) {
         for (const action of actions) {
@@ -101,7 +103,11 @@ export class MacroTeacher {
             const c = pick("Build_NAREFN");
             if (c) return c;
         }
-        if (v.minerals > 3000 && (queued("infantry")?.size ?? 0) < 2) {
+        if (
+            v.minerals > 3000 &&
+            count("E2") < 6 &&
+            (queued("infantry")?.size ?? 0) < 2
+        ) {
             const c = pick("Train_E2");
             if (c) return c;
         }
@@ -132,19 +138,47 @@ export class MacroTeacher {
             if (attacks[0]) {
                 return attacks[0];
             }
-        }
-        if (army.length >= 5) {
-            const scout = chooseFn(22)
-                .filter((c) =>
-                    c.action.unit_tags.every((t) =>
-                        army.some((u) => u.tag === t),
-                    ),
+            // A bounded individual-actor list can omit tank Attack_Unit leaves.
+            // Use a currently offered tank squad AttackMove at a visible target.
+            const assault = chooseFn(22)
+                .filter(
+                    (c) =>
+                        c.action.unit_tags.every((t) =>
+                            army.some((u) => u.tag === t),
+                        ) &&
+                        targets.some(
+                            (target) => distance(point(c), target) < 2,
+                        ),
                 )
                 .sort(
                     (a, b) =>
-                        b.action.unit_tags.length - a.action.unit_tags.length ||
-                        distance(point(b), base) - distance(point(a), base),
+                        b.action.unit_tags.length - a.action.unit_tags.length,
                 )[0];
+            if (assault) return assault;
+        }
+        if (army.length >= 5) {
+            const candidates = chooseFn(22).filter((c) =>
+                c.action.unit_tags.every((t) => army.some((u) => u.tag === t)),
+            );
+            // A public location is searched only after our army actually reaches it.
+            // No opponent start, privileged unit position or god-view data is used.
+            for (const c of candidates) {
+                if (army.some((u) => distance(u, point(c)) < 8))
+                    this.searched.add(c.action.world);
+            }
+            const rank = (c) => {
+                if (this.searched.has(c.action.world)) return 3;
+                if (c.label.includes("unexplored possible enemy base"))
+                    return 0;
+                if (c.label.includes("last seen")) return 1;
+                return 2;
+            };
+            const scout = candidates.sort(
+                (a, b) =>
+                    rank(a) - rank(b) ||
+                    b.action.unit_tags.length - a.action.unit_tags.length ||
+                    distance(point(a), base) - distance(point(b), base),
+            )[0];
             if (scout) {
                 return scout;
             }

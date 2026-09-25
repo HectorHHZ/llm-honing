@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, createReadStream } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
+import { openLog } from "./jsonl.mjs";
 import { resolve } from "node:path";
 import { STAGED_PROTOCOL, verifyStagedTrace } from "./staged.mjs";
 const dir = resolve(process.argv[2]);
@@ -93,7 +94,7 @@ function auditCall(record, stageIndex = 1) {
     }
 }
 for await (const line of createInterface({
-    input: createReadStream(dir + "/decisions.jsonl"),
+    input: openLog(dir + "/decisions.jsonl"),
     crlfDelay: Infinity,
 })) {
     if (!line.trim()) continue;

@@ -18,7 +18,7 @@ import {
 } from "../integration/laya/staged.mjs";
 import { validateAction } from "../integration/laya/policy.mjs";
 import { rowsOf } from "../integration/laya/context.mjs";
-import { MacroTeacher } from "./teacher.mjs";
+import { MacroTeacher, TEACHER_VERSION } from "./teacher.mjs";
 const args = Object.fromEntries(
     process.argv.slice(2).map((x) => x.replace(/^--/, "").split("=")),
 );
@@ -118,7 +118,7 @@ try {
         kind: "teacher-demonstration",
         notModelEvaluation: true,
         split: "train",
-        teacher: "normal-macro-v2",
+        teacher: TEACHER_VERSION,
         map,
         seed,
         seat,
@@ -169,7 +169,7 @@ try {
                     questions: req.questions,
                     answers,
                     chosenLeaf: leaf.key,
-                    teacher: "normal-macro-v2",
+                    teacher: TEACHER_VERSION,
                 });
                 return { answers, fixture: true, latencyMs: 0 };
             },

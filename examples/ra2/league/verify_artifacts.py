@@ -1,21 +1,14 @@
 """Recompute evidence from match artifacts instead of trusting caller-supplied booleans."""
 
 import argparse
-import hashlib
 import json
 import os
 import subprocess
 from pathlib import Path
 
+from storage import compress, digest
+
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def digest(path):
-    checksum = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            checksum.update(block)
-    return checksum.hexdigest()
 
 
 def verify(match, split, replay_python):
@@ -99,6 +92,7 @@ def verify(match, split, replay_python):
             )
         },
     }
+    evidence["logStorage"] = compress(match)
     (match / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     return evidence
 
