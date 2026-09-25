@@ -30,6 +30,8 @@ export class IntentPolicy extends CatalogPolicy {
         this.commandHistory = [];
         this.effects = [];
         this.previousNormal = null;
+        this.macroHistory = [];
+        this.queueProgress = new Map();
     }
     refresh(obs, tick) {
         super.refresh(obs, tick);
@@ -74,6 +76,23 @@ export class IntentPolicy extends CatalogPolicy {
                     });
             }
         }
+        const mobile = obs.vectors.army_count;
+        if (!this.macroHistory.length || tick !== this.macroHistory.at(-1).tick)
+            this.macroHistory.push({
+                tick,
+                credits: obs.vectors.minerals,
+                army: mobile,
+                truncated: current.truncated,
+            });
+        this.macroHistory = this.macroHistory.filter(
+            (x) => tick - x.tick <= 900,
+        );
+        for (const q of obs.vectors.production) {
+            const signature = `${q.status}:${q.item}:${q.progress}`,
+                old = this.queueProgress.get(q.queue);
+            if (!old || old.signature !== signature)
+                this.queueProgress.set(q.queue, { signature, since: tick });
+        }
         this.previousNormal = current;
         this.effects = this.effects
             .filter((e) => tick - e.tick <= 1800)
@@ -81,6 +100,78 @@ export class IntentPolicy extends CatalogPolicy {
         this.commandHistory = this.commandHistory.filter(
             (e) => tick - e.tick <= 1800,
         );
+    }
+    macroContext(leaves, queuedMilitary) {
+        const v = this.obs.vectors,
+            workers = this.frame.own.filter(
+                (u) => this.meta.techno.get(u.name)?.harvester,
+            );
+        const working = workers.filter(
+            (u) => !u.is_idle && [46, 47].includes(u.order_id_0),
+        );
+        const needsMining = workers.filter(
+            (u) =>
+                u.is_idle || [0, 20, 21, 22, 23, 26, 27].includes(u.order_id_0),
+        );
+        const offered = new Set(leaves.map((c) => c.action.function));
+        const first = this.macroHistory[0] ?? {
+            tick: this.tick,
+            credits: v.minerals,
+            army: v.army_count,
+        };
+        const peak = Math.max(
+            v.army_count,
+            ...this.macroHistory.filter((x) => !x.truncated).map((x) => x.army),
+        );
+        const stalls = v.production.filter(
+            (q) =>
+                q.status === "Active" &&
+                q.size > 0 &&
+                this.tick -
+                    (this.queueProgress.get(q.queue)?.since ?? this.tick) >=
+                    150,
+        );
+        const stuck =
+            stalls
+                .map(
+                    (q) =>
+                        `${q.queue} ${q.progress}% unchanged ${Math.floor(
+                            (this.tick -
+                                this.queueProgress.get(q.queue).since) /
+                                15,
+                        )}s`,
+                )
+                .join(", ") || "none";
+        const facts = `Macro facts: credits net ${
+            v.minerals - first.credits
+        } over ${Math.floor(
+            (this.tick - first.tick) / 15,
+        )}s (includes spending/refunds, NOT gross income). Harvesters ${
+            workers.length
+        }: ${working.length} have Gather/Dock orders, ${
+            needsMining.length
+        } idle or diverted. Army ${v.army_count}, recent observed peak ${peak}${
+            v.units_truncated
+                ? " (unit rows incomplete; no loss inference)"
+                : ""
+        }. Stalled production: ${stuck}.`;
+        let objective = null;
+        if (needsMining.length && offered.has(46))
+            objective =
+                "Restore recurring income now: select Support, then gather ore with idle or diverted harvesters. Move and Force-move do not collect ore and replace mining orders. Leave Gather/Dock orders running long enough to return ore to a refinery.";
+        else if (v.minerals < 100 && stalls.length)
+            objective = offered.has(46)
+                ? "Production is stalled with almost no credits. Check harvesters and restore ore collection using Support/gather ore. More tank orders cannot fund existing orders. Keep the refinery and miners."
+                : "Production is stalled with almost no credits. Restore an income source using offered normal-view choices. More tank orders cannot fund existing orders.";
+        else if (peak > v.army_count && v.army_count < 8 && !v.units_truncated)
+            objective = queuedMilitary
+                ? "The observed army count fell. Reinforcements are already queued: maintain mining and let production advance; regroup surviving combat units."
+                : "The observed army count fell and no military reinforcements are queued. Recruit replacements if affordable; protect mining and military production while rebuilding.";
+        return {
+            facts,
+            objective,
+            rules: "Operating loop: mine ore, unload at refinery, fund production, replenish combat losses, then scout and attack with military units. Keep miners on Gather/Dock; do not spam movement or Stop on them. Keep a small military queue funded; a long queue is not an army. Ready buildings need Place; paused useful queues need Resume. Wait is useful while mining, construction or battle orders progress. Add power only for demand, expand income before funds run out, and preserve the base.",
+        };
     }
     packet() {
         const packet = super.packet(),
@@ -705,6 +796,15 @@ export class IntentPolicy extends CatalogPolicy {
             "Keep useful buildings and the construction yard functioning. Build an income source, military production, and an army; use the army to find and destroy enemy buildings.",
             parts.essential[8],
         ];
+        const macro = this.macroContext(leaves, queuedMilitary);
+        parts.essential.splice(2, 0, macro.facts);
+        if (macro.objective)
+            parts.essential = parts.essential.map((x) =>
+                x.startsWith("Recommended strategic objective:")
+                    ? `Recommended strategic objective: ${macro.objective} This is advice; choose the action and its parameters.`
+                    : x,
+            );
+        parts.essential.push(macro.rules);
         const types = [...new Set(own.map((u) => u.name))];
         parts.details = types
             .filter((n) => this.meta.techno.get(n)?.type !== 2)

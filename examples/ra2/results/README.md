@@ -40,3 +40,7 @@ the JSON. The example subsequently replaced machine paths with configuration,
 formatted the source, extracted token-budget handling and hardened process
 startup. Its engine fixtures and frozen-input checks verify that port; the
 six matches are not claimed to have run from the final PR checkout.
+
+A later [macro-context follow-up](macro-context.md) changes only the typed
+model context. It improves income in these three pairs but regresses military
+production. It is a separate intervention from the checkpoint comparison above.

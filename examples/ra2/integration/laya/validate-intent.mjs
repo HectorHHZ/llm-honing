@@ -199,6 +199,47 @@ try {
     console.log(
         "PASS intent hierarchy resolves one grounded command with frozen state; confirmed effects enter context; no-op yard deploy removed; sale can be cancelled; god observer does not affect candidates",
     );
+    // Normal-observation macro diagnostics must not manufacture income or losses.
+    p.obs = {
+        vectors: {
+            minerals: 0,
+            army_count: 0,
+            units_truncated: false,
+            production: [
+                {
+                    queue: "vehicles",
+                    status: "Active",
+                    size: 25,
+                    item: 345,
+                    progress: 44,
+                },
+            ],
+        },
+    };
+    p.frame = { own: [{ name: "HARV", is_idle: 1, order_id_0: 0 }] };
+    p.tick = 900;
+    p.macroHistory = [{ tick: 0, credits: 900, army: 5, truncated: false }];
+    p.queueProgress = new Map([["vehicles", { since: 0 }]]);
+    const choices = [{ action: { function: 46 } }],
+        unchanged = structuredClone(choices);
+    let macro = p.macroContext(choices, 25);
+    assert.match(macro.objective, /Restore recurring income/);
+    assert.match(macro.facts, /NOT gross income/);
+    assert.match(macro.facts, /44% unchanged 60s/);
+    assert.deepEqual(choices, unchanged);
+    p.frame.own[0].is_idle = 0;
+    p.frame.own[0].order_id_0 = 46;
+    p.obs.vectors.minerals = 2000;
+    p.obs.vectors.production = [];
+    macro = p.macroContext(choices, 0);
+    assert.match(macro.facts, /1 have Gather\/Dock/);
+    assert.match(macro.objective, /Recruit replacements/);
+    assert.match(p.macroContext(choices, 4).objective, /already queued/);
+    p.obs.vectors.units_truncated = true;
+    assert.equal(p.macroContext([], 0).objective, null);
+    console.log(
+        "PASS macro context diagnoses diverted miners and stalled queues, preserves choices, distinguishes net credits from income, and limits replenishment inference",
+    );
 } finally {
     await engine?.shutdown();
     meta?.dispose();

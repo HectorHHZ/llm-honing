@@ -99,6 +99,16 @@ simulation for both sides. The local model uses bf16 and deterministic argmax,
 with 2048 total tokens and a 512-token question budget. Optional history is
 pruned before essential state; option or essential-state truncation is an error.
 
+The macro context also summarizes net credit change, current harvester orders,
+production progress stalls and recent observed army counts. Net credits include
+spending/refunds and are never labeled mining income. Advice prioritizes restoring
+idle or diverted miners, preserving Gather/Dock orders, funding useful queues,
+and replenishing an observed army decline. Incomplete unit observations suppress
+the replenishment inference. This advice changes model input only; it adds no
+automatic mining command and removes no candidate action. Miner diagnosis uses
+the current task as a heuristic; it can miss a queued Dock task behind Move
+and is not evidence of actual income.
+
 The compatibility facade approximates some native bot API queries, including
 placement/connectivity and weapon state. It is not a native Chrono Divide
 match. The runner preserves these limitations rather than changing the
