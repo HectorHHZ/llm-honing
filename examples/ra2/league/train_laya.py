@@ -47,6 +47,16 @@ def collate(items, pad, torch, device):
     )
 
 
+def classification_breakdown(items, predictions):
+    """Expose rare root-action errors hidden by numerous correct wait labels."""
+    groups = {}
+    for item, prediction in zip(items, predictions, strict=True):
+        group = groups.setdefault(item["bucket"], {"correct": 0, "total": 0})
+        group["total"] += 1
+        group["correct"] += int(prediction == item["label"])
+    return {key: {**value, "accuracy": value["correct"] / value["total"]} for key, value in groups.items()}
+
+
 def train(args):
     os.environ.update(HF_HUB_OFFLINE="1", USE_TF="0", TOKENIZERS_PARALLELISM="false")
     source = Path(os.environ["LAYA_SOURCE_DIR"])
@@ -138,7 +148,12 @@ def train(args):
                 keys = list(q["criteria"])
                 assert len(markers) == len(keys)
                 label = keys.index(row["answers"][key]["choice"])
-                item = {"ids": ids, "markers": markers, "label": label, "qtype": QTYPES["choice"]}
+                bucket = (
+                    ("root_wait" if row["answers"][key]["choice"] == "A" else "root_action")
+                    if row["stage"] == 1
+                    else f"parameter_stage_{row['stage']}"
+                )
+                item = {"ids": ids, "markers": markers, "label": label, "qtype": QTYPES["choice"], "bucket": bucket}
                 (validation if manifest["seed"] == args.validation_seed else items).append(item)
     items, validation, overlap_audit = separate_unique(items, validation)
     if not items or len(validation) < 50:
@@ -158,11 +173,13 @@ def train(args):
     started = time.time()
     history = []
     initial_validation = None
+    validation_breakdown = {}
 
     def evaluate():
         model.eval()
         losses = []
         correct = 0
+        predictions = []
         with torch.no_grad():
             for start in range(0, len(validation), args.batch):
                 batch = collate(validation[start : start + args.batch], tok.pad_token_id, torch, device)
@@ -170,10 +187,15 @@ def train(args):
                     logits, _ = model(*batch[:5])
                 logits = logits.float().masked_fill(~batch[3], -1e4)
                 losses.extend(torch.nn.functional.cross_entropy(logits, batch[5], reduction="none").tolist())
-                correct += int((logits.argmax(-1) == batch[5]).sum())
+                predicted = logits.argmax(-1)
+                correct += int((predicted == batch[5]).sum())
+                predictions.extend(predicted.cpu().tolist())
+        validation_breakdown.clear()
+        validation_breakdown.update(classification_breakdown(validation, predictions))
         return sum(losses) / len(losses), correct / len(validation)
 
     initial_validation = evaluate()
+    initial_validation_breakdown = dict(validation_breakdown)
     print(
         json.dumps(
             {
@@ -181,6 +203,7 @@ def train(args):
                 "train": len(items),
                 "validation": len(validation),
                 "initialValidation": initial_validation,
+                "initialValidationBreakdown": initial_validation_breakdown,
             }
         ),
         flush=True,
@@ -219,6 +242,7 @@ def train(args):
             "trainLoss": total / max(1, steps),
             "validationLoss": val,
             "validationAccuracy": accuracy,
+            "validationBreakdown": dict(validation_breakdown),
         }
         history.append(row)
         print(json.dumps(row), flush=True)
@@ -245,16 +269,17 @@ def train(args):
         "parent": config,
         "initialization": {key: initialization[key] for key in ("repo", "revision", "path")},
         "sourceRevision": revision,
-        "trainingScriptSha256": digest(Path(__file__)),
+        "trainingScriptSha256": digest(args.out / "source" / "train_laya.py"),
         "data": inputs,
         "packing": packing,
         "dataOverlapAudit": overlap_audit,
-        "datasetScriptSha256": digest(Path(__file__).with_name("dataset.py")),
+        "datasetScriptSha256": digest(args.out / "source" / "dataset.py"),
         "validationSeed": args.validation_seed,
         "trainExamples": len(items),
         "validationExamples": len(validation),
         "algorithm": "supervised-cross-entropy-data-aggregation",
         "initialValidation": initial_validation,
+        "initialValidationBreakdown": initial_validation_breakdown,
         "history": history,
         "confidenceCalibrated": False,
         "elapsedSeconds": time.time() - started,

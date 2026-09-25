@@ -17,7 +17,11 @@ cross-model self-play. `protocol.json` records the completion requirements.
   parent. Source snapshots, data hashes, parent lineage and weight hashes are
   recorded. Token packing matches inference and retains complete options.
   Duplicate training inputs and validation overlaps are removed; conflicting
-  labels fail the run. The marker batching/model APIs follow the upstream
+  labels fail the run. Validation also reports root waiting, root actions and
+  parameter stages separately; frequent waits can conceal action-selection
+  errors in overall accuracy. These diagnostics do not change the training loss
+  or checkpoint-selection rule, and are not gameplay wins.
+  The marker batching/model APIs follow the upstream
   Apache-2.0 [fine-tuning example](https://github.com/NandhaKishorM/laya/blob/970dc8c5f63d7b886a68409493f37d569424f933/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb).
 - A generation loop: train, evaluate both seats on two development maps, audit,
   collect new learner training episodes, annotate, aggregate and train again.

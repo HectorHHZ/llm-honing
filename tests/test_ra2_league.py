@@ -270,3 +270,15 @@ def test_final_driver_requires_full_development_success_before_reservation(monke
         final.development_gate(rows, protocol, "other-checkpoint")
     with pytest.raises(ValueError, match="win rate"):
         final.development_gate([dict(r, ended=False, truncated=True) for r in rows], protocol, "checkpoint")
+
+
+@pytest.mark.unit
+def test_training_report_exposes_root_action_failures_despite_high_wait_accuracy(monkeypatch):
+    monkeypatch.syspath_prepend(str(LEAGUE))
+    trainer = load("train_laya")
+    items = [{"bucket": "root_wait", "label": 0} for _ in range(99)]
+    items += [{"bucket": "root_action", "label": 1}]
+    report = trainer.classification_breakdown(items, [0] * 100)
+    assert report["root_wait"] == {"correct": 99, "total": 99, "accuracy": 1.0}
+    assert report["root_action"] == {"correct": 0, "total": 1, "accuracy": 0.0}
+    assert trainer.classification_breakdown([], []) == {}
