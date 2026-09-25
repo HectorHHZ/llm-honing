@@ -138,8 +138,9 @@ Remaining before full delivery:
 3. Integrate and train NanoJev and Jev-Omni after establishing Laya. Source/model
    pins in `model-sources.json` are discovery records, not completed integration.
    [Experimental native choice adapters](../integration/models/README.md) cover
-   lossless packing, answer binding and a pinned native JSONL worker; actual
-   model/game execution and training are still pending.
+   lossless packing, answer binding, pinned native workers and the common game
+   client. Real-weight inference transport checks pass. Full native game
+   evaluation, training and migration qualification remain pending.
 4. Complete at least two actual learning generations from cross-model self-play,
    a full cross-play matrix, baseline regression checks and final champion gate.
 5. Deliver the verified champion, full lineage and one-command reproduction.
@@ -282,3 +283,11 @@ Restore gzip before running an unchanged frozen historical auditor or any older
 consumer that only understands gzip. Restoration verifies the decoded content
 again and keeps the zstd copy. Run the original auditor from its recorded source
 revision; storage conversion does not change or replace gameplay evidence.
+
+
+The parameter-order training experiment completed four epochs with the same
+10,793 training examples, 1,461 validation examples, initialization and optimizer
+settings as the unshuffled adaptation. Its new checkpoint (`01177f30`) changes
+only the training parameter-order setting; the 24-game development comparison
+is running. Validation label accuracy is not gameplay evidence, and no
+qualification cases are consumed while the development result is pending.

@@ -1,4 +1,7 @@
-import { PermutationClient } from "./permutation-client.mjs";
+import {
+    createDecisionClient,
+    decisionClientOptions,
+} from "../models/factory.mjs";
 import {
     writeFileSync,
     appendFileSync,
@@ -14,7 +17,6 @@ import { IntentPolicy } from "./intent-policy.mjs";
 import { CatalogPolicy, PARAMETER_LIMIT } from "./catalog-policy.mjs";
 import { LayaPolicy, validateAction } from "./policy.mjs";
 import { rowsOf } from "./context.mjs";
-import { LayaClient } from "./client.mjs";
 import { CompressedDecisionLog } from "./decision-log.mjs";
 import { predictStaged, STAGED_PROTOCOL, MAX_STAGES } from "./staged.mjs";
 import { Ra2Engine, GAME_DIR } from "../dependencies.mjs";
@@ -61,6 +63,7 @@ if (
 const decisionLogFormat = args["decision-log"] ?? "plain";
 if (!["plain", "gzip"].includes(decisionLogFormat))
     throw new Error("decision-log must be plain or gzip");
+const clientOptions = decisionClientOptions(args, candidateMode);
 const out = resolve(ROOT, args.out ?? `runs/match-${layaSeat}-seed${seed}`);
 if (existsSync(out))
     throw new Error(
@@ -142,13 +145,7 @@ try {
     baseline = new SupalosaAdapter(conf(other));
     baseline.refresh(step.observations[other], 0);
     baseline.start();
-    client = new LayaClient({
-        gpu: args.gpu ?? "0",
-        model:
-            args.model ??
-            (candidateMode === "intent" ? "typed-decisions" : "english"),
-    });
-    client = new PermutationClient(client);
+    client = createDecisionClient(clientOptions);
     const runtime = await client.ready;
     const sourceFiles = [
         "README.md",
@@ -157,6 +154,17 @@ try {
         "integration/metadata.mjs",
         "integration/dependencies.mjs",
         "integration/paths.mjs",
+        "integration/models/factory.mjs",
+        "integration/models/client.mjs",
+        ...(clientOptions.family !== "laya"
+            ? [
+                  "integration/models/worker.py",
+                  "integration/models/provenance.py",
+                  "integration/models/choice_protocol.py",
+                  "integration/models/upstream_adapters.py",
+                  "league/model-sources.json",
+              ]
+            : []),
         ...[
             "context.mjs",
             "policy.mjs",
@@ -186,6 +194,11 @@ try {
     );
     const manifest = {
         implementationSha256,
+        modelFamily: clientOptions.family,
+        inferenceCallUnit:
+            clientOptions.family === "laya"
+                ? "native_model_forward"
+                : "native_choice_request",
         decisionLogFormat,
         protocol:
             decisionMode === "staged"

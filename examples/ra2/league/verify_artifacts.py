@@ -35,12 +35,45 @@ def verify(match, split, replay_python):
     if pins["supalosa"]["revision"] != protocol["baselineRevision"]:
         raise ValueError("Baseline revision mismatch")
     runtime = result["runtime"]
-    if digest(Path(runtime["path"]) / "model.safetensors") != runtime["weightsSha256"]:
-        raise ValueError("Checkpoint artifact mismatch")
+    family = result.get("modelFamily", "laya")
+    if family not in {"laya", "nanojev", "jev-omni"}:
+        raise ValueError("Unknown decision model family")
+    if family == "laya":
+        if runtime.get("family") not in {None, "laya"}:
+            raise ValueError("Native runtime must declare its model family")
+        if digest(Path(runtime["path"]) / "model.safetensors") != runtime["weightsSha256"]:
+            raise ValueError("Checkpoint artifact mismatch")
+        checkpoint_digest = runtime["weightsSha256"]
+        digest_kind = "single-file-sha256"
+    else:
+        if runtime.get("family") != family:
+            raise ValueError("Native family differs from runtime")
+        native_python = os.environ.get("RA2_NATIVE_PYTHON") or os.environ.get("LAYA_PYTHON")
+        if not native_python:
+            raise ValueError("Set RA2_NATIVE_PYTHON for native file and tokenizer verification")
+        subprocess.run(
+            [native_python, str(ROOT / "league/verify_native_encoding.py"), "--match", str(match)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        native = json.loads((match / "native-verification.json").read_text())
+        if not native["verified"] or native["weightSetSha256"] != runtime["weightSetSha256"]:
+            raise ValueError("Native source, weights or tokenization verification failed")
+        checkpoint_digest = runtime["weightSetSha256"]
+        digest_kind = "native-weight-set-v1"
     manifest = json.loads((match / "manifest.json").read_text())
     if any(
         manifest.get(key) != result.get(key)
-        for key in ("map", "seed", "layaSeat", "runtime", "cadenceTicks", "maxTicks")
+        for key in (
+            "map",
+            "seed",
+            "layaSeat",
+            "runtime",
+            "cadenceTicks",
+            "maxTicks",
+            "modelFamily",
+            "inferenceCallUnit",
+        )
     ):
         raise ValueError("Result differs from initial manifest")
     subprocess.run(
@@ -73,7 +106,10 @@ def verify(match, split, replay_python):
         "auditPassed": True,
         "replayVerified": True,
         "error": None,
-        "checkpointSha256": runtime["weightsSha256"],
+        "checkpointSha256": checkpoint_digest,
+        "checkpointDigestKind": digest_kind,
+        "modelFamily": family,
+        "nativeEncodingVerified": family != "laya",
         "ended": result["ended"],
         "truncated": result["truncated"],
         "outcome": result["outcome"],
@@ -99,6 +135,8 @@ def verify(match, split, replay_python):
             )
         },
     }
+    if family != "laya":
+        evidence["artifacts"]["native-verification.json"] = digest(match / "native-verification.json")
     evidence["logStorage"] = compress(match)
     (match / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     return evidence

@@ -155,3 +155,27 @@ def test_gpu_worker_lock_and_occupancy_fail_without_changing_device(tmp_path, mo
     with pytest.raises(RuntimeError, match="compute process"), worker.gpu_lock("5"):
         pytest.fail("Occupied GPU was accepted")
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "previous"
+
+
+def test_recorded_native_runtime_rechecks_files_settings_and_source(tmp_path, monkeypatch):
+    from examples.ra2.integration.models import provenance
+
+    path, manifest, pins = prepared(tmp_path)
+    _, runtime = worker.verify_prepared(path, "nanojev", pins)
+    runtime.update(
+        protocol="native-choice-jsonl-v1",
+        modelWeightsLoaded=True,
+        parameterStorage="float32",
+        forwardAutocast="bfloat16",
+        maxLen=2048,
+        sourceRoot=str(tmp_path),
+        sourceCommit="pinned-source-fixture",
+    )
+    monkeypatch.setattr(provenance, "verify_nano_source", lambda source, _: (source, "pinned-source-fixture"))
+    assert provenance.verify_runtime(runtime, pins) == manifest
+    for key, value in [("weightSetSha256", "0" * 64), ("modelWeightsLoaded", False), ("maxLen", True)]:
+        with pytest.raises(ValueError):
+            provenance.verify_runtime({**runtime, key: value}, pins)
+    (Path(manifest["path"]) / "best.safetensors").write_text("changed checkpoint")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        provenance.verify_runtime(runtime, pins)

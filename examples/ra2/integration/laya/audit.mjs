@@ -1,3 +1,4 @@
+import { verifyNativeRecord } from "../models/client.mjs";
 import { verifyEnsemble } from "./permutation-client.mjs";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -40,6 +41,20 @@ function auditCall(record, stageIndex = 1) {
     const forwards = record.ensemble
         ? [record.ensemble.original, record.ensemble.swapped]
         : [record];
+    if (result.modelFamily && result.modelFamily !== "laya") {
+        assert.equal(result.runtime.family, result.modelFamily);
+        for (const [index, response] of forwards.entries()) {
+            const questions =
+                index === 1
+                    ? record.ensemble.permutedQuestions
+                    : record.questions;
+            verifyNativeRecord(
+                { parts: record.contextParts, questions },
+                response,
+                result.runtime,
+            );
+        }
+    }
     latencies.push(...forwards.map((r) => r.latencyMs));
     for (const r of forwards)
         for (const a of Object.values(r.tokenAudit))
@@ -184,6 +199,11 @@ for await (const line of createInterface({
     }
 }
 assert.equal(calls, result.inferenceCalls);
+assert.equal(
+    decisionCount,
+    Math.ceil(result.tick / result.cadenceTicks),
+    "Recorded decisions do not cover every simulation cadence",
+);
 const modelActions = actions
     .filter((a) => a.seat === result.layaSeat)
     .map((a) => ({ tick: a.tick, action: a.action }));
@@ -219,7 +239,7 @@ const audit = {
     parameterCalls,
     maxStagesObserved: maxStages,
     choiceQuestions: questions,
-    latencyUnit: "native_model_forward",
+    latencyUnit: result.inferenceCallUnit ?? "native_model_forward",
     choiceCountUnit: "canonical_staged_choice",
     waitChoices: waits,
     rootQuestions,

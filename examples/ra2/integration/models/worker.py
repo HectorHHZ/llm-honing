@@ -110,6 +110,7 @@ def verify_prepared(path, family, pins):
         "revision": manifest["modelRevision"],
         "path": str(directory),
         "preparedManifestSha256": digest(path),
+        "preparedManifestPath": str(path.resolve(strict=True)),
         "verifiedFilesSha256": files,
         "weightSetSha256": weight_set,
         "weightDigestDefinition": "sha256 of sorted compact JSON mapping native weight filenames to SHA256",
@@ -220,6 +221,7 @@ def main():
         if args.source_root is None:
             parser.error("NanoJev needs its pinned --source-root")
         source, metadata["sourceCommit"] = verify_nano_source(args.source_root, pins)
+        metadata["sourceRoot"] = str(source)
     with gpu_lock(args.gpu) as uuid:
         with contextlib.redirect_stdout(sys.stderr):
             import torch

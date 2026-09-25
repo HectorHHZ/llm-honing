@@ -108,8 +108,7 @@ idle or diverted miners, preserving Gather/Dock orders, funding useful queues,
 and replenishing an observed army decline. Incomplete unit observations suppress
 the replenishment inference. This advice changes model input only; it adds no
 automatic mining command and removes no candidate action. Miner diagnosis uses
-the current task as a heuristic; it can miss a queued Dock task behind Move
-and is not evidence of actual income.
+both observed order slots as a heuristic; it is not evidence of actual income.
 
 The compatibility facade approximates some native bot API queries, including
 placement/connectivity and weapon state. It is not a native Chrono Divide
@@ -179,3 +178,11 @@ already bound in the preceding stage. This respects Laya's unchanged 48-token
 per-option and 512-token question budgets; over-budget requests still fail
 before inference instead of silently truncating. Target page headings name
 the first and last targets; full facts appear on the target selection page.
+
+
+Experimental `--family=nanojev` and `--family=jev-omni` use the same staged game
+interface with pinned native choice workers. The default family remains Laya.
+See the [native client setup and evidence limits](integration/models/README.md)
+for prepared manifests, compatible Python environments and independent native
+input verification. Native training, qualification and cross-model self-play
+are not established by the current interface and inference checks.
