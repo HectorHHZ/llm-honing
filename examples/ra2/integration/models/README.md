@@ -139,4 +139,22 @@ mapping and the complete staged action-to-audit path. The latter is a synthetic
 transcript, not an engine game. A separate real-weight client smoke check
 (`diagnostic-v52-native-client-20260925`) reproduced all three earlier requests
 per family with identical choices and probabilities through the JavaScript
-transport. Native game evaluation, learning and qualification remain pending.
+transport. Full native game evaluation, learning and qualification remain pending.
+
+
+The production factory was then checked on four recorded training requests per
+family, including a binary target requiring two native calls. All five native
+requests per family passed independent rehashing and exact tokenizer
+reconstruction (`diagnostic-v53-native-factory-20260925`). These are inference
+transcripts, not engine games.
+
+A separate 600-tick engine smoke run per family subsequently exercised the full
+normal-view game path against Supalosa (`diagnostic-v54-native-engine-smoke-20260925`).
+NanoJev made 546 native choice requests and submitted 9 accepted commands;
+Jev-Omni made 210 requests and submitted 12 accepted commands. Every raw and
+permuted request passed the action audit and independent native re-encoding;
+both replays reproduced their recorded engine hashes. Both reached the short
+cap without an engine winner. These two technical smoke runs are explicitly
+excluded from training, promotion and full-match win-rate evidence. Original
+upstream weights are still unadapted; no native learning or cross-model
+self-play has been completed.

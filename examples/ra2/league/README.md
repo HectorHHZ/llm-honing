@@ -139,8 +139,10 @@ Remaining before full delivery:
    pins in `model-sources.json` are discovery records, not completed integration.
    [Experimental native choice adapters](../integration/models/README.md) cover
    lossless packing, answer binding, pinned native workers and the common game
-   client. Real-weight inference transport checks pass. Full native game
-   evaluation, training and migration qualification remain pending.
+   client. Real-weight inference transport checks and two 600-tick engine
+   smoke runs pass action audits, exact native re-encoding and replay hashes.
+   These short runs do not count toward full native game evaluation, training
+   or migration qualification, which remain pending.
 4. Complete at least two actual learning generations from cross-model self-play,
    a full cross-play matrix, baseline regression checks and final champion gate.
 5. Deliver the verified champion, full lineage and one-command reproduction.
