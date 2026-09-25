@@ -1,6 +1,6 @@
 // Conditional model calls over a frozen set of grounded leaf actions.
 // This module has no engine, observer, GPU, or game-clock handle.
-export const STAGED_PROTOCOL = "laya-normal-staged-v1.4";
+export const STAGED_PROTOCOL = "laya-normal-staged-v1.5";
 export const MAX_STAGES = 8;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const actorKey = (c) => JSON.stringify(c.action.unit_tags ?? []);
@@ -100,6 +100,17 @@ function intentLabel(leaves) {
         `Choose parameters for function ${leaves[0].action.function}`
     );
 }
+function dimensionLabel(dimension, leaves) {
+    if (dimension === "intent") return intentLabel(leaves);
+    if (dimension === "function")
+        return (
+            leaves[0].functionLabel ??
+            functionLabels[leaves[0].action.function] ??
+            leaves[0].label
+        );
+    if (dimension === "actors") return actorsLabel(leaves);
+    return leaves[0].label;
+}
 function branch(state) {
     const leaves = state.leaves;
     if (
@@ -190,25 +201,26 @@ export class StagedDecision {
                     binding: null,
                 },
             ];
-            for (const leaves of buckets) {
-                const smallLabel = (c) =>
-                    c.label.replace(/; cost .*/, "").slice(0, 30);
+            for (const [pageIndex, leaves] of buckets.entries()) {
+                const smallLabel = (members) =>
+                    dimensionLabel(dimension, members)
+                        .replace(/; cost .*/, "")
+                        .slice(0, 64);
+                // Summarize the parameter actually being selected. Leaf labels
+                // start with a target and can be identical across actor pages.
+                const first = rawBuckets[pageIndex * width];
+                const last =
+                    rawBuckets[
+                        Math.min((pageIndex + 1) * width, rawBuckets.length) - 1
+                    ];
                 const label = paged
                     ? `More ${dimension} options: ${smallLabel(
-                          leaves[0],
-                      )} ... ${smallLabel(leaves.at(-1))}`
+                          first,
+                      )} ... ${smallLabel(last)}`
                     : dimension === "confirmation"
                     ? leaves[0].confirmationLabel ??
                       `Confirm: ${leaves[0].label}`
-                    : dimension === "intent"
-                    ? intentLabel(leaves)
-                    : dimension === "function"
-                    ? leaves[0].functionLabel ??
-                      functionLabels[leaves[0].action.function] ??
-                      leaves[0].label
-                    : dimension === "actors"
-                    ? actorsLabel(leaves)
-                    : leaves[0].label;
+                    : dimensionLabel(dimension, leaves);
                 choices.push({
                     key: String.fromCharCode(65 + choices.length),
                     label,

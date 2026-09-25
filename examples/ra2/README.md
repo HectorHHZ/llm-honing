@@ -159,3 +159,9 @@ plain JSONL. The compressed stream must finish successfully before `result.json`
 is written; `decision-log.json` records its decoded byte count, row count and
 SHA-256. Existing action audits, replay verification and offline labeling read
 both formats. This changes log storage only, not observations or model choices.
+
+Staged protocol v1.5 describes paged menus using the parameter being selected.
+Actor pages name the first and last owned-unit groups on that page; they no
+longer repeat an enemy-target label that can make several pages look identical.
+Leaf actions, page ordering and bindings are preserved. Because the model-facing
+text changes, compare checkpoints with the exact recorded source snapshot.

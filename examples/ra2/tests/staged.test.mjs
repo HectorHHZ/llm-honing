@@ -293,3 +293,53 @@ verifyStagedTrace(confirmPacket, confirmed, assert);
 ok(
     "resignation has a separate model confirmation stage and can be cancelled there",
 );
+
+const sameTargetActors = fixturePacket([
+    fixtureGroup(
+        "same_target",
+        Array.from({ length: 25 }, (_, i) => ({
+            key: `unit-${i}`,
+            label: "Attack visible ore refinery #200 with this unit",
+            actorLabel: `${i < 20 ? "conscript infantry" : "Rhino tank"} #${
+                100 + i
+            }`,
+            action: {
+                function: 23,
+                unit_tags: [100 + i],
+                target_unit_tag: 200,
+            },
+        })),
+    ),
+]);
+let actorPagesChecked = false;
+const groundedPage = await predictStaged(sameTargetActors, {
+    predict: async (request) =>
+        prediction(request, (group) => {
+            if (
+                group.dimension === "actors" &&
+                group.choices.some((c) =>
+                    c.label.startsWith("More actors options:"),
+                )
+            ) {
+                const labels = group.choices
+                    .filter((c) => c.kind === "choose")
+                    .map((c) => c.label);
+                assert.equal(
+                    new Set(labels).size,
+                    labels.length,
+                    "Actor pages must be distinguishable despite identical target labels",
+                );
+                assert(labels.some((s) => s.includes("Rhino tank #124")));
+                assert(labels.every((s) => !s.includes("ore refinery #200")));
+                actorPagesChecked = true;
+            }
+            return group.choices.find((c) => c.leafKeys.includes("unit-24"))
+                .key;
+        }),
+});
+assert(actorPagesChecked);
+assert.equal(groundedPage.resolvedAnswers.same_target.choice, "unit-24");
+verifyStagedTrace(sameTargetActors, groundedPage, assert);
+ok(
+    "actor page descriptions identify owned units even when all target labels match",
+);
