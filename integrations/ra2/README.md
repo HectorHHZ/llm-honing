@@ -52,6 +52,18 @@ Two files control how the model is asked. Both default to the files in `config/`
 
 The manifest records the path and SHA-256 of both files, and the run directory keeps copies. Per-function parameter labels are still in code; #54 moves the rest of the prompt text and turns these files into a Honing `HarnessSpec`.
 
+## Tasks and grading in Honing
+
+`tasks/suite.jsonl` holds 412 tasks built from `tasks/protocol.json`, #49's league protocol:
+
+- `train`: 256 tasks (8 maps, 16 seeds, both seats);
+- `val`: #49's development matrix of 24 tasks, which the gate uses;
+- `heldout`: 132 tasks (the qualification and sealed cases), which the gate never uses.
+
+Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.json tasks/suite.jsonl`.
+
+`honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win 1, a draw or tick-limit truncation 0.5, and a loss 0. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
+
 ## Tests
 
 ```bash

@@ -1,0 +1,144 @@
+{
+  "version": "ra2-league-v3",
+  "objective": "A learned champion that reliably defeats pinned Supalosa, with Laya, NanoJev, Jev-Omni and repeated cross-model learning in a reproducible pipeline.",
+  "view": "normal",
+  "cadenceTicks": 3,
+  "engineActionCap": 16,
+  "modelCommandsPerDecision": 1,
+  "baselineCommandsPerDecision": 16,
+  "note": "Normal vision and decision opportunities are shared. The model controller submits at most one command; baseline retains its original cap. This is not equal realized command throughput.",
+  "train": {
+    "maps": [
+      "mp03t4.map",
+      "mp06t2.map",
+      "tn01t2.map",
+      "tn04t2.map",
+      "mp09t3.map",
+      "mp01t4.map",
+      "mp10s4.map",
+      "mp33u4.map"
+    ],
+    "seeds": [
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      113,
+      114,
+      115
+    ],
+    "maxTicks": 18000
+  },
+  "dev": {
+    "maps": [
+      "mp03t4.map",
+      "mp06t2.map"
+    ],
+    "seeds": [
+      1000,
+      1001,
+      1002,
+      1003,
+      1004,
+      1005
+    ],
+    "maxTicks": 18000
+  },
+  "sealedTest": {
+    "maps": [
+      "mp02t2.map",
+      "mp11t2.map",
+      "mp08t2.map",
+      "mp14t2.map"
+    ],
+    "seeds": [
+      20000,
+      20001,
+      20002,
+      20003,
+      20004,
+      20005,
+      20006,
+      20007,
+      20008,
+      20009,
+      20010,
+      20011
+    ],
+    "seats": [
+      "red",
+      "blue"
+    ],
+    "maxTicks": 36000,
+    "minimumGames": 96,
+    "minimumWinRate": 0.9,
+    "minimumWilsonLower95": 0.8,
+    "minimumPerMapWinRate": 0.8,
+    "minimumPerSeatWinRate": 0.85,
+    "consumeOnce": true
+  },
+  "outcomes": {
+    "win": "engine ended and learned seat outcome is 1; no truncation",
+    "truncation": "non-win regardless of score",
+    "errors": "non-win; must also pass reliability gate"
+  },
+  "forbiddenForPromotion": [
+    "teacher controller",
+    "fallback actions",
+    "privileged policy inputs",
+    "test examples in training",
+    "replay mismatch",
+    "incomplete planned match matrix"
+  ],
+  "completionEvidence": [
+    "Laya held-out success",
+    "NanoJev trained and evaluated",
+    "Jev-Omni trained and evaluated",
+    "at least two completed learning generations from cross-model self-play",
+    "full cross-play matrix",
+    "champion fresh sealed-test gate",
+    "independent replay and input/action audits",
+    "checkpoint hashes, lineage, data splits, command/config snapshots",
+    "one-command pipeline resume and champion reproduction"
+  ],
+  "baselineRevision": "165b77a71d0cf5ebd27c65b19d0486bcbae78d0f",
+  "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae",
+  "statisticalCaveat": "Repeated seeds may produce correlated or identical trajectories. Wilson is a descriptive operational gate, not an independence guarantee. Report per-map/seat results and trajectory diversity.",
+  "layaQualification": {
+    "maps": [
+      "mp21s2.map",
+      "mp29u2.map",
+      "mp31s2.map"
+    ],
+    "seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005
+    ],
+    "seats": [
+      "red",
+      "blue"
+    ],
+    "maxTicks": 18000,
+    "minimumGames": 36,
+    "minimumWinRate": 0.9,
+    "minimumWilsonLower95": 0.8,
+    "minimumPerMapWinRate": 0.8,
+    "minimumPerSeatWinRate": 0.85,
+    "consumeOnce": true
+  },
+  "qualificationNote": "Laya qualifies on three reserved maps before cross-model transfer. Final champion uses the separate original sealedTest maps. Both stages consume their cases once; no held-out match has yet been launched when this split was introduced.",
+  "curriculumNote": "Before any held-out consumption, six additional public stock/tournament training maps were registered to broaden geography beyond the two development maps. Existing frozen experiments retain their original protocol snapshots. Development, Laya qualification, final test, seeds, tick budgets and promotion thresholds are unchanged."
+}
