@@ -1,0 +1,11 @@
+.cache/
+deps/
+runs/
+assets/
+engine/
+.venv/
+*.rplx
+*.mp4
+.env
+
+node_modules/

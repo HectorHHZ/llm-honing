@@ -80,3 +80,27 @@ jobs:
           python -m pip install -e ".[dev,docs]"
       - name: Test
         run: python -m pytest -m "not gpu" --cov --cov-report=term-missing
+
+  ra2-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integrations/ra2/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Check the RA2 integration without the engine, game files, or models
+        working-directory: integrations/ra2
+        run: |
+          npm ci
+          npm test
+          npm run format:check
+          python -m pip install pytest
+          python -m pytest -q -p no:cacheprovider tests

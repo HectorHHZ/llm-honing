@@ -1,0 +1,6 @@
+{
+  "decisionMode": "staged",
+  "candidateMode": "intent",
+  "decisionInterval": 3,
+  "cadence": 3
+}
