@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal, get_args
@@ -94,24 +95,81 @@ class Task:
 
 
 @dataclass(frozen=True)
-class EpisodeRecord:
-    """The outcome of one episode: a score, optional feedback, and where its transcript lives.
+class EpisodeOutcome:
+    """What one episode produced, before anyone judged it.
 
-    ``transcript_location`` points at the agent's own readable transcript, which
-    reflection-based methods read. ``samples_location`` points at token-level
-    training samples and is set only when the episode was a training rollout.
+    A runner only runs the agent; grading is task-specific and belongs to a
+    :class:`~honing.core.protocols.TaskGrader`. ``transcript_location`` points
+    at the agent's own readable transcript, and ``workspace_location`` at the
+    files it left behind, which a grader may inspect.
     """
 
     task_id: str
     spec_id: str
     policy_checksum: str
-    score: float
-    feedback: str | None = None
+    exit_code: int
+    final_output: str = ""
     transcript_location: str | None = None
-    samples_location: str | None = None
+    workspace_location: str | None = None
 
     def __post_init__(self) -> None:
-        require(math.isfinite(self.score), f"an episode score must be finite, got {self.score}")
+        require(bool(self.task_id), "EpisodeOutcome.task_id must be set")
+
+
+@dataclass(frozen=True)
+class Grade:
+    """A grader's verdict on one episode.
+
+    ``score`` is in ``[0, 1]`` for every grader, because selectors compare
+    candidate and incumbent task by task and need one scale to do it.
+    ``feedback`` is the text a reflective method reads.
+    """
+
+    score: float
+    feedback: str | None = None
+
+    def __post_init__(self) -> None:
+        require(
+            math.isfinite(self.score) and 0.0 <= self.score <= 1.0,
+            f"a grade's score must be in [0, 1], got {self.score}",
+        )
+
+
+@dataclass(frozen=True)
+class EpisodeRecord:
+    """One graded episode: the outcome a runner produced and the grade a grader gave it.
+
+    ``samples_location`` points at token-level training samples and is set only
+    when the episode was a training rollout.
+    """
+
+    outcome: EpisodeOutcome
+    grade: Grade
+    samples_location: str | None = None
+
+    @property
+    def task_id(self) -> str:
+        return self.outcome.task_id
+
+    @property
+    def spec_id(self) -> str:
+        return self.outcome.spec_id
+
+    @property
+    def policy_checksum(self) -> str:
+        return self.outcome.policy_checksum
+
+    @property
+    def score(self) -> float:
+        return self.grade.score
+
+    @property
+    def feedback(self) -> str | None:
+        return self.grade.feedback
+
+    @property
+    def transcript_location(self) -> str | None:
+        return self.outcome.transcript_location
 
 
 @dataclass(frozen=True)
@@ -120,6 +178,49 @@ class HarnessProposal:
 
     spec: HarnessSpec
     note: str = ""
+
+
+@dataclass(frozen=True)
+class ProposeResult:
+    """What one call to a method's ``propose`` produced.
+
+    ``state`` is returned whether or not there is a proposal, because an attempt
+    that proposes nothing has still spent episodes and advanced the method.
+    ``episodes_spent`` is how many episodes the attempt ran itself, so a
+    restarted campaign can enforce its budgets from the commit record.
+    """
+
+    proposal: HarnessProposal | None
+    state: Mapping[str, object]
+    episodes_spent: int = 0
+
+    def __post_init__(self) -> None:
+        require(self.episodes_spent >= 0, f"episodes_spent must be >= 0, got {self.episodes_spent}")
+
+
+@dataclass(frozen=True)
+class HarnessMoveConfig:
+    """What one harness move runs with, overriding the campaign's defaults for that move only.
+
+    ``tasks`` empty and ``episode_budget`` ``None`` mean the campaign's own.
+    ``method`` names the method the move is for; ``None`` means the campaign's
+    method. ``label`` is the scheduler's name for the move, such as a phase: the
+    campaign records it on the candidate and never interprets it, so phases and
+    their total budgets stay a scheduler concern.
+    """
+
+    tasks: tuple[Task, ...] = ()
+    episode_budget: int | None = None
+    method: str | None = None
+    label: str | None = None
+
+    def __post_init__(self) -> None:
+        require(
+            self.episode_budget is None or self.episode_budget >= 0,
+            f"episode_budget must be >= 0, got {self.episode_budget}",
+        )
+        require(self.method is None or bool(self.method), "HarnessMoveConfig.method must name a method or be None")
+        require(self.label is None or bool(self.label), "HarnessMoveConfig.label must be a name or None")
 
 
 @dataclass(frozen=True)

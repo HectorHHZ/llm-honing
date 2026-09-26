@@ -14,8 +14,10 @@ from honing.core import (
     HoneRelease,
     PolicyRef,
     Task,
+    TaskGrader,
     UpdateCandidate,
     require,
+    run_graded,
 )
 
 
@@ -28,13 +30,16 @@ def _harness_of(spec: HarnessSpec | None, side: str) -> HarnessSpec:
 class EpisodeEvaluator:
     """Scores a candidate and the head on the same tasks, each under its own harness and weights.
 
-    Both sides run concurrently. ``evaluate`` starts its own event loop, so it
-    must be called from synchronous code, not from inside a running loop.
+    Every episode is run by ``runner`` and graded by ``grader``, the same pair a
+    method uses for its own minibatches. Both sides run concurrently.
+    ``evaluate`` starts its own event loop, so it must be called from
+    synchronous code, not from inside a running loop.
     """
 
-    def __init__(self, runner: EpisodeRunner, tasks: Sequence[Task]) -> None:
+    def __init__(self, runner: EpisodeRunner, grader: TaskGrader, tasks: Sequence[Task]) -> None:
         require(len(tasks) > 0, "episode evaluation needs at least one task")
         self._runner = runner
+        self._grader = grader
         self._tasks = tuple(tasks)
 
     def evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
@@ -66,10 +71,10 @@ class EpisodeEvaluator:
         incumbent_policy: PolicyRef,
     ) -> tuple[list[EpisodeRecord], list[EpisodeRecord]]:
         candidate_runs = asyncio.gather(
-            *(self._runner.run(candidate_spec, task, candidate_policy) for task in self._tasks)
+            *(run_graded(self._runner, self._grader, candidate_spec, task, candidate_policy) for task in self._tasks)
         )
         incumbent_runs = asyncio.gather(
-            *(self._runner.run(incumbent_spec, task, incumbent_policy) for task in self._tasks)
+            *(run_graded(self._runner, self._grader, incumbent_spec, task, incumbent_policy) for task in self._tasks)
         )
         candidate_records, incumbent_records = await asyncio.gather(candidate_runs, incumbent_runs)
         return list(candidate_records), list(incumbent_records)

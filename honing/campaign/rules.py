@@ -8,6 +8,8 @@ refused step costs no compute and leaves no partial output behind.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from honing.core import (
     ALGORITHM_REQUIREMENTS,
     MASTER_WEIGHT_FORMAT,
@@ -25,6 +27,7 @@ from honing.core import (
     TrainingBatch,
     TrainJobSpec,
     UpdateCandidate,
+    method_state_version,
 )
 
 
@@ -167,3 +170,18 @@ def spec_runnable(spec: HarnessSpec, support: RunnerSupport) -> None:
         problems.append(f"the runner cannot run harness files of kind {sorted(unsupported)}")
     if problems:
         raise CampaignRuleError("spec_runnable", "; ".join(problems))
+
+
+def method_state_schema_matches(state: Mapping[str, object], method: str, expected: int) -> None:
+    """State written under another schema is refused before the method reads it.
+
+    A rollback can hand an old release's state to a newer method, whose archive
+    has a different shape. Refusing here names both versions; letting the
+    method read it would fail somewhere inside the method, or not at all.
+    """
+    found = method_state_version(state)
+    if found != expected:
+        raise CampaignRuleError(
+            "method_state_schema_matches",
+            f"{method} reads method state schema version {expected}, but the head's state is version {found}",
+        )

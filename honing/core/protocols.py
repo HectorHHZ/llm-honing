@@ -14,10 +14,22 @@ from typing import Protocol, runtime_checkable
 
 from honing.core.backend import BackendSupport
 from honing.core.candidate import EvaluationResult, PolicyRef, SelectionDecision, UpdateCandidate
+from honing.core.chat import ChatMessage, ChatReply
 from honing.core.compression import CompressionBudget, ImportanceMap, PrunePlan, QuantizePlan, SignalKind
 from honing.core.data import DataContract, TrainingBatch
-from honing.core.errors import require
-from honing.core.harness import EpisodeRecord, HarnessProposal, HarnessSpec, MethodRequirements, RunnerSupport, Task
+from honing.core.endpoints import PolicyEndpoint
+from honing.core.errors import ContractError, require
+from honing.core.harness import (
+    EpisodeOutcome,
+    EpisodeRecord,
+    Grade,
+    HarnessProposal,
+    HarnessSpec,
+    MethodRequirements,
+    ProposeResult,
+    RunnerSupport,
+    Task,
+)
 from honing.core.release import HoneRelease
 from honing.core.schedule import CampaignState, Move
 from honing.core.telemetry import UtilizationTelemetry
@@ -125,22 +137,66 @@ class TelemetryStore(Protocol):
 
 @runtime_checkable
 class EpisodeRunner(Protocol):
-    """Runs one agent episode under a harness against a policy.
+    """Runs one agent episode under a harness against a policy, and does not judge it.
 
     Asynchronous because episodes are long and a gate runs many of them at once.
     """
 
     support: RunnerSupport
 
-    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeRecord: ...
+    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome: ...
+
+
+@runtime_checkable
+class TaskGrader(Protocol):
+    """Judges one episode's outcome. The score is in ``[0, 1]``; the feedback is for reflection.
+
+    Asynchronous like the runner, since a grader may run a command in the
+    episode's own sandbox.
+    """
+
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade: ...
+
+
+@runtime_checkable
+class ChatModel(Protocol):
+    """A language model a method calls to reflect or propose. Synchronous, like ``propose``."""
+
+    def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int, temperature: float) -> ChatReply: ...
+
+
+@runtime_checkable
+class PolicyEndpoints(Protocol):
+    """Finds the engine serving a policy. Raises ``ContractError`` for a policy no engine serves."""
+
+    def resolve(self, policy: PolicyRef) -> PolicyEndpoint: ...
+
+
+async def run_graded(
+    runner: EpisodeRunner, grader: TaskGrader, spec: HarnessSpec, task: Task, policy: PolicyRef
+) -> EpisodeRecord:
+    """Run one episode and grade it: the only way the gate and methods obtain an episode record."""
+    outcome = await runner.run(spec, task, policy)
+    if (outcome.task_id, outcome.spec_id, outcome.policy_checksum) != (
+        task.task_id,
+        spec.spec_id,
+        policy.checkpoint.checksum,
+    ):
+        raise ContractError(
+            f"the runner reported task {outcome.task_id!r}, spec {outcome.spec_id!r}, and policy "
+            f"{outcome.policy_checksum!r} for an episode it was asked to run on task {task.task_id!r}, "
+            f"spec {spec.spec_id!r}, and policy {policy.checkpoint.checksum!r}"
+        )
+    return EpisodeRecord(outcome=outcome, grade=await grader.grade(task, outcome))
 
 
 @dataclass(frozen=True)
 class EvolveContext:
     """Everything a harness evolution method may read when it proposes.
 
-    ``runner`` and ``episode_budget`` let a method run its own episodes, for
-    example a minibatch against a candidate that is not the current head.
+    ``runner``, ``grader``, and ``episode_budget`` let a method run and score
+    its own episodes, for example a minibatch against a candidate that is not
+    the current head. :meth:`episode` does both in one call.
     """
 
     current: HarnessSpec
@@ -149,10 +205,14 @@ class EvolveContext:
     records: tuple[EpisodeRecord, ...]
     state: Mapping[str, object]
     runner: EpisodeRunner
+    grader: TaskGrader
     episode_budget: int
 
     def __post_init__(self) -> None:
         require(self.episode_budget >= 0, "episode_budget must be >= 0")
+
+    async def episode(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeRecord:
+        return await run_graded(self.runner, self.grader, spec, task, policy)
 
 
 # ---------------------------------------------------------------- gate and campaign
@@ -178,18 +238,22 @@ class Evaluator(Protocol):
 class EvolveMethod(Protocol):
     """A harness evolution algorithm.
 
+    ``propose`` returns the method's new state whether or not it proposes
+    anything, because an attempt that stops early has still spent episodes.
     ``record`` is called after every gate decision, accepted or rejected,
     because archive-based methods learn from rejected candidates too. The state
-    it returns is published with the next release.
+    either returns is published with the next release, and must carry
+    ``state_schema_version``.
     """
 
     name: str
     requires: MethodRequirements
     selector: CandidateSelector
+    state_schema_version: int
 
     def initial_state(self, seed: HarnessSpec) -> Mapping[str, object]: ...
 
-    def propose(self, context: EvolveContext) -> HarnessProposal | None: ...
+    def propose(self, context: EvolveContext) -> ProposeResult: ...
 
     def record(
         self,

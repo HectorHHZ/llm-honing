@@ -16,6 +16,7 @@ from honing.core.candidate import (
     SelectionDecision,
     UpdateCandidate,
 )
+from honing.core.chat import ChatMessage, ChatReply, ChatRole
 from honing.core.compression import (
     CompressionBudget,
     CompressionStep,
@@ -29,20 +30,26 @@ from honing.core.compression import (
     TransformManifest,
 )
 from honing.core.data import ContractKind, DataContract, PolicySample, PreferencePair, TrainingBatch
+from honing.core.endpoints import PolicyEndpoint
 from honing.core.errors import CampaignRuleError, ContractError, HoningError, ReleaseError, require, require_choice
 from honing.core.harness import (
+    EpisodeOutcome,
     EpisodeRecord,
+    Grade,
     HarnessFile,
     HarnessFileKind,
+    HarnessMoveConfig,
     HarnessProposal,
     HarnessSpec,
     MethodRequirements,
+    ProposeResult,
     RunnerSupport,
     Task,
 )
 from honing.core.numerics import Granularity, NumericsMode, NumericsPolicy, QuantScheme
 from honing.core.protocols import (
     CandidateSelector,
+    ChatModel,
     CoAdaptScheduler,
     DataProvider,
     EpisodeRunner,
@@ -52,15 +59,19 @@ from honing.core.protocols import (
     ImportanceScorer,
     ModelEditor,
     ModelSource,
+    PolicyEndpoints,
     PruneSelector,
     Quantizer,
     RolloutProvider,
+    TaskGrader,
     TelemetryStore,
     Trainer,
     WeightConverter,
+    run_graded,
 )
 from honing.core.release import HoneRelease
 from honing.core.schedule import CampaignState, Move, MoveKind
+from honing.core.state import METHOD_STATE_VERSION_KEY, method_state_version, validate_method_state
 from honing.core.structure import (
     ArchitectureSpec,
     AttentionHead,
@@ -93,6 +104,7 @@ from honing.core.weights import MASTER_WEIGHT_FORMAT, CheckpointRef, ModelSnapsh
 __all__ = [
     "ALGORITHM_REQUIREMENTS",
     "MASTER_WEIGHT_FORMAT",
+    "METHOD_STATE_VERSION_KEY",
     "AlgorithmName",
     "AlgorithmRequirements",
     "AlgorithmSupport",
@@ -104,6 +116,10 @@ __all__ = [
     "CampaignState",
     "CandidateKind",
     "CandidateSelector",
+    "ChatMessage",
+    "ChatModel",
+    "ChatReply",
+    "ChatRole",
     "CheckpointRef",
     "CoAdaptScheduler",
     "CompressionBudget",
@@ -113,6 +129,7 @@ __all__ = [
     "CostDelta",
     "DataContract",
     "DataProvider",
+    "EpisodeOutcome",
     "EpisodeRecord",
     "EpisodeRunner",
     "EvaluationResult",
@@ -122,9 +139,11 @@ __all__ = [
     "Executor",
     "Expert",
     "FFNChannels",
+    "Grade",
     "Granularity",
     "HarnessFile",
     "HarnessFileKind",
+    "HarnessMoveConfig",
     "HarnessProposal",
     "HarnessSpec",
     "HiddenChannels",
@@ -144,10 +163,13 @@ __all__ = [
     "NumericsPolicy",
     "Outcome",
     "ParamMask",
+    "PolicyEndpoint",
+    "PolicyEndpoints",
     "PolicyRef",
     "PolicySample",
     "PolicyVariant",
     "PreferencePair",
+    "ProposeResult",
     "PrunePlan",
     "PruneSelector",
     "QuantScheme",
@@ -164,6 +186,7 @@ __all__ = [
     "SignalKind",
     "StructureAddress",
     "Task",
+    "TaskGrader",
     "TeacherKind",
     "TeacherPlacement",
     "TeacherRef",
@@ -180,6 +203,9 @@ __all__ = [
     "UtilizationTelemetry",
     "WeightConverter",
     "WeightFormat",
+    "method_state_version",
     "require",
     "require_choice",
+    "run_graded",
+    "validate_method_state",
 ]

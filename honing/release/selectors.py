@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 from honing.core import EvaluationResult, SelectionDecision, UpdateCandidate, require
+from honing.release.statistics import paired_difference
+
+
+def _interval_metrics(evaluation: EvaluationResult) -> dict[str, float]:
+    difference = paired_difference(evaluation)
+    return {
+        "tasks": float(difference.tasks),
+        "difference_mean": difference.mean,
+        "difference_low": difference.low,
+        "difference_high": difference.high,
+    }
 
 
 class WinLossSelector:
     """Select when the candidate wins more tasks than it loses, by more than ``min_win_margin``.
 
     Suits changes expected to improve the model: training steps and harness
-    edits. A tie on every task is a rejection.
+    edits. A tie on every task is a rejection. The decision reports the
+    bootstrap interval on the mean per-task difference alongside the counts.
     """
 
     name = "win_loss"
@@ -27,7 +39,7 @@ class WinLossSelector:
             outcome="select" if selected else "reject",
             policy=self.name,
             reason=f"{wins} wins, {losses} losses, {len(pairs) - wins - losses} ties",
-            metrics={"wins": float(wins), "losses": float(losses)},
+            metrics={"wins": float(wins), "losses": float(losses), **_interval_metrics(evaluation)},
         )
 
 
@@ -36,6 +48,8 @@ class NoRegressionSelector:
 
     Suits changes made for cost rather than quality: a prune or a quantization
     earns its place by being cheaper, so it need not win, only not lose much.
+    The regression is the mean of the per-task differences, which equals the
+    difference of the means; the decision also reports its bootstrap interval.
     """
 
     name = "no_regression"
@@ -45,13 +59,14 @@ class NoRegressionSelector:
         self._max_regression = max_regression
 
     def decide(self, candidate: UpdateCandidate, evaluation: EvaluationResult) -> SelectionDecision:
-        regression = evaluation.incumbent_mean - evaluation.candidate_mean
+        interval = _interval_metrics(evaluation)
+        regression = -interval["difference_mean"]
         selected = regression <= self._max_regression
         return SelectionDecision(
             outcome="select" if selected else "reject",
             policy=self.name,
             reason=f"mean score changed by {-regression:+.4f}; the limit is -{self._max_regression:.4f}",
-            metrics={"regression": regression},
+            metrics={"regression": regression, **interval},
         )
 
 

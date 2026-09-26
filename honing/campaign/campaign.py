@@ -21,6 +21,7 @@ from honing.core import (
     EvaluationResult,
     EvolveContext,
     EvolveMethod,
+    HarnessMoveConfig,
     HarnessSpec,
     HoneRelease,
     ImportanceScorer,
@@ -37,6 +38,7 @@ from honing.core import (
     RolloutProvider,
     SelectionDecision,
     Task,
+    TaskGrader,
     TelemetryStore,
     Trainer,
     TrainingBatch,
@@ -45,7 +47,7 @@ from honing.core import (
     UpdateCandidate,
     require,
 )
-from honing.release import Gate, ReleaseChain
+from honing.release import Gate, ReleaseChain, gate_metrics
 
 
 @dataclass(frozen=True)
@@ -61,9 +63,10 @@ class CompressionComponents:
 
 @dataclass(frozen=True)
 class HarnessComponents:
-    """The Harness plane a campaign uses."""
+    """The Harness plane a campaign uses. A move's :class:`~honing.core.HarnessMoveConfig` overrides it."""
 
     runner: EpisodeRunner
+    grader: TaskGrader
     method: EvolveMethod
     tasks: tuple[Task, ...]
     episode_budget: int = 0
@@ -108,8 +111,9 @@ class Campaign:
 
     Every move builds an :class:`~honing.core.UpdateCandidate`, passes the rules
     in :mod:`honing.campaign.rules`, and is settled by the one gate. The harness
-    method's state is carried across rejected steps in memory and published
-    with the next accepted release, whatever its kind.
+    method's state is carried across rejected and skipped steps in memory and
+    published with the next accepted release, whatever its kind. A skipped
+    step is still written to the commit record, with the episodes it spent.
     """
 
     def __init__(
@@ -144,6 +148,8 @@ class Campaign:
         method = self._harness.method
         rules.method_supported_by_runner(method.requires, self._harness.runner.support)
         rules.spec_runnable(harness_seed, self._harness.runner.support)
+        initial_state = method.initial_state(harness_seed)
+        rules.method_state_schema_matches(initial_state, method.name, method.state_schema_version)
         snapshot = source.materialize(work_dir)
         rules.architecture_supported(snapshot.architecture, self._trainer.support)
         candidate = UpdateCandidate(
@@ -151,7 +157,7 @@ class Campaign:
             parent_id=None,
             master=snapshot,
             harness=harness_seed,
-            method_state=method.initial_state(harness_seed),
+            method_state=initial_state,
             metrics=_size_metrics(snapshot),
         )
         rules.master_is_hf_safetensors(candidate)
@@ -267,28 +273,40 @@ class Campaign:
     # ------------------------------------------------------------ harness candidates
 
     def _advance_harness(self, move: Move, head: HoneRelease) -> StepOutcome:
-        method, runner = self._harness.method, self._harness.runner
+        harness = self._harness
+        method, runner = harness.method, harness.runner
         if head.harness is None:
             raise ContractError("the head has no harness to evolve; start the campaign with a harness seed")
+        config = move.harness if move.harness is not None else HarnessMoveConfig()
+        if config.method is not None and config.method != method.name:
+            raise ContractError(f"the move is for method {config.method!r}, but the campaign runs {method.name!r}")
         state = self._method_state(head)
+        rules.method_state_schema_matches(state, method.name, method.state_schema_version)
         context = EvolveContext(
             current=head.harness,
             policy=head.policy(),
-            tasks=self._harness.tasks,
+            tasks=config.tasks or harness.tasks,
             records=self._recent_records,
             state=state,
             runner=runner,
-            episode_budget=self._harness.episode_budget,
+            grader=harness.grader,
+            episode_budget=harness.episode_budget if config.episode_budget is None else config.episode_budget,
         )
-        proposal = method.propose(context)
+        result = method.propose(context)
+        proposal = result.proposal
         if proposal is None:
-            return StepOutcome(
-                move=move,
-                decision=None,
-                evaluation=None,
-                release=None,
-                skipped_reason=f"{method.name} proposed nothing",
+            reason = f"{method.name} proposed nothing"
+            # Recorded before the pending state moves, so a restart can see what the attempt spent.
+            self._chain.record_skip(
+                parent_id=head.release_id,
+                method=method.name,
+                reason=reason,
+                state=result.state,
+                episodes_spent=result.episodes_spent,
+                label=config.label,
             )
+            self._pending_method_state = result.state
+            return StepOutcome(move=move, decision=None, evaluation=None, release=None, skipped_reason=reason)
         rules.spec_runnable(proposal.spec, runner.support)
         candidate = UpdateCandidate(
             kind="harness",
@@ -297,15 +315,16 @@ class Campaign:
             serving=head.serving,
             harness=proposal.spec,
             trained_numerics=head.trained_numerics,
-            method_state=state,
-            metrics=_size_metrics(head.master),
+            method_state=result.state,
+            metrics={**_size_metrics(head.master), "method_episodes": float(result.episodes_spent)},
+            move_label=config.label,
         )
         self._check_candidate(candidate)
         evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
         self._recent_records = evaluation.records
         # The method learns from every verdict, so its new state is attached
         # whether the candidate is published or rejected.
-        settled = replace(candidate, method_state=method.record(state, proposal, evaluation, decision))
+        settled = replace(candidate, method_state=method.record(result.state, proposal, evaluation, decision))
         return self._publish_or_reject(move, settled, evaluation, decision)
 
     # ------------------------------------------------------------ shared
@@ -320,6 +339,9 @@ class Campaign:
     def _publish_or_reject(
         self, move: Move, candidate: UpdateCandidate, evaluation: EvaluationResult, decision: SelectionDecision
     ) -> StepOutcome:
+        # Published and rejected candidates both carry the gate result, so the
+        # record shows how close a rejection was, not only that it happened.
+        candidate = replace(candidate, metrics={**candidate.metrics, **gate_metrics(evaluation)})
         if decision.selected:
             release = self._chain.commit(candidate, decision)
             self._pending_method_state = None

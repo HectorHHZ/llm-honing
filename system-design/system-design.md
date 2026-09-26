@@ -78,7 +78,8 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `data` | `DataContract`, `PolicySample`, `PreferencePair`, `TrainingBatch` |
 | `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `ALGORITHM_REQUIREMENTS` |
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
-| `harness` | `HarnessSpec`, `Task`, `EpisodeRecord`, `RunnerSupport`, `MethodRequirements` |
+| `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
+| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the method-state rules (`validate_method_state`) |
 | `candidate` | `UpdateCandidate`, `PolicyRef`, `EvaluationResult`, `SelectionDecision` |
 | `release` | `HoneRelease` |
 | `backend` | `BackendSupport` |
@@ -281,8 +282,16 @@ class HarnessSpec:
 
 class EpisodeRunner(Protocol):
     support: RunnerSupport
-    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeRecord: ...
+    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome: ...
+
+class TaskGrader(Protocol):
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade: ...   # score in [0, 1], plus feedback
 ```
+
+A runner only runs the agent; a grader judges the outcome, because grading depends on the
+task and the same grader serves the gate, a method's own minibatches, and training
+rollouts. An `EpisodeRecord` is an outcome plus its grade, and `run_graded` is the one
+place that pairs them.
 
 A harness is a set of files for one agent. File kinds map onto the node kinds Reef's
 harness layer renders, which keeps a Reef-backed runner possible later without changing
@@ -301,20 +310,28 @@ class EvolveMethod(Protocol):
     name: str
     requires: MethodRequirements
     selector: CandidateSelector
+    state_schema_version: int
     def initial_state(self, seed: HarnessSpec) -> Mapping[str, object]: ...
-    def propose(self, context: EvolveContext) -> HarnessProposal | None: ...
+    def propose(self, context: EvolveContext) -> ProposeResult: ...          # proposal or None, new state, episodes spent
     def record(self, state, proposal, evaluation, decision) -> Mapping[str, object]: ...
 ```
+
+Methods that reflect or propose call a model through `ChatModel`, and runners find the
+engine behind a policy through `PolicyEndpoints`; both are protocols in `honing/core`, and
+their implementations live outside it.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
 
 1. **A proposal is a complete spec.** Methods that edit and methods that write whole
    compositions both produce one.
-2. **A method may run its own episodes.** `EvolveContext` carries the runner and an
-   episode budget, for minibatches against candidates that are not the head.
-3. **Method state is opaque and released.** It is published with the release and rolled
-   back with it.
+2. **A method may run and grade its own episodes.** `EvolveContext` carries the runner,
+   the grader, and an episode budget, and `EvolveContext.episode` runs and grades in one
+   call, for minibatches against candidates that are not the head.
+3. **Method state is released, and never lost.** `propose` returns the new state even
+   when it proposes nothing, and a skip is written to the commit record with the episodes
+   it spent. The state must be JSON-native and carry the `schema_version` its method
+   declares; state under another version is refused before the method reads it.
 4. **Evaluations are per task.** `EvaluationResult` keeps score vectors and episode
    records, which Pareto-style selection needs.
 5. **Selection belongs to the method.** Its `selector` replaces the gate's default.
@@ -365,9 +382,16 @@ edited, or quantized**, so a refused step costs no compute and leaves nothing be
 | `batch_meets_contract` | a batch of a kind the algorithm does not consume, or no batch | before training |
 | `batch_from_one_release` | samples from a release or harness other than the head's | before training |
 | `method_supported_by_runner`, `spec_runnable` | an evolution method or harness the runner cannot run | at start; per proposal |
+| `method_state_schema_matches` | method state written under a schema the method does not read, for example after a rollback | at start; before each proposal |
 
-A harness method's state is carried across rejected steps in memory and published with
-the next accepted release, whatever its kind.
+A harness method's state is carried across rejected and skipped steps in memory and
+published with the next accepted release, whatever its kind.
+
+**Phases belong to the scheduler, not to core.** A harness move carries a
+`HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the
+campaign's defaults for that move only. The campaign records the label on the candidate as
+`move_label` and never interprets it. Which phase comes next, and each phase's total
+budget, are decided by the scheduler, which reads the labels back from the releases.
 
 The default scheduling policy (planned): pre-training harness pass → *N* training commits
 → when utilization is stable, prune with recovery → retune the harness → repeat until the
@@ -384,6 +408,12 @@ the regression quantization can cause. Selection policies: `WinLossSelector` for
 meant to improve quality (training, harness), `NoRegressionSelector` for changes made for
 cost (prune, quantize), `AcceptAll`, or a method's own selector.
 
+**Comparisons are paired.** Every score is in `[0, 1]`, and selectors compare candidate and
+incumbent task by task. Every gated candidate, published or rejected, records
+`gate_tasks`, both means, and a bootstrap interval on the mean paired difference
+(`gate_difference_low`, `gate_difference_high`), so a scheduler can tell a plateau from a
+real difference.
+
 **A release is the whole accepted candidate.**
 
 ```python
@@ -399,7 +429,8 @@ keeping serving weights quantized from another, produces a combination no gate e
 Rollback restores all of it.
 
 **The commit record is written before the head moves (P3).** `ReleaseChain` appends each
-publish, rejection, and rollback to a JSON-lines record and flushes it to disk first.
+publish, rejection, skip, and rollback to a JSON-lines record and flushes it to disk first.
+A value JSON cannot represent exactly is an error, never a string.
 Rebuilding a chain from that record is not implemented yet; the ordering that makes it
 possible is, and is tested.
 
@@ -596,7 +627,7 @@ Steps are ordered by risk: the assumption the whole design rests on is tested fi
 | **5** | A rollout provider and runner on `slime.agent`; GRPO and on-policy distillation | |
 | **6** | Quantization: PTQ through Slime's tools; quantization-aware training through `numerics` | |
 | **7** | In-loop compression with recovery, and a utilization-driven scheduler | |
-| **8** | Harness phases with a first real evolution method | |
+| **8** | Harness phases with a first real evolution method; the harness contracts it needs ([#15](https://github.com/HectorHHZ/llm-honing/issues/15)) are in | in progress |
 | **9** | `backends/local_dpo` | |
 | **10** | `sparse_mask` training unified with `PrunePlan` | |
 | **11** | Serve plane | |

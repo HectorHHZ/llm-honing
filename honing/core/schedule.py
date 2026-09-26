@@ -7,6 +7,7 @@ from typing import Literal, get_args
 
 from honing.core.compression import CompressionBudget
 from honing.core.errors import require, require_choice
+from honing.core.harness import HarnessMoveConfig
 from honing.core.numerics import QuantScheme
 from honing.core.release import HoneRelease
 from honing.core.training import RecoverySpec, TrainJobSpec
@@ -27,6 +28,7 @@ class Move:
     budget: CompressionBudget | None = None
     recovery: RecoverySpec | None = None
     scheme: QuantScheme | None = None
+    harness: HarnessMoveConfig | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.kind, get_args(MoveKind), "Move.kind")
@@ -36,6 +38,7 @@ class Move:
             "a budget and a recovery belong to a prune move",
         )
         require(self.scheme is None or self.kind == "quantize", "a quantization scheme belongs to a quantize move")
+        require(self.harness is None or self.kind == "harness", "a harness config belongs to a harness move")
 
 
 @dataclass(frozen=True)

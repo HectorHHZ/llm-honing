@@ -18,6 +18,7 @@ from honing.core.compression import TransformManifest
 from honing.core.errors import require, require_choice
 from honing.core.harness import EpisodeRecord, HarnessSpec
 from honing.core.numerics import NumericsPolicy
+from honing.core.state import validate_method_state
 from honing.core.structure import ArchitectureSpec
 from honing.core.weights import CheckpointRef, ModelSnapshot, ServingWeights
 
@@ -45,7 +46,10 @@ class UpdateCandidate:
     ``trained_numerics`` records the precision the master was last trained in,
     so a later quantize step can be checked against it. ``method_state`` is the
     harness evolution method's own state, published and rolled back with the
-    rest of the release.
+    rest of the release; see :mod:`honing.core.state` for what it may hold.
+    ``move_label`` is the scheduler's label for the move that built the
+    candidate, such as a harness phase, so a scheduler can read it back from
+    the releases.
     """
 
     kind: CandidateKind
@@ -57,11 +61,14 @@ class UpdateCandidate:
     trained_numerics: NumericsPolicy = field(default_factory=NumericsPolicy)
     method_state: Mapping[str, object] = field(default_factory=dict)
     metrics: Mapping[str, float] = field(default_factory=dict)
+    move_label: str | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.kind, get_args(CandidateKind), "UpdateCandidate.kind")
+        require(self.move_label is None or bool(self.move_label), "UpdateCandidate.move_label must be a name or None")
         require((self.kind == "init") == (self.parent_id is None), "only the initial candidate has no parent")
         require(all(math.isfinite(value) for value in self.metrics.values()), "candidate metrics must be finite")
+        validate_method_state(self.method_state)
 
     @property
     def evaluated_variant(self) -> PolicyVariant:

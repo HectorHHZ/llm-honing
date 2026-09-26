@@ -10,20 +10,26 @@ import pytest
 
 from honing.campaign import ScriptedScheduler
 from honing.core import (
+    ChatReply,
     CheckpointRef,
     CompressionStep,
     ContractError,
     CostDelta,
     DataContract,
+    EpisodeOutcome,
     EvaluationResult,
+    Grade,
     HarnessFile,
+    HarnessMoveConfig,
     HarnessSpec,
     HoneRelease,
     ImportanceMap,
     ModelSnapshot,
     Move,
     NumericsPolicy,
+    PolicyEndpoint,
     PolicySample,
+    ProposeResult,
     PrunePlan,
     QuantizePlan,
     QuantScheme,
@@ -45,13 +51,20 @@ from tests.fakes.compression import (
     UniformExpertEditor,
 )
 from tests.fakes.data import FakeRolloutProvider, ListDatasetProvider, token_batch
-from tests.fakes.harness import AppendInstructionMethod, FakeEpisodeRunner
+from tests.fakes.harness import (
+    AppendInstructionMethod,
+    FakeChatModel,
+    FakeEpisodeRunner,
+    FakeTaskGrader,
+    StaticPolicyEndpoints,
+)
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld, IdentityConverter, parameters_of, small_moe
 
 
 def implementations() -> list[tuple[object, type]]:
     world = FakeWorld()
     runner = FakeEpisodeRunner(world)
+    grader = FakeTaskGrader()
     return [
         (FakeModelSource(world), protocols.ModelSource),
         (ListDatasetProvider([token_batch()]), protocols.DataProvider),
@@ -64,11 +77,14 @@ def implementations() -> list[tuple[object, type]]:
         (FakeQuantizer(world), protocols.Quantizer),
         (FixedTelemetryStore(None), protocols.TelemetryStore),
         (runner, protocols.EpisodeRunner),
+        (grader, protocols.TaskGrader),
+        (FakeChatModel(["reply"]), protocols.ChatModel),
+        (StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (AppendInstructionMethod(), protocols.EvolveMethod),
         (WinLossSelector(), protocols.CandidateSelector),
         (NoRegressionSelector(0.1), protocols.CandidateSelector),
         (AcceptAll(), protocols.CandidateSelector),
-        (EpisodeEvaluator(runner, TASKS), protocols.Evaluator),
+        (EpisodeEvaluator(runner, grader, TASKS), protocols.Evaluator),
         (ScriptedScheduler([]), protocols.CoAdaptScheduler),
     ]
 
@@ -143,6 +159,35 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
         lambda: HoneRelease("r0000", UpdateCandidate("init", None, _snapshot("megatron_torch_dist")), None),
     ),
     ("a move carrying another kind's payload", lambda: Move(kind="train", scheme=INT4_G128)),
+    ("a harness config on a move that is not a harness move", lambda: Move(kind="train", harness=HarnessMoveConfig())),
+    ("a negative episode budget for a move", lambda: HarnessMoveConfig(episode_budget=-1)),
+    ("an empty move label", lambda: HarnessMoveConfig(label="")),
+    ("a grade above one", lambda: Grade(score=1.5)),
+    ("a grade below zero", lambda: Grade(score=-0.1)),
+    ("an outcome with no task", lambda: EpisodeOutcome("", "h", "c", exit_code=0)),
+    ("a negative episode count", lambda: ProposeResult(proposal=None, state={}, episodes_spent=-1)),
+    ("a reply with a negative cost", lambda: ChatReply("x", 1, 1, cost_usd=-0.01)),
+    ("an endpoint with no URL", lambda: PolicyEndpoint(base_url="", tokenizer_location="t", served_model="m")),
+    (
+        "method state holding a set",
+        lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": 1, "front": {"a"}}),
+    ),
+    (
+        "method state holding a tuple",
+        lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": 1, "scores": (1, 2)}),
+    ),
+    (
+        "method state with a non-string key",
+        lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": 1, "by_task": {1: 0.5}}),
+    ),
+    (
+        "method state without a schema version",
+        lambda: UpdateCandidate("init", None, _snapshot(), method_state={"proposals": 0}),
+    ),
+    (
+        "method state with a boolean schema version",
+        lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": True}),
+    ),
 ]
 
 
