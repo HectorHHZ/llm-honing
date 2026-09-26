@@ -1,16 +1,10 @@
-"""The optional RA2 model boundary preserves options and required state on CPU."""
-
-import importlib.util
-from pathlib import Path
+"""Token budgeting keeps every option and the essential state, and trims only what it reports."""
 
 import pytest
 
+from honing.backends.jev import token_budget as budget
+
 pytestmark = pytest.mark.unit
-MODULE = Path(__file__).resolve().parents[1] / "integration/laya/token_budget.py"
-SPEC = importlib.util.spec_from_file_location("ra2_token_budget", MODULE)
-assert SPEC is not None and SPEC.loader is not None
-BUDGET = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(BUDGET)
 
 
 class Tokenizer:
@@ -42,7 +36,7 @@ QUESTION = {"action": {"type": "choice", "instructions": "Choose", "criteria": {
 
 def test_ra2_optional_state_pruned_before_required_bindings():
     parts = {"essential": ["actor 12 target 34"], "details": ["detail"], "memory": ["old enemy"], "logs": ["old log"]}
-    state, audit, trimmed = BUDGET.prepare_request(Agent(), parts, QUESTION, 12, 512, sequence, options)
+    state, audit, trimmed = budget.prepare_request(Agent(), parts, QUESTION, 12, 512, sequence, options)
     assert state == "actor 12 target 34"
     assert [entry["section"] for entry in trimmed] == ["logs", "memory", "details"]
     assert not audit["action"]["stateTruncated"]
@@ -51,13 +45,13 @@ def test_ra2_optional_state_pruned_before_required_bindings():
 
 def test_ra2_essential_overflow_refuses_inference():
     with pytest.raises(ValueError, match="Essential state"):
-        BUDGET.prepare_request(Agent(), {"essential": ["actor 12 target 34"]}, QUESTION, 10, 512, sequence, options)
+        budget.prepare_request(Agent(), {"essential": ["actor 12 target 34"]}, QUESTION, 10, 512, sequence, options)
 
 
 def test_ra2_long_option_refuses_silent_shortening():
     question = {"q": {"type": "choice", "instructions": "Choose", "criteria": {"A": "word " * 49}}}
     with pytest.raises(ValueError, match="lossless option"):
-        BUDGET.prepare_request(Agent(), {"essential": []}, question, 2048, 512, sequence, options)
+        budget.prepare_request(Agent(), {"essential": []}, question, 2048, 512, sequence, options)
 
 
 def test_ra2_lost_option_markers_fail_closed():
@@ -66,4 +60,4 @@ def test_ra2_lost_option_markers_fail_closed():
         return ids, markers[:-1]
 
     with pytest.raises(ValueError, match="Option marker loss"):
-        BUDGET.prepare_request(Agent(), {"essential": ["normal view"]}, QUESTION, 64, 512, missing_marker, options)
+        budget.prepare_request(Agent(), {"essential": ["normal view"]}, QUESTION, 64, 512, missing_marker, options)

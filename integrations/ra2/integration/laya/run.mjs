@@ -196,27 +196,34 @@ try {
             "intent-policy.mjs",
             "staged.mjs",
             "worker.py",
-            "token_budget.py",
             "client.mjs",
             "permutation-client.mjs",
             "run.mjs",
             "decision-log.mjs",
             "text.mjs",
+            "http-client.mjs",
         ].map((f) => "integration/laya/" + f),
     ];
     mkdirSync(out + "/config", { recursive: true });
     writeFileSync(out + "/config/controller.json", controllerText);
     writeFileSync(out + "/config/questions.json", questionsText);
-    for (const file of sourceFiles) {
+    // The worker's model code lives in the Honing backend, outside this directory.
+    const REPO = ROOT + "../../";
+    const repoFiles = ["laya.py", "model.py", "token_budget.py"].map(
+        (f) => "honing/backends/jev/" + f,
+    );
+    const locate = (file) =>
+        repoFiles.includes(file) ? REPO + file : ROOT + file;
+    for (const file of [...sourceFiles, ...repoFiles]) {
         const target = out + "/source/" + file;
         mkdirSync(dirname(target), { recursive: true });
-        writeFileSync(target, readFileSync(ROOT + file));
+        writeFileSync(target, readFileSync(locate(file)));
     }
     const implementationSha256 = Object.fromEntries(
-        sourceFiles.map((file) => [
+        [...sourceFiles, ...repoFiles].map((file) => [
             file,
             createHash("sha256")
-                .update(readFileSync(ROOT + file))
+                .update(readFileSync(locate(file)))
                 .digest("hex"),
         ]),
     );

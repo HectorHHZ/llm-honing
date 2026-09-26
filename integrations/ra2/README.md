@@ -55,7 +55,19 @@ The manifest records the path and SHA-256 of both files, and the run directory k
 ## Tests
 
 ```bash
-npm test                                   # controller, staging, logs, and question text; no engine or GPU
-python -m pytest integrations/ra2/tests    # token budgeting; no model
-npm run test:engine                        # needs the engine, game files, and a GPU
+npm test                  # controller, staging, logs, question text, HTTP client; no engine or GPU
+npm run test:engine       # needs the engine, game files, and a GPU
 ```
+
+The model code the worker runs is `honing/backends/jev/`, tested with the rest of Honing (`pytest`).
+
+## Using a decision server
+
+`--decision-server=http://host:port` sends every model request to a running Honing decision server instead of starting a worker for this match. Start one with:
+
+```bash
+"$LAYA_PYTHON" -m honing.backends.jev.server --pins pins.json --model typed-decisions \
+  --model-config-dir .cache/models --laya-source "$LAYA_SOURCE_DIR" --gpu 0 --port 8801
+```
+
+It answers one request at a time, so several matches can share one loaded model. The worker and the server run the same model code.

@@ -168,6 +168,7 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
     ("a negative episode count", lambda: ProposeResult(proposal=None, state={}, episodes_spent=-1)),
     ("a reply with a negative cost", lambda: ChatReply("x", 1, 1, cost_usd=-0.01)),
     ("an endpoint with no URL", lambda: PolicyEndpoint(base_url="", tokenizer_location="t", served_model="m")),
+    ("an endpoint with an unknown runtime", lambda: PolicyEndpoint("http://h", "t", "m", runtime="vllm")),
     (
         "method state holding a set",
         lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": 1, "front": {"a"}}),

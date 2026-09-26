@@ -30,7 +30,7 @@ from honing.core.compression import (
     TransformManifest,
 )
 from honing.core.data import ContractKind, DataContract, PolicySample, PreferencePair, TrainingBatch
-from honing.core.endpoints import PolicyEndpoint
+from honing.core.endpoints import EndpointRuntime, PolicyEndpoint
 from honing.core.errors import CampaignRuleError, ContractError, HoningError, ReleaseError, require, require_choice
 from honing.core.harness import (
     EpisodeOutcome,
@@ -129,6 +129,7 @@ __all__ = [
     "CostDelta",
     "DataContract",
     "DataProvider",
+    "EndpointRuntime",
     "EpisodeOutcome",
     "EpisodeRecord",
     "EpisodeRunner",

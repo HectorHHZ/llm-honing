@@ -1,11 +1,32 @@
-"""Encode complete questions and prune optional state before model inference."""
+"""Encode complete questions and prune optional state before model inference.
+
+The state has four sections. ``essential`` is never dropped; when the encoded
+state does not fit, whole entries are removed from ``logs`` (oldest first), then
+``memory`` and ``details`` (newest first), and each removal is reported. Every
+option of every question must survive encoding intact, or the request fails.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from typing import Any
+
+SECTIONS = ("essential", "details", "memory", "logs")
 
 
-def prepare_request(agent, parts, questions, max_len, head_max_len, build_sequence, render_options):
-    """Preserve essential state and every option, or fail before inference."""
-    sections = ("essential", "details", "memory", "logs")
+def prepare_request(
+    agent: Any,
+    parts: Mapping[str, Any],
+    questions: Mapping[str, Any],
+    max_len: int,
+    head_max_len: int,
+    build_sequence: Callable[..., Any],
+    render_options: Callable[[Any], list[str]],
+) -> tuple[str, dict[str, dict[str, Any]], list[dict[str, str]]]:
+    """Return the state text, a per-question token audit, and what was trimmed; fail rather than lose content."""
+    sections = SECTIONS
     retained = {key: list(parts.get(key, [])) for key in sections}
-    trimmed = []
+    trimmed: list[dict[str, str]] = []
     internal = {key: agent._to_internal(question) for key, question in questions.items()}
     for key, question in internal.items():
         options = render_options(question)
@@ -26,7 +47,7 @@ def prepare_request(agent, parts, questions, max_len, head_max_len, build_sequen
     while True:
         state = "\n".join(text for key in sections for text in retained[key])
         state_ids = agent.tok(state, add_special_tokens=False)["input_ids"]
-        audit = {}
+        audit: dict[str, dict[str, Any]] = {}
         fits = True
         for key, question in internal.items():
             empty, _ = build_sequence(agent.tok, "", question, max_len, head_max_len, state_ids=[])
