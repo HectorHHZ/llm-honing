@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
 from honing.backends.ra2 import DuelEvaluator, load_suite
+from honing.backends.ra2.duel import result_score
 from honing.core import ContractError, HarnessFile, HoneRelease, UpdateCandidate
 from honing.release import Gate, WinLossSelector
 from tests.test_ra2_backend import FAKES, REPO, SPEC, SUITE_PATH, _endpoints, _snapshot
@@ -75,6 +77,24 @@ def test_a_duel_refuses_different_question_text(tmp_path: Path) -> None:
     candidate, incumbent = pair(candidate_spec=changed)
     with pytest.raises(ContractError, match="same question text"):
         evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1").evaluate(candidate, incumbent)
+
+
+@pytest.mark.unit
+def test_a_duel_refuses_a_controller_it_would_ignore(tmp_path: Path) -> None:
+    settings = json.loads((REPO / "integrations/ra2/config/controller.json").read_text())
+    changed = SPEC.with_file(
+        "ra2/controller.json", HarnessFile("settings", json.dumps({**settings, "decisionInterval": 6}))
+    )
+    candidate, incumbent = pair(candidate_spec=changed, incumbent_spec=changed)
+    with pytest.raises(ContractError, match="default controller settings"):
+        evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1").evaluate(candidate, incumbent)
+
+
+@pytest.mark.unit
+def test_a_win_the_engine_did_not_end_scores_as_a_draw() -> None:
+    assert result_score({"outcome": {"red": 1}, "ended": True, "truncated": False}, "red") == 1.0
+    assert result_score({"outcome": {"red": 1}, "ended": False, "truncated": False}, "red") == 0.5
+    assert result_score({"outcome": {"red": -1}, "ended": True, "truncated": False}, "red") == 0.0
 
 
 @pytest.mark.unit

@@ -18,5 +18,7 @@ if len(strong) == 1:
     outcome = {winner: 1, ("blue" if winner == "red" else "red"): -1}
 else:
     outcome = {"red": 0, "blue": 0}
-(out / "result.json").write_text(json.dumps({"outcome": outcome, "truncated": len(strong) != 1, "arguments": args}))
+(out / "result.json").write_text(
+    json.dumps({"outcome": outcome, "ended": len(strong) == 1, "truncated": len(strong) != 1, "arguments": args})
+)
 sys.exit(int(os.environ.get("FAKE_DUEL_EXIT", "0")))

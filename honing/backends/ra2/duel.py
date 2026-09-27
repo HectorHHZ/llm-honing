@@ -4,12 +4,13 @@ Gating against the Supalosa bot measures progress against one fixed opponent.
 :class:`DuelEvaluator` instead plays candidate against incumbent on each
 scenario, once in each seat, both served by their own decision servers, with
 the same normal view, cadence, and one-command budget. The candidate's score
-for a game is its result (1 win, 0.5 draw or truncation, 0 loss) and the
+for a game is its result (1 for a win the engine ended, 0.5 draw or truncation, 0 loss) and the
 incumbent's is one minus it, so the gate's paired comparison reads the duel
 directly.
 
 Both sides must use the same question text, because a match process loads it
-once for both seats. A duel therefore compares weights under one harness; a
+once for both seats, and the default controller settings, which the duel
+process uses for both. A duel therefore compares weights under one harness; a
 harness change is judged against the bot instead.
 """
 
@@ -22,7 +23,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from honing.backends.ra2.runner import QUESTIONS_PATH
+from honing.backends.ra2.runner import CONTROLLER_PATH, QUESTIONS_PATH
 from honing.backends.ra2.scenarios import RA2Suite
 from honing.core import (
     ContractError,
@@ -37,9 +38,13 @@ from honing.core import (
 SEATS = ("red", "blue")
 
 
-def result_score(outcome: Mapping[str, int], truncated: bool, seat: str) -> float:
-    mine = outcome.get(seat, 0)
-    return 1.0 if mine == 1 and not truncated else 0.0 if mine == -1 else 0.5
+def result_score(result: Mapping[str, object], seat: str) -> float:
+    """1 for a win the engine ended (as #49 counts wins), 0 for a loss, 0.5 otherwise."""
+    outcome = result.get("outcome")
+    mine = outcome.get(seat, 0) if isinstance(outcome, Mapping) else 0
+    if mine == 1 and result.get("ended") is True and not result.get("truncated"):
+        return 1.0
+    return 0.0 if mine == -1 else 0.5
 
 
 class DuelEvaluator:
@@ -127,10 +132,7 @@ class DuelEvaluator:
                 other = "blue" if seat == "red" else "red"
                 jobs.append((seat, self._duel(task, {seat: candidate_url, other: incumbent_url}, questions, slots)))
         results = await asyncio.gather(*(job for _, job in jobs))
-        return [
-            result_score(r["outcome"], bool(r.get("truncated")), seat)  # type: ignore[arg-type]
-            for (seat, _), r in zip(jobs, results, strict=True)
-        ]
+        return [result_score(r, seat) for (seat, _), r in zip(jobs, results, strict=True)]
 
     def evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
         if candidate.harness is None or incumbent.harness is None:
@@ -140,6 +142,14 @@ class DuelEvaluator:
             raise ContractError(
                 "a duel needs both sides to use the same question text; judge a harness change against the bot"
             )
+        # duel.mjs plays both seats with fixed controller settings, the integration's defaults.
+        fixed = json.loads((self._integration_dir / "config/controller.json").read_text(encoding="utf-8"))
+        for side in (candidate.harness, incumbent.harness):
+            controller = side.get(CONTROLLER_PATH)
+            if controller is not None and json.loads(controller.content) != fixed:
+                raise ContractError(
+                    "a duel plays with the default controller settings; judge a controller change against the bot"
+                )
         self._runs_dir.mkdir(parents=True, exist_ok=True)
         questions = None
         if mine is not None:

@@ -73,7 +73,7 @@ Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.js
 
 A seat can use a running decision server (`--red-decision-server=URL`, `--blue-decision-server=URL`). `--questions` sets the question text for both seats.
 
-`honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text, so it judges weight changes; harness changes are judged against the bot.
+`honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text and the default controller settings, which the duel process uses for both seats, so it judges weight changes; a win counts only when the engine ended the match, as in #49; harness changes are judged against the bot.
 
 ## Tests
 
