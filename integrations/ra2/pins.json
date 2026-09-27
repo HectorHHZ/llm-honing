@@ -1,0 +1,21 @@
+{
+  "supalosa": {
+    "url": "https://github.com/Supalosa/supalosa-chronodivide-bot.git",
+    "revision": "165b77a71d0cf5ebd27c65b19d0486bcbae78d0f"
+  },
+  "layaSource": {
+    "url": "https://github.com/NandhaKishorM/laya.git",
+    "revision": "970dc8c5f63d7b886a68409493f37d569424f933"
+  },
+  "models": {
+    "english": {
+      "repo": "convaiinnovations/laya",
+      "revision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982"
+    },
+    "typed-decisions": {
+      "repo": "convaiinnovations/laya-typed-decisions",
+      "revision": "1a793eb568e6718f15941d08f85432581df534e3"
+    }
+  },
+  "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae"
+}
