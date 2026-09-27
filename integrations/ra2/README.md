@@ -93,6 +93,10 @@ A seat can use a running decision server (`--red-decision-server=URL`, `--blue-d
 
 `honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text and the default controller settings, which the duel process uses for both seats, so it judges weight changes; a win counts only when the engine ended the match, as in #49; harness changes are judged against the bot.
 
+## Training a decision model
+
+`honing.backends.ra2.RA2DemonstrationProvider` reads labelled matches (teacher demonstrations and DAgger corrections, in #49's directory format) as one `typed_decisions` batch. It keeps every check #49's trainer made: the match must be a train-split scenario, labelled data, not a model evaluation, with unchanged source files, and every row must name the same scenario as its match. `honing.backends.jev.trainer.LocalJevTrainer` then trains Laya on that batch and writes a checkpoint manifest the decision server can load. `parity/` compares both with #49's code.
+
 ## Tests
 
 ```bash

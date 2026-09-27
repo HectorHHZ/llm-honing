@@ -104,7 +104,7 @@ disallow_untyped_defs = true
 
 # Model libraries exist only in the GPU environment, and backends import them lazily.
 [[tool.mypy.overrides]]
-module = ["torch", "torch.*", "laya", "laya.*", "transformers", "transformers.*"]
+module = ["torch", "torch.*", "laya", "laya.*", "transformers", "transformers.*", "safetensors", "safetensors.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
