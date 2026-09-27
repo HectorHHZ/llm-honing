@@ -127,3 +127,117 @@ The model code the worker runs is `honing/backends/jev/`, tested with the rest o
 ```
 
 It answers one request at a time, so several matches can share one loaded model. The worker and the server run the same model code.
+
+## End to end
+
+This is the whole loop on RA2 today: serve a model, play and grade tasks, gate a candidate, train, and duel. Each step runs on its own. A single script that runs them as one campaign is #70. New trainers (Slime, #68) and agents (OpenHands, #69) plug in at the interfaces listed at the end.
+
+### Environments
+
+| Part | Environment |
+|---|---|
+| Honing (tasks, runner, grader, gate, trainers' Python side) | repository `.venv`, Python 3.10+, no GPU |
+| Match process | Node.js 22, `npm ci`, `RA2_SDK_DIR`, `RA2_GAME_DIR`, `SUPALOSA_DIR` (see Setup) |
+| Decision server and `LocalJevTrainer` | `LAYA_PYTHON`: CUDA PyTorch, the Laya revision in `pins.json`, and Honing installed (`pip install -e .`) |
+| Replay check | `RA2_REPLAY_PYTHON`: a Python with the SDK's `ra2_game_env` package |
+
+The game files and the engine SDK cannot be redistributed; get them as the External inputs table says. Shell commands run from `integrations/ra2` and Python from the repository root, both with `.env` sourced. The Python steps continue one session.
+
+### 1. Serve the model
+
+```bash
+"$LAYA_PYTHON" -m honing.backends.jev.server --pins pins.json --model typed-decisions \
+  --model-config-dir .cache/models --laya-source "$LAYA_SOURCE_DIR" --gpu 0 --port 8801
+```
+
+Add `--checkpoint-manifest <train-dir>/checkpoint.json` to serve a trained checkpoint. Serve each checkpoint you compare on its own GPU and port.
+
+### 2. Play one match by hand
+
+```bash
+npm run match -- --decision-server=http://127.0.0.1:8801 --seat=red --seed=1 --ticks=18000 --out=runs/seed1-red
+npm run audit -- runs/seed1-red
+"$RA2_REPLAY_PYTHON" scripts/verify_replay.py --game-dir "$RA2_GAME_DIR" --match runs/seed1-red
+```
+
+`viewer.json` in the run directory is an observer-only record of the match.
+
+### 3. Play and grade tasks through Honing
+
+```python
+import asyncio
+import json
+import os
+from pathlib import Path
+
+from honing.backends.jev import JevEndpoints
+from honing.backends.jev.laya import laya_snapshot
+from honing.backends.ra2 import RA2EpisodeRunner, RA2Grader, load_suite, seed_harness
+from honing.core import PolicyEndpoint, PolicyRef, run_graded
+
+ra2 = Path("integrations/ra2").resolve()  # the match process runs in this directory, so paths are absolute
+suite = load_suite(ra2 / "tasks/suite.jsonl")
+base = laya_snapshot(Path("<path from .cache/models/typed-decisions.json>"))
+endpoints = JevEndpoints(
+    {base.checkpoint.checksum: PolicyEndpoint("http://127.0.0.1:8801", "tokenizer", "laya", runtime="jev_decision")}
+)
+runner = RA2EpisodeRunner(suite=suite, endpoints=endpoints, integration_dir=ra2, runs_dir=ra2 / "runs/honing")
+replay = [os.environ["RA2_REPLAY_PYTHON"], "scripts/verify_replay.py", "--game-dir", os.environ["RA2_GAME_DIR"]]
+grader = RA2Grader(suite=suite, integration_dir=ra2, replay_command=replay)
+policy = PolicyRef(base.checkpoint, base.architecture, "master")
+
+record = asyncio.run(run_graded(runner, grader, seed_harness(ra2), suite.tasks("val")[0], policy))
+print(record.score, record.feedback)
+```
+
+A win the engine ended scores 1, a draw or truncation 0.5, a loss 0.
+
+### 4. Gate a candidate against the incumbent
+
+Serve both checkpoints (step 1), map both checksums in `JevEndpoints`, then:
+
+```python
+from honing.core import HoneRelease, UpdateCandidate
+from honing.release import EpisodeEvaluator, Gate, WinLossSelector
+
+incumbent = HoneRelease("r0000", UpdateCandidate("init", None, base, harness=seed_harness(ra2)), None)
+candidate = UpdateCandidate("train", "r0000", trained, harness=seed_harness(ra2))  # trained = laya_snapshot(...)
+gate = Gate(EpisodeEvaluator(runner, grader, suite.tasks("val", limit=4)), default_selector=WinLossSelector())
+evaluation, decision = gate.judge(candidate, incumbent)
+```
+
+Use `DuelEvaluator` in place of `EpisodeEvaluator` to play the two checkpoints against each other instead of against the bot.
+
+### 5. Train
+
+Supervised, on labelled matches in #49's directory format (`parity/make_demos.py` writes a small synthetic set):
+
+```python
+from honing.backends.jev.trainer import JevTrainerSettings, LocalJevTrainer
+from honing.backends.ra2 import RA2DemonstrationProvider
+from honing.core import TrainJobSpec, requirements_for
+
+job = TrainJobSpec("sft", steps=1, contract="typed_decisions")
+settings = JevTrainerSettings(
+    laya_source=ra2 / "deps/laya", pins_path=ra2 / "pins.json",
+    model_record=ra2 / ".cache/models/typed-decisions.json", work_dir=ra2 / "runs/train", gpu="1",
+)
+protocol = json.loads((ra2 / "tasks/protocol.json").read_text())
+batch = RA2DemonstrationProvider(match_dirs, protocol).next_batch(requirements_for(job).data_contract())
+result = LocalJevTrainer(settings).train(job, base, batch)
+```
+
+`parity/train_honing.py` is the same code as a runnable script. On game outcomes, `RA2RolloutProvider(runner, grader).collect(...)` returns a rollout batch for `TrainJobSpec("grpo", ...)`. It needs sampled play, which the controller does not do yet.
+
+### Where new components plug in
+
+| Step | Interface | RA2 default | Planned |
+|---|---|---|---|
+| agent that plays | `EpisodeRunner` | `RA2EpisodeRunner` with the Jev controller | OpenHands playing through MCP tools (#69) |
+| model serving | `PolicyEndpoints` | `JevEndpoints` and the decision server | an SGLang endpoint for an LLM agent (#69, #68) |
+| grading | `TaskGrader` | `RA2Grader` | reused by #69 |
+| training | `Trainer` | `LocalJevTrainer` (`sft`, `grpo` on `typed_decisions`) | `SlimeTrainer` on language-model contracts (#68) |
+| training data | `DataProvider`, `RolloutProvider` | `RA2DemonstrationProvider`, `RA2RolloutProvider` | token-level rollouts from the agent's sessions (#68) |
+| comparison | `Evaluator` | `EpisodeEvaluator` against the bot, or `DuelEvaluator` | unchanged |
+
+To check a new component, swap it into step 3 or 4 in place of the default and run on the val tasks. Once #70 lands, the same swap is one line in its config.
