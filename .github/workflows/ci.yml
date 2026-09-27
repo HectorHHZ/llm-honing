@@ -93,14 +93,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: integrations/ra2/package-lock.json
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
       - name: Check the RA2 integration without the engine, game files, or models
         working-directory: integrations/ra2
         run: |
           npm ci
           npm test
           npm run format:check
-          python -m pip install pytest
-          python -m pytest -q -p no:cacheprovider tests

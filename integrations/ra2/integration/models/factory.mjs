@@ -1,5 +1,6 @@
 import { LayaClient } from "../laya/client.mjs";
 import { PermutationClient } from "../laya/permutation-client.mjs";
+import { HttpDecisionClient } from "../laya/http-client.mjs";
 
 // Only the Laya family runs here. The native families (NanoJev, Jev-Omni) come
 // with the decision server and the trainer; see #52 and #56.
@@ -16,6 +17,8 @@ export function decisionClientOptions(args, candidateMode) {
         args["native-max-length"]
     )
         throw new Error("Native settings require a native model family");
+    if (args["decision-server"])
+        return { family, decisionServer: args["decision-server"] };
     return {
         family,
         gpu: args.gpu ?? "0",
@@ -26,5 +29,8 @@ export function decisionClientOptions(args, candidateMode) {
 }
 
 export function createDecisionClient(options) {
-    return new PermutationClient(new LayaClient(options));
+    const raw = options.decisionServer
+        ? new HttpDecisionClient({ url: options.decisionServer })
+        : new LayaClient(options);
+    return new PermutationClient(raw);
 }
