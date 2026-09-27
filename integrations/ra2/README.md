@@ -82,6 +82,17 @@ It also refuses missing question keys and invalid controller settings. The caden
 
 Text built from game content can still overrun during a match. The worker then refuses the request rather than truncating it, and `RA2Grader` scores that match 0, with feedback naming the question and its token counts. Any other failure mid-match is still an invalid episode.
 
+## Duels
+
+`integration/models/duel.mjs`, from #49, plays two decision models against each other:
+- both seats see normal views frozen before either prediction;
+- both have the same cadence and a one-command budget;
+- the engine advances only after both choices resolve.
+
+A seat can use a running decision server (`--red-decision-server=URL`, `--blue-decision-server=URL`). `--questions` sets the question text for both seats.
+
+`honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text and the default controller settings, which the duel process uses for both seats, so it judges weight changes; a win counts only when the engine ended the match, as in #49; harness changes are judged against the bot.
+
 ## Tests
 
 ```bash
