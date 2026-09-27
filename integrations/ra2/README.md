@@ -64,6 +64,35 @@ Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.js
 
 `honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win the engine ended 1, a draw, tick-limit truncation, or unended match 0.5, and a loss 0, counting wins as #49 did. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
 
+## The harness
+
+In Honing, the two files above are the harness an evolution method rewrites. `honing.backends.ra2.seed_harness` builds a `HarnessSpec` for agent `ra2_decision` from `config/`:
+
+- `ra2/controller.json` (kind `settings`);
+- `ra2/questions.json` (kind `instructions`).
+
+`RA2EpisodeRunner` passes them to the match as `--controller` and `--questions`.
+
+Before any match, `LayaQuestionCheck` refuses a harness the model cannot read (rule `questions_fit_model`). It fills placeholders with their longest values, encodes each entry with the model's tokenizer, and checks three limits:
+- every option fits Laya's 48-token limit;
+- instructions stay within 256 tokens, half the question budget;
+- each state entry stays within 512 tokens.
+
+It also refuses missing question keys and invalid controller settings. The cadence belongs to the task, as in #49's gates: the runner always passes the scenario's `--cadence`, so it refuses a harness whose `cadence` differs (rule `cadence_fixed_by_task`) rather than ignore it. With the pinned `typed-decisions` tokenizer, the seed harness's longest option is 14 tokens, its instruction 12, and its longest state entry 105.
+
+Text built from game content can still overrun during a match. The worker then refuses the request rather than truncating it, and `RA2Grader` scores that match 0, with feedback naming the question and its token counts. Any other failure mid-match is still an invalid episode.
+
+## Duels
+
+`integration/models/duel.mjs`, from #49, plays two decision models against each other:
+- both seats see normal views frozen before either prediction;
+- both have the same cadence and a one-command budget;
+- the engine advances only after both choices resolve.
+
+A seat can use a running decision server (`--red-decision-server=URL`, `--blue-decision-server=URL`). `--questions` sets the question text for both seats.
+
+`honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text and the default controller settings, which the duel process uses for both seats, so it judges weight changes; a win counts only when the engine ended the match, as in #49; harness changes are judged against the bot.
+
 ## Training a decision model
 
 `honing.backends.ra2.RA2DemonstrationProvider` reads labelled matches (teacher demonstrations and DAgger corrections, in #49's directory format) as one `typed_decisions` batch. It keeps every check #49's trainer made: the match must be a train-split scenario, labelled data, not a model evaluation, with unchanged source files, and every row must name the same scenario as its match. `honing.backends.jev.trainer.LocalJevTrainer` then trains Laya on that batch and writes a checkpoint manifest the decision server can load. `parity/` compares both with #49's code.
