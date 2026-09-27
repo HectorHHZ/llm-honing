@@ -8,7 +8,6 @@ from pathlib import Path
 
 from honing.campaign import rules
 from honing.core import (
-    ALGORITHM_REQUIREMENTS,
     CampaignState,
     CandidateSelector,
     CoAdaptScheduler,
@@ -46,6 +45,7 @@ from honing.core import (
     TransformManifest,
     UpdateCandidate,
     require,
+    requirements_for,
 )
 from honing.release import Gate, ReleaseChain, gate_metrics
 
@@ -357,7 +357,7 @@ class Campaign:
 
     def _check_job(self, job: TrainJobSpec) -> None:
         rules.algorithm_requirements_met(job, self._trainer.support)
-        if ALGORITHM_REQUIREMENTS[job.algorithm].requires_rollout and self._rollout is None:
+        if requirements_for(job).requires_rollout and self._rollout is None:
             raise ContractError(f"{job.algorithm} learns from rollouts, but the campaign has no rollout provider")
 
     def _method_state(self, head: HoneRelease) -> Mapping[str, object]:
@@ -366,7 +366,7 @@ class Campaign:
     def _batch_for(
         self, job: TrainJobSpec, head: HoneRelease, policy: PolicyRef, *, release_id: str | None
     ) -> TrainingBatch | None:
-        requirements = ALGORITHM_REQUIREMENTS[job.algorithm]
+        requirements = requirements_for(job)
         if not requirements.requires_rollout:
             return self._data.next_batch(requirements.data_contract())
         if self._rollout is None:
