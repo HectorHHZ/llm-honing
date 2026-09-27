@@ -11,6 +11,9 @@ from honing.backends.ra2.scenarios import RA2Suite
 from honing.core import ContractError, EpisodeOutcome, Grade, Task
 
 WIN, DRAW, LOSS = 1.0, 0.5, 0.0
+# The worker refuses, rather than truncates, text that does not fit the model. When the
+# harness's wording causes that mid-match, the match scores 0 and says why.
+OVER_BUDGET = ("exceeds lossless option/instruction budget", "Essential state exceeds token budget")
 CATEGORIES = ("building", "infantry", "vehicle", "aircraft")
 
 
@@ -54,8 +57,10 @@ class RA2Grader:
     """Satisfies :class:`~honing.core.TaskGrader` for RA2 tasks.
 
     A match that failed, or that fails its audit or replay check, is an invalid
-    episode, so grading raises instead of scoring it. A valid match scores 1 for
-    a win, 0.5 for a draw or a tick-limit truncation, and 0 for a loss.
+    episode, so grading raises instead of scoring it. The exception is a match
+    stopped because a question did not fit the model: that is the harness's
+    fault, so it scores 0 with feedback naming the question. A valid match
+    scores 1 for a win, 0.5 for a draw or a tick-limit truncation, and 0 for a loss.
 
     ``audit_command`` defaults to ``node integration/laya/audit.mjs``, and
     ``replay_command``, when given, re-plays the replay without any policy and
@@ -92,6 +97,17 @@ class RA2Grader:
             raise ContractError(f"the RA2 outcome for {task.task_id} names no run directory")
         run = Path(outcome.workspace_location)
         if outcome.exit_code != 0:
+            error_path = run / "error.json"
+            error = json.loads(error_path.read_text()) if error_path.exists() else {}
+            message = str(error.get("error", ""))
+            if any(marker in message for marker in OVER_BUDGET):
+                return Grade(
+                    score=LOSS,
+                    feedback=(
+                        f"The match stopped at tick {error.get('tick')} because a question did not fit the model: "
+                        f"{message}. Shorten that question's instructions or option wording."
+                    ),
+                )
             raise ContractError(f"the match for {task.task_id} exited {outcome.exit_code}; see {run}.log")
         await self._check([*self._audit, str(run)], "audit")
         if self._replay is not None:
