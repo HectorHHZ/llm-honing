@@ -12,7 +12,14 @@ Executors:
     distillation and GKD run through Slime's custom-loss hook.
 ``local``
     The preference trainer that runs DPO without Slime, because Slime's data
-    flow is built around rollouts and has no preference-pair path.
+    flow is built around rollouts and has no preference-pair path; and the
+    decision-model trainer, because a Jev-style model with a scoring head is not
+    a Megatron model.
+
+An algorithm has a default data contract. ``sft`` and ``grpo`` can also train a
+decision model on ``typed_decisions`` (:data:`DECISION_REQUIREMENTS`); a job
+opts in with ``TrainJobSpec.contract``, and :func:`requirements_for` returns the
+requirements that apply to it.
 
 On-policy *self*-distillation is ``opd`` with a teacher of kind ``lineage``: the
 student distills from an earlier release of itself.
@@ -50,10 +57,14 @@ class AlgorithmRequirements:
     executor: Executor
     requires_reward: bool = False
     requires_logprobs: bool = False
+    requires_group: bool = False
 
     def data_contract(self) -> DataContract:
         return DataContract(
-            kind=self.contract, requires_reward=self.requires_reward, requires_logprobs=self.requires_logprobs
+            kind=self.contract,
+            requires_reward=self.requires_reward,
+            requires_logprobs=self.requires_logprobs,
+            requires_group=self.requires_group,
         )
 
 
@@ -88,6 +99,24 @@ _REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
 }
 
 ALGORITHM_REQUIREMENTS: Final[Mapping[AlgorithmName, AlgorithmRequirements]] = MappingProxyType(_REQUIREMENTS)
+
+# Training a decision model. Supervised decisions need no rollout; policy
+# gradient over option distributions needs each decision's reward, behavior
+# probabilities, and a group to compare within, for example the seeds of one scenario.
+_DECISION_REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
+    "sft": AlgorithmRequirements("typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"),
+    "grpo": AlgorithmRequirements(
+        "typed_decisions",
+        requires_rollout=True,
+        requires_teacher=False,
+        executor="local",
+        requires_reward=True,
+        requires_logprobs=True,
+        requires_group=True,
+    ),
+}
+
+DECISION_REQUIREMENTS: Final[Mapping[AlgorithmName, AlgorithmRequirements]] = MappingProxyType(_DECISION_REQUIREMENTS)
 
 
 def _compile_pattern(pattern: str) -> None:
@@ -161,11 +190,27 @@ class TrainJobSpec:
     rollout: RolloutKind = "none"
     teacher: TeacherRef | None = None
     steps: int = 1
+    contract: ContractKind | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.algorithm, get_args(AlgorithmName), "TrainJobSpec.algorithm")
         require_choice(self.rollout, get_args(RolloutKind), "TrainJobSpec.rollout")
         require(self.steps > 0, f"steps must be > 0, got {self.steps}")
+        if self.contract is not None:
+            require_choice(self.contract, get_args(ContractKind), "TrainJobSpec.contract")
+            defaults = ALGORITHM_REQUIREMENTS[self.algorithm].contract
+            decisions = DECISION_REQUIREMENTS.get(self.algorithm)
+            require(
+                self.contract == defaults or (decisions is not None and self.contract == decisions.contract),
+                f"{self.algorithm} does not train on {self.contract}",
+            )
+
+
+def requirements_for(job: TrainJobSpec) -> AlgorithmRequirements:
+    """What this job's algorithm needs on the data contract the job trains on."""
+    if job.contract == "typed_decisions":
+        return DECISION_REQUIREMENTS[job.algorithm]
+    return ALGORITHM_REQUIREMENTS[job.algorithm]
 
 
 @dataclass(frozen=True)
@@ -183,7 +228,7 @@ class RecoverySpec:
 
     def as_job(self, numerics: NumericsPolicy) -> TrainJobSpec:
         """The job that runs this recovery, keeping the precision the weights were trained in."""
-        requirements = ALGORITHM_REQUIREMENTS[self.algorithm]
+        requirements = ALGORITHM_REQUIREMENTS[self.algorithm]  # recovery trains the pruned language model
         return TrainJobSpec(
             algorithm=self.algorithm,
             update_policy=self.update_policy,
