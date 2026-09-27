@@ -96,6 +96,8 @@ def test_rollouts_play_each_task_and_label_decisions_with_score_group_and_releas
     assert {d.group for d in batch.decisions} == {t.task_id for t in tasks}
     assert all(d.reward == 1.0 for d in batch.decisions)
     assert batch.source_releases == frozenset({"r0003"}) and batch.source_harnesses == frozenset({SPEC.spec_id})
+    again = provider.collect(tasks, _policy("a"), SPEC, "r0003", samples_per_task=2)
+    assert again.batch_id != batch.batch_id
 
 
 @pytest.mark.unit

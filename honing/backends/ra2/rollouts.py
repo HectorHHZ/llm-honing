@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import json
+import uuid
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -131,5 +132,6 @@ class RA2RolloutProvider:
         ]
         if not decisions:
             raise ContractError("the rollout matches produced no decisions")
-        batch_id = f"ra2-rollout-{release_id or 'unpublished'}-{len(played)}x"
+        # Two collections from one release are different batches, so the id names this one.
+        batch_id = f"ra2-rollout-{release_id or 'unpublished'}-{len(played)}x-{uuid.uuid4().hex[:8]}"
         return TrainingBatch(batch_id, ROLLOUT_CONTRACT, decisions=tuple(decisions))
