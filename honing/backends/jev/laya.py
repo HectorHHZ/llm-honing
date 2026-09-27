@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from honing.backends.jev.token_budget import prepare_request
+from honing.core import ArchitectureSpec, CheckpointRef, LayerShape, ModelSnapshot
 
 HEAD_MAX_LEN = 512
 
@@ -60,6 +61,27 @@ def _gpu_uuid(gpu: str) -> str:
     if not matches:
         raise ValueError(f"GPU index {gpu} not found")
     return matches[0]
+
+
+@contextlib.contextmanager
+def gpu_lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
+    """Hold one GPU for this process: an exclusive per-user lock, and no other compute process on it.
+
+    Sets ``CUDA_VISIBLE_DEVICES`` to the GPU's UUID for the duration, so the
+    caller sees it as device 0. Yields the UUID.
+    """
+    uuid = _gpu_uuid(gpu)
+    directory = lock_dir or Path(tempfile.gettempdir()) / f"laya-{os.getuid()}"
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / f"{uuid}.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        used = subprocess.check_output(
+            ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"], text=True
+        )
+        if uuid in used:
+            raise RuntimeError(f"GPU {gpu} already has a compute process")
+        os.environ["CUDA_VISIBLE_DEVICES"] = uuid
+        yield uuid
 
 
 def _resolve_model(settings: LayaSettings, pins: Mapping[str, Any], revision: str) -> dict[str, Any]:
@@ -110,17 +132,7 @@ class LayaDecisionModel:
             raise ValueError("The Laya source must use the revision in pins.json")
         if str(source) not in sys.path:
             sys.path.insert(0, str(source))
-        uuid = _gpu_uuid(settings.gpu)
-        lock_dir = settings.lock_dir or Path(tempfile.gettempdir()) / f"laya-{os.getuid()}"
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        with (lock_dir / f"{uuid}.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            used = subprocess.check_output(
-                ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"], text=True
-            )
-            if uuid in used:
-                raise RuntimeError(f"GPU {settings.gpu} already has a compute process")
-            os.environ["CUDA_VISIBLE_DEVICES"] = uuid
+        with gpu_lock(settings.gpu, settings.lock_dir) as uuid:
             model = _resolve_model(settings, pins, revision)
             with contextlib.redirect_stdout(sys.stderr):
                 import laya
@@ -164,3 +176,33 @@ class LayaDecisionModel:
             "trimmed": trimmed,
             "latencyMs": (time.perf_counter() - started) * 1000,
         }
+
+
+def safetensors_parameters(path: Path) -> int:
+    """Count the parameters in a safetensors file from its header alone."""
+    with path.open("rb") as handle:
+        length = int.from_bytes(handle.read(8), "little")
+        header = json.loads(handle.read(length))
+    total = 0
+    for name, tensor in header.items():
+        if name == "__metadata__":
+            continue
+        count = 1
+        for dimension in tensor["shape"]:
+            count *= int(dimension)
+        total += count
+    return total
+
+
+def laya_snapshot(checkpoint: Path) -> ModelSnapshot:
+    """A Laya checkpoint directory as a ModelSnapshot: encoder shape, parameter count, weight checksum."""
+    encoder = json.loads((checkpoint / "encoder" / "config.json").read_text())
+    layer = LayerShape(attention_heads=int(encoder["num_attention_heads"]), ffn_size=int(encoder["intermediate_size"]))
+    weights = checkpoint / "model.safetensors"
+    return ModelSnapshot(
+        checkpoint=CheckpointRef(location=str(checkpoint), weight_format="hf_safetensors", checksum=_sha256(weights)),
+        architecture=ArchitectureSpec(
+            hidden_size=int(encoder["hidden_size"]), layers=(layer,) * int(encoder["num_hidden_layers"])
+        ),
+        parameters=safetensors_parameters(weights),
+    )

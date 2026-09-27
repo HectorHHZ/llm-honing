@@ -95,9 +95,11 @@ class FakeTrainer:
         self.support = support
         self.gain = gain
         self.jobs: list[TrainJobSpec] = []
+        self.batches: list[TrainingBatch | None] = []
 
     def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult:
         self.jobs.append(job)
+        self.batches.append(batch)
         snapshot = self.world.snapshot(base.architecture, self.world.quality[base.checkpoint.checksum] + self.gain)
         if job.numerics.mode == "fake_quant_qat" and job.numerics.scheme is not None:
             self.world.trained_scheme[snapshot.checkpoint.checksum] = job.numerics.scheme

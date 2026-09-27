@@ -64,6 +64,10 @@ Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.js
 
 `honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win 1, a draw or tick-limit truncation 0.5, and a loss 0. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
 
+## Training a decision model
+
+`honing.backends.ra2.RA2DemonstrationProvider` reads labelled matches (teacher demonstrations and DAgger corrections, in #49's directory format) as one `typed_decisions` batch. It keeps every check #49's trainer made: the match must be a train-split scenario, labelled data, not a model evaluation, with unchanged source files, and every row must name the same scenario as its match. `honing.backends.jev.trainer.LocalJevTrainer` then trains Laya on that batch and writes a checkpoint manifest the decision server can load. `parity/` compares both with #49's code.
+
 ## Tests
 
 ```bash

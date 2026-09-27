@@ -193,6 +193,13 @@ class Trainer(Protocol):
 Two backends are planned: `backends/slime` for everything but DPO, and
 `backends/local_dpo` for DPO. v1 backends declare `uniform` architectures only.
 
+Decision models have their own trainer. `backends/jev/trainer.py` (`LocalJevTrainer`)
+runs `sft` on `typed_decisions` for Laya: full weights, or head only as `param_subset`. It
+reproduces the RA2 experiment's training procedure, and with deterministic kernels its
+weights are byte-identical to that code's (`integrations/ra2/parity/`). It declares
+`contracts={"typed_decisions"}`, so a campaign can use it, and later replace it,
+through configuration alone.
+
 ### 2.5 Compression Plane — pruning and quantization
 
 The Compression plane has no dependency on training, serving, or a running campaign; the

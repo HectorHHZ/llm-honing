@@ -9,6 +9,7 @@ from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, H
 from honing.core import (
     BackendSupport,
     CompressionBudget,
+    DataProvider,
     EvolveMethod,
     PruneSelector,
     QuantScheme,
@@ -53,7 +54,7 @@ class CampaignFixture:
     runner: FakeEpisodeRunner
     grader: FakeTaskGrader
     method: EvolveMethod
-    data: ListDatasetProvider
+    data: DataProvider
 
 
 def build_campaign(
@@ -65,6 +66,7 @@ def build_campaign(
     recovery: RecoverySpec | None = None,
     rollout: RolloutProvider | None = None,
     method: EvolveMethod | None = None,
+    data: DataProvider | None = None,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake."""
     world = FakeWorld()
@@ -74,7 +76,7 @@ def build_campaign(
     method = method if method is not None else AppendInstructionMethod()
     editor = UniformExpertEditor(world)
     quantizer = FakeQuantizer(world)
-    data = ListDatasetProvider([token_batch()])
+    data = data if data is not None else ListDatasetProvider([token_batch()])
 
     gate = Gate(
         EpisodeEvaluator(runner, grader, TASKS),
