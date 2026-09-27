@@ -75,7 +75,7 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `structure` | `StructureAddress` (layer, expert, attention head, FFN channels, hidden channels, parameter mask) and `ArchitectureSpec` |
 | `numerics` | `QuantScheme`, `NumericsPolicy` |
 | `weights` | `CheckpointRef`, `ModelSnapshot`, `ServingWeights`, the master weight format |
-| `data` | `DataContract`, `PolicySample`, `PreferencePair`, `TrainingBatch` |
+| `data` | `DataContract`, `PolicySample`, `PreferencePair`, `DecisionQuestion`, `DecisionSample`, `TrainingBatch` |
 | `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `ALGORITHM_REQUIREMENTS` |
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
 | `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
@@ -116,6 +116,14 @@ both produce a `TrainingBatch`, and **the trainer cannot tell which one fed it**
 algorithm declares the `DataContract` it consumes — token sequences, on-policy samples,
 grouped on-policy samples, or preference pairs — and the campaign checks the batch against
 it before training starts.
+
+A decision model (a Jev-style System One model) trains on `typed_decisions`. Each
+`DecisionSample` holds the state, the typed questions asked about it with their options, and the
+option chosen. A rollout's samples also hold the behavior probabilities, the reward, and a group. `sft` and `grpo` accept this
+contract when a job names it (`TrainJobSpec.contract`), and run on a local trainer. A backend
+lists the contracts it can train on (`BackendSupport.contracts`), so a decision job never
+reaches a language-model trainer. Decision samples carry the same release and harness
+attribution, so changing the questions a model is asked invalidates older samples.
 
 Rollout samples carry `source_release` and `source_harness`; offline samples carry
 neither. That attribution is what the `batch_from_one_release` rule reads (P4).
