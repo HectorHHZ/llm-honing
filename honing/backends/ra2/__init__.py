@@ -7,8 +7,9 @@ task suite. :class:`RA2EpisodeRunner` plays it through the RA2 integration
 here imports the engine or Node code; both run as separate processes.
 """
 
+from honing.backends.ra2.duel import DuelEvaluator
 from honing.backends.ra2.grader import RA2Grader
 from honing.backends.ra2.runner import RA2EpisodeRunner
 from honing.backends.ra2.scenarios import RA2Scenario, RA2Suite, build_suite, load_suite
 
-__all__ = ["RA2EpisodeRunner", "RA2Grader", "RA2Scenario", "RA2Suite", "build_suite", "load_suite"]
+__all__ = ["DuelEvaluator", "RA2EpisodeRunner", "RA2Grader", "RA2Scenario", "RA2Suite", "build_suite", "load_suite"]

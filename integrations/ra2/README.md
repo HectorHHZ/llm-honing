@@ -64,6 +64,17 @@ Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.js
 
 `honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win 1, a draw or tick-limit truncation 0.5, and a loss 0. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
 
+## Duels
+
+`integration/models/duel.mjs`, from #49, plays two decision models against each other:
+- both seats see normal views frozen before either prediction;
+- both have the same cadence and a one-command budget;
+- the engine advances only after both choices resolve.
+
+A seat can use a running decision server (`--red-decision-server=URL`, `--blue-decision-server=URL`). `--questions` sets the question text for both seats.
+
+`honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text, so it judges weight changes; harness changes are judged against the bot.
+
 ## Tests
 
 ```bash
