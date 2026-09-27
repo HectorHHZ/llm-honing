@@ -64,6 +64,24 @@ Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.js
 
 `honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win the engine ended 1, a draw, tick-limit truncation, or unended match 0.5, and a loss 0, counting wins as #49 did. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
 
+## The harness
+
+In Honing, the two files above are the harness an evolution method rewrites. `honing.backends.ra2.seed_harness` builds a `HarnessSpec` for agent `ra2_decision` from `config/`:
+
+- `ra2/controller.json` (kind `settings`);
+- `ra2/questions.json` (kind `instructions`).
+
+`RA2EpisodeRunner` passes them to the match as `--controller` and `--questions`.
+
+Before any match, `LayaQuestionCheck` refuses a harness the model cannot read (rule `questions_fit_model`). It fills placeholders with their longest values, encodes each entry with the model's tokenizer, and checks three limits:
+- every option fits Laya's 48-token limit;
+- instructions stay within 256 tokens, half the question budget;
+- each state entry stays within 512 tokens.
+
+It also refuses missing question keys and invalid controller settings. The cadence belongs to the task, as in #49's gates: the runner always passes the scenario's `--cadence`, so it refuses a harness whose `cadence` differs (rule `cadence_fixed_by_task`) rather than ignore it. With the pinned `typed-decisions` tokenizer, the seed harness's longest option is 14 tokens, its instruction 12, and its longest state entry 105.
+
+Text built from game content can still overrun during a match. The worker then refuses the request rather than truncating it, and `RA2Grader` scores that match 0, with feedback naming the question and its token counts. Any other failure mid-match is still an invalid episode.
+
 ## Duels
 
 `integration/models/duel.mjs`, from #49, plays two decision models against each other:
