@@ -97,6 +97,17 @@ A seat can use a running decision server (`--red-decision-server=URL`, `--blue-d
 
 `honing.backends.ra2.RA2DemonstrationProvider` reads labelled matches (teacher demonstrations and DAgger corrections, in #49's directory format) as one `typed_decisions` batch. It keeps every check #49's trainer made: the match must be a train-split scenario, labelled data, not a model evaluation, with unchanged source files, and every row must name the same scenario as its match. `honing.backends.jev.trainer.LocalJevTrainer` then trains Laya on that batch and writes a checkpoint manifest the decision server can load. `parity/` compares both with #49's code.
 
+## Training on game outcomes
+
+`honing.backends.ra2.RA2RolloutProvider` plays tasks with the policy being trained, and turns each model call in the decision logs into a decision. Each decision carries the model's probability for every option, the match's score as its reward, the task as its group, and the release and harness it was played under.
+
+`LocalJevTrainer` then runs `grpo` on those decisions:
+- each decision's advantage is its reward against its group, in standard deviations, and groups whose rewards all agree are skipped;
+- the update maximizes a clipped probability ratio;
+- the starting probabilities are recomputed from the model, because inference may apply temperature calibration that training does not.
+
+The matches must be played with sampled choices. Argmax play repeats exactly, gives no reward spread within a group, and so teaches nothing. The controller cannot sample yet.
+
 ## Tests
 
 ```bash

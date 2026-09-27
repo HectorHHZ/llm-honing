@@ -198,7 +198,9 @@ runs `sft` on `typed_decisions` for Laya: full weights, or head only as `param_s
 reproduces the RA2 experiment's training procedure, and with deterministic kernels its
 weights are byte-identical to that code's (`integrations/ra2/parity/`). It declares
 `contracts={"typed_decisions"}`, so a campaign can use it, and later replace it,
-through configuration alone.
+through configuration alone. It also runs `grpo` on rollout decisions: a group-baseline
+advantage per decision, a clipped probability ratio against probabilities the model recomputes
+before the first step, and the final weights kept.
 
 ### 2.5 Compression Plane — pruning and quantization
 

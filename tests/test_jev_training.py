@@ -99,8 +99,8 @@ def _trainer(tmp_path: Path) -> LocalJevTrainer:
 @pytest.mark.parametrize(
     ("job", "message"),
     [
-        (TrainJobSpec("sft"), "sft on typed_decisions only"),
-        (TrainJobSpec("grpo", rollout="harness", contract="typed_decisions"), "sft on typed_decisions only"),
+        (TrainJobSpec("sft"), "sft or grpo on typed_decisions only"),
+        (TrainJobSpec("dpo"), "sft or grpo on typed_decisions only"),
         (
             TrainJobSpec("sft", contract="typed_decisions", update_policy=UpdatePolicy(kind="lora", lora_rank=8)),
             "cannot apply a lora update",
