@@ -29,7 +29,6 @@ from honing.core.compression import (
     TransformKind,
     TransformManifest,
 )
-from honing.core.data import ContractKind, DataContract, PolicySample, PreferencePair, TrainingBatch
 from honing.core.data import (
     ContractKind,
     DataContract,
