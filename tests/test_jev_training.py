@@ -4,6 +4,7 @@ campaign that trains on decisions through whichever trainer it is given. No GPU.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -184,3 +185,21 @@ def test_a_campaign_trains_on_ra2_decisions_through_a_swapped_in_trainer(tmp_pat
     assert outcome.release is not None and outcome.release.kind == "train"
     (batch,) = fixture.trainer.batches
     assert isinstance(batch, TrainingBatch) and batch.contract.kind == "typed_decisions" and len(batch.decisions) == 6
+
+
+@pytest.mark.unit
+def test_the_gpu_lock_restores_the_visible_devices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from honing.backends.jev import laya
+
+    def nvidia_smi(command: list[str], text: bool) -> str:
+        return "0, GPU-aaa\n1, GPU-bbb\n" if "--query-gpu=index,uuid" in command else ""
+
+    monkeypatch.setattr(laya.subprocess, "check_output", nvidia_smi)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
+    with laya.gpu_lock("1", tmp_path) as uuid:
+        assert uuid == "GPU-bbb" and os.environ["CUDA_VISIBLE_DEVICES"] == "GPU-bbb"
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "3"
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES")
+    with laya.gpu_lock("0", tmp_path):
+        pass
+    assert "CUDA_VISIBLE_DEVICES" not in os.environ

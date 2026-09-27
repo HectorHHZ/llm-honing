@@ -68,7 +68,7 @@ def gpu_lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
     """Hold one GPU for this process: an exclusive per-user lock, and no other compute process on it.
 
     Sets ``CUDA_VISIBLE_DEVICES`` to the GPU's UUID for the duration, so the
-    caller sees it as device 0. Yields the UUID.
+    caller sees it as device 0, and restores it afterwards. Yields the UUID.
     """
     uuid = _gpu_uuid(gpu)
     directory = lock_dir or Path(tempfile.gettempdir()) / f"laya-{os.getuid()}"
@@ -80,8 +80,15 @@ def gpu_lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
         )
         if uuid in used:
             raise RuntimeError(f"GPU {gpu} already has a compute process")
+        previous = os.environ.get("CUDA_VISIBLE_DEVICES")
         os.environ["CUDA_VISIBLE_DEVICES"] = uuid
-        yield uuid
+        try:
+            yield uuid
+        finally:
+            if previous is None:
+                os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            else:
+                os.environ["CUDA_VISIBLE_DEVICES"] = previous
 
 
 def _resolve_model(settings: LayaSettings, pins: Mapping[str, Any], revision: str) -> dict[str, Any]:
