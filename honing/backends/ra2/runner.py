@@ -12,6 +12,7 @@ from pathlib import Path
 from honing.backends.ra2.harness import AGENT, CONTROLLER_PATH, QUESTIONS_PATH, LayaQuestionCheck
 from honing.backends.ra2.scenarios import RA2Suite
 from honing.core import (
+    CampaignRuleError,
     ContractError,
     EpisodeOutcome,
     HarnessSpec,
@@ -64,7 +65,24 @@ class RA2EpisodeRunner:
         self._question_check = question_check
 
     def check_spec(self, spec: HarnessSpec) -> None:
-        """Refuse a harness the model cannot read, before any match; see :class:`LayaQuestionCheck`."""
+        """Refuse, before any match, a harness the model cannot read (see :class:`LayaQuestionCheck`)
+        or one that changes the cadence.
+
+        The cadence belongs to the task protocol, as in #49's gates: the match always
+        receives the scenario's ``--cadence``, which would silently override the harness.
+        """
+        controller = spec.get(CONTROLLER_PATH)
+        if controller is not None:
+            try:
+                cadence = json.loads(controller.content).get("cadence")
+            except (json.JSONDecodeError, AttributeError):
+                cadence = None
+            cadences = {int(record["ra2"]["cadence"]) for record in self._suite.records}  # type: ignore[index]
+            if cadence is not None and cadences != {cadence}:
+                raise CampaignRuleError(
+                    "cadence_fixed_by_task",
+                    f"the harness sets cadence {cadence}, but the task suite plays at {sorted(cadences)}",
+                )
         if self._question_check is not None:
             self._question_check.check(spec)
 

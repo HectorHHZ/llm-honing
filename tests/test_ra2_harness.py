@@ -94,6 +94,25 @@ def test_the_runner_refuses_an_unreadable_harness_before_starting_a_match(tmp_pa
     assert not (tmp_path / "runs").exists() or not any((tmp_path / "runs").iterdir())
 
 
+@pytest.mark.unit
+def test_the_runner_refuses_a_harness_that_changes_the_task_s_cadence(tmp_path: Path) -> None:
+    runner = RA2EpisodeRunner(
+        suite=load_suite(SUITE_PATH),
+        endpoints=_endpoints(a="http://strong:1"),
+        integration_dir=INTEGRATION,
+        runs_dir=tmp_path / "runs",
+        command=[sys.executable, str(FAKES / "fake_match.py")],
+    )
+    settings = json.loads((INTEGRATION / "config/controller.json").read_text())
+    spec = seed_harness(INTEGRATION).with_file(
+        "ra2/controller.json", HarnessFile("settings", json.dumps({**settings, "cadence": 6, "decisionInterval": 6}))
+    )
+    with pytest.raises(CampaignRuleError, match="cadence_fixed_by_task"):
+        asyncio.run(runner.run(spec, load_suite(SUITE_PATH).tasks("val")[0], _policy("a")))
+    assert not (tmp_path / "runs").exists() or not any((tmp_path / "runs").iterdir())
+    runner.check_spec(seed_harness(INTEGRATION))  # the seed's cadence is the suite's
+
+
 def _stopped_match(tmp_path: Path, message: str) -> EpisodeOutcome:
     run = tmp_path / "run"
     run.mkdir()

@@ -78,7 +78,7 @@ Before any match, `LayaQuestionCheck` refuses a harness the model cannot read (r
 - instructions stay within 256 tokens, half the question budget;
 - each state entry stays within 512 tokens.
 
-It also refuses missing question keys and invalid controller settings. With the pinned `typed-decisions` tokenizer, the seed harness's longest option is 14 tokens, its instruction 12, and its longest state entry 105.
+It also refuses missing question keys and invalid controller settings. The cadence belongs to the task, as in #49's gates: the runner always passes the scenario's `--cadence`, so it refuses a harness whose `cadence` differs (rule `cadence_fixed_by_task`) rather than ignore it. With the pinned `typed-decisions` tokenizer, the seed harness's longest option is 14 tokens, its instruction 12, and its longest state entry 105.
 
 Text built from game content can still overrun during a match. The worker then refuses the request rather than truncating it, and `RA2Grader` scores that match 0, with feedback naming the question and its token counts. Any other failure mid-match is still an invalid episode.
 
