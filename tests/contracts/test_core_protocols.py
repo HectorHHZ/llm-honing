@@ -10,12 +10,15 @@ import pytest
 
 from honing.campaign import ScriptedScheduler
 from honing.core import (
+    BackendSupport,
     ChatReply,
     CheckpointRef,
     CompressionStep,
     ContractError,
     CostDelta,
     DataContract,
+    DecisionQuestion,
+    DecisionSample,
     EpisodeOutcome,
     EvaluationResult,
     Grade,
@@ -169,6 +172,49 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
     ("a reply with a negative cost", lambda: ChatReply("x", 1, 1, cost_usd=-0.01)),
     ("an endpoint with no URL", lambda: PolicyEndpoint(base_url="", tokenizer_location="t", served_model="m")),
     ("an endpoint with an unknown runtime", lambda: PolicyEndpoint("http://h", "t", "m", runtime="vllm")),
+    ("a decision question with one option", lambda: DecisionQuestion("choice", "Next?", (("a", "A"),))),
+    (
+        "a decision question naming an option twice",
+        lambda: DecisionQuestion("choice", "Next?", (("a", "A"), ("a", "B"))),
+    ),
+    ("an unknown decision kind", lambda: DecisionQuestion("rank", "Next?", (("a", "A"), ("b", "B")))),
+    (
+        "a decision that leaves a question unanswered",
+        lambda: DecisionSample((), (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),), ()),
+    ),
+    (
+        "a decision choosing an option not offered",
+        lambda: DecisionSample(
+            (), (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),), (("q", "c"),)
+        ),
+    ),
+    (
+        "behavior probabilities that do not sum to 1",
+        lambda: DecisionSample(
+            (),
+            (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),),
+            (("q", "a"),),
+            behavior_probs=(("q", (("a", 0.5), ("b", 0.2))),),
+        ),
+    ),
+    (
+        "behavior probabilities missing an option",
+        lambda: DecisionSample(
+            (),
+            (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),),
+            (("q", "a"),),
+            behavior_probs=(("q", (("a", 1.0),)),),
+        ),
+    ),
+    (
+        "a decision batch carrying token samples",
+        lambda: TrainingBatch("b", DataContract("typed_decisions"), token_batch().samples),
+    ),
+    ("preference training on decisions", lambda: TrainJobSpec(algorithm="dpo", contract="typed_decisions")),
+    (
+        "a backend that trains on no data contract",
+        lambda: BackendSupport("b", "uniform", frozenset({"bf16"}), frozenset({"hf_safetensors"}), (), frozenset()),
+    ),
     (
         "method state holding a set",
         lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": 1, "front": {"a"}}),
