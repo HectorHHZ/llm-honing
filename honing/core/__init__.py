@@ -6,7 +6,7 @@ plane, which is what lets each plane be developed, faked, and replaced on its
 own. ``tests/contracts/test_boundaries.py`` enforces the import rule.
 """
 
-from honing.core.backend import AlgorithmSupport, ArchitectureSupport, BackendSupport
+from honing.core.backend import LANGUAGE_MODEL_CONTRACTS, AlgorithmSupport, ArchitectureSupport, BackendSupport
 from honing.core.candidate import (
     CandidateKind,
     EvaluationResult,
@@ -29,7 +29,16 @@ from honing.core.compression import (
     TransformKind,
     TransformManifest,
 )
-from honing.core.data import ContractKind, DataContract, PolicySample, PreferencePair, TrainingBatch
+from honing.core.data import (
+    ContractKind,
+    DataContract,
+    DecisionKind,
+    DecisionQuestion,
+    DecisionSample,
+    PolicySample,
+    PreferencePair,
+    TrainingBatch,
+)
 from honing.core.endpoints import PolicyEndpoint
 from honing.core.errors import CampaignRuleError, ContractError, HoningError, ReleaseError, require, require_choice
 from honing.core.harness import (
@@ -86,6 +95,7 @@ from honing.core.structure import (
 from honing.core.telemetry import UtilizationTelemetry
 from honing.core.training import (
     ALGORITHM_REQUIREMENTS,
+    DECISION_REQUIREMENTS,
     AlgorithmName,
     AlgorithmRequirements,
     Executor,
@@ -98,11 +108,14 @@ from honing.core.training import (
     TrainResult,
     UpdatePolicy,
     UpdatePolicyKind,
+    requirements_for,
 )
 from honing.core.weights import MASTER_WEIGHT_FORMAT, CheckpointRef, ModelSnapshot, ServingWeights, WeightFormat
 
 __all__ = [
     "ALGORITHM_REQUIREMENTS",
+    "DECISION_REQUIREMENTS",
+    "LANGUAGE_MODEL_CONTRACTS",
     "MASTER_WEIGHT_FORMAT",
     "METHOD_STATE_VERSION_KEY",
     "AlgorithmName",
@@ -129,6 +142,9 @@ __all__ = [
     "CostDelta",
     "DataContract",
     "DataProvider",
+    "DecisionKind",
+    "DecisionQuestion",
+    "DecisionSample",
     "EpisodeOutcome",
     "EpisodeRecord",
     "EpisodeRunner",
@@ -206,6 +222,7 @@ __all__ = [
     "method_state_version",
     "require",
     "require_choice",
+    "requirements_for",
     "run_graded",
     "validate_method_state",
 ]

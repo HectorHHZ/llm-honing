@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from honing.core import (
-    ALGORITHM_REQUIREMENTS,
     MASTER_WEIGHT_FORMAT,
     ArchitectureSpec,
     BackendSupport,
@@ -28,6 +27,7 @@ from honing.core import (
     TrainJobSpec,
     UpdateCandidate,
     method_state_version,
+    requirements_for,
 )
 
 
@@ -99,10 +99,12 @@ def algorithm_requirements_met(job: TrainJobSpec, support: BackendSupport) -> No
     This reads the job alone, so it runs before any batch is drawn or any
     weight is edited. :func:`batch_meets_contract` checks the batch once it exists.
     """
-    requirements = ALGORITHM_REQUIREMENTS[job.algorithm]
+    requirements = requirements_for(job)
     problems = []
     if support.support_for(job.algorithm) == "unsupported":
         problems.append(f"{support.name} cannot run {job.algorithm}")
+    if requirements.contract not in support.contracts:
+        problems.append(f"{support.name} cannot train on {requirements.contract} data")
     if requirements.requires_rollout and job.rollout == "none":
         problems.append(f"{job.algorithm} learns from its own samples and needs a rollout source")
     if not requirements.requires_rollout and job.rollout != "none":
@@ -119,7 +121,7 @@ def algorithm_requirements_met(job: TrainJobSpec, support: BackendSupport) -> No
 
 def batch_meets_contract(job: TrainJobSpec, batch: TrainingBatch | None) -> None:
     """A training job starts only with a batch of the kind its algorithm consumes."""
-    contract = ALGORITHM_REQUIREMENTS[job.algorithm].contract
+    contract = requirements_for(job).contract
     if batch is None:
         raise CampaignRuleError(
             "batch_meets_contract", f"no batch meets the {contract} contract {job.algorithm} needs"
