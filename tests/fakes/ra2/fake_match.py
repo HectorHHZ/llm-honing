@@ -40,5 +40,17 @@ result = {
     "window": [started, time.time()],
 }
 (out / "result.json").write_text(json.dumps(result))
-(out / "decisions.jsonl").write_text(json.dumps({"tick": 3}) + "\n")
+question = {"type": "choice", "instructions": "Next?", "criteria": {"A": "Wait", "B": "Power plant"}}
+stage = {
+    "stageIndex": 1,
+    "tick": 3,
+    "contextParts": {"essential": ["Tick 3."]},
+    "questions": {"g1": question},
+    "answers": {"g1": {"choice": "B", "probabilities": {"A": 0.3, "B": 0.7}}},
+}
+rows = [
+    {"tick": 3, "decisionMode": "staged", "stages": [stage]},
+    {"tick": 6, "decisionMode": "staged", "stages": [{**stage, "tick": 6, "questions": {}, "answers": {}}]},
+]
+(out / "decisions.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
 sys.exit(int(os.environ.get("FAKE_MATCH_EXIT", "0")))
