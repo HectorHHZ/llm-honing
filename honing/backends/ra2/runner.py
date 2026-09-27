@@ -9,8 +9,10 @@ import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from honing.backends.ra2.harness import AGENT, CONTROLLER_PATH, QUESTIONS_PATH, LayaQuestionCheck
 from honing.backends.ra2.scenarios import RA2Suite
 from honing.core import (
+    CampaignRuleError,
     ContractError,
     EpisodeOutcome,
     HarnessSpec,
@@ -20,10 +22,6 @@ from honing.core import (
     Task,
 )
 
-AGENT = "ra2_decision"
-# Harness files the match process reads, by path in the spec.
-CONTROLLER_PATH = "ra2/controller.json"
-QUESTIONS_PATH = "ra2/questions.json"
 RESULT_FIELDS = ("outcome", "tick", "ended", "truncated", "hash")
 
 
@@ -33,6 +31,8 @@ class RA2EpisodeRunner:
     ``command`` starts the match process and defaults to the integration's
     ``node integration/laya/run.mjs``; tests pass a stand-in. ``concurrency``
     caps how many matches run at once, since a gate starts every task together.
+    ``question_check``, when given, refuses a harness the model cannot read
+    before its first match.
     Each match gets a fresh directory under ``runs_dir``, which the outcome
     points at; nothing there is deleted.
     """
@@ -51,6 +51,7 @@ class RA2EpisodeRunner:
         command: Sequence[str] | None = None,
         environment: Mapping[str, str] | None = None,
         concurrency: int = 4,
+        question_check: LayaQuestionCheck | None = None,
     ) -> None:
         if concurrency <= 0:
             raise ContractError("concurrency must be positive")
@@ -61,6 +62,29 @@ class RA2EpisodeRunner:
         self._command = list(command or ["node", str(integration_dir / "integration/laya/run.mjs")])
         self._environment = dict(environment or {})
         self._slots = asyncio.Semaphore(concurrency)
+        self._question_check = question_check
+
+    def check_spec(self, spec: HarnessSpec) -> None:
+        """Refuse, before any match, a harness the model cannot read (see :class:`LayaQuestionCheck`)
+        or one that changes the cadence.
+
+        The cadence belongs to the task protocol, as in #49's gates: the match always
+        receives the scenario's ``--cadence``, which would silently override the harness.
+        """
+        controller = spec.get(CONTROLLER_PATH)
+        if controller is not None:
+            try:
+                cadence = json.loads(controller.content).get("cadence")
+            except (json.JSONDecodeError, AttributeError):
+                cadence = None
+            cadences = {int(record["ra2"]["cadence"]) for record in self._suite.records}  # type: ignore[index]
+            if cadence is not None and cadences != {cadence}:
+                raise CampaignRuleError(
+                    "cadence_fixed_by_task",
+                    f"the harness sets cadence {cadence}, but the task suite plays at {sorted(cadences)}",
+                )
+        if self._question_check is not None:
+            self._question_check.check(spec)
 
     def _harness_arguments(self, spec: HarnessSpec, directory: Path) -> list[str]:
         if spec.agent != AGENT:
@@ -75,6 +99,7 @@ class RA2EpisodeRunner:
         return arguments
 
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        self.check_spec(spec)
         scenario = self._suite.scenario(task.task_id)
         endpoint = self._endpoints.resolve(policy)
         if endpoint.runtime != "jev_decision":
