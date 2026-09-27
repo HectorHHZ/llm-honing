@@ -50,6 +50,16 @@ def feedback_text(result: Mapping[str, object], seat: str, score: float) -> str:
     return " ".join(lines)
 
 
+def _verified(report: str) -> bool:
+    """Whether the replay check's last output line is a JSON report with ``verified`` true."""
+    lines = report.strip().splitlines()
+    try:
+        parsed = json.loads(lines[-1]) if lines else None
+    except json.JSONDecodeError:
+        return False
+    return isinstance(parsed, Mapping) and parsed.get("verified") is True
+
+
 class RA2Grader:
     """Satisfies :class:`~honing.core.TaskGrader` for RA2 tasks.
 
@@ -59,7 +69,7 @@ class RA2Grader:
 
     ``audit_command`` defaults to ``node integration/laya/audit.mjs``, and
     ``replay_command``, when given, re-plays the replay without any policy and
-    must print a report with ``"verified": true``. The run directory is
+    must print, as its last line, a JSON report with ``"verified": true``. The run directory is
     appended to the audit command; the replay command gets ``--match <dir>``.
     """
 
@@ -96,10 +106,12 @@ class RA2Grader:
         await self._check([*self._audit, str(run)], "audit")
         if self._replay is not None:
             report = await self._check([*self._replay, "--match", str(run)], "replay check")
-            if '"verified": true' not in report:
+            if not _verified(report):
                 raise ContractError(f"the replay of {task.task_id} did not verify: {report[-2000:]}")
         result = json.loads((run / "result.json").read_text())
         outcome_by_seat = result.get("outcome") or {}
         mine = outcome_by_seat.get(scenario.seat, 0)
-        score = WIN if mine == 1 and not result.get("truncated") else LOSS if mine == -1 else DRAW
+        # As in #49: a win must be ended by the engine, not cut off at the tick limit.
+        won = mine == 1 and result.get("ended") is True and not result.get("truncated")
+        score = WIN if won else LOSS if mine == -1 else DRAW
         return Grade(score=score, feedback=feedback_text(result, scenario.seat, score))

@@ -166,7 +166,10 @@ def test_the_runner_caps_how_many_matches_run_at_once(tmp_path: Path, monkeypatc
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(("url", "score"), [("http://strong:1", 1.0), ("http://weak:1", 0.0), ("http://even:1", 0.5)])
+@pytest.mark.parametrize(
+    ("url", "score"),
+    [("http://strong:1", 1.0), ("http://weak:1", 0.0), ("http://even:1", 0.5), ("http://strong-unended:1", 0.5)],
+)
 def test_the_grade_is_the_match_result(tmp_path: Path, url: str, score: float) -> None:
     runner = _runner(tmp_path, _endpoints(a=url))
     task = load_suite(SUITE_PATH).tasks("val")[0]

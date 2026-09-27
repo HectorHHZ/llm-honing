@@ -1,7 +1,8 @@
 """Stands in for integrations/ra2/integration/laya/run.mjs: same flags, same output files, no engine.
 
 The decision server URL decides the result: a URL containing "strong" wins, "weak" loses,
-anything else runs to the tick limit. FAKE_MATCH_EXIT sets the exit code.
+anything else runs to the tick limit. A URL also containing "unended" reports the win without
+the engine ending the match. FAKE_MATCH_EXIT sets the exit code.
 """
 
 import json
@@ -21,7 +22,7 @@ outcome = {seat: 1, other: -1} if "strong" in url else {seat: -1, other: 1} if "
 truncated = outcome[seat] == 0
 result = {
     "tick": int(args["ticks"]) if truncated else 9000,
-    "ended": not truncated,
+    "ended": not truncated and "unended" not in url,
     "truncated": truncated,
     "outcome": outcome,
     "hash": {"tick": 9000, "hash": "abc"},

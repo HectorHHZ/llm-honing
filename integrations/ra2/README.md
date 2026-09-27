@@ -62,7 +62,7 @@ The manifest records the path and SHA-256 of both files, and the run directory k
 
 Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.json tasks/suite.jsonl`.
 
-`honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win 1, a draw or tick-limit truncation 0.5, and a loss 0. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
+`honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win the engine ended 1, a draw, tick-limit truncation, or unended match 0.5, and a loss 0, counting wins as #49 did. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
 
 ## Tests
 
