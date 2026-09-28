@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import uuid
+import weakref
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -61,7 +62,12 @@ class RA2EpisodeRunner:
         self._runs_dir = runs_dir
         self._command = list(command or ["node", str(integration_dir / "integration/laya/run.mjs")])
         self._environment = dict(environment or {})
-        self._slots = asyncio.Semaphore(concurrency)
+        self._concurrency = concurrency
+        # One semaphore per event loop: a campaign calls asyncio.run once per gate, and an
+        # asyncio primitive used in one loop cannot be awaited from the next.
+        self._slots: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+            weakref.WeakKeyDictionary()
+        )
         self._question_check = question_check
 
     def check_spec(self, spec: HarnessSpec) -> None:
@@ -119,7 +125,9 @@ class RA2EpisodeRunner:
             f"--out={out}",
             *self._harness_arguments(spec, harness_dir),
         ]
-        async with self._slots:
+        loop = asyncio.get_running_loop()
+        slots = self._slots.setdefault(loop, asyncio.Semaphore(self._concurrency))
+        async with slots:
             with (self._runs_dir / f"{name}.log").open("wb") as log:
                 process = await asyncio.create_subprocess_exec(
                     *arguments,
