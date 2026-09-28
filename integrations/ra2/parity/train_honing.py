@@ -21,7 +21,7 @@ protocol = json.loads((PR49 / "league/protocol.json").read_text())
 job = TrainJobSpec("sft", steps=epochs, contract="typed_decisions")
 trainer = LocalJevTrainer(
     JevTrainerSettings(
-        laya_source=PR49 / "deps/laya",
+        laya_source=Path(os.environ.get("LAYA_SOURCE_DIR", str(PR49 / "deps/laya"))),
         pins_path=PR49 / "pins.json",
         model_record=record_path,
         work_dir=out,

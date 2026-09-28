@@ -25,7 +25,8 @@ import subprocess
 import sys
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -156,6 +157,38 @@ def collate(items: Sequence[Mapping[str, Any]], pad: int, torch: Any, device: st
     )
 
 
+@contextmanager
+def training_attention() -> Iterator[None]:
+    """Keep masked SDPA off the cuDNN backward path, including checkpoint recomputation.
+
+    cuDNN can produce NaN query gradients for lengths such as 192 on H100:
+    https://github.com/pytorch/pytorch/issues/196678. Keep the other fused
+    implementations available, with math as a fallback. Restore the caller's
+    backend settings on exit, including failures.
+    """
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+        yield
+
+
+def backward_step(loss: Any, parameters: Sequence[Any], optimizer: Any, where: str) -> float:
+    """Reject invalid gradients before clipping can corrupt weights or optimizer state."""
+    import torch
+
+    if not torch.isfinite(loss):
+        raise ContractError(f"nonfinite training loss ({where})")
+    loss.backward()
+    try:
+        norm = torch.nn.utils.clip_grad_norm_(parameters, 1.0, error_if_nonfinite=True)
+    except RuntimeError as error:
+        if "non-finite" not in str(error):
+            raise
+        raise ContractError(f"nonfinite training gradients ({where}); optimizer step was not applied") from error
+    optimizer.step()
+    return float(norm)
+
+
 class LocalJevTrainer:
     """Satisfies :class:`~honing.core.Trainer` for Laya decision models on ``typed_decisions`` data.
 
@@ -179,7 +212,7 @@ class LocalJevTrainer:
         run = self._settings.work_dir / f"train-{uuid.uuid4().hex[:12]}"
         run.mkdir(parents=True)
         try:
-            with gpu_lock(self._settings.gpu, self._settings.lock_dir):
+            with gpu_lock(self._settings.gpu, self._settings.lock_dir), training_attention():
                 return self._train(job, base, batch, run)
         except Exception as error:
             (run / "error.json").write_text(json.dumps({"error": str(error)}) + "\n")
@@ -287,7 +320,10 @@ class LocalJevTrainer:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         logits, _ = model(*tensors[:5])
                     logits = logits.float().masked_fill(~tensors[3], -1e4)
-                    losses.extend(torch.nn.functional.cross_entropy(logits, tensors[5], reduction="none").tolist())
+                    batch_losses = torch.nn.functional.cross_entropy(logits, tensors[5], reduction="none")
+                    if not torch.isfinite(batch_losses).all():
+                        raise ContractError(f"nonfinite validation loss (batch={start // settings.batch_size + 1})")
+                    losses.extend(batch_losses.tolist())
                     correct += int((logits.argmax(-1) == tensors[5]).sum())
             return sum(losses) / len(losses), correct / len(validation)
 
@@ -309,11 +345,7 @@ class LocalJevTrainer:
                     torch.nn.functional.cross_entropy(logits.float().masked_fill(~tensors[3], -1e4), tensors[5])
                     + 0 * aux.float().sum()
                 )
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite training loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
+                backward_step(loss, [p for _, p in trainable], optimizer, f"epoch={epoch + 1}, batch={steps + 1}")
                 total += float(loss.detach())
                 steps += 1
             val, accuracy = evaluate()
@@ -365,6 +397,7 @@ class LocalJevTrainer:
                 "headLr": settings.head_lr,
                 "validationGroups": settings.validation_groups,
                 "deterministic": settings.deterministic,
+                "sdpaBackends": ["flash", "efficient", "math"],
             },
             "elapsedSeconds": time.time() - started,
         }
