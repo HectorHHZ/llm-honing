@@ -1,0 +1,31 @@
+{
+  "description": "RA2 campaign with no game, Node, or GPU: the real runner and grader around stand-in match and check processes, and fake model, trainer, data, and harness method.",
+  "integration_dir": "integrations/ra2",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/e2e-dry-run",
+  "gate_tasks": {"split": "val", "limit": 4},
+  "harness_tasks": {"split": "val", "limit": 4},
+  "schedule": [
+    {"kind": "harness", "label": "reword-rules"},
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"}
+  ],
+  "requires": {"env": [], "commands": [], "paths": []},
+  "components": {
+    "model_source": {"factory": "tests.fakes.ra2.e2e:model_source"},
+    "endpoints": {"factory": "tests.fakes.ra2.e2e:endpoints"},
+    "runner": {
+      "factory": "honing.backends.ra2.e2e:episode_runner",
+      "args": {"command": ["{python}", "{root}/tests/fakes/ra2/fake_match.py"]}
+    },
+    "grader": {
+      "factory": "honing.backends.ra2.e2e:grader",
+      "args": {
+        "audit_command": ["{python}", "{root}/tests/fakes/ra2/fake_check.py", "audit"],
+        "replay_command": ["{python}", "{root}/tests/fakes/ra2/fake_check.py", "replay"]
+      }
+    },
+    "trainer": {"factory": "tests.fakes.ra2.e2e:trainer"},
+    "data": {"factory": "tests.fakes.ra2.e2e:demonstrations"},
+    "method": {"factory": "tests.fakes.ra2.e2e:method"}
+  }
+}

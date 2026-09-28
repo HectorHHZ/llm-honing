@@ -130,7 +130,15 @@ It answers one request at a time, so several matches can share one loaded model.
 
 ## End to end
 
-This is the whole loop on RA2 today: serve a model, play and grade tasks, gate a candidate, train, and duel. Each step runs on its own. A single script that runs them as one campaign is #70. New trainers (Slime, #68) and agents (OpenHands, #69) plug in at the interfaces listed at the end.
+This is the whole loop on RA2 today: serve a model, play and grade tasks, gate a candidate, train, and duel.
+
+`scripts/e2e/ra2_campaign.py` runs the loop as one campaign from a JSON config that names every component by import path. The dry-run config needs no game, Node, or GPU:
+
+```bash
+python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json
+```
+
+It plays 4 val tasks through the real runner and grader with stand-in match and check processes, and fake model, trainer, data, and harness method. A reworded harness ties its gate and is rolled back; a train move wins and is published as `r0001`. The release chain, every episode's run directory, and `summary.json` go to `runs/e2e-dry-run`. A config for real matches with the Jev model is the next part of #70; until then, the steps below run each piece by hand. New trainers (Slime, #68) and agents (OpenHands, #69) plug in at the interfaces listed at the end.
 
 ### Environments
 
@@ -240,4 +248,4 @@ result = LocalJevTrainer(settings).train(job, base, batch)
 | training data | `DataProvider`, `RolloutProvider` | `RA2DemonstrationProvider`, `RA2RolloutProvider` | token-level rollouts from the agent's sessions (#68) |
 | comparison | `Evaluator` | `EpisodeEvaluator` against the bot, or `DuelEvaluator` | unchanged |
 
-To check a new component, swap it into step 3 or 4 in place of the default and run on the val tasks. Once #70 lands, the same swap is one line in its config.
+To check a new component, point its slot in a copy of `configs/e2e/ra2_dry_run.json` at your factory (`package.module:function`, called with the run's context and the entry's `args`) and run the script; `tests/test_ra2_e2e.py` does this for a trainer and a runner. With real matches, swap it into step 3 or 4 in place of the default.
