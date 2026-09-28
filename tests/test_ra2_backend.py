@@ -162,6 +162,20 @@ def test_the_runner_caps_how_many_matches_run_at_once(tmp_path: Path, monkeypatc
     assert peak <= 2
 
 
+@pytest.mark.unit
+def test_one_runner_serves_one_gate_after_another(tmp_path: Path) -> None:
+    # A campaign calls asyncio.run once per gate; the second must not wait on the first loop's slots.
+    runner = _runner(tmp_path, _endpoints(a="http://strong:1"), concurrency=1)
+    tasks = load_suite(SUITE_PATH).tasks("val", limit=2)
+
+    async def gate() -> int:
+        runs = asyncio.gather(*(runner.run(SPEC, task, _policy("a")) for task in tasks))
+        return len(await asyncio.wait_for(runs, timeout=20))
+
+    assert asyncio.run(gate()) == 2
+    assert asyncio.run(gate()) == 2
+
+
 # ------------------------------------------------------------------ the grader
 
 
