@@ -27,6 +27,12 @@
       "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e",
       "base": "Qwen/Qwen3.5-0.8B-Base",
       "baseRevision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68"
+    },
+    "kev-4b": {
+      "repo": "jaredpalmer/kev-4b",
+      "revision": "139fdd94f1b6a6ad80cc15e08fcb99cac885a101",
+      "base": "Qwen/Qwen3.5-4B-Base",
+      "baseRevision": "1001bb4d826a52d1f399e183466143f4da7b741b"
     }
   },
   "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae"

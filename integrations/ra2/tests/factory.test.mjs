@@ -29,6 +29,13 @@ test("the laya and kev families are accepted, anything else is refused", () => {
         ),
         { family: "kev", decisionServer: "http://127.0.0.1:8801" },
     );
+    assert.equal(
+        decisionClientOptions(
+            { family: "kev", gpu: "0", model: "kev-4b" },
+            "intent",
+        ).model,
+        "kev-4b",
+    );
     assert.throws(
         () => decisionClientOptions({ family: "nanojev" }, "intent"),
         /nanojev is not supported; use one of laya, kev/,

@@ -132,10 +132,10 @@ It answers one request at a time, so several matches can share one loaded model.
 
 ## Using Kev
 
-[Kev](https://github.com/jaredpalmer/kev) is a second decision-model family: a LoRA adapter and pointer head on a Qwen3.5 base, answering the same typed questions as Laya with the same response fields. `honing.backends.jev.kev` runs it through Kev's own code at the commit in `pins.json`, so it needs its own environment (Python 3.12, torch 2.8, transformers 5.x):
+[Kev](https://github.com/jaredpalmer/kev) is a second decision-model family: a LoRA adapter and pointer head on a Qwen3.5 base. Two sizes are pinned: `kev-0.8b` (the default) and `kev-4b` (select it with `--model kev-4b` on the server, `--model=kev-4b` on a match, or `KEV_MODEL=kev-4b`). Both answer the same typed questions as Laya with the same response fields. `honing.backends.jev.kev` runs them through Kev's own code at the commit in `pins.json`; the two checkpoints record identical Kev source files, so one commit serves both. It needs its own environment (Python 3.12, torch 2.8, transformers 5.x). A kev-4b server held about 13 GB of GPU memory in bf16 on an H100:
 
 ```bash
-scripts/setup-kev.sh                  # prints the KEV_PYTHON and KEV_SOURCE_DIR exports
+scripts/setup-kev.sh                  # every pinned Kev model; KEV_MODELS=kev-4b for one. Prints the exports
 "$KEV_PYTHON" -m honing.backends.jev.server --family kev --pins pins.json --kev-source "$KEV_SOURCE_DIR" --gpu 0 --port 8802
 npm run match -- --family=kev --decision-server=http://127.0.0.1:8802 --seat=red --seed=1 --out=runs/kev-seed1-red
 npm run match -- --family=kev --gpu=0 --seat=red --seed=1 --out=runs/kev-seed1-red-worker   # or a stdio worker

@@ -4,8 +4,9 @@ Usage: kev_training.py <sft-gpu> <serve-gpu> <grpo-gpu> <work-dir> <demo-match-d
 
 Each step holds its GPU's lock, which refuses a GPU that already runs a process, so the steps use three GPUs.
 
-1. sft: the matches (written by make_demos.py) train kev-0.8b for one epoch; validation loss is reported before
-   and after, and the trained checkpoint is loaded by KevDecisionModel from its manifest and answers a request.
+1. sft: the matches (written by make_demos.py) train the Kev model (KEV_MODEL, default kev-0.8b) for one epoch;
+   validation loss is reported before and after, and KevDecisionModel loads the trained checkpoint from its
+   manifest and answers a request.
 2. grpo: synthetic rollouts as in policy_gradient.py (16 scenario groups of 6 sampled choices, a reward that
    favors option B, one group whose rewards agree). The favored option's raw probability is measured on every
    state before and after.
@@ -34,7 +35,8 @@ pins = json.loads((ROOT / "pins.json").read_text())
 sys.path.insert(0, str(source))
 from kev.checkpoint import resolve_run  # noqa: E402
 
-pin = pins["kevModels"]["kev-0.8b"]
+MODEL = os.environ.get("KEV_MODEL", "kev-0.8b")
+pin = pins["kevModels"][MODEL]
 release = Path(resolve_run(f"{pin['repo']}@{pin['revision']}"))
 qwen_config = Path(resolve_run(f"{pin['base']}@{pin['baseRevision']}")) / "config.json"
 base = kev_snapshot(release, qwen_config)
@@ -44,7 +46,12 @@ report: dict[str, object] = {"base_checksum": base.checkpoint.checksum}
 protocol = json.loads((ROOT / "tasks/protocol.json").read_text())
 trainer = KevTrainer(
     KevTrainerSettings(
-        pins_path=ROOT / "pins.json", source_dir=source, work_dir=work / "sft", gpu=sft_gpu, deterministic=True
+        pins_path=ROOT / "pins.json",
+        source_dir=source,
+        work_dir=work / "sft",
+        model=MODEL,
+        gpu=sft_gpu,
+        deterministic=True,
     )
 )
 job = TrainJobSpec("sft", steps=1, contract="typed_decisions")
@@ -63,18 +70,18 @@ SERVE = """
 import json, sys
 from pathlib import Path
 from honing.backends.jev.kev import KevDecisionModel, KevSettings
-root, source, gpu, manifest, request = sys.argv[1:6]
+root, source, gpu, manifest, request, model = sys.argv[1:7]
 request = json.loads(request)
-settings = KevSettings(
-    pins_path=Path(root) / "pins.json", source_dir=Path(source), gpu=gpu, checkpoint_manifest=Path(manifest)
-)
+pins = Path(root) / "pins.json"
+manifest = Path(manifest)
+settings = KevSettings(pins_path=pins, source_dir=Path(source), model=model, gpu=gpu, checkpoint_manifest=manifest)
 with KevDecisionModel.load(settings) as model:
     answer = model.predict(request["parts"], request["questions"])
     meta = model.metadata
     print(json.dumps({"revision": meta["revision"], "temperature": meta["temperature"], "answers": answer["answers"]}))
 """
 served = subprocess.run(
-    [sys.executable, "-c", SERVE, str(ROOT), str(source), serve_gpu, str(manifest_path), json.dumps(request)],
+    [sys.executable, "-c", SERVE, str(ROOT), str(source), serve_gpu, str(manifest_path), json.dumps(request), MODEL],
     check=True,
     capture_output=True,
     text=True,
@@ -121,6 +128,7 @@ pg = KevTrainer(
         pins_path=ROOT / "pins.json",
         source_dir=source,
         work_dir=work / "grpo",
+        model=MODEL,
         gpu=grpo_gpu,
         lr=5e-5,
         batch_size=8,
