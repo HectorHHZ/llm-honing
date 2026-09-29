@@ -14,7 +14,9 @@ from pathlib import Path
 
 import pytest
 
-DESIGN_DOCS = ("system-design/README.md", "system-design/system-design.md")
+DESIGN_DOCS = ("README.md", "system-design/README.md", "system-design/system-design.md")
+#: Diagram sources under system-design/; each writes a PNG of the same name beside itself.
+DIAGRAMS = ("honing_architecture", "honing_scope", "honing_compositions")
 
 #: Markdown inline links, excluding images and external URLs.
 LINK = re.compile(r"(?<!!)\[[^\]]+\]\((?P<target>[^)\s]+)\)")
@@ -67,25 +69,35 @@ def test_the_readme_embeds_the_rendered_diagram(repo_root: Path) -> None:
 
 
 @pytest.mark.unit
-def test_the_diagram_source_writes_beside_itself(repo_root: Path) -> None:
+@pytest.mark.parametrize("image", ["honing_scope.png", "honing_compositions.png"])
+def test_the_top_level_readme_embeds_the_scope_diagrams(repo_root: Path, image: str) -> None:
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    assert f"](system-design/{image})" in readme
+    assert (repo_root / "system-design" / image).is_file()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", DIAGRAMS)
+def test_the_diagram_source_writes_beside_itself(repo_root: Path, name: str) -> None:
     """The script must not hard-code an author's absolute path.
 
-    It was written in a scratch directory and moved here, which is exactly how
-    an absolute output path survives into a repository unnoticed.
+    The first one was written in a scratch directory and moved here, which is
+    exactly how an absolute output path survives into a repository unnoticed.
     """
-    source = (repo_root / "system-design/honing_architecture.py").read_text(encoding="utf-8")
+    source = (repo_root / f"system-design/{name}.py").read_text(encoding="utf-8")
     assert "Path(__file__)" in source, "the output path must be derived from __file__"
     assert "/tmp/" not in source and "/home/" not in source
 
 
 @pytest.mark.slow
-def test_the_diagram_regenerates(repo_root: Path, tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", DIAGRAMS)
+def test_the_diagram_regenerates(repo_root: Path, tmp_path: Path, name: str) -> None:
     """Render the diagram in a copy, so a stale committed PNG cannot mask a broken script."""
     pytest.importorskip("matplotlib", reason="diagram rendering needs the 'docs' extra")
 
-    script = tmp_path / "honing_architecture.py"
+    script = tmp_path / f"{name}.py"
     script.write_text(
-        (repo_root / "system-design/honing_architecture.py").read_text(encoding="utf-8"),
+        (repo_root / f"system-design/{name}.py").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=300)
