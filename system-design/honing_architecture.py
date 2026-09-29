@@ -401,8 +401,7 @@ notes = [
     " another scheme is refused before quantizing.",
     "③  After a shape-changing cut, the recovery teacher (typically the pre-cut release) is served by its own"
     " engine, since an in-process teacher must share the student's shape.",
-    "④  v1: uniform layers only · DPO in a local trainer · Slime is the only framework dependency"
-    " (Reef is a design reference, not imported).",
+    "④  v1: uniform layers only · DPO in a local trainer · Slime is the only framework dependency.",
 ]
 for i, text in enumerate(notes):
     ax.text(2, 1.0 - i * 1.55, text, fontsize=8.0, color=C["ink"])

@@ -55,7 +55,7 @@ the release that applied it.
   without pulling in a framework.
 - Planes depend on `honing.core` and never on each other.
 - Only `honing/backends/` may import a training framework. Slime is the one such
-  dependency; Reef is a design reference and is never imported.
+  dependency.
 
 [`tests/contracts/test_boundaries.py`](../tests/contracts/test_boundaries.py) enforces
 all three.
@@ -310,9 +310,7 @@ task and the same grader serves the gate, a method's own minibatches, and traini
 rollouts. An `EpisodeRecord` is an outcome plus its grade, and `run_graded` is the one
 place that pairs them.
 
-A harness is a set of files for one agent. File kinds map onto the node kinds Reef's
-harness layer renders, which keeps a Reef-backed runner possible later without changing
-this type.
+A harness is a set of files for one agent.
 
 The planned runner is built on Slime's agent layer: `BaseHarness.run` launches the agent
 in a sandbox after Honing writes the spec's files into its workspace; the `Sandbox`

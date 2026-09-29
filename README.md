@@ -57,8 +57,7 @@ The plan is to build this module by integrating a third-party harness
 infrastructure, potentially [Reef](https://github.com/Human-Agent-Society/reef) or
 [OpenHands](https://github.com/OpenHands/OpenHands). Each harness it proposes still
 passes Honing's gate and lands in the release chain with the model it was evolved
-for. Why Reef is not a dependency today, and what would change that, is in
-[`system-design/README.md`](system-design/README.md#why-reef-is-not-a-dependency).
+for.
 
 ```mermaid
 flowchart LR
@@ -163,16 +162,8 @@ without the others.
 
 | Document | What it covers |
 | --- | --- |
-| [`system-design/README.md`](system-design/README.md) | the planes, the dependency on Slime, and how Honing compares to inference engines, RL frameworks, and Reef |
 | [`system-design/system-design.md`](system-design/system-design.md) | subsystem contracts, the coupling model, the ordering rules, worked lifecycles, and the implementation steps |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | issue, commit, and pull request conventions; writing style; development setup |
-
-## Dependencies
-
-[Slime](https://github.com/THUDM/slime) is the one training-framework
-dependency, pinned by commit and imported only under `honing/backends/`. Reef
-informs the design but is not a dependency. The reasoning, and what Slime does
-and does not supply, is in [`system-design/README.md`](system-design/README.md#dependencies).
 
 ## Development
 
