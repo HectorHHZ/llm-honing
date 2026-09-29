@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-honing"
-description = "Continual specialization infra: a large model that sheds its own dead weight while it learns"
+description = "One infra to customize, train, and deploy a model end to end"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

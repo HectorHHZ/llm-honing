@@ -1,49 +1,164 @@
 # Honing
 
-**Continual specialization infra: a large model that sheds its own dead weight while it learns.**
+One infra to customize, train, and deploy a model end to end. Use all of its
+modules, or only the ones you need.
 
-Honing is post-training infrastructure that turns a large general model into a
-leaner domain-specialized one *over time*. As the model serves real traffic and
-real data, it keeps the capacity that carries the work, removes what it no
-longer needs, and publishes each result as a versioned, rollback-able release.
-The model gets better in-domain while getting cheaper to run.
+Honing starts from an open model (a 122B mixture-of-experts model, say) or from
+a model behind an API, and ends with a model customized for one user or one
+company and deployed where they run it. Four modules do the work:
 
-> **Status: skeleton.** The contracts every plane is built against
-> (`honing/core`), the gate and release chain (`honing/release`), and the
-> campaign with its ordering rules (`honing/campaign`) are implemented. A
-> walking skeleton runs a full campaign — train, prune with recovery, quantize,
-> evolve the harness, roll back — with every other plane faked on a CPU. Planes
-> become real one at a time; see the implementation steps in the design document.
+| Module | What it does | Methods |
+| --- | --- | --- |
+| Compression | makes the model smaller | pruning, quantization, recovery training |
+| Post-training | makes it better at your task | SFT, RL (PPO, GRPO, DPO), distillation, on-policy distillation, QAT, LoRA and SMT |
+| Harness self-evolve | improves the prompts, skills, and tools around the model | harness evolve, auto research, GEPA, Meta-Harness |
+| Serving | deploys the result | SGLang or vLLM on a GPU cluster, or a Mac or mobile app that calls the model |
 
-## Start here
+![Honing scope: four modules, the data plane, and the gate](system-design/honing_scope.png)
 
-| Document | What it covers |
+A data plane underneath is shared by every module. Offline data (SFT,
+preference, and distillation sets) becomes training batches. Online data
+(rollouts, user feedback, and serving logs) drives harness self-evolve, and
+serving telemetry such as per-expert routing counts tells compression what to
+prune next.
+
+Every change is one candidate: a training step, a prune, a quantization, or a
+harness edit. One gate judges all of them. A change made for quality must beat
+the release it would replace, and a change made for cost must not regress it.
+An accepted candidate becomes a versioned release that records the model and
+the harness together, so a rollback restores both.
+
+## Scope
+
+### Compression
+
+Pruning scores importance from calibration data, weights, gradients, or serving
+telemetry, then removes layers, experts, attention heads, or FFN dimensions.
+Quantization exports low-bit serving weights and never modifies the
+full-precision master weights. A cut is followed by a short post-training job
+that recovers the quality it lost, and the gate judges the recovered model.
+
+### Post-training
+
+The algorithms are SFT, RL (PPO, GRPO, and DPO), distillation, and on-policy
+distillation. A job updates all weights, LoRA adapters, or a sparse subset of
+sub-matrices (SMT), and trains in bf16 or fp8. Quantization-aware training
+shares one quantization scheme with serving, so the model is trained under
+the scheme it is served with.
+
+### Harness self-evolve
+
+The harness is everything around the model: the system prompt, instructions,
+skills, tools, and agent files. The loop runs episodes, scores them with the
+same gate model updates pass, keeps the winner, and proposes the next harness.
+Methods such as GEPA and Meta-Harness plug into the propose step.
+
+```mermaid
+flowchart LR
+    run[Run episodes] --> score[Score with the gate]
+    score --> keep[Keep the winner]
+    keep --> propose[Propose a new harness]
+    propose --> run
+```
+
+The loop needs no gradients. It learns from online data, so it also works with
+a model behind an API and on a laptop or phone. It can run at three points:
+
+| When | What it does |
 | --- | --- |
-| [`system-design/README.md`](system-design/README.md) | What Honing is, the planes, its dependency on Slime, and how it compares to inference engines, RL frameworks, and Reef |
-| [`system-design/system-design.md`](system-design/system-design.md) | Subsystem contracts, the coupling model, the ordering rules, worked lifecycles, and the implementation steps |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Issue, commit, and pull request conventions; writing style; development setup |
+| Before training | searches instructions and skills on the base model |
+| During training | co-adapts with the weights, one harness per training window |
+| After training | evolves against the exact weights that ship |
+
+### Serving
+
+SGLang and vLLM load the serving weights, quantized or not. The same engines
+generate RL rollouts during training, so the model is trained on what it
+serves. The target is a GPU cluster, or a Mac or mobile app that calls the
+model through an API.
+
+### Outside the scope
+
+Honing starts from a trained model and does not pretrain one. It has no
+training or inference engine of its own: [Slime](https://github.com/THUDM/slime)
+trains, and SGLang and vLLM serve. Honing decides what runs next, checks each
+move before it touches weights, and records the result.
+
+## Compose what you need
+
+![Which modules different users turn on](system-design/honing_compositions.png)
+
+A company with GPUs can use every module. It starts from a large open model,
+prunes and quantizes it, post-trains it on its domain data, evolves the
+harness, and serves the result in-house, ending with a domain expert much
+smaller than the model it started from.
+
+An individual with no GPUs can skip compression and post-training. They start
+from an API model, let the harness self-evolve on their own data, and deploy on
+a Mac or phone, which gives a personal agent that keeps improving from daily
+use with no training compute.
+
+Any subset in between works, for example post-training with LoRA or SMT and
+serving with vLLM, because every module shares one data plane and one release
+chain.
+
+## Research it builds on
+
+Three earlier projects of the author supply methods to the model modules:
+
+| Project | Used for |
+| --- | --- |
+| Less is MoE | pruning |
+| ExpertCondenser | MoE post-training |
+| SMT | sparse fine-tuning |
+
+## Status
+
+The contracts every module is built against, the gate, the release chain, and
+the campaign with its ordering rules are implemented. A walking skeleton runs
+a full campaign (train, prune with recovery, quantize, evolve the harness,
+roll back) on a CPU, with every module it does not yet implement replaced by a
+fake. The first real workload is Red Alert 2, where a small decision model
+plays matches and is gated and trained through Honing.
+
+| Module | In code today | Next |
+| --- | --- | --- |
+| Gate and release chain | `honing/release`, `honing/campaign` | chain recovery after a crash |
+| Compression | contracts, rules, and CPU fakes | an expert-drop editor on a small MoE |
+| Post-training | `LocalJevTrainer`: SFT and GRPO on typed decisions (`honing/backends/jev`) | a Slime backend for language models |
+| Harness self-evolve | contracts, and the RA2 runner, grader, and harness (`honing/backends/ra2`) | GEPA ([#77](https://github.com/HectorHHZ/llm-honing/pull/77), in review) |
+| Serving | an HTTP decision server for Laya models (`honing/backends/jev/server.py`) | Kev models ([#76](https://github.com/HectorHHZ/llm-honing/pull/76), in review); SGLang and vLLM |
+| Data plane | the batch contracts, and RA2 demonstration and rollout providers | dataset and feedback providers |
+
+[`integrations/ra2/README.md`](integrations/ra2/README.md) runs the RA2 loop
+end to end, and CI runs its dry run on every pull request. The implementation
+steps are in [`system-design/system-design.md`](system-design/system-design.md#7-implementation-steps).
+
+## System design
 
 ![Honing system design](system-design/honing_architecture.png)
 
-## The planes
+In code, the modules are planes on one release spine. The planes meet only
+through the contracts in `honing/core`, which is what lets a user turn one on
+without the others.
 
-| Plane | Owns |
+| Plane | Module | Owns |
+| --- | --- | --- |
+| Core | | the value types and protocols every plane is built against; imports only the standard library |
+| Model Source | | the initial model: an open checkpoint, or a large model compressed first |
+| Data | data plane | online feedback and offline datasets, behind one batch type |
+| Train | post-training | algorithm, update policy, numerics, rollout source, and teacher as independent choices |
+| Compression | compression | pruning (score, select, edit) and quantization; usable standalone |
+| Harness Evolve | harness self-evolve | harness specs, episode runs, and evolution methods before, during, and after training |
+| Campaign | | which move comes next, and the rules each move must pass before it touches weights |
+| Gate and release | | one gate for every candidate, joint releases, the commit record, and rollback |
+| Serve | serving | live traffic and artifact activation |
+
+| Document | What it covers |
 | --- | --- |
-| **Core** | The value types and protocols every plane is built against; imports only the standard library |
-| **Model Source** | Where the initial model comes from — an open checkpoint, or a large model compressed first |
-| **Data** | Online feedback and offline datasets, behind one batch type |
-| **Train** | Algorithm, update policy, numerics, rollout source, and teacher as independent choices |
-| **Compression** | Pruning (score, select, edit) and quantization; usable standalone |
-| **Harness Evolve** | Harness specs, episode runs, and evolution methods before, during, and after training |
-| **Campaign** | Which move comes next, and the rules each move must pass before it touches weights |
-| **Serve** | Live traffic and artifact activation (reserved) |
-
-The idea that keeps this small enough to build:
-
-> **Every step is an update candidate.** A training step, a prune, a
-> quantization, and a harness change all pass the same gate and settle into the
-> same release chain. A bad prune is a rejected candidate or a rolled-back
-> release, not a new failure mode.
+| [`system-design/README.md`](system-design/README.md) | the planes, the dependency on Slime, and how Honing compares to inference engines, RL frameworks, and Reef |
+| [`system-design/system-design.md`](system-design/system-design.md) | subsystem contracts, the coupling model, the ordering rules, worked lifecycles, and the implementation steps |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | issue, commit, and pull request conventions; writing style; development setup |
 
 ## Dependencies
 
@@ -63,7 +178,12 @@ pre-commit run --all-files
 pytest
 ```
 
-No GPU is needed for the test suite.
+No GPU is needed for the test suite. The diagrams under `system-design/`
+render with matplotlib alone:
+
+```bash
+uv run --no-project --with matplotlib python system-design/honing_scope.py
+```
 
 ## License
 
