@@ -48,9 +48,12 @@ function auditCall(record, stageIndex = 1) {
     const forwards = record.ensemble
         ? [record.ensemble.original, record.ensemble.swapped]
         : [record];
-    if (result.modelFamily && !["laya", "kev"].includes(result.modelFamily))
+    if (
+        result.modelFamily &&
+        !["laya", "kev", "nanojev"].includes(result.modelFamily)
+    )
         throw new Error(
-            `This audit covers the laya and kev families, not ${result.modelFamily}`,
+            `This audit covers the laya, kev, and nanojev families, not ${result.modelFamily}`,
         );
     latencies.push(...forwards.map((r) => r.latencyMs));
     for (const r of forwards)

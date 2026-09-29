@@ -8,7 +8,7 @@ import {
 } from "../integration/models/factory.mjs";
 import { LayaClient } from "../integration/laya/client.mjs";
 
-test("the laya and kev families are accepted, anything else is refused", () => {
+test("the laya, kev, and nanojev families are accepted, anything else is refused", () => {
     assert.deepEqual(decisionClientOptions({}, "intent"), {
         family: "laya",
         gpu: "0",
@@ -36,9 +36,13 @@ test("the laya and kev families are accepted, anything else is refused", () => {
         ).model,
         "kev-4b",
     );
+    assert.equal(
+        decisionClientOptions({ family: "nanojev", gpu: "1" }, "intent").model,
+        "nanojev",
+    );
     assert.throws(
-        () => decisionClientOptions({ family: "nanojev" }, "intent"),
-        /nanojev is not supported; use one of laya, kev/,
+        () => decisionClientOptions({ family: "jev-omni" }, "intent"),
+        /jev-omni is not supported; use one of laya, kev, nanojev/,
     );
 });
 
@@ -96,4 +100,30 @@ test("a kev worker runs with KEV_PYTHON and the kev settings", () => {
     assert.equal(env.LAYA_GPU, "2");
     assert.equal(env.KEV_MODEL, "kev-0.8b");
     assert.equal(env.KEV_CHECKPOINT_MANIFEST, "/runs/train/checkpoint.json");
+});
+
+test("a nanojev worker runs with NANOJEV_PYTHON and the nanojev settings", () => {
+    const calls = [];
+    const saved = process.env.NANOJEV_PYTHON;
+    process.env.NANOJEV_PYTHON = "/envs/nanojev/bin/python";
+    try {
+        const client = new LayaClient({
+            family: "nanojev",
+            gpu: "4",
+            model: "nanojev",
+            checkpointManifest: null,
+            spawnProcess: fakeSpawn(calls),
+        });
+        client.ready.catch(() => {});
+        client.close();
+    } finally {
+        if (saved === undefined) delete process.env.NANOJEV_PYTHON;
+        else process.env.NANOJEV_PYTHON = saved;
+    }
+    const [{ command, env }] = calls;
+    assert.equal(command, "/envs/nanojev/bin/python");
+    assert.equal(env.DECISION_FAMILY, "nanojev");
+    assert.equal(env.NANOJEV_MODEL, "nanojev");
+    assert.equal(env.LAYA_GPU, "4");
+    assert.equal(env.NANOJEV_CHECKPOINT_MANIFEST, undefined);
 });

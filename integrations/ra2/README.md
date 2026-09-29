@@ -19,6 +19,8 @@ None of these are in the repository. Each is pinned or supplied separately.
 | Laya weights (`english`, `typed-decisions`) | Hugging Face, revisions in `pins.json` | Apache-2.0 |
 | Kev source | cloned at the commit in `pins.json` (`kevSource`) | Apache-2.0 |
 | Kev weights (`kev-0.8b`) and its Qwen3.5-0.8B-Base base | Hugging Face, revisions in `pins.json` (`kevModels`) | Apache-2.0 |
+| NanoJev source | cloned at the commit in `pins.json` (`nanojevSource`), the one #49 pinned | MIT |
+| NanoJev weights (`nanojev`, full Qwen3-0.6B) | Hugging Face, revision in `pins.json` (`nanojevModels`) | the card names no separate weight license: its source is MIT and the Qwen3-0.6B base keeps Apache-2.0 |
 
 Supalosa's own dependencies currently report 11 advisories from `npm audit`, one of them critical. They run only at setup and inside the match process.
 
@@ -152,6 +154,18 @@ Everything Laya has works with `family=kev`:
 | `LocalJevTrainer` (`sft`, `grpo`) | `KevTrainer`: continues the adapter and pointer head as `kev.train --init_from` does, and saves a Kev checkpoint with a `trained-kev` manifest the server loads with `--checkpoint-manifest` |
 
 Each request runs on its own, with no state cached across requests, so an answer does not depend on what came before. `parity/kev_serving.sh` and `parity/kev_training.py` check both against Kev's own code.
+
+## Using NanoJev
+
+[NanoJev](https://huggingface.co/C-Tianyu/NanoJev) is a third family: a full Qwen3-0.6B backbone that scores every option on its own candidate path, with a scalar head and a set attention head. `honing.backends.jev.nanojev` runs NanoJev's own `DecisionPredictor` at the source and model revisions #49 pinned, and handles requests as #49's NanoJev adapter did. Its environment follows NanoJev's own requirements (torch 2.14, transformers 5.17):
+
+```bash
+scripts/setup-nanojev.sh              # prints the NANOJEV_PYTHON and NANOJEV_SOURCE_DIR exports
+"$NANOJEV_PYTHON" -m honing.backends.jev.server --family nanojev --pins pins.json --nanojev-source "$NANOJEV_SOURCE_DIR" --gpu 0 --port 8803
+npm run match -- --family=nanojev --decision-server=http://127.0.0.1:8803 --seat=red --seed=1 --out=runs/nanojev-seed1-red
+```
+
+As for Kev, everything Laya has works with `family=nanojev`: `NanoJevDecisionModel`, the server and the stdio worker (`DECISION_FAMILY=nanojev`, `NANOJEV_*` settings, started with `NANOJEV_PYTHON`), match, duel and audit, `NanoJevQuestionCheck` (`NANOJEV_LIMITS`), and `NanoJevTrainer` (`sft`, `grpo`; full weights, or `param_subset` for the heads). The model files are checked against the checksums the model repository publishes, and a candidate path is limited to 2,048 tokens, as #49 ran it; the state is trimmed by whole entries until every path fits. `parity/nanojev_serving.py` compares serving with #49's worker and `parity/nanojev_training.py` checks the trainer.
 
 ## End to end
 

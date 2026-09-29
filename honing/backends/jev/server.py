@@ -8,20 +8,30 @@ Routes:
   fields the stdio worker emits.
 
 One model loaded on one GPU answers one request at a time; concurrent requests
-wait their turn, so many games can share one loaded model. A malformed request
-is a 400 and a model failure is a 500, each with ``{"error": ...}``.
+wait their turn, so many games can share one loaded model. Every model call runs
+on the thread that runs :meth:`DecisionServer.serve`, the one that loaded the
+model, never on a request's thread: a CUDA kernel can be chosen per thread, and
+NanoJev answered a few requests differently (by up to 0.0015) on a new thread
+than on the loading thread. The server therefore answers exactly as the stdio
+worker does. A malformed request is a 400 and a model failure is a 500, each
+with ``{"error": ...}``.
 
-Run: ``python -m honing.backends.jev.server --pins <pins.json> --model typed-decisions --gpu 0 ...`` (Laya), or
-``python -m honing.backends.jev.server --family kev --pins <pins.json> --kev-source <kev checkout> --gpu 0`` (Kev).
+Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the family's settings:
+
+- Laya: ``--model typed-decisions --model-config-dir <records> --laya-source <checkout>``
+- Kev: ``--family kev --kev-source <checkout>``
+- NanoJev: ``--family nanojev --nanojev-source <checkout>``
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import queue
 import sys
 import threading
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -55,15 +65,62 @@ def parse_decide(body: bytes) -> tuple[object, Mapping[str, object], Mapping[str
     return request.get("id"), parts, questions
 
 
+@dataclass
+class _Decision:
+    """One model call waiting for the model thread."""
+
+    parts: Mapping[str, object]
+    questions: Mapping[str, object]
+    done: threading.Event = field(default_factory=threading.Event)
+    response: Mapping[str, object] | None = None
+    error: Exception | None = None
+
+
 class DecisionServer(ThreadingHTTPServer):
-    """An HTTP server around one :class:`DecisionModel`, answering one request at a time."""
+    """An HTTP server around one :class:`DecisionModel`, answering one request at a time on the model's thread.
+
+    :meth:`serve` accepts requests on a background thread and runs every model
+    call on the calling thread until :meth:`stop`.
+    """
 
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], model: DecisionModel) -> None:
         super().__init__(address, _Handler)
         self.model = model
-        self.lock = threading.Lock()
+        self._decisions: queue.Queue[_Decision | None] = queue.Queue()
+
+    def decide(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> dict[str, object]:
+        """Hand one call to the model thread and wait for its answer; a model failure is raised here."""
+        decision = _Decision(parts, questions)
+        self._decisions.put(decision)
+        decision.done.wait()
+        if decision.error is not None:
+            raise decision.error
+        return dict(decision.response or {})
+
+    def serve(self) -> None:
+        """Accept requests on a background thread and answer them on this one until :meth:`stop`."""
+        accepting = threading.Thread(target=self.serve_forever, daemon=True)
+        accepting.start()
+        try:
+            while (decision := self._decisions.get()) is not None:
+                self._answer(decision)
+        finally:
+            self.shutdown()
+            accepting.join()
+
+    def _answer(self, decision: _Decision) -> None:
+        try:
+            decision.response = self.model.predict(decision.parts, decision.questions)
+        except Exception as error:  # reported to the waiting request as a 500
+            decision.error = error
+        finally:
+            decision.done.set()
+
+    def stop(self) -> None:
+        """Make :meth:`serve` return once the calls already handed over are answered."""
+        self._decisions.put(None)
 
     @property
     def url(self) -> str:
@@ -105,8 +162,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         try:
-            with self.server.lock:
-                response = dict(self.server.model.predict(parts, questions))
+            response = self.server.decide(parts, questions)
         except Exception as error:  # the model's own failure, reported rather than hidden
             self._send(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"{type(error).__name__}: {error}"})
             return
@@ -117,18 +173,21 @@ class _Handler(BaseHTTPRequestHandler):
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve one decision model (Laya or Kev) over HTTP.")
-    parser.add_argument("--family", choices=("laya", "kev"), default="laya")
+    parser.add_argument("--family", choices=("laya", "kev", "nanojev"), default="laya")
     parser.add_argument(
         "--pins", type=Path, required=True, help="pins.json naming the model source and model revisions"
     )
-    parser.add_argument("--model", help="model name in pins.json: typed-decisions (laya), kev-0.8b or kev-4b (kev)")
+    parser.add_argument(
+        "--model", help="model name in pins.json: typed-decisions (laya), kev-0.8b or kev-4b (kev), nanojev (nanojev)"
+    )
     parser.add_argument("--model-config-dir", type=Path, help="laya: directory of prepared model records")
     parser.add_argument("--laya-source", type=Path, help="laya: Laya checkout at the pinned revision")
     parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")
+    parser.add_argument("--nanojev-source", type=Path, help="nanojev: NanoJev checkout at the pinned revision")
     parser.add_argument("--dtype", choices=("bf16", "fp32"), default="bf16", help="kev: serving precision")
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
-    parser.add_argument("--max-len", type=int, default=2048, help="laya: input token limit")
+    parser.add_argument("--max-len", type=int, default=2048, help="laya, nanojev: input token limit")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
@@ -137,13 +196,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         # One line on stdout tells a launcher where the server is and what it loaded.
         print(json.dumps({"ready": True, "url": server.url, "metadata": dict(model.metadata)}), flush=True)
         try:
-            server.serve_forever()
+            server.serve()
         finally:
             server.server_close()
 
 
 def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
     """The model's loading context for the chosen family; a missing family setting is a usage error."""
+    if args.family == "nanojev":
+        from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings
+
+        if args.nanojev_source is None:
+            parser.error("--family nanojev needs --nanojev-source")
+        return NanoJevDecisionModel.load(
+            NanoJevSettings(
+                pins_path=args.pins,
+                source_dir=args.nanojev_source,
+                model=args.model or "nanojev",
+                gpu=args.gpu,
+                checkpoint_manifest=args.checkpoint_manifest,
+                max_length=args.max_len,
+            )
+        )
     if args.family == "kev":
         from honing.backends.jev.kev import KevDecisionModel, KevSettings
 
