@@ -30,6 +30,18 @@ pass, without the command and its output, is not review evidence.
 $ pytest
 ```
 
+## End-to-end
+
+<!--
+CI runs the end-to-end checks on every pull request (the `e2e` job: a dry-run
+campaign and a decision server with the match's Node client). Name its result.
+
+A change to a model family, a trainer, the decision server, or the engine side
+also needs an end-to-end run CI cannot do, on a GPU or in a real game: the
+command, the hardware, and the output (for example integrations/ra2/parity/,
+or a match with its audit and replay check). If it could not be run, say why.
+-->
+
 ## AI assistance
 
 <!--
@@ -46,4 +58,5 @@ remains responsible for every submitted line, claim, and test result.
 - [ ] The design specification under `system-design/` is updated, or the change does not affect it.
 - [ ] An accepted RFC is linked, or this change does not require one.
 - [ ] `pre-commit run --all-files` and `pytest` pass locally.
+- [ ] The CI `e2e` job passes, and a GPU or in-game run is reported above when the change needs one.
 - [ ] Non-trivial AI assistance is disclosed above, or none was used.
