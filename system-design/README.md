@@ -109,6 +109,10 @@ harness edits that are code, if Reef packages its evolution methods, if its harn
 layer stabilizes behind tagged releases, or if the Serve plane needs Reef's install and
 release delivery.
 
+Harness self-evolve may still run on a third-party harness infrastructure: the plan is
+to integrate one, potentially Reef or [OpenHands](https://github.com/OpenHands/OpenHands),
+for that module. The conditions above decide whether Reef is the one.
+
 ### The dependency boundary
 
 `honing/core` imports only the standard library. Planes depend on `honing.core` and never
@@ -130,6 +134,8 @@ on each other. Only `honing/backends/` may import a training framework.
 | Versioned artifacts, rollback | ❌ | ❌ | ✅ | ✅ |
 | Stays live through updates | ❌ | ❌ | ✅ | ⏳ reserved |
 | Evolves the harness (prompts, skills, tools) | ❌ | ❌ | ✅ | ✅ |
+| Serves and trains open-weight Jev-style decision models (Laya, Kev) | ❌ | ❌ | ❌ | ✅ Laya; Kev in review |
+| Calls the hosted, closed-weight Jev (TypeSafe) | ❌ | ❌ | ✅ relayed, unrecorded | ⏳ planned |
 | **Harness × weight co-adaptation** | ❌ | ❌ | ❌ | ✅ |
 | **Structural pruning and quantization, recorded per release** | ❌ | ❌ | ❌ | ✅ |
 | **Serving cost falls as the model learns** | ❌ | ❌ | ❌ | ✅ |
@@ -138,6 +144,14 @@ on each other. Only `honing/backends/` may import a training framework.
 Inference engines and RL frameworks are **components** Honing orchestrates, not
 competitors: SGLang serves rollouts and (later) traffic; Slime is the training backend.
 The comparison is about *what layer owns the loop*.
+
+The two Jev rows were checked against Reef's `main` branch on 2026-09-29, not the
+`016b4670` commit the rest of this document cites. Reef relays `/v1/decisions` to a
+gateway such as OpenRouter (`~typesafe/jev-latest`) without recording the calls
+(`evolution.multimodal` in `docs/reference/configuration.rst`), and a code search found
+no path in it that serves or trains an open-weight decision model. Honing serves and
+trains Laya through `honing/backends/jev`; Kev support is in review
+([#76](https://github.com/HectorHHZ/llm-honing/pull/76)).
 
 ### Where Honing goes beyond Reef
 

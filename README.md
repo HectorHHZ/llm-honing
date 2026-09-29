@@ -53,6 +53,13 @@ skills, tools, and agent files. The loop runs episodes, scores them with the
 same gate model updates pass, keeps the winner, and proposes the next harness.
 Methods such as GEPA and Meta-Harness plug into the propose step.
 
+The plan is to build this module by integrating a third-party harness
+infrastructure, potentially [Reef](https://github.com/Human-Agent-Society/reef) or
+[OpenHands](https://github.com/OpenHands/OpenHands). Each harness it proposes still
+passes Honing's gate and lands in the release chain with the model it was evolved
+for. Why Reef is not a dependency today, and what would change that, is in
+[`system-design/README.md`](system-design/README.md#why-reef-is-not-a-dependency).
+
 ```mermaid
 flowchart LR
     run[Run episodes] --> score[Score with the gate]
