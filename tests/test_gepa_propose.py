@@ -121,6 +121,26 @@ def test_an_improving_reply_changes_only_the_chosen_component() -> None:
 
 
 @pytest.mark.unit
+def test_a_proposed_child_records_the_task_ids_of_its_minibatch() -> None:
+    fixture = Fixture([IMPROVING], minibatch_size=3)
+    drawn: list[str] = []
+    run = fixture.runner.run
+
+    async def recording_run(spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        if spec.get(INSTRUCTIONS) != SEED.get(INSTRUCTIONS):
+            drawn.append(task.task_id)
+        return await run(spec, task, policy)
+
+    fixture.runner.run = recording_run  # type: ignore[method-assign]
+    result = fixture.propose()
+
+    child = _archive(result).candidates[1]
+    assert child.minibatch_task_ids == _archive(result).train_order[:3]
+    assert sorted(child.minibatch_task_ids) == sorted(drawn)
+    assert len(child.minibatch_task_ids) == len(child.minibatch_scores) == 3
+
+
+@pytest.mark.unit
 def test_a_non_improving_reply_proposes_nothing_but_charges_both_minibatches() -> None:
     fixture = Fixture([NOT_IMPROVING], minibatch_size=3)
 

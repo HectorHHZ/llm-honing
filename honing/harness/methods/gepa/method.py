@@ -177,7 +177,7 @@ class GEPAMethod:
 
         # The parent's cursor has already advanced, so the child starts after the
         # component just rewritten, as upstream's GEPAState does.
-        archive, child_index = archive.add(child_components, parent_index, after)
+        archive, child_index = archive.add(child_components, parent_index, after, batch_ids)
         note = (
             f"GEPA candidate {child_index}: rewrote {path} of candidate {parent_index};"
             f" minibatch sum {sum(before):.4g} -> {sum(after):.4g}"

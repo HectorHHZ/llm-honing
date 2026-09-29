@@ -51,7 +51,10 @@ class ArchiveCandidate:
     ``components`` pairs each rewritable file path with its text, sorted by
     path, so the same files always compare equal. ``validation_scores`` follows
     the archive's task order and stays ``None`` until the gate has scored the
-    candidate on every task at once.
+    candidate on every task at once. ``minibatch_task_ids`` names the training
+    task behind each of ``minibatch_scores``, in the same order; a padded
+    minibatch can name a task twice. It is empty only for a candidate added
+    without its minibatch.
     """
 
     components: tuple[tuple[str, str], ...]
@@ -59,6 +62,7 @@ class ArchiveCandidate:
     validation_scores: tuple[float, ...] | None = None
     minibatch_scores: tuple[float, ...] = ()
     component_cursor: int = 0
+    minibatch_task_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         paths = [path for path, _ in self.components]
@@ -76,6 +80,12 @@ class ArchiveCandidate:
         if self.validation_scores is not None:
             _require_scores(self.validation_scores, "validation_scores")
         _require_scores(self.minibatch_scores, "minibatch_scores")
+        require(
+            not self.minibatch_task_ids or len(self.minibatch_task_ids) == len(self.minibatch_scores),
+            f"minibatch_task_ids names {len(self.minibatch_task_ids)} tasks for"
+            f" {len(self.minibatch_scores)} minibatch scores",
+        )
+        require(all(isinstance(task_id, str) for task_id in self.minibatch_task_ids), "task ids must be strings")
 
     @property
     def paths(self) -> tuple[str, ...]:
@@ -167,7 +177,11 @@ class Archive:
         )
 
     def add(
-        self, components: Mapping[str, str], parent: int, minibatch_scores: Sequence[float] = ()
+        self,
+        components: Mapping[str, str],
+        parent: int,
+        minibatch_scores: Sequence[float] = (),
+        minibatch_task_ids: Sequence[str] = (),
     ) -> tuple[Archive, int]:
         """Append a child of ``parent``. It starts at its parent's component cursor, as upstream GEPA does."""
         require(0 <= parent < len(self.candidates), f"parent must index a candidate, got {parent}")
@@ -177,6 +191,7 @@ class Archive:
             parent=parent,
             minibatch_scores=tuple(float(s) for s in minibatch_scores),
             component_cursor=self.candidates[parent].component_cursor,
+            minibatch_task_ids=tuple(minibatch_task_ids),
         )
         return replace(self, candidates=(*self.candidates, child)), len(self.candidates)
 
@@ -336,6 +351,7 @@ class Archive:
                     ),
                     "minibatch_scores": list(candidate.minibatch_scores),
                     "component_cursor": candidate.component_cursor,
+                    "minibatch_task_ids": list(candidate.minibatch_task_ids),
                 }
                 for candidate in self.candidates
             ],
@@ -425,6 +441,10 @@ def _candidate_from_state(raw: object, index: int) -> ArchiveCandidate:
             for s in _list(fields.get("minibatch_scores"), f"candidates[{index}].minibatch_scores")
         ),
         component_cursor=_int(fields.get("component_cursor"), f"candidates[{index}].component_cursor"),
+        minibatch_task_ids=tuple(
+            _str(task_id, "minibatch task id")
+            for task_id in _list(fields.get("minibatch_task_ids"), f"candidates[{index}].minibatch_task_ids")
+        ),
     )
 
 

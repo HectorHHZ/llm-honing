@@ -42,10 +42,12 @@ def _random_archive(rng: random.Random) -> Archive:
         action = rng.choice(["add", "validate", "sample", "cursor", "charge", "serve", "minibatch"])
         size = len(archive.candidates)
         if action == "add":
+            scores = [rng.choice([0.0, 0.5, 1.0]) for _ in range(rng.randrange(4))]
             archive, _ = archive.add(
                 {**COMPONENTS, "CLAUDE.md": f"text {rng.random()}"},
                 parent=rng.randrange(size),
-                minibatch_scores=[rng.choice([0.0, 0.5, 1.0]) for _ in range(rng.randrange(4))],
+                minibatch_scores=scores,
+                minibatch_task_ids=[rng.choice(["a", "b", "c"]) for _ in scores] if rng.random() < 0.8 else [],
             )
         elif action == "validate":
             unvalidated = [i for i, c in enumerate(archive.candidates) if c.validation_scores is None]
