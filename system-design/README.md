@@ -8,8 +8,7 @@ one user or one company and deployed where they run it. Compression makes the
 model smaller, post-training makes it better at the task, harness self-evolve
 improves the prompts, skills, and tools around it, and serving deploys it. A
 user turns on only the modules they need. This document describes the planes
-behind those modules, how they depend on Slime, and how Honing compares to the
-systems around it.
+behind those modules and how they depend on Slime.
 
 ![Honing scope: four modules, the data plane, and the gate](honing_scope.png)
 
@@ -89,84 +88,6 @@ the student's architecture, so after a cut the recovery teacher is served by its
 engine. And quantization-aware training cannot be combined with Slime's DeepGEMM MoE
 forward path.
 
-### Why Reef is not a dependency
-
-[Reef](https://github.com/Human-Agent-Society/reef) is the closest system in scope, and
-its principles shape this design. It is not imported, for three reasons verified against
-its source at `016b4670`:
-
-1. **Its harness evolution methods do not ship.** GEPA, SkillClaw, and Meta-Harness live
-   in Reef's `recipes/`, which its wheel excludes; depending on Reef yields the mechanism
-   but not the methods.
-2. **Its evolution engine is bound to its own trainer and scenario**, while Honing needs
-   one gate and one joint release across weights, compression, and harness.
-3. **Training rollouts and gate evaluations must run the same harness runner.** Slime's
-   agent layer captures token-level training samples; Reef's episode runner reads
-   session logs for scoring. Using both would evaluate one runner and train on another.
-
-Reef would be reconsidered if Honing needs agents beyond Claude Code and Codex or
-harness edits that are code, if Reef packages its evolution methods, if its harness
-layer stabilizes behind tagged releases, or if the Serve plane needs Reef's install and
-release delivery.
-
-Harness self-evolve may still run on a third-party harness infrastructure: the plan is
-to integrate one, potentially Reef or [OpenHands](https://github.com/OpenHands/OpenHands),
-for that module. The conditions above decide whether Reef is the one.
-
-### The dependency boundary
-
-`honing/core` imports only the standard library. Planes depend on `honing.core` and never
-on each other. Only `honing/backends/` may import a training framework.
-`tests/contracts/test_boundaries.py` enforces all three.
-
----
-
-## How Honing differs from the surrounding stack
-
-### Capability comparison
-
-| Ability | Inference engine<br>(vLLM, SGLang) | RL framework<br>(Slime, veRL, AReaL) | Reef | **Honing** |
-|---|:---:|:---:|:---:|:---:|
-| Serves live traffic | ✅ | ❌ | ✅ | ⏳ reserved |
-| Trains weights | ❌ | ✅ | ✅ | ✅ |
-| Offline dataset training (SFT, DPO, distillation) | ❌ | ✅ | ❌ | ✅ |
-| Online feedback training (receipts → steps) | ❌ | ❌ | ✅ | ✅ |
-| Versioned artifacts, rollback | ❌ | ❌ | ✅ | ✅ |
-| Stays live through updates | ❌ | ❌ | ✅ | ⏳ reserved |
-| Evolves the harness (prompts, skills, tools) | ❌ | ❌ | ✅ | ✅ |
-| Serves and trains open-weight Jev-style decision models (Laya, Kev) | ❌ | ❌ | ❌ | ✅ Laya; Kev in review |
-| Calls the hosted, closed-weight Jev (TypeSafe) | ❌ | ❌ | ✅ relayed, unrecorded | ⏳ planned |
-| **Harness × weight co-adaptation** | ❌ | ❌ | ❌ | ✅ |
-| **Structural pruning and quantization, recorded per release** | ❌ | ❌ | ❌ | ✅ |
-| **Serving cost falls as the model learns** | ❌ | ❌ | ❌ | ✅ |
-| Ablation control (isolate what caused a gain) | ❌ | ❌ | ❌ | ✅ |
-
-Inference engines and RL frameworks are **components** Honing orchestrates, not
-competitors: SGLang serves rollouts and (later) traffic; Slime is the training backend.
-The comparison is about *what layer owns the loop*.
-
-The two Jev rows were checked against Reef's `main` branch on 2026-09-29, not the
-`016b4670` commit the rest of this document cites. Reef relays `/v1/decisions` to a
-gateway such as OpenRouter (`~typesafe/jev-latest`) without recording the calls
-(`evolution.multimodal` in `docs/reference/configuration.rst`), and a code search found
-no path in it that serves or trains an open-weight decision model. Honing serves and
-trains Laya through `honing/backends/jev`; Kev support is in review
-([#76](https://github.com/HectorHHZ/llm-honing/pull/76)).
-
-### Where Honing goes beyond Reef
-
-Reef is the closest system in scope, so the five axes below are where Honing's
-capabilities differ. Each row was verified against the Reef source at `016b4670`, with
-the deciding file cited so a reader can check the claim.
-
-| Axis | Reef | Honing | Where in Reef's source |
-|---|---|---|---|
-| **Training algorithms** | 3 production loss families — `sao`, `tttd`, `openclawrl` — all test-time-training RL variants. No SFT, no DPO, no distillation. (CORAL reuses `tttd`'s family rather than adding one.) | SFT, offline distillation, on-policy distillation, GKD, PPO, GRPO, and DPO | `recipes/{sao,tttd,openclawrl}/__init__.py` register the only three; `recipes/coral/recipe.py:36` sets `loss_family="tttd"` |
-| **Gradient update policy** | Full fine-tune or LoRA only, selected by one flag | `full` · `lora` · `param_subset` · `sparse_mask`, independent of the algorithm | `megatron_lora_rank` is the sole switch (`reef/train/slime_backend/reef_adapters/megatron/lora.py:113`) |
-| **Data sources** | Records only. Both `ReportedFeedbackProcessor` and `ComputedFeedbackProcessor` read the record store; there is no offline dataset path. | Online feedback **and** offline datasets behind one `TrainingBatch` | `reef/train/processors/{reported,computed}.py`; no dataset loader exists under `reef/train/` |
-| **Model compression** | None. Serving cost is fixed by the checkpoint a deployment starts with. | The Compression plane: expert, layer, head, and channel pruning with recovery; post-training quantization; quantization-aware training | no pruning code in `reef/` (matches are file cleanup and export-time quantization) |
-| **Harness × weights** | Separate recipes. A deployment picks `CordisRecipe` (harness) *or* a `WeightTrainingRecipe` (weights), never both, and has no ablation control. | Harness evolution as three phases around weight training, with a co-adaptation scheduler | `reef/train/cordis_backend/recipe.py` and `reef/recipe/base.py:161` are disjoint branches of `Recipe` |
-
 ---
 
 ## Acknowledgements
@@ -175,10 +96,6 @@ the deciding file cited so a reader can check the claim.
   depends on, pinned at `41014d1f`.
 - [SGLang](https://github.com/sgl-project/sglang) and Megatron-Core — the inference and
   training engines, reached through Slime.
-- [Reef](https://github.com/Human-Agent-Society/reef) (Apache-2.0) — the design reference
-  for publishing every change as a gated candidate, writing the commit record before the
-  head moves, and attributing each sample to the release that produced it. No Reef code
-  is imported or copied.
 
 ---
 
@@ -186,7 +103,7 @@ the deciding file cited so a reader can check the claim.
 
 ```text
 system-design/
-  README.md                  this file: what Honing is, its planes, dependencies, how it compares
+  README.md                  this file: what Honing is, its planes, dependencies
   system-design.md           the design: contracts, coupling, rules, lifecycles, implementation steps
   honing_architecture.py     the system design diagram (matplotlib, self-contained)
   honing_scope.py            the four modules, the data plane, and the gate
