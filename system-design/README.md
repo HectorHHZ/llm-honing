@@ -1,20 +1,25 @@
 # Honing
 
-**Continual specialization infra: a large model that sheds its own dead weight while it learns.**
+One infra to customize, train, and deploy a model end to end. Use all of its
+modules, or only the ones you need.
 
-Honing is post-training infrastructure that turns a large general model into a leaner
-domain-specialized one *over time*. As the model serves real traffic and real data, the
-system keeps the capacity that carries the work, removes what it no longer needs, and
-publishes each result as a versioned, rollback-able release. The model gets better
-in-domain while getting cheaper to run.
+Honing takes an open model, or a model behind an API, to a model customized for
+one user or one company and deployed where they run it. Compression makes the
+model smaller, post-training makes it better at the task, harness self-evolve
+improves the prompts, skills, and tools around it, and serving deploys it. A
+user turns on only the modules they need. This document describes the planes
+behind those modules, how they depend on Slime, and how Honing compares to the
+systems around it.
 
-Three framings of the same mechanism:
+![Honing scope: four modules, the data plane, and the gate](honing_scope.png)
+
+What each audience gets from it:
 
 | Audience | The claim |
 |---|---|
-| **Researchers** | A post-training process that lets a large MoE model continuously shed dead weight while it learns and works — keeping the few parts doing real work, cutting the rest, so the model becomes smaller, faster, and cheaper on its own. |
-| **Practitioners** | A general model becomes a specialized model through use. It keeps the capacity that matters, drops what it doesn't, and delivers similar or better in-domain intelligence at a fraction of serving cost. |
-| **Decision makers** | Your AI gets smarter for your business while getting cheaper to run — instead of paying forever for an oversized general model. Because honing runs on your own servers, proprietary data never leaves your infrastructure. |
+| Researchers | Compression, post-training, and harness evolution are moves under one gate. Each move is measured against the release it would replace and can be rolled back, so the source of a gain can be isolated. |
+| Practitioners | One infra from a base model to a deployed one. A company with GPUs can prune, quantize, and post-train a large open model into a smaller domain expert; an individual with no GPUs can evolve the harness around an API model on their own data. |
+| Decision makers | A model that improves on your own data and, with compression turned on, costs less to serve. With an open model on your own servers, proprietary data never leaves your infrastructure. |
 
 ---
 
@@ -22,28 +27,29 @@ Three framings of the same mechanism:
 
 ![Honing system design](honing_architecture.png)
 
-Honing is a set of planes on one release spine: a campaign that decides the next move,
-one gate, and a release chain that records every change before it takes effect. The
-planes meet only through the contracts in `honing/core`.
+In code, the modules are planes on one release spine: a campaign that decides the
+next move, one gate, and a release chain that records every change before it takes
+effect. The planes meet only through the contracts in `honing/core`, which is what
+lets a user turn one module on without the others.
 
-| Plane | Owns | In code today |
-|---|---|---|
-| **Core** | Value types and protocols every plane is built against; standard library only | `honing/core` |
-| **Model Source** | The initial model: an open checkpoint, or a large model compressed first | protocol + fake |
-| **Data** | Online feedback and offline datasets behind one batch type | protocol + fake |
-| **Train** | Algorithm, update policy, numerics, rollout source, and teacher; run by Slime, or by a local trainer for DPO | protocol + fake |
-| **Compression** | Pruning as score → select → edit, and post-training quantization; usable standalone | protocol + fake |
-| **Harness Evolve** | Harness specs, episode runs, and evolution methods before, during, and after training | protocol + fake |
-| **Campaign** | The scheduler, and the ordering rules every move passes before it touches weights | `honing/campaign` |
-| **Gate / Release** | One gate for every candidate; joint releases; the commit record; rollback | `honing/release` |
-| **Serve** | Live traffic and artifact activation | reserved |
+| Plane | Module | Owns | In code today |
+|---|---|---|---|
+| Core | | Value types and protocols every plane is built against; standard library only | `honing/core` |
+| Model Source | | The initial model: an open checkpoint, or a large model compressed first | protocol + fake |
+| Data | data plane | Online feedback and offline datasets behind one batch type | contracts; RA2 demonstration and rollout providers |
+| Train | post-training | Algorithm, update policy, numerics, rollout source, and teacher; run by Slime, or by a local trainer for DPO | `LocalJevTrainer` for decision models; Slime planned |
+| Compression | compression | Pruning as score → select → edit, and post-training quantization; usable standalone | protocol + fake |
+| Harness Evolve | harness self-evolve | Harness specs, episode runs, and evolution methods before, during, and after training | contracts; RA2 runner, grader, and harness |
+| Campaign | | The scheduler, and the ordering rules every move passes before it touches weights | `honing/campaign` |
+| Gate / Release | | One gate for every candidate; joint releases; the commit record; rollback | `honing/release` |
+| Serve | serving | Live traffic and artifact activation | a decision server for Laya models; live traffic reserved |
 
 The one idea that makes this small enough to build:
 
-> **Every step is an `UpdateCandidate`.** A training step, a prune, a quantization, and a
-> harness change pass the same gate and settle into the same release chain. A bad prune
-> is a rejected candidate or a rolled-back release — not a new failure mode needing new
-> machinery.
+> Every step is an `UpdateCandidate`. A training step, a prune, a quantization, and a
+> harness change pass the same gate and settle into the same release chain, so a bad
+> prune is a rejected candidate or a rolled-back release and needs no machinery of its
+> own.
 
 Read [`system-design.md`](system-design.md) for the subsystem contracts, the coupling
 model, the ordering rules, and worked lifecycles.
@@ -103,6 +109,10 @@ harness edits that are code, if Reef packages its evolution methods, if its harn
 layer stabilizes behind tagged releases, or if the Serve plane needs Reef's install and
 release delivery.
 
+Harness self-evolve may still run on a third-party harness infrastructure: the plan is
+to integrate one, potentially Reef or [OpenHands](https://github.com/OpenHands/OpenHands),
+for that module. The conditions above decide whether Reef is the one.
+
 ### The dependency boundary
 
 `honing/core` imports only the standard library. Planes depend on `honing.core` and never
@@ -124,6 +134,8 @@ on each other. Only `honing/backends/` may import a training framework.
 | Versioned artifacts, rollback | ❌ | ❌ | ✅ | ✅ |
 | Stays live through updates | ❌ | ❌ | ✅ | ⏳ reserved |
 | Evolves the harness (prompts, skills, tools) | ❌ | ❌ | ✅ | ✅ |
+| Serves and trains open-weight Jev-style decision models (Laya, Kev) | ❌ | ❌ | ❌ | ✅ Laya; Kev in review |
+| Calls the hosted, closed-weight Jev (TypeSafe) | ❌ | ❌ | ✅ relayed, unrecorded | ⏳ planned |
 | **Harness × weight co-adaptation** | ❌ | ❌ | ❌ | ✅ |
 | **Structural pruning and quantization, recorded per release** | ❌ | ❌ | ❌ | ✅ |
 | **Serving cost falls as the model learns** | ❌ | ❌ | ❌ | ✅ |
@@ -132,6 +144,14 @@ on each other. Only `honing/backends/` may import a training framework.
 Inference engines and RL frameworks are **components** Honing orchestrates, not
 competitors: SGLang serves rollouts and (later) traffic; Slime is the training backend.
 The comparison is about *what layer owns the loop*.
+
+The two Jev rows were checked against Reef's `main` branch on 2026-09-29, not the
+`016b4670` commit the rest of this document cites. Reef relays `/v1/decisions` to a
+gateway such as OpenRouter (`~typesafe/jev-latest`) without recording the calls
+(`evolution.multimodal` in `docs/reference/configuration.rst`), and a code search found
+no path in it that serves or trains an open-weight decision model. Honing serves and
+trains Laya through `honing/backends/jev`; Kev support is in review
+([#76](https://github.com/HectorHHZ/llm-honing/pull/76)).
 
 ### Where Honing goes beyond Reef
 
@@ -169,7 +189,7 @@ system-design/
   README.md                  this file: what Honing is, its planes, dependencies, how it compares
   system-design.md           the design: contracts, coupling, rules, lifecycles, implementation steps
   honing_architecture.py     the system design diagram (matplotlib, self-contained)
-  honing_scope.py            the four modules, the data plane, and the gate, for the top-level README
+  honing_scope.py            the four modules, the data plane, and the gate
   honing_compositions.py     which modules different users turn on, for the top-level README
   *.png                      each rendered diagram, regenerated by the script of the same name
 
