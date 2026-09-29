@@ -39,7 +39,7 @@ def _random_archive(rng: random.Random) -> Archive:
     """Random adds, validations, parent draws, cursor moves and charges, in a random order."""
     archive = Archive.seed(COMPONENTS, TASK_IDS, rng.randrange(1000))
     for _ in range(rng.randrange(1, 25)):
-        action = rng.choice(["add", "validate", "sample", "cursor", "charge", "serve"])
+        action = rng.choice(["add", "validate", "sample", "cursor", "charge", "serve", "minibatch"])
         size = len(archive.candidates)
         if action == "add":
             archive, _ = archive.add(
@@ -58,6 +58,11 @@ def _random_archive(rng: random.Random) -> Archive:
             archive, _ = archive.next_component(rng.randrange(size))
         elif action == "charge":
             archive = archive.charge(rng.randrange(10))
+        elif action == "minibatch":
+            train_ids = rng.choice([["a", "b", "c"], ["a", "b", "c", "d", "e"]])
+            size = rng.randrange(1, 4)
+            archive, batch = archive.next_minibatch(train_ids, size)
+            assert len(batch) == size
         else:
             archive = archive.with_served(rng.randrange(size))
     return archive

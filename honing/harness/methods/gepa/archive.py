@@ -8,19 +8,25 @@ came from.
 
 Parent sampling is delegated to upstream GEPA
 (``gepa.gepa_utils.select_program_candidate_from_pareto_front``) rather than
-reimplemented, so a parent pick here is the pick GEPA itself would make.
+reimplemented, so a parent pick here is the pick GEPA itself would make. The
+training minibatches follow upstream's ``EpochShuffledBatchSampler`` and draw
+from the same RNG, as upstream's ``gepa.optimize`` shares one RNG between the
+two.
 """
 
 from __future__ import annotations
 
 import random
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from honing.core import ContractError, require
 from honing.core.state import METHOD_STATE_VERSION_KEY, method_state_version
 
-ARCHIVE_SCHEMA_VERSION = 1
+# 2: the training-minibatch sampler's state (iteration, train_ids, train_order, train_epoch,
+# train_minibatch_size).
+ARCHIVE_SCHEMA_VERSION = 2
 
 # ``random.Random.getstate()`` for the Mersenne Twister: a version, 624 words
 # of generator state plus the position within them, and a cached Gaussian.
@@ -83,6 +89,14 @@ class Archive:
     Each operation returns a new archive and leaves this one unchanged, so a
     state already handed to the campaign cannot shift underneath it.
     ``task_ids`` is the gate's task order; validation scores are stored in it.
+
+    The last five fields are the training-minibatch sampler's state:
+    ``iteration`` counts the minibatches drawn (upstream's ``state.i + 1``),
+    ``train_ids`` are the training task ids the current epoch was shuffled
+    from, ``train_order`` is that epoch's shuffled and padded order,
+    ``train_epoch`` is its epoch number (``-1`` before the first draw), and
+    ``train_minibatch_size`` is the size ``train_order`` was padded for
+    (``0`` before the first draw).
     """
 
     task_ids: tuple[str, ...]
@@ -90,6 +104,11 @@ class Archive:
     rng_state: RngState
     served: int = 0
     metric_calls: int = 0
+    iteration: int = 0
+    train_ids: tuple[str, ...] = ()
+    train_order: tuple[str, ...] = ()
+    train_epoch: int = -1
+    train_minibatch_size: int = 0
 
     def __post_init__(self) -> None:
         require(len(self.task_ids) > 0, "a GEPA archive needs at least one validation task")
@@ -119,6 +138,22 @@ class Archive:
         )
         require(0 <= self.served < len(self.candidates), f"served must index a candidate, got {self.served}")
         require(self.metric_calls >= 0, f"metric_calls must be >= 0, got {self.metric_calls}")
+        require(self.iteration >= 0, f"iteration must be >= 0, got {self.iteration}")
+        require(self.train_epoch >= -1, f"train_epoch must be >= -1, got {self.train_epoch}")
+        require(len(set(self.train_ids)) == len(self.train_ids), "train task ids must be unique")
+        require(
+            bool(self.train_ids) == bool(self.train_order) and set(self.train_order) <= set(self.train_ids),
+            "train_order must be a padded shuffle of train_ids, or both empty",
+        )
+        require(
+            (
+                self.train_minibatch_size == 0
+                if not self.train_order
+                else self.train_minibatch_size >= 1 and len(self.train_order) % self.train_minibatch_size == 0
+            ),
+            f"train_order holds {len(self.train_order)} ids, which is not padded for minibatches of"
+            f" {self.train_minibatch_size}",
+        )
         # Rebuilding the generator is the only complete check that the state is one it accepts.
         _rng_from_state(self.rng_state)
 
@@ -230,6 +265,52 @@ class Archive:
         advanced = replace(candidate, component_cursor=(candidate.component_cursor + 1) % len(paths))
         return self._with_candidate(index, advanced), paths[candidate.component_cursor]
 
+    def next_minibatch(self, train_ids: Sequence[str], size: int) -> tuple[Archive, tuple[str, ...]]:
+        """The next training minibatch, as upstream's ``EpochShuffledBatchSampler`` draws it.
+
+        Each epoch shuffles the training ids with the archive's RNG and pads the
+        order to a multiple of ``size`` with the least used ids; minibatch ``i``
+        is slice ``i`` of that order. Two differences from upstream, on purpose:
+        upstream reshuffles when the training set's size changes, and this
+        reshuffles whenever the ids change, since a move can pass other tasks of
+        the same size; and this also reshuffles when ``size`` changes, since the
+        order is padded for one size, where upstream fixes the size for a run.
+        """
+        train_ids = tuple(train_ids)
+        require(size >= 1, f"minibatch size must be >= 1, got {size}")
+        require(len(train_ids) > 0, "a minibatch needs at least one training task")
+        require(len(set(train_ids)) == len(train_ids), "training task ids must be unique")
+        # Upstream: base_idx = state.i * minibatch_size, with the epoch measured
+        # against the previous epoch's order (batch_sampler.py:86-92).
+        base = self.iteration * size
+        epoch = 0 if self.train_epoch == -1 else base // max(len(self.train_order), 1)
+        archive = self
+        if (
+            not self.train_order
+            or train_ids != self.train_ids
+            or size != self.train_minibatch_size
+            or epoch > self.train_epoch
+        ):
+            rng = _rng_from_state(self.rng_state)
+            order = list(train_ids)
+            rng.shuffle(order)
+            uses = Counter(order)
+            for _ in range((size - len(order) % size) % size):
+                least_used = uses.most_common()[::-1][0][0]
+                order.append(least_used)
+                uses[least_used] += 1
+            archive = replace(
+                self,
+                rng_state=_rng_state_of(rng),
+                train_ids=train_ids,
+                train_order=tuple(order),
+                train_epoch=epoch,
+                train_minibatch_size=size,
+            )
+        start = base % len(archive.train_order)
+        batch = archive.train_order[start : start + size]
+        return replace(archive, iteration=self.iteration + 1), batch
+
     def charge(self, metric_calls: int) -> Archive:
         """Add episodes spent to the budget."""
         require(metric_calls >= 0, f"metric_calls to charge must be >= 0, got {metric_calls}")
@@ -261,6 +342,11 @@ class Archive:
             "served": self.served,
             "metric_calls": self.metric_calls,
             "rng_state": [version, list(words), gauss],
+            "iteration": self.iteration,
+            "train_ids": list(self.train_ids),
+            "train_order": list(self.train_order),
+            "train_epoch": self.train_epoch,
+            "train_minibatch_size": self.train_minibatch_size,
         }
 
     @classmethod
@@ -289,6 +375,11 @@ class Archive:
             ),
             served=_int(state.get("served"), "served"),
             metric_calls=_int(state.get("metric_calls"), "metric_calls"),
+            iteration=_int(state.get("iteration"), "iteration"),
+            train_ids=tuple(_str(item, "train_ids[]") for item in _list(state.get("train_ids"), "train_ids")),
+            train_order=tuple(_str(item, "train_order[]") for item in _list(state.get("train_order"), "train_order")),
+            train_epoch=_int(state.get("train_epoch"), "train_epoch"),
+            train_minibatch_size=_int(state.get("train_minibatch_size"), "train_minibatch_size"),
         )
 
     def _with_candidate(self, index: int, candidate: ArchiveCandidate) -> Archive:
