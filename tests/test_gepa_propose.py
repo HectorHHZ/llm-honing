@@ -536,13 +536,3 @@ def test_a_template_without_its_placeholders_is_refused() -> None:
         GEPAMethod(
             FakeChatModel([]), GEPAConfig(max_metric_calls=1, reflection_prompt_template="<curr_param>"), VALIDATION
         )
-
-
-@pytest.mark.unit
-def test_selection_and_recording_wait_for_issue_25() -> None:
-    method = Fixture().method
-
-    with pytest.raises(NotImplementedError, match="#25"):
-        method.selector.decide(None, None)  # type: ignore[arg-type]
-    with pytest.raises(NotImplementedError, match="#25"):
-        method.record({}, None, None, None)  # type: ignore[arg-type]

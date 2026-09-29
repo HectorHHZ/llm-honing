@@ -25,8 +25,9 @@ from honing.core import ContractError, require
 from honing.core.state import METHOD_STATE_VERSION_KEY, method_state_version
 
 # 2: the training-minibatch sampler's state (iteration, train_ids, train_order, train_epoch,
-# train_minibatch_size).
-ARCHIVE_SCHEMA_VERSION = 2
+# train_minibatch_size). 3: validation_policy, the checksum of the weights every validation
+# score was taken under.
+ARCHIVE_SCHEMA_VERSION = 3
 
 # ``random.Random.getstate()`` for the Mersenne Twister: a version, 624 words
 # of generator state plus the position within them, and a cached Gaussian.
@@ -100,6 +101,11 @@ class Archive:
     state already handed to the campaign cannot shift underneath it.
     ``task_ids`` is the gate's task order; validation scores are stored in it.
 
+    ``validation_policy`` is the checksum of the weights every validation
+    score was taken under, ``None`` until the first one is recorded. Upstream
+    GEPA holds the model fixed; Honing can change the weights between harness
+    moves, and a score from other weights is not comparable.
+
     The last five fields are the training-minibatch sampler's state:
     ``iteration`` counts the minibatches drawn (upstream's ``state.i + 1``),
     ``train_ids`` are the training task ids the current epoch was shuffled
@@ -119,6 +125,7 @@ class Archive:
     train_order: tuple[str, ...] = ()
     train_epoch: int = -1
     train_minibatch_size: int = 0
+    validation_policy: str | None = None
 
     def __post_init__(self) -> None:
         require(len(self.task_ids) > 0, "a GEPA archive needs at least one validation task")
@@ -163,6 +170,11 @@ class Archive:
             ),
             f"train_order holds {len(self.train_order)} ids, which is not padded for minibatches of"
             f" {self.train_minibatch_size}",
+        )
+        require(
+            self.validation_policy is None
+            or (isinstance(self.validation_policy, str) and self.validation_policy != ""),
+            f"validation_policy must be a checksum or None, got {self.validation_policy!r}",
         )
         # Rebuilding the generator is the only complete check that the state is one it accepts.
         _rng_from_state(self.rng_state)
@@ -326,6 +338,16 @@ class Archive:
         batch = archive.train_order[start : start + size]
         return replace(archive, iteration=self.iteration + 1), batch
 
+    def under_policy(self, checksum: str) -> Archive:
+        """Pin the weights validation scores are taken under. Scores from other weights are refused."""
+        require(bool(checksum), "a validation policy needs a checksum")
+        if self.validation_policy is not None and self.validation_policy != checksum:
+            raise ContractError(
+                f"the archive's validation scores were taken under weights {self.validation_policy},"
+                f" not {checksum}"
+            )
+        return replace(self, validation_policy=checksum)
+
     def charge(self, metric_calls: int) -> Archive:
         """Add episodes spent to the budget."""
         require(metric_calls >= 0, f"metric_calls to charge must be >= 0, got {metric_calls}")
@@ -363,6 +385,7 @@ class Archive:
             "train_order": list(self.train_order),
             "train_epoch": self.train_epoch,
             "train_minibatch_size": self.train_minibatch_size,
+            "validation_policy": self.validation_policy,
         }
 
     @classmethod
@@ -396,6 +419,7 @@ class Archive:
             train_order=tuple(_str(item, "train_order[]") for item in _list(state.get("train_order"), "train_order")),
             train_epoch=_int(state.get("train_epoch"), "train_epoch"),
             train_minibatch_size=_int(state.get("train_minibatch_size"), "train_minibatch_size"),
+            validation_policy=_optional_str(state.get("validation_policy"), "validation_policy"),
         )
 
     def _with_candidate(self, index: int, candidate: ArchiveCandidate) -> Archive:
@@ -470,6 +494,10 @@ def _float(value: object, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ContractError(f"{name} must be a number, got {value!r}")
     return float(value)
+
+
+def _optional_str(value: object, name: str) -> str | None:
+    return None if value is None else _str(value, name)
 
 
 def _str(value: object, name: str) -> str:

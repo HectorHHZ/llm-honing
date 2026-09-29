@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,11 +68,12 @@ def build_campaign(
     rollout: RolloutProvider | None = None,
     method: EvolveMethod | None = None,
     data: DataProvider | None = None,
+    make_runner: Callable[[FakeWorld], FakeEpisodeRunner] = FakeEpisodeRunner,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake."""
     world = FakeWorld()
     trainer = FakeTrainer(world, support=support, gain=trainer_gain)
-    runner = FakeEpisodeRunner(world)
+    runner = make_runner(world)
     grader = FakeTaskGrader()
     method = method if method is not None else AppendInstructionMethod()
     editor = UniformExpertEditor(world)
