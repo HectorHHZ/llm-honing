@@ -5,13 +5,15 @@ No game needed. Requests vary state length (some force trimming), question count
 
 import json
 import os
-import random
 import subprocess
 import sys
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from decision_requests import requests
 
 PY = os.environ.get("LAYA_PYTHON", sys.executable)
 PR49 = Path(os.environ["PR49_DIR"])
@@ -24,34 +26,6 @@ ENV = {
     "LAYA_SOURCE_DIR": str(PR49 / "deps/laya"),
     "LAYA_MODEL_CONFIG_DIR": str(PR49 / ".cache/models"),
 }
-BUILDINGS = ["Power plant", "Ore refinery", "Barracks", "War factory", "Radar", "Battle lab", "Wall", "Service depot"]
-
-
-def requests(n=24, seed=0):
-    rng = random.Random(seed)
-    out = []
-    for i in range(n):
-        essential = [f"Tick {30 * (i + 1)}. Credits {rng.randint(0, 10000)}. Army {rng.randint(0, 20)}."]
-        logs = [
-            f"t{j}: order {rng.choice(BUILDINGS)} queued and {rng.choice(['placed', 'cancelled', 'delayed'])}"
-            for j in range(rng.choice([0, 5, 400]))
-        ]
-        parts = {
-            "essential": essential,
-            "details": [f"Visible enemy units: {rng.randint(0, 9)}"],
-            "memory": [],
-            "logs": logs,
-        }
-        questions = {}
-        for q in range(rng.randint(1, 3)):
-            opts = rng.sample(BUILDINGS, rng.randint(2, 8))
-            questions[f"q{q}"] = {
-                "type": "choice",
-                "instructions": f"Which structure should be built next ({q})?",
-                "criteria": {f"o{k}": label for k, label in enumerate(opts)},
-            }
-        out.append({"id": i + 1, "parts": parts, "questions": questions})
-    return out
 
 
 def stdio(worker, gpu, reqs, cwd):

@@ -10,6 +10,15 @@ These scripts compare the code in Honing with the original RA2 experiment in #49
 
 `make_demos.py` writes six labelled matches in #49's directory format, with seed 101 held out for validation, so training parity needs no game.
 
+## Kev against Kev's own code
+
+The Kev family has no counterpart in #49, so these compare Honing with Kev's own code at the commit in `pins.json`. They need the Kev environment from `scripts/setup-kev.sh` (`KEV_PYTHON`, `KEV_SOURCE_DIR`) and the pinned snapshots in the Hugging Face cache.
+
+| Script | Compares | Result on an H100 |
+|---|---|---|
+| `kev_serving.sh <out>` | Honing's `KevDecisionModel` against `kev.serve` at the pinned commit, on the 24 serving requests plus 3 whose long logs make Kev trim the state: a reference running the same computation (bf16, no CUDA graphs), `kev.serve`'s CUDA defaults, and Kev's exact fp32 path | same computation: 56 of 56 questions choose the same option with identical probabilities; fp32: identical; `kev.serve` defaults (CUDA graphs): largest difference 0.008, one near-tie (0.4264 vs 0.4309) chosen differently |
+| `kev_training.py <gpus> <work> <matches>` | `KevTrainer` sft on `make_demos.py`'s matches, the trained checkpoint served from its manifest, and grpo on synthetic rollouts favoring one option | sft validation loss 3.09 to 1.32 (584 train, 118 validation examples); the trained checkpoint serves at temperature 1.0; grpo raises the favored option from 0.10 to 0.91, on 16 of 16 states |
+
 ## Real game controller parity on CPU
 
 `game_parity.py` compares the original #49 controller with the extracted

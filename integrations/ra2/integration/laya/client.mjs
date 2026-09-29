@@ -3,9 +3,12 @@ import { createInterface } from "node:readline";
 import { ROOT } from "../paths.mjs";
 export class LayaClient {
     constructor({
+        family = "laya",
         gpu = "0",
         model = "english",
-        python = process.env.LAYA_PYTHON ?? "python3",
+        python = (family === "kev"
+            ? process.env.KEV_PYTHON
+            : process.env.LAYA_PYTHON) ?? "python3",
         checkpointManifest = undefined,
         spawnProcess = spawn,
     } = {}) {
@@ -16,17 +19,22 @@ export class LayaClient {
             this.readyResolve = resolve;
             this.readyReject = reject;
         });
+        // The worker reads its family's settings: LAYA_* for Laya, KEV_* for Kev.
+        const manifestVar =
+            family === "kev"
+                ? "KEV_CHECKPOINT_MANIFEST"
+                : "LAYA_CHECKPOINT_MANIFEST";
         const workerEnv = {
             ...process.env,
+            DECISION_FAMILY: family,
             LAYA_GPU: String(gpu),
-            LAYA_MODEL_TYPE: model,
+            [family === "kev" ? "KEV_MODEL" : "LAYA_MODEL_TYPE"]: model,
         };
-        if (checkpointManifest === null)
-            delete workerEnv.LAYA_CHECKPOINT_MANIFEST;
+        if (checkpointManifest === null) delete workerEnv[manifestVar];
         else if (checkpointManifest !== undefined) {
             if (typeof checkpointManifest !== "string" || !checkpointManifest)
                 throw new Error("Invalid per-player checkpoint manifest");
-            workerEnv.LAYA_CHECKPOINT_MANIFEST = checkpointManifest;
+            workerEnv[manifestVar] = checkpointManifest;
         }
         this.process = spawnProcess(
             python,

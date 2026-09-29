@@ -1,6 +1,8 @@
 import {
+    checkServedFamily,
     createDecisionClient,
     decisionClientOptions,
+    FAMILIES,
 } from "../models/factory.mjs";
 import {
     writeFileSync,
@@ -180,7 +182,7 @@ try {
     baseline.refresh(step.observations[other], 0);
     baseline.start();
     client = createDecisionClient(clientOptions);
-    const runtime = await client.ready;
+    const runtime = checkServedFamily(clientOptions, await client.ready);
     const sourceFiles = [
         "README.md",
         "pins.json",
@@ -236,10 +238,9 @@ try {
         },
         questions: { path: questionsPath, sha256: sha256(questionsText) },
         modelFamily: clientOptions.family,
-        inferenceCallUnit:
-            clientOptions.family === "laya"
-                ? "native_model_forward"
-                : "native_choice_request",
+        inferenceCallUnit: FAMILIES.includes(clientOptions.family)
+            ? "native_model_forward"
+            : "native_choice_request",
         decisionLogFormat,
         protocol:
             decisionMode === "staged"

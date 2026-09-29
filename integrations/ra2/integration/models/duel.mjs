@@ -16,7 +16,12 @@ import { IntentPolicy } from "../laya/intent-policy.mjs";
 import { PARAMETER_LIMIT } from "../laya/catalog-policy.mjs";
 import { CompressedDecisionLog } from "../laya/decision-log.mjs";
 import { STAGED_PROTOCOL, MAX_STAGES } from "../laya/staged.mjs";
-import { createDecisionClient, decisionClientOptions } from "./factory.mjs";
+import {
+    checkServedFamily,
+    createDecisionClient,
+    decisionClientOptions,
+    FAMILIES,
+} from "./factory.mjs";
 import { DUEL_SEATS, normalSeats, resolveDuelStep } from "./duel-core.mjs";
 import { loadQuestions } from "../laya/text.mjs";
 
@@ -58,10 +63,10 @@ const options = Object.fromEntries(
             "Use an explicitly reserved GPU index",
         );
         const config = decisionClientOptions(seatArgs, "intent");
-        if (config.family === "laya") {
+        if (config.family === "laya" || config.family === "kev") {
             assert(
                 seatArgs["checkpoint-manifest"],
-                "Use an explicit Laya checkpoint manifest or upstream",
+                "Use an explicit checkpoint manifest or upstream",
             );
             config.checkpointManifest =
                 seatArgs["checkpoint-manifest"] === "upstream"
@@ -186,7 +191,13 @@ try {
     const runtimeResults = await Promise.all(
         DUEL_SEATS.map((seat) => clients[seat].ready),
     );
-    DUEL_SEATS.forEach((seat, i) => (runtimes[seat] = runtimeResults[i]));
+    DUEL_SEATS.forEach(
+        (seat, i) =>
+            (runtimes[seat] = checkServedFamily(
+                options[seat],
+                runtimeResults[i],
+            )),
+    );
     const manifest = {
         kind: "model-duel-v1",
         implementationSha256,
@@ -233,10 +244,9 @@ try {
             opponentKind: "decision-model",
             modelFamily: options[seat].family,
             runtime: runtimes[seat],
-            inferenceCallUnit:
-                options[seat].family === "laya"
-                    ? "native_model_forward"
-                    : "native_choice_request",
+            inferenceCallUnit: FAMILIES.includes(options[seat].family)
+                ? "native_model_forward"
+                : "native_choice_request",
         };
         save(seat + "/manifest.json", manifests[seat]);
     }
