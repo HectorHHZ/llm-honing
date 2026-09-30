@@ -121,7 +121,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--pins", type=Path, required=True, help="pins.json naming the model source and model revisions"
     )
-    parser.add_argument("--model", help="model name in pins.json: typed-decisions (laya) or kev-0.8b (kev)")
+    parser.add_argument("--model", help="model name in pins.json: typed-decisions (laya), kev-0.8b or kev-4b (kev)")
     parser.add_argument("--model-config-dir", type=Path, help="laya: directory of prepared model records")
     parser.add_argument("--laya-source", type=Path, help="laya: Laya checkout at the pinned revision")
     parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")

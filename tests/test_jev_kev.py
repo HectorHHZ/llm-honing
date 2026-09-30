@@ -248,14 +248,23 @@ def test_a_trained_manifest_must_name_this_source_and_release(
 
 
 @pytest.mark.unit
-def test_pins_name_the_kev_source_release_and_base() -> None:
+def test_pins_name_the_kev_source_releases_and_bases() -> None:
     pins = json.loads((INTEGRATION / "pins.json").read_text())
+    # kev-0.8b was trained at this commit; kev-4b's recorded source hashes (commit 6d02f5d) match it file for file
     assert pins["kevSource"]["revision"] == "45923b7a3460b6d36358e2e143455902c1eb856b"
-    assert pins["kevModels"]["kev-0.8b"] == {
-        "repo": "jaredpalmer/kev-0.8b",
-        "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e",
-        "base": "Qwen/Qwen3.5-0.8B-Base",
-        "baseRevision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68",
+    assert pins["kevModels"] == {
+        "kev-0.8b": {
+            "repo": "jaredpalmer/kev-0.8b",
+            "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e",
+            "base": "Qwen/Qwen3.5-0.8B-Base",
+            "baseRevision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68",
+        },
+        "kev-4b": {
+            "repo": "jaredpalmer/kev-4b",
+            "revision": "139fdd94f1b6a6ad80cc15e08fcb99cac885a101",
+            "base": "Qwen/Qwen3.5-4B-Base",
+            "baseRevision": "1001bb4d826a52d1f399e183466143f4da7b741b",
+        },
     }
 
 

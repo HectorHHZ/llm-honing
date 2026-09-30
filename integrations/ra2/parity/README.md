@@ -19,6 +19,13 @@ The Kev family has no counterpart in #49, so these compare Honing with Kev's own
 | `kev_serving.sh <out>` | Honing's `KevDecisionModel` against `kev.serve` at the pinned commit, on the 24 serving requests plus 3 whose long logs make Kev trim the state: a reference running the same computation (bf16, no CUDA graphs), `kev.serve`'s CUDA defaults, and Kev's exact fp32 path | same computation: 56 of 56 questions choose the same option with identical probabilities; fp32: identical; `kev.serve` defaults (CUDA graphs): largest difference 0.008, one near-tie (0.4264 vs 0.4309) chosen differently |
 | `kev_training.py <gpus> <work> <matches>` | `KevTrainer` sft on `make_demos.py`'s matches, the trained checkpoint served from its manifest, and grpo on synthetic rollouts favoring one option | sft validation loss 3.09 to 1.32 (584 train, 118 validation examples); the trained checkpoint serves at temperature 1.0; grpo raises the favored option from 0.10 to 0.91, on 16 of 16 states |
 
+`KEV_MODEL=kev-4b` runs both for kev-4b:
+
+| Script | Result for kev-4b on an H100 |
+|---|---|
+| `kev_serving.sh <out>` | same computation: 56 of 56 identical; fp32: identical; `kev.serve` defaults: largest difference 0.009, one near-tie (0.1918 vs 0.1932) chosen differently |
+| `kev_training.py` | sft validation loss 2.01 to 1.31; the trained checkpoint serves at temperature 1.0; grpo raises the favored option from 0.39 to 0.9994, on 16 of 16 states; 3.5 minutes for all three steps |
+
 ## Real game controller parity on CPU
 
 `game_parity.py` compares the original #49 controller with the extracted

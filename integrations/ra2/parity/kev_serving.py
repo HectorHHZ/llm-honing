@@ -1,6 +1,6 @@
 """Kev serving on a GPU: Honing's KevDecisionModel against kev.serve, Kev's own server at the pinned commit.
 
-Usage: kev_serving.py <our-gpu> <out-dir> <dtype> <port:name>...
+Usage: [KEV_MODEL=kev-4b] kev_serving.py <our-gpu> <out-dir> <dtype> <port:name>...   (default kev-0.8b)
 
 The kev.serve instances must already be running on the given ports (see kev_serving.sh). The requests are the
 24 serving parity requests (decision_requests.py) plus 3 with long logs that make Kev trim the state. For each
@@ -45,7 +45,11 @@ def post(port, state, questions):
 
 
 settings = KevSettings(
-    pins_path=ROOT / "pins.json", source_dir=Path(os.environ["KEV_SOURCE_DIR"]), gpu=gpu, dtype=dtype
+    pins_path=ROOT / "pins.json",
+    source_dir=Path(os.environ["KEV_SOURCE_DIR"]),
+    model=os.environ.get("KEV_MODEL", "kev-0.8b"),
+    gpu=gpu,
+    dtype=dtype,
 )
 rows, ours_all = [], []
 with KevDecisionModel.load(settings) as model:
