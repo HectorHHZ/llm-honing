@@ -10,8 +10,13 @@ import {
     responseDelay,
     controlLabel,
     avoidanceProfile,
+    assistEnabledFor,
+    assistLevelFor,
+    shotGuardFor,
 } from "./engine.js";
 import { buildPlans, applyPlanDecision, PLAN_PROTOCOL } from "./planner.js";
+import { buildArenaContext } from "./context.js";
+import { contextRevision } from "../shared/seat-config.js";
 import { validProbabilities } from "../shared/model-client.js";
 
 export const adapter = {
@@ -33,11 +38,11 @@ export const adapter = {
             assistActive: false,
         }),
     setAssist: (game, on) => game.setAssistEnabled(on),
-    assistance: (game) => ({
-        enabled: game.assistEnabled,
-        profile: game.assistProfile,
-        parameters: avoidanceProfile(game),
-        shot_guard: game.fireGuardEnabled,
+    assistance: (game, id) => ({
+        enabled: assistEnabledFor(game, id),
+        profile: assistLevelFor(game, id),
+        parameters: avoidanceProfile(game, id),
+        shot_guard: shotGuardFor(game, id),
     }),
     shortControls: "W/S drive · A/D turn · Space fire",
     keyboard: (mode) =>
@@ -52,7 +57,11 @@ export const adapter = {
         game.assistEnabled
             ? `Dodge assist: ${avoidanceProfile(game).label} · reacts to threats within ${Math.round(avoidanceProfile(game).trigger * 1000)} ms. Interventions appear in match exports.`
             : "Dodge assist off. Your shells can hit you.",
-    observe(game, id, { controllerMode, interval, rtt }) {
+    observe(
+        game,
+        id,
+        { controllerMode, interval, rtt, contextVersion = "full" },
+    ) {
         const controlDuration = Math.max(
                 MODEL_CONTROL_SECONDS,
                 interval / 1000 + 0.3,
@@ -61,15 +70,21 @@ export const adapter = {
                 reactionDelay: responseDelay(rtt ?? 300),
                 controlDuration,
             };
+        if (controllerMode === "plans" && contextVersion !== "full")
+            throw Error("Planned steering requires full tactical context");
+        const revision = contextRevision({ controllerMode, contextVersion });
         const obs =
             controllerMode === "plans"
                 ? buildPlans(game, id, opts)
-                : buildObservation(game, id, opts);
+                : contextVersion === "arena-v1"
+                  ? buildArenaContext(game, id, opts)
+                  : buildObservation(game, id, opts);
         return {
             ...obs,
             controlDuration,
             bulletCount: obs.bullets.length,
             text:
+                `CONTEXT PROFILE: ${revision}\n` +
                 obs.state +
                 "\n\n" +
                 (obs.actions
@@ -92,8 +107,9 @@ export const adapter = {
                     state: obs.state,
                     candidates: obs.candidates,
                 }),
-                avoidance_enabled: game.assistEnabled,
-                avoidance_level: game.assistProfile,
+                context_revision: revision,
+                avoidance_enabled: assistEnabledFor(game, id),
+                avoidance_level: assistLevelFor(game, id),
                 predicted_response_delay_ms: Math.round(
                     obs.reactionDelay * 1000,
                 ),
@@ -137,6 +153,8 @@ export const adapter = {
         controlLabel({ drive: t.executedDrive, turn: t.executedTurn }),
     aimNote: (data) => {
         const aim = data?.observed?.aim?.best;
+        if (data?.observed?.contextRevision === "arena-v1")
+            return "Arena-only context: the model receives no aim hints.";
         return !data
             ? "Waiting for an aim observation."
             : aim

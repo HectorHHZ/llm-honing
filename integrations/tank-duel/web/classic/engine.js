@@ -375,7 +375,7 @@ export function tankMotion(maze, t, drive, turn, dt, other = null) {
 }
 export function forecastCurrentControls(game, t, time) {
     if (
-        game.assistEnabled &&
+        assistEnabledFor(game, t.id) &&
         t.assistActive &&
         t.avoidance &&
         game.elapsed + time < t.avoidance.expiresAt
@@ -584,8 +584,14 @@ export const AVOIDANCE_PROFILES = Object.freeze({
         instantRefresh: true,
     }),
 });
-export const avoidanceProfile = (game) =>
-    AVOIDANCE_PROFILES[game.assistProfile ?? "light"];
+export const assistEnabledFor = (game, id) =>
+    game.playerSettings?.[id]?.assistEnabled ?? game.assistEnabled;
+export const assistLevelFor = (game, id) =>
+    game.playerSettings?.[id]?.assistProfile ?? game.assistProfile ?? "light";
+export const shotGuardFor = (game, id) =>
+    game.playerSettings?.[id]?.fireGuardEnabled ?? game.fireGuardEnabled;
+export const avoidanceProfile = (game, id) =>
+    AVOIDANCE_PROFILES[assistLevelFor(game, id)];
 const stopped = { drive: "stop", turn: "none" };
 const sameMotion = (a, b) => a.drive === b.drive && a.turn === b.turn;
 // Shared shell paths keep nine local forecasts cheap. Physics uses exactly the
@@ -593,7 +599,7 @@ const sameMotion = (a, b) => a.drive === b.drive && a.turn === b.turn;
 export function buildAvoidance(game, id) {
     const t = game.tanks[id],
         enemy = game.tanks[1 - id],
-        profile = avoidanceProfile(game),
+        profile = avoidanceProfile(game, id),
         dt = 1 / 60,
         steps = Math.round(profile.horizon / dt);
     const remaining = t.avoidance
@@ -691,7 +697,7 @@ export function buildAvoidance(game, id) {
 }
 export function chooseAvoidance(game, id) {
     const t = game.tanks[id],
-        profile = avoidanceProfile(game),
+        profile = avoidanceProfile(game, id),
         report = buildAvoidance(game, id),
         { proposed, requested, options } = report;
     if (
@@ -736,12 +742,13 @@ export function chooseAvoidance(game, id) {
 }
 export function avoidanceContext(game, id) {
     const t = game.tanks[id],
-        p = avoidanceProfile(game),
+        p = avoidanceProfile(game, id),
         ms = (n) => Math.round(n * 1000);
     return (
-        `Local bullet avoidance=${game.assistEnabled ? "ON" : "OFF"}; active=${!!t.assistActive}; requested=${t.drive}/${t.turn}, actual=${t.executedDrive}/${t.executedTurn}. ` +
-        (game.assistEnabled
-            ? `Level=${game.assistProfile}; checks every ${ms(p.interval)}ms, forecast ${ms(p.horizon)}ms, intervenes only for collision within ${ms(p.trigger)}ms. ` +
+        `Shot guard=${shotGuardFor(game, id) ? "ON" : "OFF"}. ` +
+        `Local bullet avoidance=${assistEnabledFor(game, id) ? "ON" : "OFF"}; active=${!!t.assistActive}; requested=${t.drive}/${t.turn}, actual=${t.executedDrive}/${t.executedTurn}. ` +
+        (assistEnabledFor(game, id)
+            ? `Level=${assistLevelFor(game, id)}; checks every ${ms(p.interval)}ms, forecast ${ms(p.horizon)}ms, intervenes only for collision within ${ms(p.trigger)}ms. ` +
               `Maximum burst=${Number.isFinite(p.maxDuration) ? ms(p.maxDuration) + "ms" : "unlimited"}, cooldown=${ms(p.cooldown)}ms; remaining cooldown=${ms(Math.max(0, (t.assistCooldownUntil ?? 0) - game.elapsed))}ms. ` +
               `It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override. Response-position forecasts resume your original command after a burst expires. Future interventions are unknown. `
             : "") +
@@ -953,6 +960,7 @@ export class Game {
         this.assistEnabled = false;
         this.assistProfile = "light";
         this.fireGuardEnabled = false;
+        this.playerSettings = [{}, {}];
         this.nextRound();
     }
     nextRound() {
@@ -1000,7 +1008,34 @@ export class Game {
         this.events = [];
         this.nextRound();
     }
+    setPlayerSettings(id, settings) {
+        if (![0, 1].includes(id)) throw Error("Unknown player");
+        if (
+            settings.assistProfile !== undefined &&
+            !Object.hasOwn(AVOIDANCE_PROFILES, settings.assistProfile)
+        )
+            throw Error("Unknown avoidance level");
+        for (const key of ["assistEnabled", "fireGuardEnabled"])
+            if (
+                settings[key] !== undefined &&
+                typeof settings[key] !== "boolean"
+            )
+                throw Error("Invalid player setting");
+        Object.assign(this.playerSettings[id], settings);
+        const t = this.tanks[id];
+        t.avoidance = null;
+        t.assistActive = false;
+        t.safetyUntil = 0;
+        t.assistCooldownUntil = 0;
+        // Releasing a dodge immediately restores the valid model command in forecasts too.
+        t.executedDrive = this.elapsed <= t.commandUntil ? t.drive : "stop";
+        t.executedTurn =
+            this.elapsed <= Math.min(t.commandUntil, t.turnUntil ?? Infinity)
+                ? t.turn
+                : "none";
+    }
     setAssistEnabled(enabled) {
+        this.playerSettings.forEach((s) => delete s.assistEnabled);
         this.assistEnabled = !!enabled;
         for (const t of this.tanks) {
             t.avoidance = null;
@@ -1013,6 +1048,7 @@ export class Game {
         if (!Object.hasOwn(AVOIDANCE_PROFILES, profile))
             throw Error("Unknown avoidance level");
         this.assistProfile = profile;
+        this.playerSettings.forEach((s) => delete s.assistProfile);
         this.setAssistEnabled(this.assistEnabled);
     }
     emit(type, data = {}) {
@@ -1038,7 +1074,7 @@ export class Game {
         t.fireBlocked = false;
         t.commandUntil = this.elapsed + ttl;
         t.travel = 0;
-        if (avoidanceProfile(this).instantRefresh) t.safetyUntil = 0;
+        if (avoidanceProfile(this, id).instantRefresh) t.safetyUntil = 0;
         t.planned = false;
         t.turnUntil = Infinity;
         t.pendingFireAt = this.elapsed;
@@ -1112,7 +1148,7 @@ export class Game {
             turn: this.elapsed > t.turnUntil + 1e-8 ? "none" : t.turn,
         };
         let execute = requested;
-        const profile = avoidanceProfile(this);
+        const profile = avoidanceProfile(this, t.id);
         let releaseReason = "safe_path";
         const release = (reason) => {
             if (t.avoidance) {
@@ -1124,7 +1160,7 @@ export class Game {
         if (t.avoidance && this.elapsed + 1e-8 >= t.avoidance.expiresAt)
             release("burst_limit");
         if (
-            this.assistEnabled &&
+            assistEnabledFor(this, t.id) &&
             this.bullets.length &&
             this.elapsed + 1e-8 >= (t.assistCooldownUntil ?? 0)
         ) {
@@ -1165,7 +1201,8 @@ export class Game {
                 t.safetySignature = signature;
             }
             if (t.avoidance) execute = t.avoidance.controls;
-        } else release(this.assistEnabled ? "no_bullets" : "disabled");
+        } else
+            release(assistEnabledFor(this, t.id) ? "no_bullets" : "disabled");
         const assisted = !!t.avoidance;
         if (
             assisted &&
@@ -1176,7 +1213,7 @@ export class Game {
             t.assistCount = (t.assistCount ?? 0) + 1;
             this.emit("assist", {
                 player: t.id,
-                level: this.assistProfile,
+                level: assistLevelFor(this, t.id),
                 requested: { ...requested },
                 executed: { ...execute },
                 burst_remaining_ms: Number.isFinite(t.avoidance.expiresAt)
@@ -1235,7 +1272,7 @@ export class Game {
                 });
             }
         }
-        if (trigger && this.fireGuardEnabled) {
+        if (trigger && shotGuardFor(this, t.id)) {
             const forecast = forecastShot(this, t.id, execute, {
                 reactionDelay: 0,
                 horizon: 0.8,

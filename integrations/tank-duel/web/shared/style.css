@@ -1085,3 +1085,132 @@ h1 span {
         gap: 10px;
     }
 }
+/* Per-seat Classic setup shares the arena's paper-and-ink palette. */
+.match-setup {
+    margin: 0 0 16px;
+    border-bottom: 1px solid #d5d6cd;
+    padding: 10px 0 16px;
+}
+.match-setup > summary {
+    cursor: pointer;
+    font-weight: 650;
+    font-size: 14px;
+}
+.match-setup > summary > span {
+    float: right;
+    color: #78807a;
+    font-weight: 400;
+    font-size: 12px;
+}
+.setup-tools {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 16px 0 12px;
+}
+.setup-tools button {
+    font-size: 12px;
+}
+.setup-tools small {
+    color: #747c77;
+    font-size: 11px;
+}
+.seat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.seat-config {
+    border: 1px solid #d9dace;
+    border-top: 2px solid currentColor;
+    border-radius: 5px;
+    padding: 14px;
+    background: #fffdf6;
+    min-width: 0;
+}
+.seat-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 10px;
+}
+.seat-heading h3 {
+    margin: 0;
+    font-size: 14px;
+}
+.seat-heading > span {
+    color: #747c77;
+    font-size: 11px;
+}
+.seat-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+.seat-fields label {
+    display: grid;
+    gap: 4px;
+    color: #616b65;
+    font-size: 11px;
+    min-width: 0;
+}
+.seat-fields select {
+    width: 100%;
+    min-width: 0;
+    font-size: 12px;
+    padding: 7px;
+}
+.seat-assist {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+.seat-assist button,
+.seat-assist select {
+    font-size: 11px;
+    padding: 7px;
+}
+.seat-description {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #707973;
+    margin: 12px 0 8px;
+}
+.seat-revision {
+    font-size: 10px;
+    line-height: 1.5;
+    color: #707973;
+    overflow-wrap: anywhere;
+}
+.seat-revision summary {
+    cursor: pointer;
+}
+@media (max-width: 650px) {
+    .seat-grid {
+        grid-template-columns: 1fr;
+    }
+    .setup-tools {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .match-setup > summary > span {
+        float: none;
+        display: block;
+        margin-top: 4px;
+    }
+}
+
+.seat-config.blue {
+    border-top-color: #357a9b;
+}
+.seat-config.red {
+    border-top-color: #c4654b;
+}
+.seat-config.blue h3 {
+    color: #357a9b;
+}
+.seat-config.red h3 {
+    color: #c4654b;
+}

@@ -38,9 +38,14 @@ A/D turn. In Auto Aim, WASD move in screen coordinates. P pauses; backgrounding
 the tab also pauses the game. A keyboard is required; the layout scales to
 small screens for viewing, but there are no touch controls.
 
-The collapsed **Settings & model decisions** panel contains model selection,
-50–1,000 ms scheduling, trajectory previews, fullscreen, context and match
-export. The main arena stays clear for demos and recordings.
+Classic's **Match setup** has independent Blue and Red settings: model/checkpoint,
+decision version, context, 50–1,000 ms scheduling, dodge toggle/strength and raw
+shot guard. Collapse it for recordings. Settings persist in this browser/origin.
+Model, decision, context or interval changes restart the match and invalidate
+in-flight responses; assistance changes apply to that seat immediately. The
+**Settings & model decisions** panel shows probabilities, actual context,
+latency, trajectory previews, fullscreen and match export. Auto Aim keeps its
+shared model and assist controls.
 
 ## Connect a model
 
@@ -82,17 +87,59 @@ without the game API it offers keyboard play only.
 Existing tank-specific services can be retained using `CLASSIC_MODEL_URL`,
 `CLASSIC_MODEL_LABEL`, `AUTOAIM_MODEL_URL` and `AUTOAIM_MODEL_LABEL`. These use
 `/health` and `/decision` directly. `CLASSIC_NANOJEV_URL` adds a second Classic
-backend. Each service must report its model, two seat IDs and the appropriate
-protocols: `plans-v1` plus `controls-v3` for Classic, `controls-v2` for Auto Aim.
+backend. Each service must report its model, two seat IDs and support the selected
+protocol: `plans-v1` for Classic planned steering, `controls-v3` for Classic
+independent controls, or `controls-v2` for Auto Aim. A service can support just
+one Classic decision version; selecting an unsupported version blocks play.
 Responses must echo the request ID, round, seat, model and protocol, include
 native probabilities and report `state_truncated: false`.
+
+## Multiple models and checkpoints
+
+Register additional Honing-compatible or tank-compatible endpoints using
+`MODELS_JSON`. Each ID represents one running model/checkpoint endpoint. The
+same family can appear multiple times with different `version` labels:
+
+```bash
+MODELS_JSON='[
+  {"id":"gemma-current","label":"DiffusionGemma","version":"current","url":"http://127.0.0.1:8081","transport":"honing","editions":["classic"]},
+  {"id":"nano-original","label":"NanoJev","version":"original checkpoint","url":"http://127.0.0.1:8082","transport":"honing","editions":["classic"]}
+]' npm start
+```
+
+Use `transport: "tank"` for the legacy `/health` + `/decision` services. Optional
+`token` is kept server-side. Registration labels do not load, pin or verify a
+checkpoint: configure each actual model service first. **Model & context
+identity** shows its reported model revision and adapter identity separately
+from the context revision; an unreported checkpoint is explicitly labelled.
+The browser only selects server-registered IDs and never submits upstream URLs.
+Each seat validates responses against its own selected endpoint and seat ID.
+
+The **Gemma planned vs NanoJev independent** preset selects the two named
+families when available. Blue uses planned steering, Red uses independent
+controls, both use Full tactical context, 100 ms scheduling and Light dodge.
+Either dodge can then be turned off independently. This is a control-policy
+comparison using the configured checkpoints, **not an assertion that an
+archived first-generation prompt or older weights were restored**.
+
+| Decision version          | Context                                     | Behavior                                                                                                                                               |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Current · planned v1      | Full tactical (`planned-aim-v1`)            | Joint motion and conditional weapon, bounded turning, geometric selection and fresh shot validation.                                                   |
+| Independent · controls v3 | Full tactical (`state-v7-avoidance-levels`) | Independent drive/turn/weapon with existing aim hints and motion/shot forecasts; no joint-plan filtering.                                              |
+| Independent · controls v3 | Arena only · v1 (`arena-v1`)                | Newly added minimal profile: positions, headings, walls, all shells, timing and own assistance state; no aim hints, waypoints or trajectory forecasts. |
+
+Planned steering requires its full tactical context. Every profile includes
+shells from both sides. Dodge Off disables the local emergency controller for
+that tank; it does not remove observations or planned steering's geometry and
+shot checks. The optional raw shot guard is also independent per tank. Keyboard
+players always use manual controls. Settings survive round changes and restarts.
 
 ## What the model sees and controls
 
 - Both editions include **every active shell from both players**: position,
   velocity, owner, ricochet count and remaining lifetime. Ownership never makes
   a shell safe. State also includes tank positions, ammo, cooldowns and time.
-- Classic adds hull heading, wall geometry, verified hit directions, required
+- Classic Full tactical adds hull heading, wall geometry, verified hit directions, required
   turns, response-delay estimates, navigation waypoints and forecasts for all
   nine drive/turn combinations. Auto Aim supplies forecasts for each usable
   movement, including whole-path shell clearance and enemy-route progress.
@@ -122,8 +169,11 @@ Standard and Strong remain available. Auto Aim's separate optional dodge checks
 700 ms ahead every 50 ms and defaults **off**. Dodge assistance never controls
 keyboard players. All interventions appear in match exports.
 
-The export records model metadata, seed, physics revision, context, native
-responses, actual latency, applied plans, shots, kills and assistance events.
+The export records each player's backend, reported model metadata, decision and
+context versions, interval and assist settings. Each decision also snapshots
+that configuration and the model identity it was validated against. Mid-match
+assistance changes are events. Seed, physics revision, full context, native
+responses, actual latency, applied plans, shots and kills are included.
 It is an audit record, not a deterministic replay format. Treat probability
 bars as model outputs; geometry restrictions and execution changes are shown
 separately in the details and export.
@@ -167,6 +217,8 @@ To check a configured live model with the actual engine and collision assertions
 node scripts/smoke-model.mjs --edition classic --seconds 25
 node scripts/smoke-model.mjs --edition auto-aim --seconds 25
 # Optional: --url http://127.0.0.1:4177 --backend honing --controller raw
+# Mixed Classic seats (use IDs registered on your server):
+node scripts/smoke-model.mjs --edition classic --seconds 20 --players-json '[{"backend":"gemma-current","controllerMode":"plans","assistEnabled":true},{"backend":"nano-original","controllerMode":"raw","contextVersion":"full","assistEnabled":false}]'
 ```
 
 Pause browser model matches before running a smoke check against the same

@@ -1,3 +1,5 @@
+import { mountClassicSetup } from "../classic/setup.js";
+import { defaultSeats, seatProtocol } from "./seat-config.js";
 import { mountShell } from "./shell.js";
 import { createRenderer, COLORS } from "./renderer.js";
 import {
@@ -15,24 +17,52 @@ export async function boot(adapter) {
         game = new adapter.Game();
     adapter.initialize(game);
     const models = await modelConfig(edition);
-    $("model-backend").replaceChildren(
-        ...(models.length
-            ? models
-            : [{ id: "", label: "No model connected" }]
-        ).map((m) => new Option(m.label, m.id)),
-    );
-    $("model-backend").disabled = !models.length;
-    let backend = models[0]?.id || "",
-        mode = models.length ? "ai" : "local",
-        interval = 100,
-        controllerMode = "plans";
+    const classic = edition === "classic";
+    let seats = defaultSeats(models, classic);
+    let setup;
+    if (classic) {
+        setup = mountClassicSetup(models, game, (player, field) => {
+            if (
+                ["assistEnabled", "assistProfile", "fireGuardEnabled"].includes(
+                    field,
+                )
+            ) {
+                cancelSeat(player);
+                game.emit("configuration", {
+                    player,
+                    field,
+                    settings: { ...seats[player] },
+                });
+                addFeed(`${side(player)} ${field} updated.`, player);
+                update();
+            } else {
+                health = [null, null];
+                healthSerial = healthSerial.map((n) => n + 1);
+                error = "Connecting selected models";
+                reset();
+                void checkHealth();
+            }
+        });
+        seats = setup.seats;
+    } else {
+        $("model-backend").replaceChildren(
+            ...(models.length
+                ? models
+                : [{ id: "", label: "No model connected" }]
+            ).map((m) => new Option(m.label, m.id)),
+        );
+        $("model-backend").disabled = !models.length;
+    }
+    let mode = models.length ? "ai" : "local";
     let paused = false,
-        health = null,
+        health = [null, null],
+        healthSerial = [0, 0],
         error = "",
         generation = 0,
         serial = 0,
         trajectory = false;
     let pending = [null, null],
+        seatEpoch = [0, 0],
         next = [0, 0],
         latest = [null, null],
         counts = [0, 0],
@@ -48,9 +78,10 @@ export async function boot(adapter) {
         taps = new Set(),
         side = (i) => (i ? "Red" : "Blue"),
         isAI = (i) => mode === "ai" || (mode === "human" && i === 1);
-    const modelName = () =>
-        health?.metadata?.model_label ||
-        models.find((m) => m.id === backend)?.label ||
+    const ready = () => seats.every((_, i) => !isAI(i) || !!health[i]);
+    const modelName = (i) =>
+        models.find((m) => m.id === seats[i].backend)?.label ||
+        health[i]?.metadata?.model_label ||
         "Model";
     const render = createRenderer(canvas, adapter.traceShot, {
         autoAim: edition === "auto-aim",
@@ -108,14 +139,18 @@ export async function boot(adapter) {
             }),
         );
     }
+    function cancelSeat(player) {
+        seatEpoch[player]++;
+        pending[player]?.abort();
+        pending[player] = null;
+        next[player] = 0;
+        adapter.clear(game.tanks[player]);
+    }
     function cancel() {
         generation++;
-        pending.forEach((p) => p?.abort());
-        pending = [null, null];
-        next = [0, 0];
+        [0, 1].forEach(cancelSeat);
         keys.clear();
         taps.clear();
-        game.tanks.forEach(adapter.clear);
     }
     function reset(random = false) {
         cancel();
@@ -136,13 +171,18 @@ export async function boot(adapter) {
         paused = value;
         if (value) cancel();
         else {
+            if (!ready()) {
+                paused = true;
+                update();
+                return;
+            }
             lastFrame = performance.now();
             accumulator = 0;
         }
         update();
     }
     function start() {
-        if (mode !== "local" && !health) return;
+        if (!ready()) return;
         if (game.phase === "matchover") reset();
         error = "";
         paused = false;
@@ -160,37 +200,27 @@ export async function boot(adapter) {
         mode = e.target.value;
         reset();
     };
-    $("interval").onchange = (e) => {
-        interval = Number(e.target.value);
-    };
-    $("model-backend").onchange = (e) => {
-        backend = e.target.value;
-        health = null;
-        error = "Connecting model";
-        reset();
-        void checkHealth();
-    };
-    if ($("controller"))
-        $("controller").onchange = (e) => {
-            controllerMode = e.target.value;
-            game.fireGuardEnabled = false;
+    if (!classic) {
+        $("interval").onchange = (e) => {
+            seats.forEach((s) => (s.interval = Number(e.target.value)));
+        };
+        $("model-backend").onchange = (e) => {
+            seats.forEach((s) => (s.backend = e.target.value));
+            health = [null, null];
+            healthSerial = healthSerial.map((n) => n + 1);
+            error = "Connecting model";
             reset();
+            void checkHealth();
         };
-    $("assist").onclick = () => {
-        adapter.setAssist(game, !game.assistEnabled);
-        addFeed(`Dodge assist ${game.assistEnabled ? "enabled" : "disabled"}.`);
-        update();
-    };
-    if ($("assist-level"))
-        $("assist-level").onchange = (e) => {
-            game.setAssistProfile(e.target.value);
+        $("assist").onclick = () => {
+            adapter.setAssist(game, !game.assistEnabled);
+            seats.forEach((s) => (s.assistEnabled = game.assistEnabled));
+            addFeed(
+                `Dodge assist ${game.assistEnabled ? "enabled" : "disabled"}.`,
+            );
             update();
         };
-    if ($("fire-guard"))
-        $("fire-guard").onclick = () => {
-            game.fireGuardEnabled = !game.fireGuardEnabled;
-            update();
-        };
+    }
     $("trajectory").onclick = () => {
         trajectory = !trajectory;
         $("trajectory").setAttribute("aria-pressed", String(trajectory));
@@ -217,12 +247,14 @@ export async function boot(adapter) {
             created_at: new Date().toISOString(),
             edition,
             physics_revision: "full-footprint-v1",
-            model: health?.metadata,
+            players: seats.map((s, i) => ({
+                player: i,
+                ...s,
+                model: health[i]?.metadata,
+                assistance: adapter.assistance(game, i),
+            })),
             mode,
             seed: game.seed,
-            decision_interval_ms: interval,
-            controller: controllerMode,
-            assistance: adapter.assistance(game),
             scores: game.scores,
             shots: game.shots,
             events: game.events,
@@ -282,29 +314,39 @@ export async function boot(adapter) {
             pause(true);
     });
     async function checkHealth() {
-        if (!backend) {
-            health = null;
-            update();
-            return;
-        }
-        const selected = backend;
-        try {
-            const r = await fetch(
-                    `/api/${edition}/health?backend=${encodeURIComponent(selected)}`,
-                    { signal: AbortSignal.timeout(4000) },
-                ),
-                h = await r.json();
-            if (!r.ok || !validHealth(h, adapter.protocols))
-                throw Error("Model is not ready");
-            if (selected !== backend) return;
-            health = h;
-            error = "";
-        } catch {
-            if (selected !== backend) return;
-            health = null;
-            error = "Model offline";
-            if (mode !== "local" && game.phase === "running") pause(true);
-        }
+        await Promise.all(
+            seats.map(async (seat, player) => {
+                const selected = seat.backend,
+                    protocol = seatProtocol(edition, seat),
+                    ticket = ++healthSerial[player];
+                if (!selected) {
+                    health[player] = null;
+                    return;
+                }
+                try {
+                    const r = await fetch(
+                        `/api/${edition}/health?backend=${encodeURIComponent(selected)}`,
+                        { signal: AbortSignal.timeout(4000) },
+                    );
+                    const h = await r.json();
+                    if (!r.ok || !validHealth(h, [protocol]))
+                        throw Error(
+                            "Model is offline or does not support the selected decision version",
+                        );
+                    if (ticket !== healthSerial[player]) return;
+                    health[player] = h;
+                } catch {
+                    if (ticket !== healthSerial[player]) return;
+                    health[player] = null;
+                    if (isAI(player)) {
+                        error = `${side(player)} model offline or incompatible`;
+                        if (["running", "roundover"].includes(game.phase))
+                            pause(true);
+                    }
+                }
+            }),
+        );
+        if (ready()) error = "";
         update();
     }
     async function decide(player, now) {
@@ -312,17 +354,20 @@ export async function boot(adapter) {
             pending[player] ||
             now < next[player] ||
             !isAI(player) ||
+            !health[player] ||
             !game.tanks[player].alive
         )
             return;
+        const settings = { ...seats[player] };
+        const { backend, controllerMode, interval } = settings;
         const observed = adapter.observe(game, player, {
-                controllerMode,
-                interval,
+                ...settings,
                 rtt: latest[player]?.rtt,
             }),
             round = game.roundSerial,
             epoch = generation,
-            expectedHealth = health;
+            playerEpoch = seatEpoch[player],
+            expectedHealth = health[player];
         const body = {
             ...observed.request,
             id: `${edition}-${game.seed}-${++serial}`,
@@ -332,6 +377,7 @@ export async function boot(adapter) {
             decision_interval_ms: interval,
             bullet_count: observed.bulletCount,
             physics_revision: "full-footprint-v1",
+            configuration: settings,
         };
         const ctl = new AbortController(),
             sent = performance.now();
@@ -354,18 +400,19 @@ export async function boot(adapter) {
                 },
             );
             const response = await r.json();
-            if (r.status === 429) {
-                next[player] = performance.now() + interval;
-                return;
-            }
-            if (!r.ok) throw Error(response.error || `HTTP ${r.status}`);
             if (
                 epoch !== generation ||
+                playerEpoch !== seatEpoch[player] ||
                 round !== game.roundSerial ||
                 paused ||
                 game.phase !== "running"
             )
                 return;
+            if (r.status === 429) {
+                next[player] = performance.now() + interval;
+                return;
+            }
+            if (!r.ok) throw Error(response.error || `HTTP ${r.status}`);
             if (
                 !validDecision(response, body, expectedHealth) ||
                 !adapter.validControls(response, observed)
@@ -379,6 +426,9 @@ export async function boot(adapter) {
                 player,
                 round: game.round,
                 elapsed: game.elapsed,
+                backend,
+                model_metadata: expectedHealth.metadata,
+                configuration: settings,
                 request: body,
                 response,
                 rtt_ms: rtt,
@@ -402,8 +452,9 @@ export async function boot(adapter) {
             counts[player]++;
             latest[player] = { ...response, applied, rtt, cadence, observed };
         } catch (e) {
-            if (epoch !== generation) return;
-            health = null;
+            if (epoch !== generation || playerEpoch !== seatEpoch[player])
+                return;
+            health[player] = null;
             error = `${side(player)} model disconnected`;
             addFeed(error + ". Match paused.");
             pause(true);
@@ -414,16 +465,15 @@ export async function boot(adapter) {
         }
     }
     function update() {
-        $("connection-light").className =
-            mode === "local" || health ? "ready" : "error";
+        $("connection-light").className = ready() ? "ready" : "error";
         $("connection-title").textContent =
             mode === "local"
                 ? "Local play ready"
-                : health
-                  ? "Model connected"
+                : ready()
+                  ? "Models connected"
                   : error || "Connect a model";
-        $("name-a").textContent = mode === "ai" ? modelName() : "Player 1";
-        $("name-b").textContent = mode === "local" ? "Player 2" : modelName();
+        $("name-a").textContent = mode === "ai" ? modelName(0) : "Player 1";
+        $("name-b").textContent = mode === "local" ? "Player 2" : modelName(1);
         $("score-a").textContent = game.scores[0];
         $("score-b").textContent = game.scores[1];
         $("round-label").textContent =
@@ -442,37 +492,44 @@ export async function boot(adapter) {
             (game.phase === "running" && !paused ? " live" : "");
         $("pause").disabled = !["running", "roundover"].includes(game.phase);
         $("pause").textContent = paused ? "Resume" : "Pause";
-        $("assist").disabled = mode === "local";
-        $("assist").setAttribute(
-            "aria-pressed",
-            String(mode !== "local" && game.assistEnabled),
-        );
-        $("assist").querySelector("span").textContent =
-            mode !== "local" && game.assistEnabled ? "On" : "Off";
-        if ($("assist-level")) {
-            $("assist-level").disabled = mode === "local";
-            $("assist-level").value = game.assistProfile;
-        }
-        if ($("fire-guard")) {
-            $("fire-guard").disabled = controllerMode === "plans";
-            $("fire-guard").setAttribute(
+        if (!classic) {
+            $("assist").disabled = mode === "local";
+            $("assist").setAttribute(
                 "aria-pressed",
-                String(game.fireGuardEnabled),
+                String(mode !== "local" && game.assistEnabled),
             );
-            $("fire-guard").querySelector("span").textContent =
-                game.fireGuardEnabled ? "On" : "Off";
+            $("assist").querySelector("span").textContent =
+                mode !== "local" && game.assistEnabled ? "On" : "Off";
         }
+        setup?.render(health, isAI);
         $("assist-note").textContent =
             mode === "local"
                 ? "Your shells can hit you. Make every bounce count."
-                : adapter.assistNote(game, controllerMode);
+                : classic
+                  ? seats
+                        .map(
+                            (s, i) =>
+                                `${side(i)}: ${!isAI(i) ? "Keyboard" : "Dodge " + (s.assistEnabled ? s.assistProfile : "Off")}`,
+                        )
+                        .join(" · ")
+                  : adapter.assistNote(game);
         $("keyboard-help").hidden = mode === "ai";
         $("keyboard-help").textContent = adapter.keyboard(mode);
-        $("controller-description").textContent =
-            adapter.description(controllerMode);
-        $("connection-detail").textContent = health
-            ? `${modelName()} · ${health.metadata.independent_instances ? "Separate model instances" : "Independent seats"} · ${interval} ms scheduling floor. Actual latency is measured below.`
-            : "Local two-player works without a model. Set HONING_URL on the game server to connect one.";
+        $("controller-description").textContent = classic
+            ? seats
+                  .map(
+                      (s, i) =>
+                          `${side(i)}: ${adapter.description(s.controllerMode)}`,
+                  )
+                  .join("\n")
+            : adapter.description();
+        $("connection-detail").textContent =
+            seats
+                .map(
+                    (s, i) =>
+                        `${side(i)} · ${modelName(i)} · ${health[i] ? "connected" : "offline"} · ${s.interval} ms scheduling floor`,
+                )
+                .join(" | ") + ". Actual latency is measured below.";
         const overlay =
             paused || game.phase === "ready" || game.phase === "matchover";
         $("overlay").hidden = !overlay;
@@ -500,13 +557,13 @@ export async function boot(adapter) {
                     ? "Play again"
                     : paused
                       ? "Resume match"
-                      : mode !== "local" && !health
+                      : !ready()
                         ? "Waiting for model"
                         : "Start match") + " →";
-            $("start").disabled = mode !== "local" && !health;
+            $("start").disabled = !ready();
             $("overlay-note").textContent =
                 mode === "ai"
-                    ? `${modelName()} vs ${modelName()}`
+                    ? `${modelName(0)} vs ${modelName(1)}`
                     : mode === "human"
                       ? `You are Blue · ${adapter.shortControls}`
                       : "Blue: WASD + Space · Red: arrows + Enter";
@@ -518,7 +575,7 @@ export async function boot(adapter) {
                 ai = isAI(id),
                 chip = $(`player-${id}`);
             p.querySelector("h2").textContent =
-                `${side(id)} · ${ai ? modelName() : "Player"}`;
+                `${side(id)} · ${ai ? modelName(id) : "Player"}`;
             p.querySelector(".agent-status").textContent = !t.alive
                 ? "Knocked out"
                 : paused
@@ -628,7 +685,7 @@ export async function boot(adapter) {
                     );
             }
             cursor = game.events.length;
-            if (health && game.phase === "running") {
+            if (ready() && game.phase === "running") {
                 void decide(0, now);
                 void decide(1, now);
             }

@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { adapter as classic } from "../web/classic/adapter.js";
 import { adapter as auto } from "../web/auto-aim/adapter.js";
 import { circleTouchesWall, TANK_RADIUS } from "../web/shared/collision.js";
+import { seatProtocol } from "../web/shared/seat-config.js";
 import { validHealth, validDecision } from "../web/shared/model-client.js";
 
 export async function smokeModel({
@@ -13,21 +14,47 @@ export async function smokeModel({
     seconds = 20,
     backend = "",
     controllerMode = "plans",
+    players = null,
 }) {
     assert.ok(["classic", "auto-aim"].includes(edition));
     assert.ok(seconds > 0 && seconds <= 120);
     const adapter = edition === "classic" ? classic : auto,
-        base = url + `/api/${edition}`,
-        query = backend ? `?backend=${encodeURIComponent(backend)}` : "";
-    const h = await fetch(base + "/health" + query, {
-        signal: AbortSignal.timeout(5000),
-    });
-    assert.equal(h.status, 200);
-    const health = await h.json();
-    assert.ok(validHealth(health, adapter.protocols));
+        base = url + `/api/${edition}`;
+    assert.ok(
+        players === null || (Array.isArray(players) && players.length === 2),
+    );
+    const seats = [0, 1].map((i) => ({
+        backend,
+        controllerMode,
+        interval: 100,
+        contextVersion: "full",
+        assistEnabled: edition === "classic",
+        assistProfile: "light",
+        fireGuardEnabled: false,
+        ...players?.[i],
+    }));
+    const query = (id) =>
+        seats[id].backend
+            ? `?backend=${encodeURIComponent(seats[id].backend)}`
+            : "";
+    const health = await Promise.all(
+        seats.map(async (s, i) => {
+            const r = await fetch(base + "/health" + query(i), {
+                signal: AbortSignal.timeout(5000),
+            });
+            assert.equal(r.status, 200);
+            const h = await r.json();
+            assert.ok(validHealth(h, [seatProtocol(edition, s)]));
+            return h;
+        }),
+    );
     const game = new adapter.Game();
     adapter.initialize(game);
+    if (edition === "classic")
+        seats.forEach((s, i) => game.setPlayerSettings(i, s));
     game.start();
+    const seatRtts = [[], []],
+        identities = [new Set(), new Set()];
     const counts = [0, 0],
         rtts = [],
         pending = [null, null],
@@ -39,9 +66,8 @@ export async function smokeModel({
         maxShells = 0;
     async function decide(id) {
         const observed = adapter.observe(game, id, {
-                controllerMode,
-                interval: 100,
-                rtt: rtts.at(-1),
+                ...seats[id],
+                rtt: seatRtts[id].at(-1),
             }),
             round = game.roundSerial;
         const body = {
@@ -51,9 +77,9 @@ export async function smokeModel({
                 round_id: round,
             },
             started = performance.now();
-        next[id] = started + 100;
+        next[id] = started + seats[id].interval;
         try {
-            const r = await fetch(base + "/decision" + query, {
+            const r = await fetch(base + "/decision" + query(id), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
@@ -62,10 +88,12 @@ export async function smokeModel({
             assert.equal(r.status, 200, await r.clone().text());
             const data = await r.json(),
                 rtt = performance.now() - started;
-            assert.ok(validDecision(data, body, health));
+            assert.ok(validDecision(data, body, health[id]));
             assert.ok(adapter.validControls(data, observed));
             counts[id]++;
             rtts.push(rtt);
+            seatRtts[id].push(rtt);
+            identities[id].add(data.model);
             if (
                 round !== game.roundSerial ||
                 game.phase !== "running" ||
@@ -74,7 +102,7 @@ export async function smokeModel({
                 discarded++;
                 return;
             }
-            adapter.apply(game, id, data, { controllerMode, interval: 100 });
+            adapter.apply(game, id, data, seats[id]);
         } catch (error) {
             errors.push(error.message);
         } finally {
@@ -126,7 +154,18 @@ export async function smokeModel({
     return {
         edition,
         controller: controllerMode,
-        model: health.metadata.model,
+        model: health[0].metadata.model,
+        players: seats.map((s, i) => ({
+            ...s,
+            model: health[i].metadata.model,
+            observed_models: [...identities[i]],
+            decisions: counts[i],
+            median_rtt_ms: Math.round(
+                seatRtts[i].toSorted((a, b) => a - b)[
+                    Math.floor(seatRtts[i].length / 2)
+                ],
+            ),
+        })),
         seconds,
         frames,
         decisions: counts,
@@ -140,6 +179,11 @@ export async function smokeModel({
             .length,
         max_shells: maxShells,
         median_rtt_ms: Math.round(sorted[Math.floor(sorted.length / 2)]),
+        assistance_events: [0, 1].map(
+            (i) =>
+                game.events.filter((e) => e.type === "assist" && e.player === i)
+                    .length,
+        ),
         errors: 0,
     };
 }
@@ -160,6 +204,7 @@ if (
                 seconds: Number(read("--seconds", "20")),
                 backend: read("--backend", ""),
                 controllerMode: read("--controller", "plans"),
+                players: JSON.parse(read("--players-json", "null")),
             }),
             null,
             2,

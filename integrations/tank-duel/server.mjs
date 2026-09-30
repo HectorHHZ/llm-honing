@@ -18,8 +18,19 @@ const types = {
 };
 export function configuration(env = process.env) {
     const editions = { classic: [], "auto-aim": [] };
-    const add = (edition, id, url, label, transport, token) => {
+    const add = (edition, id, url, label, transport, token, version) => {
         if (!url) return;
+        if (
+            !Object.hasOwn(editions, edition) ||
+            !/^[a-zA-Z0-9_-]{1,64}$/.test(id) ||
+            editions[edition].some((b) => b.id === id) ||
+            typeof label !== "string" ||
+            !label.trim() ||
+            !["tank", "honing"].includes(transport) ||
+            (version !== undefined &&
+                (typeof version !== "string" || version.length > 200))
+        )
+            throw Error("Invalid or duplicate model registration");
         const parsed = new URL(url);
         if (
             !["http:", "https:"].includes(parsed.protocol) ||
@@ -37,6 +48,7 @@ export function configuration(env = process.env) {
             label,
             transport,
             token,
+            ...(version ? { version } : {}),
         });
     };
     for (const edition of Object.keys(editions))
@@ -63,6 +75,33 @@ export function configuration(env = process.env) {
         env.AUTOAIM_MODEL_LABEL || "Auto Aim model",
         "tank",
     );
+    if (env.MODELS_JSON) {
+        const models = JSON.parse(env.MODELS_JSON);
+        if (!Array.isArray(models) || models.length > 32)
+            throw Error(
+                "MODELS_JSON must be an array of at most 32 model endpoints",
+            );
+        for (const m of models) {
+            if (
+                !m ||
+                typeof m.url !== "string" ||
+                !m.url ||
+                !Array.isArray(m.editions) ||
+                !m.editions.length
+            )
+                throw Error("Each model needs a URL and editions");
+            for (const edition of m.editions)
+                add(
+                    edition,
+                    m.id,
+                    m.url,
+                    m.label,
+                    m.transport || "honing",
+                    m.token,
+                    m.version,
+                );
+        }
+    }
     const defaultEdition = env.DEFAULT_EDITION || "";
     if (defaultEdition && !Object.hasOwn(editions, defaultEdition))
         throw Error("Unknown DEFAULT_EDITION");
@@ -107,9 +146,10 @@ export function createGameServer(config = configuration()) {
                             Object.entries(config.editions).map(
                                 ([key, values]) => [
                                     key,
-                                    values.map(({ id, label }) => ({
+                                    values.map(({ id, label, version }) => ({
                                         id,
                                         label,
+                                        ...(version ? { version } : {}),
                                     })),
                                 ],
                             ),

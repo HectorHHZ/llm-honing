@@ -351,3 +351,77 @@ test("legacy tank services retain their identity and wire response", async (t) =
         reply,
     );
 });
+
+test("mixed endpoints route each seat and protocol independently; registry never exposes credentials", async (t) => {
+    const blue = await fixture(t),
+        red = await fixture(t);
+    const config = configuration({
+        MODELS_JSON: JSON.stringify([
+            {
+                id: "gemma",
+                label: "DiffusionGemma",
+                version: "current",
+                url: blue.url,
+                editions: ["classic"],
+                token: "blue-secret",
+            },
+            {
+                id: "nano-v1",
+                label: "NanoJev",
+                version: "checkpoint-1",
+                url: red.url,
+                editions: ["classic"],
+                token: "red-secret",
+            },
+        ]),
+    });
+    const base = await serve(t, createGameServer(config));
+    const publicConfig = await (await fetch(base + "/api/config")).json();
+    assert.deepEqual(publicConfig.editions.classic, [
+        { id: "gemma", label: "DiffusionGemma", version: "current" },
+        { id: "nano-v1", label: "NanoJev", version: "checkpoint-1" },
+    ]);
+    assert.ok(!JSON.stringify(publicConfig).includes("secret"));
+    assert.ok(!JSON.stringify(publicConfig).includes(blue.url));
+    const a = request(classic, "plans"),
+        b = request(classic, "raw");
+    b.body.player = 1;
+    b.body.id = "red-test";
+    const responses = await Promise.all([
+        post(base + "/api/classic/decision?backend=gemma", a.body),
+        post(base + "/api/classic/decision?backend=nano-v1", b.body),
+    ]);
+    assert.ok(responses.every((r) => r.status === 200));
+    const [ar, br] = await Promise.all(responses.map((r) => r.json()));
+    assert.equal(ar.protocol, "plans-v1");
+    assert.equal(br.protocol, "controls-v3");
+    assert.ok(classic.validControls(ar, a.obs));
+    assert.ok(classic.validControls(br, b.obs));
+    assert.equal(blue.calls.length, 2);
+    assert.equal(red.calls.length, 1);
+    assert.deepEqual(Object.keys(blue.calls[0].questions), ["motion"]);
+    assert.deepEqual(Object.keys(red.calls[0].questions), [
+        "drive",
+        "turn",
+        "weapon",
+    ]);
+    assert.ok(blue.calls.every((c) => c.id.startsWith(a.body.id)));
+    assert.ok(red.calls.every((c) => c.id.startsWith(b.body.id)));
+});
+test("model registry rejects duplicate IDs, unsupported transports and unknown editions", () => {
+    const entry = {
+        id: "model",
+        url: "http://localhost:1234",
+        label: "Model",
+        editions: ["classic"],
+    };
+    for (const list of [
+        [entry, entry],
+        [{ ...entry, transport: "unknown" }],
+        [{ ...entry, editions: ["unknown"] }],
+        [{ ...entry, url: "file:///tmp/model" }],
+    ])
+        assert.throws(() =>
+            configuration({ MODELS_JSON: JSON.stringify(list) }),
+        );
+});
