@@ -179,6 +179,21 @@ def test_a_reply_repeating_the_current_text_proposes_nothing_and_runs_no_child()
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("current", ["Solve the task.\n", "  Solve the task.\n\n"])
+def test_a_reply_repeating_the_current_text_up_to_whitespace_runs_no_child(current: str) -> None:
+    # The extractor strips the reply, so "Solve the task.\n" comes back as "Solve the task.".
+    seed = SEED.with_file(INSTRUCTIONS, HarnessFile(kind="instructions", content=current))
+    fixture = Fixture(["```\nSolve the task.\n```"], minibatch_size=3)
+
+    result = fixture.method.propose(replace(fixture.context(fixture.method.initial_state(seed)), current=seed))
+
+    assert result.proposal is None
+    assert fixture.runner.runs == 3
+    assert (_archive(result).metric_calls, result.episodes_spent) == (3, 3)
+    assert len(_archive(result).candidates) == 1
+
+
+@pytest.mark.unit
 def test_an_exhausted_budget_proposes_nothing_and_runs_nothing() -> None:
     fixture = Fixture([IMPROVING], max_metric_calls=6)
     state = Archive.from_state(fixture.method.initial_state(SEED)).charge(6).to_state()
