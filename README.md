@@ -140,6 +140,8 @@ plays matches and is gated and trained through Honing.
 end to end, and CI runs its dry run on every pull request. The implementation
 steps are in [`system-design/system-design.md`](system-design/system-design.md#7-implementation-steps).
 
+The [RICOCHET tank demo](integrations/tank-duel/README.md) offers two English sketch-style browser games: hull steering and automatic turret aiming. Both run locally without a model; set `HONING_URL` to enable model duels with live decision context and match exports.
+
 ## System design
 
 ![Honing system design](system-design/honing_architecture.png)
