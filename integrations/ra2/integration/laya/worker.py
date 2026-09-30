@@ -10,10 +10,13 @@ implementations the HTTP decision server uses. DECISION_FAMILY picks the family
   and KEV_DTYPE.
 - NanoJev: LAYA_GPU, NANOJEV_MODEL, NANOJEV_SOURCE_DIR, NANOJEV_CHECKPOINT_MANIFEST,
   LAYA_LOCK_DIR, and NANOJEV_MAX_LEN.
+- djev: DJEV_URL (a running deployment), or LAYA_GPU, DJEV_SOURCE_DIR, DJEV_CACHE_DIR, and
+  DJEV_PORTS to start one with this interpreter's environment; DJEV_MODEL.
 """
 
 import json
 import os
+import signal
 import sys
 import traceback
 from pathlib import Path
@@ -23,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # does not need Honing installed to import its backend.
 sys.path.insert(0, str(ROOT.parents[1]))
 
+from honing.backends.djev import DjevDecisionModel, DjevRuntimeSettings, DjevSettings  # noqa: E402
 from honing.backends.jev.kev import KevDecisionModel, KevSettings  # noqa: E402
 from honing.backends.jev.laya import LayaDecisionModel, LayaSettings  # noqa: E402
 from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings  # noqa: E402
@@ -75,8 +79,32 @@ def nanojev_settings_from_environment():
     )
 
 
+def djev_settings_from_environment():
+    runtime = None
+    if not os.environ.get("DJEV_URL"):
+        api_port, model_port = (int(p) for p in os.environ.get("DJEV_PORTS", "8100,8101").split(","))
+        cache = os.environ.get("DJEV_CACHE_DIR")
+        runtime = DjevRuntimeSettings(
+            pins_path=ROOT / "pins.json",
+            source_dir=Path(os.environ.get("DJEV_SOURCE_DIR", ROOT / "deps/djev")),
+            python=Path(sys.executable),
+            gpu=os.environ.get("LAYA_GPU", "0"),
+            api_port=api_port,
+            model_port=model_port,
+            cache_dir=Path(cache) if cache else None,
+        )
+    return DjevSettings(
+        pins_path=ROOT / "pins.json",
+        runtime=runtime,
+        url=os.environ.get("DJEV_URL") or None,
+        model=os.environ.get("DJEV_MODEL", "diffusiongemma-26b-a4b-it"),
+    )
+
+
 def load_model():
     family = os.environ.get("DECISION_FAMILY", "laya")
+    if family == "djev":
+        return DjevDecisionModel.load(djev_settings_from_environment())
     if family == "nanojev":
         return NanoJevDecisionModel.load(nanojev_settings_from_environment())
     if family == "kev":
@@ -87,6 +115,8 @@ def load_model():
 
 
 def main():
+    # SIGTERM (the match process closing its client) ends the worker through its context managers.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     with load_model() as model:
         emit({"ready": True, "metadata": dict(model.metadata)})
         for line in sys.stdin:

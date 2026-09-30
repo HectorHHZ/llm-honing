@@ -459,6 +459,14 @@ possible is, and is tested.
 The Serve plane (live traffic, `/v1` routes, artifact activation) is not built. It will
 load a release's serving weights when they exist.
 
+What exists is serving for decision models, which runners reach through
+`PolicyEndpoints` as `jev_decision` endpoints: the decision server
+(`backends/jev/server.py`) serves one loaded model per GPU, answering on the thread that
+loaded it, for four families (Laya, Kev, and NanoJev in process; DiffusionGemma through a
+djev deployment). `backends/djev/runtime.py` starts that deployment, a patched vLLM and the
+djev API in djev's own pinned environment, after checking the environment against the pins,
+and Honing reaches it only through processes and HTTP.
+
 ```python
 class TelemetryStore(Protocol):
     def observe(self, stats: UtilizationTelemetry) -> None: ...

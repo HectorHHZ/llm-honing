@@ -47,5 +47,15 @@
       "base": "Qwen/Qwen3-0.6B",
       "baseRevision": "c1899de289a04d12100db370d81485cdf75e47ca"
     }
+  },
+  "djevSource": {
+    "url": "https://github.com/Davipar/djev-dev.git",
+    "revision": "3ce907e6835212f27ee82b4cee9039198c4abe35"
+  },
+  "djevModels": {
+    "diffusiongemma-26b-a4b-it": {
+      "repo": "google/diffusiongemma-26B-A4B-it",
+      "revision": "f7f5b7f5fa82ffc52addd066915886d497f5517b"
+    }
   }
 }

@@ -19,6 +19,16 @@ These scripts compare the code in Honing with the original RA2 experiment in #49
 - The first HTTP server ran each call on the request's thread, which changed request 4 by 0.0015 against the loading thread. The server now runs every call on the thread that loaded the model, and matches.
 - Training: sft validation loss 1.60 to 1.30 (584 train, 118 validation); the trained checkpoint serves from its manifest; grpo raises the favored option from 0.44 to 0.997, on 16 of 16 states; 1 minute 40 seconds for all three steps.
 
+## DiffusionGemma through djev
+
+`djev_serving.py <out> <gpu> <small-context-gpu>`, run with `DJEV_PYTHON` and `DJEV_SOURCE_DIR`, starts a djev deployment through Honing and compares every Honing path with djev's own `POST /v1/request` on the state Honing packed. On H100s:
+
+- The environment check passed on the pinned commits and versions (torch 2.13.0+cu130, vLLM 0.29.1rc1.dev347+gdee37d891, transformers 5.17.0, Pillow 12.3.0).
+- `DjevDecisionModel` (twice), the stdio worker, and the HTTP server, sequentially and from 4 concurrent clients, gave identical answers to djev on all 27 requests (the 24 serving requests plus 3 over djev's 20,000-character state limit, which Honing trimmed by 590 entries). The concurrent run matching is djev's batch-invariant vLLM at work.
+- With a 2,048-token context, djev refused the long state as over the context; Honing removed 245 entries until djev accepted a 2,024-token prompt, and answered as djev does on that state.
+- Warm latency: median 44 ms per request, at most 78 ms.
+- A decision server that starts its own deployment (`--djev-source`) served the same answers to Node's `HttpDecisionClient` (24 of 24). Stopping it with SIGTERM or SIGKILL released the GPU (69 GB to 0) and left no djev process.
+
 ## Kev against Kev's own code
 
 The Kev family has no counterpart in #49, so these compare Honing with Kev's own code at the commit in `pins.json`. They need the Kev environment from `scripts/setup-kev.sh` (`KEV_PYTHON`, `KEV_SOURCE_DIR`) and the pinned snapshots in the Hugging Face cache.

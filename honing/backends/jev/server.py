@@ -21,6 +21,8 @@ Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the
 - Laya: ``--model typed-decisions --model-config-dir <records> --laya-source <checkout>``
 - Kev: ``--family kev --kev-source <checkout>``
 - NanoJev: ``--family nanojev --nanojev-source <checkout>``
+- djev (DiffusionGemma): ``--family djev --djev-source <checkout> --djev-cache <local dir>`` starts a deployment on
+  the GPU, or ``--family djev --djev-url <url>`` uses a running one; run it with the djev environment's Python
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import queue
+import signal
 import sys
 import threading
 from collections.abc import Mapping, Sequence
@@ -40,6 +43,7 @@ from typing import Any
 from honing.backends.jev.model import DecisionModel
 
 MAX_BODY_BYTES = 16 * 1024 * 1024
+DJEV_MODEL = "diffusiongemma-26b-a4b-it"
 
 
 class RequestError(ValueError):
@@ -173,7 +177,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve one decision model (Laya or Kev) over HTTP.")
-    parser.add_argument("--family", choices=("laya", "kev", "nanojev"), default="laya")
+    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "djev"), default="laya")
     parser.add_argument(
         "--pins", type=Path, required=True, help="pins.json naming the model source and model revisions"
     )
@@ -184,6 +188,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--laya-source", type=Path, help="laya: Laya checkout at the pinned revision")
     parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")
     parser.add_argument("--nanojev-source", type=Path, help="nanojev: NanoJev checkout at the pinned revision")
+    parser.add_argument("--djev-url", help="djev: a running djev deployment's API to use")
+    parser.add_argument("--djev-source", type=Path, help="djev: djev checkout at the pinned revision, to start one")
+    parser.add_argument("--djev-cache", type=Path, help="djev: local directory for the deployment's compile caches")
+    parser.add_argument("--djev-ports", default="8100,8101", help="djev: API and vLLM ports of a started deployment")
     parser.add_argument("--dtype", choices=("bf16", "fp32"), default="bf16", help="kev: serving precision")
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
@@ -191,6 +199,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
+    # SIGTERM ends the server through its context managers, so a model holding processes or a GPU is released.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     with _load(parser, args) as model:
         server = DecisionServer((args.host, args.port), model)
         # One line on stdout tells a launcher where the server is and what it loaded.
@@ -203,6 +213,26 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
     """The model's loading context for the chosen family; a missing family setting is a usage error."""
+    if args.family == "djev":
+        from honing.backends.djev import DjevDecisionModel, DjevRuntimeSettings, DjevSettings
+
+        if (args.djev_url is None) == (args.djev_source is None):
+            parser.error("--family djev needs --djev-url (a running deployment) or --djev-source (to start one)")
+        runtime = None
+        if args.djev_source is not None:
+            api_port, model_port = (int(p) for p in args.djev_ports.split(","))
+            runtime = DjevRuntimeSettings(
+                pins_path=args.pins,
+                source_dir=args.djev_source,
+                python=Path(sys.executable),
+                gpu=args.gpu,
+                api_port=api_port,
+                model_port=model_port,
+                cache_dir=args.djev_cache,
+            )
+        return DjevDecisionModel.load(
+            DjevSettings(pins_path=args.pins, runtime=runtime, url=args.djev_url, model=args.model or DJEV_MODEL)
+        )
     if args.family == "nanojev":
         from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings
 

@@ -9,10 +9,10 @@ A harness for agent ``ra2_decision`` has two files, which the match reads as
   recommendation text, with ``{name}`` placeholders filled during the match.
 
 :func:`seed_harness` is the integration's current behavior. :class:`LayaQuestionCheck`,
-:class:`KevQuestionCheck`, and :class:`NanoJevQuestionCheck` refuse, before any
-match starts, a harness the model cannot read: every option, instruction, and
-state entry must fit the family's limits (:data:`LAYA_LIMITS`, :data:`KEV_LIMITS`,
-:data:`NANOJEV_LIMITS`). Placeholders are filled with the
+:class:`KevQuestionCheck`, :class:`NanoJevQuestionCheck`, and :class:`DjevQuestionCheck`
+refuse, before any match starts, a harness the model cannot read: every option,
+instruction, and state entry must fit the family's limits (:data:`LAYA_LIMITS`,
+:data:`KEV_LIMITS`, :data:`NANOJEV_LIMITS`, :data:`DJEV_LIMITS`). Placeholders are filled with the
 longest values the match produces, so the check is conservative. Text built
 from game content can still overrun during a match; the grader then scores that
 match 0 and names the question.
@@ -54,6 +54,9 @@ KEV_LIMITS = QuestionLimits(option=256, instruction=512, state_entry=2048)
 # NanoJev scores each option on its own path (state, question, candidate) within a 2,048-token input; these keep
 # a candidate within an eighth of it, instructions within a quarter, and one state entry within a quarter.
 NANOJEV_LIMITS = QuestionLimits(option=256, instruction=512, state_entry=512)
+# djev's request contract counts Unicode characters: 500 per option, 2,000 per instruction, 20,000 for the state,
+# of which one entry may take a quarter.
+DJEV_LIMITS = QuestionLimits(option=500, instruction=2000, state_entry=5000)
 OPTION_LIMIT, INSTRUCTION_LIMIT, STATE_ENTRY_LIMIT = (
     LAYA_LIMITS.option,
     LAYA_LIMITS.instruction,
@@ -109,6 +112,7 @@ class TokenQuestionCheck:
     """
 
     limits = LAYA_LIMITS
+    unit = "tokens"
 
     def __init__(self, tokenizer: Any, required_keys: frozenset[str]) -> None:
         self._tok = tokenizer
@@ -159,7 +163,7 @@ class TokenQuestionCheck:
                 count = self._tokens(filled)
                 limit = self.limits.instruction if kind == "instruction" else self.limits.state_entry
             if count > limit:
-                problems.append(f"{key} ({kind}) is {count} tokens; the limit is {limit}")
+                problems.append(f"{key} ({kind}) is {count} {self.unit}; the limit is {limit}")
         return problems
 
     def check(self, spec: HarnessSpec) -> None:
@@ -228,3 +232,24 @@ class NanoJevQuestionCheck(TokenQuestionCheck):
 
     def _option_tokens(self, text: str) -> int:
         return 1 + self._tokens(f"Candidate:\nX: {text}\nDecision:")
+
+
+class _Characters:
+    """Counts Unicode characters, the unit of djev's request limits, with a tokenizer's call signature."""
+
+    def __call__(self, text: str, *, add_special_tokens: bool = False) -> dict[str, list[str]]:
+        return {"input_ids": list(text)}
+
+
+class DjevQuestionCheck(TokenQuestionCheck):
+    """The check for DiffusionGemma through djev, whose limits are in characters, so it needs no tokenizer."""
+
+    limits = DJEV_LIMITS
+    unit = "characters"
+
+    def __init__(self, required_keys: frozenset[str]) -> None:
+        super().__init__(_Characters(), required_keys)
+
+    @classmethod
+    def for_integration(cls, integration_dir: Path) -> DjevQuestionCheck:
+        return cls(_required_keys(integration_dir))

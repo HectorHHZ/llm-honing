@@ -21,6 +21,9 @@ None of these are in the repository. Each is pinned or supplied separately.
 | Kev weights (`kev-0.8b`) and its Qwen3.5-0.8B-Base base | Hugging Face, revisions in `pins.json` (`kevModels`) | Apache-2.0 |
 | NanoJev source | cloned at the commit in `pins.json` (`nanojevSource`), the one #49 pinned | MIT |
 | NanoJev weights (`nanojev`, full Qwen3-0.6B) | Hugging Face, revision in `pins.json` (`nanojevModels`) | the card names no separate weight license: its source is MIT and the Qwen3-0.6B base keeps Apache-2.0 |
+| djev source | cloned at the commit in `pins.json` (`djevSource`) | Apache-2.0 |
+| DiffusionGemma weights (`google/diffusiongemma-26B-A4B-it`, about 52 GB) | Hugging Face, revision in `pins.json` (`djevModels`) | Apache-2.0 |
+| vLLM for djev | the wheel of djev's base commit, patched by djev's installer | Apache-2.0 |
 
 Supalosa's own dependencies currently report 11 advisories from `npm audit`, one of them critical. They run only at setup and inside the match process.
 
@@ -166,6 +169,22 @@ npm run match -- --family=nanojev --decision-server=http://127.0.0.1:8803 --seat
 ```
 
 As for Kev, everything Laya has works with `family=nanojev`: `NanoJevDecisionModel`, the server and the stdio worker (`DECISION_FAMILY=nanojev`, `NANOJEV_*` settings, started with `NANOJEV_PYTHON`), match, duel and audit, `NanoJevQuestionCheck` (`NANOJEV_LIMITS`), and `NanoJevTrainer` (`sft`, `grpo`; full weights, or `param_subset` for the heads). The model files are checked against the checksums the model repository publishes, and a candidate path is limited to 2,048 tokens, as #49 ran it; the state is trimmed by whole entries until every path fits. `parity/nanojev_serving.py` compares serving with #49's worker and `parity/nanojev_training.py` checks the trainer.
+
+## Serving DiffusionGemma through djev
+
+[djev](https://github.com/Davipar/djev-dev) serves [DiffusionGemma](https://huggingface.co/google/diffusiongemma-26B-A4B-it) as a typed-decision model: one denoising read of a fixed answer canvas gives the probability of every option. It lives in the Serve plane (`honing/backends/djev/`), in two parts:
+
+- `djev_runtime` starts a deployment on one GPU: vLLM, patched by djev's installer, and the djev API, both in djev's own environment. Honing never imports vLLM, torch, or djev; it starts them as processes and talks to them over HTTP. Before starting, it checks that the djev checkout, the model djev serves, the torch/vLLM/transformers/Pillow versions, and vLLM's record of djev's patches all match the pins. vLLM runs with the arguments djev's `runtime/serve.py` builds, with only the port changed. The processes stop with the server, and also stop if the server is killed outright.
+- `DjevDecisionModel` puts the deployment behind Honing's decision-model interface, so the decision server serves it and runners reach it through `PolicyEndpoints` as a `jev_decision` endpoint. It packs and trims the state as the other families do: first to djev's 20,000-character state limit, then one entry at a time while djev reports that the prompt exceeds the context.
+
+```bash
+scripts/setup-djev.sh                 # djev's runtime on a venv; prints the DJEV_PYTHON and DJEV_SOURCE_DIR exports
+"$DJEV_PYTHON" -m honing.backends.jev.server --family djev --pins pins.json --djev-source "$DJEV_SOURCE_DIR" \
+  --djev-cache /local/disk/djev-cache --gpu 0 --port 8804      # or --djev-url for a running deployment
+npm run match -- --family=djev --decision-server=http://127.0.0.1:8804 --seat=red --seed=1 --out=runs/djev-seed1-red
+```
+
+The environment is djev's, not Honing's: Python 3.12, torch 2.13+cu130, vLLM at djev's base commit with its patches, transformers 5.17. It needs an NVIDIA driver for CUDA 13, and one GPU that holds the BF16 weights (an 80 GB H100 does; djev targets a B200). Keep `HF_HOME` and `--djev-cache` on local disk: the compile caches exceed a home-directory quota. `DjevQuestionCheck` checks a harness against djev's character limits. djev reads DiffusionGemma without training it, so there is no trainer for this family. `parity/djev_serving.py` compares every Honing path with djev's own API.
 
 ## End to end
 

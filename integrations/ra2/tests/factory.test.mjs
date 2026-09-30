@@ -42,7 +42,7 @@ test("the laya, kev, and nanojev families are accepted, anything else is refused
     );
     assert.throws(
         () => decisionClientOptions({ family: "jev-omni" }, "intent"),
-        /jev-omni is not supported; use one of laya, kev, nanojev/,
+        /jev-omni is not supported; use one of laya, kev, nanojev, djev/,
     );
 });
 
@@ -126,4 +126,31 @@ test("a nanojev worker runs with NANOJEV_PYTHON and the nanojev settings", () =>
     assert.equal(env.NANOJEV_MODEL, "nanojev");
     assert.equal(env.LAYA_GPU, "4");
     assert.equal(env.NANOJEV_CHECKPOINT_MANIFEST, undefined);
+});
+
+test("a djev worker runs with DJEV_PYTHON, and the family names DiffusionGemma by default", () => {
+    assert.deepEqual(
+        decisionClientOptions({ family: "djev", gpu: "2" }, "intent"),
+        { family: "djev", gpu: "2", model: "diffusiongemma-26b-a4b-it" },
+    );
+    const calls = [];
+    const saved = process.env.DJEV_PYTHON;
+    process.env.DJEV_PYTHON = "/envs/djev/bin/python";
+    try {
+        const client = new LayaClient({
+            family: "djev",
+            gpu: "2",
+            model: "diffusiongemma-26b-a4b-it",
+            spawnProcess: fakeSpawn(calls),
+        });
+        client.ready.catch(() => {});
+        client.close();
+    } finally {
+        if (saved === undefined) delete process.env.DJEV_PYTHON;
+        else process.env.DJEV_PYTHON = saved;
+    }
+    const [{ command, env }] = calls;
+    assert.equal(command, "/envs/djev/bin/python");
+    assert.equal(env.DECISION_FAMILY, "djev");
+    assert.equal(env.DJEV_MODEL, "diffusiongemma-26b-a4b-it");
 });
