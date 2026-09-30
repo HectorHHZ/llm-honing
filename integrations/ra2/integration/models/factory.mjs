@@ -2,13 +2,21 @@ import { LayaClient } from "../laya/client.mjs";
 import { PermutationClient } from "../laya/permutation-client.mjs";
 import { HttpDecisionClient } from "../laya/http-client.mjs";
 
-// Only the Laya family runs here. The native families (NanoJev, Jev-Omni) come
-// with the decision server and the trainer; see #52 and #56.
+// Two decision-model families run here: Laya and Kev. Both answer the same typed
+// questions with the same response fields (honing/backends/jev/laya.py and kev.py).
+export const FAMILIES = ["laya", "kev"];
+const DEFAULT_MODEL = {
+    laya: (candidateMode) =>
+        candidateMode === "intent" ? "typed-decisions" : "english",
+    kev: () => "kev-0.8b",
+};
 export function decisionClientOptions(args, candidateMode) {
     const family = args.family ?? "laya";
-    if (family !== "laya")
+    if (!FAMILIES.includes(family))
         throw new Error(
-            `Model family ${family} is not supported yet; only laya runs in this integration`,
+            `Model family ${family} is not supported; use one of ${FAMILIES.join(
+                ", ",
+            )}`,
         );
     if (
         args["head-manifest"] ||
@@ -22,10 +30,18 @@ export function decisionClientOptions(args, candidateMode) {
     return {
         family,
         gpu: args.gpu ?? "0",
-        model:
-            args.model ??
-            (candidateMode === "intent" ? "typed-decisions" : "english"),
+        model: args.model ?? DEFAULT_MODEL[family](candidateMode),
     };
+}
+
+// A decision server reports the family it loaded; a Laya server predates the field.
+export function checkServedFamily(options, metadata) {
+    const served = metadata?.family ?? "laya";
+    if (served !== options.family)
+        throw new Error(
+            `Asked for a ${options.family} model, but the decision server loaded ${served}`,
+        );
+    return metadata;
 }
 
 export function createDecisionClient(options) {

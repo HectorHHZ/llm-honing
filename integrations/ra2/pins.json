@@ -17,5 +17,17 @@
       "revision": "1a793eb568e6718f15941d08f85432581df534e3"
     }
   },
+  "kevSource": {
+    "url": "https://github.com/jaredpalmer/kev.git",
+    "revision": "45923b7a3460b6d36358e2e143455902c1eb856b"
+  },
+  "kevModels": {
+    "kev-0.8b": {
+      "repo": "jaredpalmer/kev-0.8b",
+      "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e",
+      "base": "Qwen/Qwen3.5-0.8B-Base",
+      "baseRevision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68"
+    }
+  },
   "engineCommit": "abad0cc238bd74b9e64a3d7e92c4631418d8dfae"
 }

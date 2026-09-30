@@ -17,6 +17,8 @@ None of these are in the repository. Each is pinned or supplied separately.
 | Supalosa bot | cloned at the commit in `pins.json` | the upstream repository has no license file, so it is cloned at setup and never copied here |
 | Laya source | cloned at the commit in `pins.json` | Apache-2.0 |
 | Laya weights (`english`, `typed-decisions`) | Hugging Face, revisions in `pins.json` | Apache-2.0 |
+| Kev source | cloned at the commit in `pins.json` (`kevSource`) | Apache-2.0 |
+| Kev weights (`kev-0.8b`) and its Qwen3.5-0.8B-Base base | Hugging Face, revisions in `pins.json` (`kevModels`) | Apache-2.0 |
 
 Supalosa's own dependencies currently report 11 advisories from `npm audit`, one of them critical. They run only at setup and inside the match process.
 
@@ -127,6 +129,29 @@ The model code the worker runs is `honing/backends/jev/`, tested with the rest o
 ```
 
 It answers one request at a time, so several matches can share one loaded model. The worker and the server run the same model code.
+
+## Using Kev
+
+[Kev](https://github.com/jaredpalmer/kev) is a second decision-model family: a LoRA adapter and pointer head on a Qwen3.5 base, answering the same typed questions as Laya with the same response fields. `honing.backends.jev.kev` runs it through Kev's own code at the commit in `pins.json`, so it needs its own environment (Python 3.12, torch 2.8, transformers 5.x):
+
+```bash
+scripts/setup-kev.sh                  # prints the KEV_PYTHON and KEV_SOURCE_DIR exports
+"$KEV_PYTHON" -m honing.backends.jev.server --family kev --pins pins.json --kev-source "$KEV_SOURCE_DIR" --gpu 0 --port 8802
+npm run match -- --family=kev --decision-server=http://127.0.0.1:8802 --seat=red --seed=1 --out=runs/kev-seed1-red
+npm run match -- --family=kev --gpu=0 --seat=red --seed=1 --out=runs/kev-seed1-red-worker   # or a stdio worker
+```
+
+Everything Laya has works with `family=kev`:
+
+| Laya | Kev |
+|---|---|
+| `LayaDecisionModel` | `KevDecisionModel`: the same four state sections, trimmed by whole entries to fit Kev's context (8,192 state tokens) instead of Laya's 2,048; an overrun is refused with the same wording, so `RA2Grader` scores it 0 |
+| decision server, stdio worker | `--family kev`; the worker reads `DECISION_FAMILY=kev` and the `KEV_*` settings, and `KEV_PYTHON` starts it |
+| match, duel, audit | `--family=kev` (or `--red-family=kev` in a duel); the manifest records the family, and a server that loaded another family is refused |
+| `LayaQuestionCheck` | `KevQuestionCheck`, with Kev's tokenizer and limits (`KEV_LIMITS`) |
+| `LocalJevTrainer` (`sft`, `grpo`) | `KevTrainer`: continues the adapter and pointer head as `kev.train --init_from` does, and saves a Kev checkpoint with a `trained-kev` manifest the server loads with `--checkpoint-manifest` |
+
+Each request runs on its own, with no state cached across requests, so an answer does not depend on what came before. `parity/kev_serving.sh` and `parity/kev_training.py` check both against Kev's own code.
 
 ## End to end
 

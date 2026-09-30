@@ -11,7 +11,8 @@ One model loaded on one GPU answers one request at a time; concurrent requests
 wait their turn, so many games can share one loaded model. A malformed request
 is a 400 and a model failure is a 500, each with ``{"error": ...}``.
 
-Run: ``python -m honing.backends.jev.server --pins <pins.json> --model typed-decisions --gpu 0``
+Run: ``python -m honing.backends.jev.server --pins <pins.json> --model typed-decisions --gpu 0 ...`` (Laya), or
+``python -m honing.backends.jev.server --family kev --pins <pins.json> --kev-source <kev checkout> --gpu 0`` (Kev).
 """
 
 from __future__ import annotations
@@ -115,31 +116,23 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    from honing.backends.jev.laya import LayaDecisionModel, LayaSettings
-
-    parser = argparse.ArgumentParser(description="Serve one Laya checkpoint over HTTP.")
+    parser = argparse.ArgumentParser(description="Serve one decision model (Laya or Kev) over HTTP.")
+    parser.add_argument("--family", choices=("laya", "kev"), default="laya")
     parser.add_argument(
-        "--pins", type=Path, required=True, help="pins.json naming the Laya source and model revisions"
+        "--pins", type=Path, required=True, help="pins.json naming the model source and model revisions"
     )
-    parser.add_argument("--model", required=True, help="model name in pins.json, e.g. typed-decisions")
-    parser.add_argument("--model-config-dir", type=Path, required=True, help="directory of prepared model records")
-    parser.add_argument("--laya-source", type=Path, required=True, help="Laya checkout at the pinned revision")
+    parser.add_argument("--model", help="model name in pins.json: typed-decisions (laya) or kev-0.8b (kev)")
+    parser.add_argument("--model-config-dir", type=Path, help="laya: directory of prepared model records")
+    parser.add_argument("--laya-source", type=Path, help="laya: Laya checkout at the pinned revision")
+    parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")
+    parser.add_argument("--dtype", choices=("bf16", "fp32"), default="bf16", help="kev: serving precision")
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
-    parser.add_argument("--max-len", type=int, default=2048)
+    parser.add_argument("--max-len", type=int, default=2048, help="laya: input token limit")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
-    settings = LayaSettings(
-        pins_path=args.pins,
-        model_type=args.model,
-        model_config_dir=args.model_config_dir,
-        source_dir=args.laya_source,
-        gpu=args.gpu,
-        checkpoint_manifest=args.checkpoint_manifest,
-        max_len=args.max_len,
-    )
-    with LayaDecisionModel.load(settings) as model:
+    with _load(parser, args) as model:
         server = DecisionServer((args.host, args.port), model)
         # One line on stdout tells a launcher where the server is and what it loaded.
         print(json.dumps({"ready": True, "url": server.url, "metadata": dict(model.metadata)}), flush=True)
@@ -147,6 +140,40 @@ def main(argv: Sequence[str] | None = None) -> None:
             server.serve_forever()
         finally:
             server.server_close()
+
+
+def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
+    """The model's loading context for the chosen family; a missing family setting is a usage error."""
+    if args.family == "kev":
+        from honing.backends.jev.kev import KevDecisionModel, KevSettings
+
+        if args.kev_source is None:
+            parser.error("--family kev needs --kev-source")
+        return KevDecisionModel.load(
+            KevSettings(
+                pins_path=args.pins,
+                source_dir=args.kev_source,
+                model=args.model or "kev-0.8b",
+                gpu=args.gpu,
+                checkpoint_manifest=args.checkpoint_manifest,
+                dtype=args.dtype,
+            )
+        )
+    from honing.backends.jev.laya import LayaDecisionModel, LayaSettings
+
+    if args.model is None or args.model_config_dir is None or args.laya_source is None:
+        parser.error("--family laya needs --model, --model-config-dir, and --laya-source")
+    return LayaDecisionModel.load(
+        LayaSettings(
+            pins_path=args.pins,
+            model_type=args.model,
+            model_config_dir=args.model_config_dir,
+            source_dir=args.laya_source,
+            gpu=args.gpu,
+            checkpoint_manifest=args.checkpoint_manifest,
+            max_len=args.max_len,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import weakref
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from honing.backends.ra2.harness import AGENT, CONTROLLER_PATH, QUESTIONS_PATH, LayaQuestionCheck
+from honing.backends.ra2.harness import AGENT, CONTROLLER_PATH, QUESTIONS_PATH, QuestionCheck
 from honing.backends.ra2.scenarios import RA2Suite
 from honing.core import (
     CampaignRuleError,
@@ -52,7 +52,7 @@ class RA2EpisodeRunner:
         command: Sequence[str] | None = None,
         environment: Mapping[str, str] | None = None,
         concurrency: int = 4,
-        question_check: LayaQuestionCheck | None = None,
+        question_check: QuestionCheck | None = None,
     ) -> None:
         if concurrency <= 0:
             raise ContractError("concurrency must be positive")
@@ -71,7 +71,7 @@ class RA2EpisodeRunner:
         self._question_check = question_check
 
     def check_spec(self, spec: HarnessSpec) -> None:
-        """Refuse, before any match, a harness the model cannot read (see :class:`LayaQuestionCheck`)
+        """Refuse, before any match, a harness the model cannot read (see ``question_check``)
         or one that changes the cadence.
 
         The cadence belongs to the task protocol, as in #49's gates: the match always
