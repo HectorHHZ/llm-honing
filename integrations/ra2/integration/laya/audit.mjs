@@ -1,3 +1,4 @@
+import { verifyTokenAudit } from "./token-audit.mjs";
 import { verifyEnsemble } from "./permutation-client.mjs";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -50,10 +51,10 @@ function auditCall(record, stageIndex = 1) {
         : [record];
     if (
         result.modelFamily &&
-        !["laya", "kev", "nanojev"].includes(result.modelFamily)
+        !["laya", "kev", "nanojev", "djev"].includes(result.modelFamily)
     )
         throw new Error(
-            `This audit covers the laya, kev, and nanojev families, not ${result.modelFamily}`,
+            `This audit covers the laya, kev, nanojev, and djev families, not ${result.modelFamily}`,
         );
     latencies.push(...forwards.map((r) => r.latencyMs));
     for (const r of forwards)
@@ -109,10 +110,7 @@ function auditCall(record, stageIndex = 1) {
         // Probabilities are logged rounded; a 0.0001 tolerance allows a rounded tie.
         assert(answer.probabilities[answer.choice] + 0.0001 >= Math.max(...ps));
         const a = record.tokenAudit[id];
-        assert(a);
-        assert.equal(a.options, Object.keys(q.criteria).length);
-        assert.equal(a.stateTruncated, false);
-        assert(a.stateTokens <= a.stateRoom);
+        verifyTokenAudit(a, Object.keys(q.criteria).length);
         peakTokens = Math.max(peakTokens, a.inputTokens);
     }
 }

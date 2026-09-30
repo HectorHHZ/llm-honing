@@ -298,3 +298,7 @@ result = LocalJevTrainer(settings).train(job, base, batch)
 | comparison | `Evaluator` | `EpisodeEvaluator` against the bot, or `DuelEvaluator` | unchanged |
 
 To check a new component, point its slot in a copy of `configs/e2e/ra2_dry_run.json` at your factory (`package.module:function`, called with the run's context and the entry's `args`) and run the script; `tests/test_ra2_e2e.py` does this for a trainer and a runner. With real matches, swap it into step 3 or 4 in place of the default.
+
+## DiffusionGemma / djev
+
+`--family=djev --decision-server=<Honing bridge URL>` uses an existing djev structured-read deployment. See [the bridge setup and validation boundary](../djev/README.md). The adapter preserves upstream probabilities and total-prompt token accounting; it does not load weights or provide a trainer. Match and duel records count structured decision requests rather than GPU forwards.

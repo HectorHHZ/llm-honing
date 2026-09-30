@@ -2,7 +2,7 @@ import {
     checkServedFamily,
     createDecisionClient,
     decisionClientOptions,
-    FAMILIES,
+    inferenceCallUnit,
 } from "../models/factory.mjs";
 import {
     writeFileSync,
@@ -200,6 +200,7 @@ try {
             "worker.py",
             "client.mjs",
             "permutation-client.mjs",
+            "token-audit.mjs",
             "run.mjs",
             "decision-log.mjs",
             "text.mjs",
@@ -211,7 +212,7 @@ try {
     writeFileSync(out + "/config/questions.json", questionsText);
     // The worker's model code lives in the Honing backend, outside this directory.
     const REPO = ROOT + "../../";
-    const repoFiles = ["laya.py", "model.py", "token_budget.py"].map(
+    const repoFiles = ["laya.py", "model.py", "token_budget.py", "djev.py"].map(
         (f) => "honing/backends/jev/" + f,
     );
     const locate = (file) =>
@@ -238,9 +239,7 @@ try {
         },
         questions: { path: questionsPath, sha256: sha256(questionsText) },
         modelFamily: clientOptions.family,
-        inferenceCallUnit: FAMILIES.includes(clientOptions.family)
-            ? "native_model_forward"
-            : "native_choice_request",
+        inferenceCallUnit: inferenceCallUnit(clientOptions.family),
         decisionLogFormat,
         protocol:
             decisionMode === "staged"

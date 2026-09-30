@@ -115,3 +115,29 @@ test("failed or differently packed second call does not substitute a local actio
     };
     await assert.rejects(new PermutationClient(invalid).predict(packet));
 });
+
+test("remote token accounting survives the actual target permutation path", async () => {
+    const raw = fixture([
+            [0, 0.6, 0.4],
+            [0, 0.9, 0.1],
+        ]),
+        predict = raw.predict.bind(raw);
+    raw.predict = async (p) => {
+        const r = await predict(p);
+        r.tokenAudit.next_action = {
+            ...r.tokenAudit.next_action,
+            encoding: "djev-remote-prompt",
+            accounting: "upstream-request-total",
+            stateTokens: null,
+            stateRoom: null,
+        };
+        return r;
+    };
+    const r = await new PermutationClient(raw).predict(packet);
+    verifyEnsemble({ ...packet, ...r });
+    assert.equal(r.answers.next_action.choice, "C");
+    assert.equal(r.tokenAudit.next_action.stateTokens, null);
+    const bad = structuredClone(r);
+    bad.ensemble.original.tokenAudit.next_action.stateRoom = 8192;
+    assert.throws(() => verifyEnsemble({ ...packet, ...bad }));
+});

@@ -21,6 +21,7 @@ Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the
 - Laya: ``--model typed-decisions --model-config-dir <records> --laya-source <checkout>``
 - Kev: ``--family kev --kev-source <checkout>``
 - NanoJev: ``--family nanojev --nanojev-source <checkout>``
+- djev: ``--family djev --djev-url http://127.0.0.1:8011 --model dgemma`` (no local pins/GPU)
 """
 
 from __future__ import annotations
@@ -172,18 +173,21 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Serve one decision model (Laya or Kev) over HTTP.")
-    parser.add_argument("--family", choices=("laya", "kev", "nanojev"), default="laya")
+    parser = argparse.ArgumentParser(description="Serve a local decision model or bridge a remote djev server.")
+    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "djev"), default="laya")
+    parser.add_argument("--pins", type=Path, help="local families: pins.json naming source and model revisions")
     parser.add_argument(
-        "--pins", type=Path, required=True, help="pins.json naming the model source and model revisions"
-    )
-    parser.add_argument(
-        "--model", help="model name in pins.json: typed-decisions (laya), kev-0.8b or kev-4b (kev), nanojev (nanojev)"
+        "--model",
+        help="local model name in pins.json, or the upstream served name for djev",
     )
     parser.add_argument("--model-config-dir", type=Path, help="laya: directory of prepared model records")
     parser.add_argument("--laya-source", type=Path, help="laya: Laya checkout at the pinned revision")
     parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")
     parser.add_argument("--nanojev-source", type=Path, help="nanojev: NanoJev checkout at the pinned revision")
+    parser.add_argument("--djev-url", help="djev: upstream base URL, optionally ending in /v1")
+    parser.add_argument("--djev-timeout", type=float, default=60.0)
+    parser.add_argument("--djev-samples", type=int, default=1)
+    parser.add_argument("--djev-steps", type=int, default=1)
     parser.add_argument("--dtype", choices=("bf16", "fp32"), default="bf16", help="kev: serving precision")
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
@@ -203,6 +207,24 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
     """The model's loading context for the chosen family; a missing family setting is a usage error."""
+    if args.family == "djev":
+        from honing.backends.jev.djev import DjevDecisionModel, DjevSettings
+
+        if not args.djev_url or not args.model:
+            parser.error("--family djev needs --djev-url and --model (the upstream served name)")
+        if args.checkpoint_manifest is not None or args.pins is not None:
+            parser.error("djev is remote: local pins/checkpoint manifests cannot verify or select its weights")
+        return DjevDecisionModel.load(
+            DjevSettings(
+                url=args.djev_url,
+                model=args.model,
+                timeout=args.djev_timeout,
+                samples=args.djev_samples,
+                steps=args.djev_steps,
+            )
+        )
+    if args.pins is None:
+        parser.error("local model families need --pins")
     if args.family == "nanojev":
         from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings
 

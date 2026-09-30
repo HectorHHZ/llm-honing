@@ -20,7 +20,7 @@ import {
     checkServedFamily,
     createDecisionClient,
     decisionClientOptions,
-    FAMILIES,
+    inferenceCallUnit,
 } from "./factory.mjs";
 import { DUEL_SEATS, normalSeats, resolveDuelStep } from "./duel-core.mjs";
 import { loadQuestions } from "../laya/text.mjs";
@@ -238,9 +238,7 @@ try {
             opponentKind: "decision-model",
             modelFamily: options[seat].family,
             runtime: runtimes[seat],
-            inferenceCallUnit: FAMILIES.includes(options[seat].family)
-                ? "native_model_forward"
-                : "native_choice_request",
+            inferenceCallUnit: inferenceCallUnit(options[seat].family),
         };
         save(seat + "/manifest.json", manifests[seat]);
     }

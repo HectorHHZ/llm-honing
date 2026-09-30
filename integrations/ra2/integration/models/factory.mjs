@@ -2,10 +2,10 @@ import { LayaClient } from "../laya/client.mjs";
 import { PermutationClient } from "../laya/permutation-client.mjs";
 import { HttpDecisionClient } from "../laya/http-client.mjs";
 
-// Three decision-model families run here: Laya, Kev, and NanoJev. All answer the same
+// Local Laya, Kev, NanoJev and remote djev answer the same
 // typed questions with the same response fields (honing/backends/jev/laya.py, kev.py,
 // nanojev.py).
-export const FAMILIES = ["laya", "kev", "nanojev"];
+export const FAMILIES = ["laya", "kev", "nanojev", "djev"];
 const DEFAULT_MODEL = {
     laya: (candidateMode) =>
         candidateMode === "intent" ? "typed-decisions" : "english",
@@ -29,6 +29,10 @@ export function decisionClientOptions(args, candidateMode) {
         throw new Error("Native settings require a native model family");
     if (args["decision-server"])
         return { family, decisionServer: args["decision-server"] };
+    if (family === "djev")
+        throw new Error(
+            "djev requires --decision-server pointing to the Honing djev bridge",
+        );
     return {
         family,
         gpu: args.gpu ?? "0",
@@ -47,8 +51,16 @@ export function checkServedFamily(options, metadata) {
 }
 
 export function createDecisionClient(options) {
+    if (options.family === "djev" && !options.decisionServer)
+        throw new Error("djev requires a decision server");
     const raw = options.decisionServer
         ? new HttpDecisionClient({ url: options.decisionServer })
         : new LayaClient(options);
     return new PermutationClient(raw);
+}
+
+export function inferenceCallUnit(family) {
+    return family === "djev"
+        ? "structured_decision_request"
+        : "native_model_forward";
 }
