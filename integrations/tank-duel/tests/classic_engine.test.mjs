@@ -33,6 +33,19 @@ test("generated mazes are reproducible, connected, and every cell center is trav
                 );
             const p = center(i);
             assert.equal(blocked(maze, p.x, p.y), false);
+            // Waypoints must use openings that fit the complete tank body.
+            for (const j of maze.links[i]) {
+                const end = center(j);
+                for (let step = 0; step <= 30; step++)
+                    assert.equal(
+                        blocked(
+                            maze,
+                            p.x + ((end.x - p.x) * step) / 30,
+                            p.y + ((end.y - p.y) * step) / 30,
+                        ),
+                        false,
+                    );
+            }
         }
     }
 });
@@ -558,8 +571,10 @@ test("fire guard can be disabled and does not affect human shooting or bullet le
     }
 });
 test("context separates existing-shell movement risk from new-shot risk and exposes obstructing walls", () => {
-    const g = new Game(),
-        o = buildObservation(g, 0);
+    const g = new Game();
+    // Keep this obstruction regression independent of the open demo layouts.
+    g.maze.walls = [{ x: 176, y: 0, w: 8, h: H }];
+    const o = buildObservation(g, 0);
     assert.equal(o.bullets.length, 0);
     assert.equal(o.enemyVisible, false);
     assert.ok(o.frontWallDistance < 45);

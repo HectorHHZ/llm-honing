@@ -9,7 +9,7 @@ with local keyboard play and an optional Honing model connection.
 | **Auto Aim** | Up/down/left/right in screen coordinates    | Independent turret turns toward a verified direct or ricochet shot. The model chooses movement and firing separately. |
 
 Both have bouncing shells, five active shells per tank, one-hit rounds, a
-first-to-five match, seeded mazes, model probabilities, full context inspection,
+first-to-five match, seeded arenas, model probabilities, full context inspection,
 and downloadable match records. **Your own shells are lethal.**
 
 Screenshots from connected model matches; model labels come from the configured service.
@@ -177,6 +177,16 @@ responses, actual latency, applied plans, shots and kills are included.
 It is an audit record, not a deterministic replay format. Treat probability
 bars as model outputs; geometry restrictions and execution changes are shown
 separately in the details and export.
+
+## Classic arenas
+
+Classic uses three simple, rotationally symmetric layouts: Open Field, Side
+Cover and Crossfire. Each has just four short interior walls, wide open routes
+and a clear center. Navigation links are derived from actual tank clearance
+against those walls, so model waypoints match the visible layout. Rounds rotate
+layouts deterministically; **New arena** selects a different layout and
+**Restart** keeps the match seed. Exports identify this map set as
+`open-arenas-v1`. Auto Aim retains its maze generator.
 
 ## Collision rules
 

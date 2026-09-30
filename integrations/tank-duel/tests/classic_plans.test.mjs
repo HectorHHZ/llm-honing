@@ -88,8 +88,10 @@ test("planning state contains all own/enemy shells and joint candidate outcomes"
     );
 });
 test("spawn facing a nearby wall has no permitted opening shot", () => {
-    const g = new Game(),
-        o = buildPlans(g, 0, { reactionDelay: 0 });
+    const g = new Game();
+    // Explicit nearby-wall fixture; the default demo arena is intentionally open.
+    g.maze.walls = [{ x: 180, y: 0, w: 8, h: 630 }];
+    const o = buildPlans(g, 0, { reactionDelay: 0 });
     assert.ok(o.actions.every((p) => !p.allowFire));
 });
 test("replacing a stale motion cancels the weapon decision conditioned on that motion", () => {

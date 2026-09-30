@@ -39,67 +39,89 @@ export function rng(seed) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
+// Sparse, rotationally symmetric cover: open routes and readable ricochet lanes.
+// Coordinates stay on cell boundaries so every navigation cell remains usable.
+const ARENAS = [
+    {
+        name: "Side Cover",
+        segments: [
+            [3, 2, "v"],
+            [7, 2, "v"],
+            [3, 4, "v"],
+            [7, 4, "v"],
+        ],
+    },
+    {
+        name: "Open Field",
+        segments: [
+            [3, 2, "h"],
+            [6, 2, "h"],
+            [3, 5, "h"],
+            [6, 5, "h"],
+        ],
+    },
+    {
+        name: "Crossfire",
+        segments: [
+            [3, 2, "h"],
+            [6, 5, "h"],
+            [7, 2, "v"],
+            [3, 4, "v"],
+        ],
+    },
+];
 export function makeMaze(seed) {
-    const random = rng(seed),
-        links = Array.from({ length: COLS * ROWS }, () => []),
-        visited = new Set([0]),
-        stack = [0],
-        edges = new Set();
-    const key = (a, b) => [Math.min(a, b), Math.max(a, b)].join("-");
-    const neighbors = (i) =>
-        [
-            i % COLS > 0 ? i - 1 : -1,
-            i % COLS < COLS - 1 ? i + 1 : -1,
-            i >= COLS ? i - COLS : -1,
-            i < COLS * (ROWS - 1) ? i + COLS : -1,
-        ].filter((j) => j >= 0);
-    const connect = (a, b) => {
-        if (edges.has(key(a, b))) return;
-        edges.add(key(a, b));
-        links[a].push(b);
-        links[b].push(a);
-    };
-    while (stack.length) {
-        const i = stack.at(-1),
-            next = neighbors(i).filter((j) => !visited.has(j));
-        if (!next.length) {
-            stack.pop();
-            continue;
-        }
-        const j = next[Math.floor(random() * next.length)];
-        connect(i, j);
-        visited.add(j);
-        stack.push(j);
-    }
-    // Additional loops create sight lines and prevent a single-corridor chase.
-    for (let i = 0; i < links.length; i++)
-        for (const j of neighbors(i))
-            if (j > i && random() < 0.3) connect(i, j);
+    const layout = ARENAS[(seed >>> 0) % ARENAS.length];
     const walls = [
         { x: 0, y: 0, w: W, h: 7 },
         { x: 0, y: H - 7, w: W, h: 7 },
         { x: 0, y: 0, w: 7, h: H },
         { x: W - 7, y: 0, w: 7, h: H },
+        ...layout.segments.map(([x, y, direction]) => ({
+            x: x * CELL - 4,
+            y: y * CELL - 4,
+            w: direction === "h" ? CELL + 8 : 8,
+            h: direction === "v" ? CELL + 8 : 8,
+        })),
     ];
-    for (let y = 0; y < ROWS; y++)
-        for (let x = 0; x < COLS; x++) {
-            const i = y * COLS + x;
-            if (x < COLS - 1 && !edges.has(key(i, i + 1)))
-                walls.push({
-                    x: (x + 1) * CELL - 4,
-                    y: y * CELL - 4,
-                    w: 8,
-                    h: CELL + 8,
-                });
-            if (y < ROWS - 1 && !edges.has(key(i, i + COLS)))
-                walls.push({
-                    x: x * CELL - 4,
-                    y: (y + 1) * CELL - 4,
-                    w: CELL + 8,
-                    h: 8,
-                });
+    const maze = {
+        walls,
+        links: Array.from({ length: COLS * ROWS }, () => []),
+        seed,
+        name: layout.name,
+        revision: "open-arenas-v1",
+    };
+    // Derive the graph from physical clearance, never from the old maze's edges.
+    // This keeps model waypoints consistent with the walls visible on screen.
+    for (let i = 0; i < COLS * ROWS; i++) {
+        const neighbors = [
+            i % COLS < COLS - 1 ? i + 1 : -1,
+            i < COLS * (ROWS - 1) ? i + COLS : -1,
+        ];
+        for (const j of neighbors) {
+            if (j < 0) continue;
+            const a = center(i),
+                b = center(j);
+            let clear = true;
+            for (let d = 0; d <= CELL; d += 3) {
+                if (
+                    blocked(
+                        maze,
+                        a.x + ((b.x - a.x) * d) / CELL,
+                        a.y + ((b.y - a.y) * d) / CELL,
+                    )
+                ) {
+                    clear = false;
+                    break;
+                }
+            }
+            if (clear) {
+                maze.links[i].push(j);
+                maze.links[j].push(i);
+            }
         }
-    return { walls, links, seed };
+    }
+    return maze;
 }
 export const center = (i) => ({
     x: ((i % COLS) + 0.5) * CELL,

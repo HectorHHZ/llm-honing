@@ -154,7 +154,10 @@ export async function boot(adapter) {
     }
     function reset(random = false) {
         cancel();
-        game.reset(random ? Date.now() >>> 0 : game.seed);
+        const seed = random ? Date.now() >>> 0 : game.seed;
+        game.reset(
+            random && adapter.nextSeed ? adapter.nextSeed(game, seed) : seed,
+        );
         paused = false;
         latest = [null, null];
         counts = [0, 0];
@@ -247,6 +250,7 @@ export async function boot(adapter) {
             created_at: new Date().toISOString(),
             edition,
             physics_revision: "full-footprint-v1",
+            map_revision: game.maze.revision || "maze-v1",
             players: seats.map((s, i) => ({
                 player: i,
                 ...s,
@@ -377,6 +381,7 @@ export async function boot(adapter) {
             decision_interval_ms: interval,
             bullet_count: observed.bulletCount,
             physics_revision: "full-footprint-v1",
+            map_revision: game.maze.revision || "maze-v1",
             configuration: settings,
         };
         const ctl = new AbortController(),
@@ -477,7 +482,9 @@ export async function boot(adapter) {
         $("score-a").textContent = game.scores[0];
         $("score-b").textContent = game.scores[1];
         $("round-label").textContent =
-            "ROUND " + String(game.round).padStart(2, "0");
+            "ROUND " +
+            String(game.round).padStart(2, "0") +
+            (game.maze.name ? " · " + game.maze.name.toUpperCase() : "");
         $("clock").textContent = Math.max(0, game.timeLeft).toFixed(1);
         $("live-tag").textContent = paused
             ? "PAUSED"

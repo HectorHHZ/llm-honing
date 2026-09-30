@@ -1,5 +1,6 @@
 import {
     Game,
+    makeMaze,
     DRIVE,
     TURNS,
     WEAPONS,
@@ -25,6 +26,8 @@ export const adapter = {
     traceShot,
     heads: { drive: DRIVE, turn: TURNS, weapon: WEAPONS },
     protocols: [PROTOCOL, PLAN_PROTOCOL],
+    nextSeed: (game, seed) =>
+        makeMaze(seed + 7919).name === game.maze.name ? (seed + 1) >>> 0 : seed,
     initialize: (game) => game.setAssistEnabled(true),
     clear: (t) =>
         Object.assign(t, {
