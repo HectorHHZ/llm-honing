@@ -179,6 +179,16 @@ python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json
 
 It plays 4 val tasks through the real runner and grader with stand-in match and check processes, and fake model, trainer, data, and harness method. A reworded harness ties its gate and is rolled back; a train move wins and is published as `r0001`. The release chain, every episode's run directory, and `summary.json` go to `runs/e2e-dry-run`. A config for real matches with the Jev model is the next part of #70; until then, the steps below run each piece by hand. New trainers (Slime, #68) and agents (OpenHands, #69) plug in at the interfaces listed at the end.
 
+CI runs two end-to-end checks on every pull request (the `e2e` job), and both run locally the same way:
+
+```bash
+python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json --work-dir /tmp/campaign
+python scripts/e2e/check_campaign.py /tmp/campaign --expect harness="rolled back" --expect train=published
+scripts/e2e/serving.sh /tmp/serving    # a decision server process and the match's Node client stack
+```
+
+`check_campaign.py` reads what the run wrote: a result for every step, the release chain's records and head, and a result on disk for every gated episode. `serving.sh` starts Honing's decision server with a stand-in model whose answers a client can compute, then sends 25 requests through `decisionClientOptions`, `createDecisionClient`, the permutation client (one binary target question, asked twice), and the HTTP client, and checks every answer, probability, and state text. Neither needs a GPU, the game, or model weights; GPU and in-game runs are reported in the pull request.
+
 ### Environments
 
 | Part | Environment |
