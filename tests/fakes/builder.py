@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,8 +69,12 @@ def build_campaign(
     method: EvolveMethod | None = None,
     data: DataProvider | None = None,
     make_runner: Callable[[FakeWorld], FakeEpisodeRunner] = FakeEpisodeRunner,
+    gate_tasks: Sequence[Task] = TASKS,
 ) -> CampaignFixture:
-    """A started campaign: release 0 is published and every plane is a fake."""
+    """A started campaign: release 0 is published and every plane is a fake.
+
+    ``gate_tasks`` are the gate's tasks and the harness plane's default tasks.
+    """
     world = FakeWorld()
     trainer = FakeTrainer(world, support=support, gain=trainer_gain)
     runner = make_runner(world)
@@ -81,7 +85,7 @@ def build_campaign(
     data = data if data is not None else ListDatasetProvider([token_batch()])
 
     gate = Gate(
-        EpisodeEvaluator(runner, grader, TASKS),
+        EpisodeEvaluator(runner, grader, gate_tasks),
         default_selector=WinLossSelector(),
         # Cost-driven changes need only avoid regressing; quality-driven ones must win.
         selectors={"prune": NoRegressionSelector(0.05), "quantize": NoRegressionSelector(0.05)},
@@ -98,7 +102,7 @@ def build_campaign(
             quantizer=quantizer,
             telemetry=FixedTelemetryStore(skewed_expert_telemetry(small_moe())),
         ),
-        harness=HarnessComponents(runner=runner, grader=grader, method=method, tasks=TASKS),
+        harness=HarnessComponents(runner=runner, grader=grader, method=method, tasks=tuple(gate_tasks)),
         defaults=CampaignDefaults(
             train=TrainJobSpec(algorithm="sft", steps=10),
             budget=CompressionBudget(keep_ratio=0.75),
