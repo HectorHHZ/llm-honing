@@ -62,7 +62,7 @@ def main() -> None:
     server = DecisionServer(("127.0.0.1", args.port), model)
     print(json.dumps({"ready": True, "url": server.url, "metadata": model.metadata}), flush=True)
     try:
-        server.serve_forever()
+        server.serve()
     finally:
         server.server_close()
 

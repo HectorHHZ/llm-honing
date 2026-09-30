@@ -8,6 +8,8 @@ implementations the HTTP decision server uses. DECISION_FAMILY picks the family
   LAYA_CHECKPOINT_MANIFEST, LAYA_LOCK_DIR, and LAYA_MAX_LEN.
 - Kev: LAYA_GPU, KEV_MODEL, KEV_SOURCE_DIR, KEV_CHECKPOINT_MANIFEST, LAYA_LOCK_DIR,
   and KEV_DTYPE.
+- NanoJev: LAYA_GPU, NANOJEV_MODEL, NANOJEV_SOURCE_DIR, NANOJEV_CHECKPOINT_MANIFEST,
+  LAYA_LOCK_DIR, and NANOJEV_MAX_LEN.
 """
 
 import json
@@ -23,6 +25,7 @@ sys.path.insert(0, str(ROOT.parents[1]))
 
 from honing.backends.jev.kev import KevDecisionModel, KevSettings  # noqa: E402
 from honing.backends.jev.laya import LayaDecisionModel, LayaSettings  # noqa: E402
+from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings  # noqa: E402
 
 
 def emit(value):
@@ -58,8 +61,24 @@ def kev_settings_from_environment():
     )
 
 
+def nanojev_settings_from_environment():
+    manifest = os.environ.get("NANOJEV_CHECKPOINT_MANIFEST")
+    lock_dir = os.environ.get("LAYA_LOCK_DIR")
+    return NanoJevSettings(
+        pins_path=ROOT / "pins.json",
+        source_dir=Path(os.environ.get("NANOJEV_SOURCE_DIR", ROOT / "deps/nanojev")),
+        model=os.environ.get("NANOJEV_MODEL", "nanojev"),
+        gpu=os.environ.get("LAYA_GPU", "0"),
+        checkpoint_manifest=Path(manifest) if manifest else None,
+        lock_dir=Path(lock_dir) if lock_dir else None,
+        max_length=int(os.environ.get("NANOJEV_MAX_LEN", "2048")),
+    )
+
+
 def load_model():
     family = os.environ.get("DECISION_FAMILY", "laya")
+    if family == "nanojev":
+        return NanoJevDecisionModel.load(nanojev_settings_from_environment())
     if family == "kev":
         return KevDecisionModel.load(kev_settings_from_environment())
     if family != "laya":

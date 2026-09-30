@@ -10,6 +10,15 @@ These scripts compare the code in Honing with the original RA2 experiment in #49
 
 `make_demos.py` writes six labelled matches in #49's directory format, with seed 101 held out for validation, so training parity needs no game.
 
+## NanoJev against #49
+
+`nanojev_serving.py <out> <gpu-49> <gpu-stdio> <gpu-http>` sends the 24 serving requests to #49's native worker (twice), Honing's stdio worker, and Honing's HTTP server, sequentially and from 4 concurrent clients. It needs `PR49_DIR`, `NANOJEV_PYTHON`, and `NANOJEV_SOURCE_DIR`. `nanojev_training.py <gpus> <work> <matches>` checks `NanoJevTrainer` as `kev_training.py` checks Kev's. Results on an H100:
+
+- On one GPU, all four paths agree with #49 on every field of all 24 requests (answers, probabilities, state text, token audits, 1,153 trimmed entries).
+- NanoJev's bf16 forward does not repeat bit for bit across processes. In six runs of #49's own worker on one GPU, requests 4 and 21 took one of two values (at most 0.0015 apart) from run to run; the other 22 never changed. Honing's worker shows the same two values, and matches #49 whenever both land on the same one.
+- The first HTTP server ran each call on the request's thread, which changed request 4 by 0.0015 against the loading thread. The server now runs every call on the thread that loaded the model, and matches.
+- Training: sft validation loss 1.60 to 1.30 (584 train, 118 validation); the trained checkpoint serves from its manifest; grpo raises the favored option from 0.44 to 0.997, on 16 of 16 states; 1 minute 40 seconds for all three steps.
+
 ## Kev against Kev's own code
 
 The Kev family has no counterpart in #49, so these compare Honing with Kev's own code at the commit in `pins.json`. They need the Kev environment from `scripts/setup-kev.sh` (`KEV_PYTHON`, `KEV_SOURCE_DIR`) and the pinned snapshots in the Hugging Face cache.

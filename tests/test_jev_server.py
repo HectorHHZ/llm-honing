@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from typing import ClassVar
 
 import pytest
 
@@ -49,17 +50,19 @@ class FakeDecisionModel:
 
 @pytest.fixture
 def serve() -> Iterator[object]:
-    servers: list[DecisionServer] = []
+    servers: list[tuple[DecisionServer, threading.Thread]] = []
 
     def start(model: DecisionModel) -> str:
         server = DecisionServer(("127.0.0.1", 0), model)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        servers.append(server)
+        thread = threading.Thread(target=server.serve, daemon=True)
+        thread.start()
+        servers.append((server, thread))
         return server.url
 
     yield start
-    for server in servers:
-        server.shutdown()
+    for server, thread in servers:
+        server.stop()
+        thread.join(timeout=10)
         server.server_close()
 
 
@@ -163,3 +166,42 @@ def test_endpoints_refuse_a_language_model_server() -> None:
 @pytest.mark.unit
 def test_the_fake_satisfies_the_decision_model_protocol() -> None:
     assert isinstance(FakeDecisionModel(), DecisionModel)
+
+
+class ThreadRecordingModel:
+    """Records the thread each call runs on."""
+
+    metadata: ClassVar[dict[str, object]] = {"family": "fake"}
+
+    def __init__(self) -> None:
+        self.threads: set[int] = set()
+
+    def predict(self, parts: object, questions: object) -> dict[str, object]:
+        self.threads.add(threading.get_ident())
+        return {"answers": {}}
+
+
+@pytest.mark.unit
+def test_every_model_call_runs_on_the_serving_thread() -> None:
+    # A CUDA kernel can be chosen per thread, so the server never runs the model on a request's thread.
+    model = ThreadRecordingModel()
+    server = DecisionServer(("127.0.0.1", 0), model)  # type: ignore[arg-type]
+    serving: list[int] = []
+
+    def serve() -> None:
+        serving.append(threading.get_ident())
+        server.serve()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        replies = list(
+            pool.map(lambda i: call(server.url, "/v1/decide", {"id": i, "parts": {}, "questions": QUESTION}), range(8))
+        )
+    server.stop()
+    thread.join(timeout=10)
+    server.server_close()
+
+    assert [status for status, _ in replies] == [200] * 8
+    assert model.threads == set(serving)
+    assert not thread.is_alive()

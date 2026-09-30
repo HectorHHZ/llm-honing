@@ -2,13 +2,15 @@ import { LayaClient } from "../laya/client.mjs";
 import { PermutationClient } from "../laya/permutation-client.mjs";
 import { HttpDecisionClient } from "../laya/http-client.mjs";
 
-// Two decision-model families run here: Laya and Kev. Both answer the same typed
-// questions with the same response fields (honing/backends/jev/laya.py and kev.py).
-export const FAMILIES = ["laya", "kev"];
+// Three decision-model families run here: Laya, Kev, and NanoJev. All answer the same
+// typed questions with the same response fields (honing/backends/jev/laya.py, kev.py,
+// nanojev.py).
+export const FAMILIES = ["laya", "kev", "nanojev"];
 const DEFAULT_MODEL = {
     laya: (candidateMode) =>
         candidateMode === "intent" ? "typed-decisions" : "english",
     kev: () => "kev-0.8b",
+    nanojev: () => "nanojev",
 };
 export function decisionClientOptions(args, candidateMode) {
     const family = args.family ?? "laya";

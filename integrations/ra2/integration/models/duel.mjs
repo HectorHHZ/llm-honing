@@ -63,22 +63,16 @@ const options = Object.fromEntries(
             "Use an explicitly reserved GPU index",
         );
         const config = decisionClientOptions(seatArgs, "intent");
-        if (config.family === "laya" || config.family === "kev") {
-            assert(
-                seatArgs["checkpoint-manifest"],
-                "Use an explicit checkpoint manifest or upstream",
-            );
-            config.checkpointManifest =
-                seatArgs["checkpoint-manifest"] === "upstream"
-                    ? null
-                    : resolve(seatArgs["checkpoint-manifest"]);
-            if (config.checkpointManifest)
-                assert(existsSync(config.checkpointManifest));
-        } else
-            assert(
-                !seatArgs["checkpoint-manifest"],
-                "Native family requires its prepared manifest",
-            );
+        assert(
+            seatArgs["checkpoint-manifest"],
+            "Use an explicit checkpoint manifest or upstream",
+        );
+        config.checkpointManifest =
+            seatArgs["checkpoint-manifest"] === "upstream"
+                ? null
+                : resolve(seatArgs["checkpoint-manifest"]);
+        if (config.checkpointManifest)
+            assert(existsSync(config.checkpointManifest));
         return [seat, config];
     }),
 );

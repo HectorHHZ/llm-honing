@@ -47,6 +47,22 @@ def normalize(value):
     return value
 
 
+@contextlib.contextmanager
+def serving_cpu_model(model):
+    """Run the CPU parity model through the same queue as the decision-server CLI."""
+    server = DecisionServer(("127.0.0.1", 0), model)
+    thread = threading.Thread(target=server.serve, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.stop()
+        thread.join(timeout=10)
+        server.server_close()
+        if thread.is_alive():
+            raise RuntimeError("parity decision server did not stop")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", type=Path, required=True, help="#49 examples/ra2 directory")
@@ -81,15 +97,12 @@ def main():
     with contextlib.redirect_stdout(sys.stderr):
         agent = laya.load(record["path"], device="cpu")
     metadata = {**record, "sourceCommit": revision, "device": "cpu", "dtype": str(agent.dtype)}
-    server = DecisionServer(("127.0.0.1", 0), LayaDecisionModel(agent, metadata, 2048))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
     bridge = args.out / "stdio_http_bridge.py"
     bridge.write_text(BRIDGE)
     bridge.chmod(0o700)
-    env = {**os.environ, "LAYA_PYTHON": str(bridge), "PARITY_DECISION_SERVER": server.url}
     started = time.monotonic()
-    try:
+    with serving_cpu_model(LayaDecisionModel(agent, metadata, 2048)) as server:
+        env = {**os.environ, "LAYA_PYTHON": str(bridge), "PARITY_DECISION_SERVER": server.url}
         for label, root in (("reference", args.reference), ("extracted", integration)):
             command = [
                 "node",
@@ -105,10 +118,6 @@ def main():
             with (args.out / f"{label}.log").open("w") as log:
                 subprocess.run(command, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
             print(json.dumps({"completed": label, "seconds": time.monotonic() - started}), flush=True)
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join()
     report = {
         "device": "cpu",
         "ticks": args.ticks,

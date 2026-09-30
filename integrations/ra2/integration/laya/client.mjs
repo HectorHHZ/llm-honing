@@ -1,14 +1,19 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { ROOT } from "../paths.mjs";
+// Each family runs in its own model environment, and its worker reads its own settings.
+const PYTHON_VARIABLE = {
+    laya: "LAYA_PYTHON",
+    kev: "KEV_PYTHON",
+    nanojev: "NANOJEV_PYTHON",
+};
+const SETTING_PREFIX = { laya: "LAYA", kev: "KEV", nanojev: "NANOJEV" };
 export class LayaClient {
     constructor({
         family = "laya",
         gpu = "0",
         model = "english",
-        python = (family === "kev"
-            ? process.env.KEV_PYTHON
-            : process.env.LAYA_PYTHON) ?? "python3",
+        python = process.env[PYTHON_VARIABLE[family]] ?? "python3",
         checkpointManifest = undefined,
         spawnProcess = spawn,
     } = {}) {
@@ -19,16 +24,15 @@ export class LayaClient {
             this.readyResolve = resolve;
             this.readyReject = reject;
         });
-        // The worker reads its family's settings: LAYA_* for Laya, KEV_* for Kev.
-        const manifestVar =
-            family === "kev"
-                ? "KEV_CHECKPOINT_MANIFEST"
-                : "LAYA_CHECKPOINT_MANIFEST";
+        if (!Object.hasOwn(SETTING_PREFIX, family))
+            throw new Error(`Unknown decision model family ${family}`);
+        const prefix = SETTING_PREFIX[family];
+        const manifestVar = `${prefix}_CHECKPOINT_MANIFEST`;
         const workerEnv = {
             ...process.env,
             DECISION_FAMILY: family,
             LAYA_GPU: String(gpu),
-            [family === "kev" ? "KEV_MODEL" : "LAYA_MODEL_TYPE"]: model,
+            [family === "laya" ? "LAYA_MODEL_TYPE" : `${prefix}_MODEL`]: model,
         };
         if (checkpointManifest === null) delete workerEnv[manifestVar];
         else if (checkpointManifest !== undefined) {
