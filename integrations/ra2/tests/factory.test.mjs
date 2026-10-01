@@ -5,6 +5,7 @@ import { PassThrough } from "node:stream";
 import {
     checkServedFamily,
     decisionClientOptions,
+    inferenceCallUnit,
 } from "../integration/models/factory.mjs";
 import { LayaClient } from "../integration/laya/client.mjs";
 
@@ -126,4 +127,24 @@ test("a nanojev worker runs with NANOJEV_PYTHON and the nanojev settings", () =>
     assert.equal(env.NANOJEV_MODEL, "nanojev");
     assert.equal(env.LAYA_GPU, "4");
     assert.equal(env.NANOJEV_CHECKPOINT_MANIFEST, undefined);
+});
+
+test("djev uses a bridge and is counted as a structured request", () => {
+    assert.deepEqual(
+        decisionClientOptions(
+            { family: "djev", "decision-server": "http://localhost:8801" },
+            "intent",
+        ),
+        { family: "djev", decisionServer: "http://localhost:8801" },
+    );
+    assert.throws(
+        () => decisionClientOptions({ family: "djev" }, "intent"),
+        /requires --decision-server/,
+    );
+    assert.throws(
+        () => checkServedFamily({ family: "djev" }, { family: "nanojev" }),
+        /loaded nanojev/,
+    );
+    assert.equal(inferenceCallUnit("djev"), "structured_decision_request");
+    assert.equal(inferenceCallUnit("nanojev"), "native_model_forward");
 });

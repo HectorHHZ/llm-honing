@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyTokenAudit } from "./token-audit.mjs";
 
 export const METHOD = "binary-target-permutation-mean-v1";
 export function binaryTarget(request) {
@@ -85,11 +86,7 @@ export function verifyEnsemble(record) {
         assert.equal(response.stateText, record.stateText);
         assert.deepEqual(response.trimmed, record.trimmed);
         assert.deepEqual(response.modelResult.answers, response.answers);
-        const audit = response.tokenAudit[id];
-        assert.equal(audit.options, 3);
-        assert.equal(audit.stateTruncated, false);
-        assert(audit.stateTokens <= audit.stateRoom);
-        assert(Number.isInteger(audit.inputTokens) && audit.inputTokens > 0);
+        verifyTokenAudit(response.tokenAudit[id], 3);
     }
     const mean = aggregate(
         record.questions,
