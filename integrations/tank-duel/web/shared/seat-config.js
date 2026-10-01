@@ -1,8 +1,11 @@
+import { STRATEGIES, strategyFor } from "../classic/strategies.js";
 export const INTERVALS = [50, 100, 200, 350, 600, 1000];
 export function defaultSeats(models, classic = true) {
     return [0, 1].map(() => ({
         backend: models[0]?.id || "",
         controllerMode: classic ? "plans" : "raw",
+        decisionVersion: classic ? "baseline" : "raw",
+        intervalMode: classic ? "auto" : "manual",
         contextVersion: "full",
         interval: 100,
         assistEnabled: classic,
@@ -16,6 +19,13 @@ export function normalizeSeat(input, models, fallback) {
     if (models.some((m) => m.id === input.backend)) s.backend = input.backend;
     if (["plans", "raw"].includes(input.controllerMode))
         s.controllerMode = input.controllerMode;
+    if (Object.hasOwn(STRATEGIES, input.decisionVersion))
+        s.decisionVersion = input.decisionVersion;
+    else if (input.controllerMode)
+        s.decisionVersion = input.controllerMode === "raw" ? "raw" : "baseline";
+    s.controllerMode = strategyFor(s).mode;
+    if (["auto", "manual"].includes(input.intervalMode))
+        s.intervalMode = input.intervalMode;
     if (["full", "arena-v1"].includes(input.contextVersion))
         s.contextVersion = input.contextVersion;
     if (s.controllerMode === "plans") s.contextVersion = "full";
@@ -36,7 +46,9 @@ export function seatProtocol(edition, seat) {
 }
 export function contextRevision(seat) {
     return seat.controllerMode === "plans"
-        ? "planned-aim-v1"
+        ? strategyFor(seat).id === "baseline"
+            ? "planned-aim-v1"
+            : strategyFor(seat).id
         : seat.contextVersion === "arena-v1"
           ? "arena-v1"
           : "state-v7-avoidance-levels";
@@ -49,5 +61,6 @@ export function matchupPreset(models) {
     seats[0].backend = gemma.id;
     seats[1].backend = nano.id;
     seats[1].controllerMode = "raw";
+    seats[1].decisionVersion = "raw";
     return seats;
 }

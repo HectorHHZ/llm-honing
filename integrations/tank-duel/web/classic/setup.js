@@ -1,3 +1,5 @@
+import { publishedStrategies, strategyFor } from "./strategies.js";
+import { AVOIDANCE_PROFILES } from "./engine.js";
 import {
     defaultSeats,
     normalizeSeat,
@@ -27,12 +29,15 @@ export function mountClassicSetup(models, game, changed) {
             if (player === null || player === i) game.setPlayerSettings(i, s);
             for (const k of [
                 "backend",
-                "controllerMode",
+                "decisionVersion",
                 "contextVersion",
                 "interval",
                 "assistProfile",
             ])
-                $(`seat-${i}-${k}`).value = s[k];
+                $(`seat-${i}-${k}`).value =
+                    k === "interval" && s.intervalMode === "auto"
+                        ? "auto"
+                        : s[k];
             $(`seat-${i}-contextVersion`).disabled =
                 s.controllerMode === "plans";
             $(`seat-${i}-fireGuardEnabled`).disabled =
@@ -46,7 +51,8 @@ export function mountClassicSetup(models, game, changed) {
             }
             $(`seat-${i}-description`).textContent =
                 s.controllerMode === "plans"
-                    ? "Joint motion → conditional shot. Aim hints + forecasts. Geometry filters plans and checks shots, even with Dodge Off."
+                    ? strategyFor(s).description +
+                      " Geometry checks remain active with Dodge Off."
                     : s.contextVersion === "arena-v1"
                       ? "Independent drive / turn / fire. Positions, walls and every shell; no aim hints or trajectory forecasts. New minimal profile."
                       : "Independent drive / turn / fire. Full tactical context with aim hints and shell forecasts. No joint-plan filtering.";
@@ -56,11 +62,17 @@ export function mountClassicSetup(models, game, changed) {
         const box = $(`seat-config-${i}`);
         box.innerHTML = `<div class="seat-heading"><h3>${i ? "02 / Red" : "01 / Blue"}</h3><span id="seat-${i}-status">Connecting…</span></div>
         <div class="seat-fields"><label>Model / checkpoint<select id="seat-${i}-backend" aria-label="${i ? "Red" : "Blue"} model"></select></label>
-        <label>Decision version<select id="seat-${i}-controllerMode" aria-label="${i ? "Red" : "Blue"} decision version"><option value="plans">Current · planned v1</option><option value="raw">Independent · controls v3</option></select></label>
+        <label>Decision version<select id="seat-${i}-decisionVersion" aria-label="${i ? "Red" : "Blue"} decision version">${publishedStrategies()
+            .map((s) => `<option value="${s.id}">${s.label}</option>`)
+            .join("")}</select></label>
         <label>Context<select id="seat-${i}-contextVersion" aria-label="${i ? "Red" : "Blue"} context"><option value="full">Full tactical</option><option value="arena-v1">Arena only · v1</option></select></label>
-        <label>Decision interval<select id="seat-${i}-interval" aria-label="${i ? "Red" : "Blue"} decision interval">${INTERVALS.map((n) => `<option value="${n}">${n} ms</option>`).join("")}</select></label></div>
+        <label>Decision interval<select id="seat-${i}-interval" aria-label="${i ? "Red" : "Blue"} decision interval"><option value="auto">Auto · measured speed</option>${INTERVALS.map((n) => `<option value="${n}">${n} ms</option>`).join("")}</select></label></div>
         <div class="seat-assist"><button id="seat-${i}-assistEnabled" aria-label="${i ? "Red" : "Blue"} dodge assist">Dodge assist <span></span></button>
-        <select id="seat-${i}-assistProfile" aria-label="${i ? "Red" : "Blue"} dodge strength"><option value="light">Light</option><option value="standard">Standard</option><option value="strong">Strong</option></select>
+        <select id="seat-${i}-assistProfile" aria-label="${i ? "Red" : "Blue"} dodge strength">${Object.entries(
+            AVOIDANCE_PROFILES,
+        )
+            .map(([id, p]) => `<option value="${id}">${p.label}</option>`)
+            .join("")}</select>
         <button id="seat-${i}-fireGuardEnabled" aria-label="${i ? "Red" : "Blue"} shot guard">Shot guard <span></span></button></div>
         <p class="seat-description" id="seat-${i}-description"></p><details class="seat-revision"><summary>Model & context identity</summary><p id="seat-${i}-revision"></p></details>`;
         $(`seat-${i}-backend`).replaceChildren(
@@ -78,14 +90,21 @@ export function mountClassicSetup(models, game, changed) {
         $(`seat-${i}-backend`).disabled = !models.length;
         for (const k of [
             "backend",
-            "controllerMode",
+            "decisionVersion",
             "contextVersion",
             "interval",
             "assistProfile",
         ])
             $(`seat-${i}-${k}`).onchange = (e) => {
                 const value =
-                    k === "interval" ? Number(e.target.value) : e.target.value;
+                    k === "interval"
+                        ? e.target.value === "auto"
+                            ? s.interval
+                            : Number(e.target.value)
+                        : e.target.value;
+                if (k === "interval")
+                    s.intervalMode =
+                        e.target.value === "auto" ? "auto" : "manual";
                 Object.assign(
                     s,
                     normalizeSeat({ ...s, [k]: value }, models, s),
@@ -112,7 +131,7 @@ export function mountClassicSetup(models, game, changed) {
     sync();
     return {
         seats,
-        render(health, isAI) {
+        render(health, isAI, cadence = []) {
             seats.forEach((s, i) => {
                 const m = health[i]?.metadata;
                 $(`seat-${i}-status`).textContent = !isAI(i)
@@ -121,7 +140,7 @@ export function mountClassicSetup(models, game, changed) {
                       ? "Connected"
                       : "Offline / incompatible";
                 $(`seat-${i}-revision`).textContent =
-                    `${m?.model || "Awaiting model identity"} · checkpoint: ${m?.revision || "not reported by service"} · adapter: ${m?.code_sha256 || m?.adapterContractRevision || "not reported"} · context: ${contextRevision(s)}. Model/checkpoint options use separate configured endpoints.`;
+                    `${m?.model || "Awaiting model identity"} · checkpoint: ${m?.revision || "not reported by service"} · adapter: ${m?.code_sha256 || m?.adapterContractRevision || "not reported"} · context: ${contextRevision(s)}. ${s.intervalMode === "auto" ? `Auto cadence: ${cadence[i]?.floor_ms || 100} ms floor, p50 ${cadence[i]?.p50_ms ?? "—"} ms, p95 ${cadence[i]?.p95_ms ?? "—"} ms, ${cadence[i]?.samples || 0} samples.` : "Manual scheduling."} Model/checkpoint options use separate configured endpoints.`;
             });
         },
     };

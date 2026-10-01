@@ -121,9 +121,16 @@ test("both games and shared assets work without any model configuration", async 
         "/shared/style.css",
         "/shared/game-client.js",
         "/classic/adapter.js",
+        "/classic/lab.html",
+        "/classic/lab.js",
+        "/classic/lab-results.json",
         "/auto-aim/adapter.js",
     ])
         assert.equal((await fetch(url + route)).status, 200, route);
+    const report = await (
+        await fetch(url + "/classic/lab-results.json")
+    ).json();
+    assert.equal(report.experiments.length, 5);
     const config = await (await fetch(url + "/api/config")).json();
     assert.deepEqual(config, { editions: { classic: [], "auto-aim": [] } });
     assert.equal((await fetch(url + "/api/classic/health")).status, 503);
@@ -176,6 +183,11 @@ for (const [adapter, mode] of [
                 "logs",
             ]);
             assert.deepEqual(call.parts.details, []);
+            for (const q of Object.values(call.questions))
+                for (const [id, label] of Object.entries(q.criteria)) {
+                    assert.ok(label.length < 100);
+                    assert.ok(call.parts.essential[0].includes(`/${id}: `));
+                }
             for (let i = 0; i < 10; i++)
                 assert.ok(call.parts.essential[0].includes(`shell-${i}`));
         }
@@ -424,4 +436,27 @@ test("model registry rejects duplicate IDs, unsupported transports and unknown e
         assert.throws(() =>
             configuration({ MODELS_JSON: JSON.stringify(list) }),
         );
+});
+
+test("Honing accepts rounded probability ties without replacing the native choice", async (t) => {
+    const model = await fixture(t, {
+        mutate: (r) => {
+            for (const a of Object.values(r.answers)) {
+                const keys = Object.keys(a.probabilities);
+                a.probabilities = Object.fromEntries(
+                    keys.map((k) => [k, Number((1 / keys.length).toFixed(4))]),
+                );
+                a.choice = keys.at(-1);
+            }
+        },
+    });
+    const url = await serve(
+        t,
+        createGameServer(configuration({ HONING_URL: model.url })),
+    );
+    const { body } = request(classic, "raw");
+    const response = await post(url + "/api/classic/decision", body);
+    assert.equal(response.status, 200);
+    const r = await response.json();
+    assert.equal(r.probabilities.drive.stop, 0.3333);
 });

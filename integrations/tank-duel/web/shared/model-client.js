@@ -46,7 +46,10 @@ export function validProbabilities(probabilities, keys) {
                 probabilities[k] >= 0 &&
                 probabilities[k] <= 1,
         ) &&
-        Math.abs(keys.reduce((sum, k) => sum + probabilities[k], 0) - 1) < 1e-5
+        // Kev serializes each probability to four decimals. Preserve those
+        // native values; allow only the maximum accumulated rounding error.
+        Math.abs(keys.reduce((sum, k) => sum + probabilities[k], 0) - 1) <=
+            Math.max(1e-5, keys.length * 0.00005 + 1e-8)
     );
 }
 export function tokenLabel(data) {

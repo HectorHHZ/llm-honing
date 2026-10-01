@@ -19,6 +19,8 @@ export const SPEED = 125,
     PROTOCOL = "controls-v3";
 export const CONTEXT_REVISION = "state-v7-avoidance-levels",
     MODEL_CONTROL_SECONDS = 0.6;
+export const SHELL_LIFETIME = 4.5,
+    FIRE_COOLDOWN = 0.3;
 export const responseDelay = (ms) => clamp(ms / 1000, 1 / 60, 1.6);
 export const COLORS = ["#357a9b", "#c4654b"];
 export const controlLabel = (c) =>
@@ -39,102 +41,115 @@ export function rng(seed) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
-// Rotationally symmetric cover, flanking loops and bank-shot lanes.
-// [column, row, direction, length] stays on navigation-cell boundaries.
-const ARENAS = [
-    {
-        name: "Switchback",
-        segments: [
-            [4, 1, "v", 2],
-            [6, 4, "v", 2],
-            [3, 3, "h", 1],
-            [6, 4, "h", 1],
-            [2, 2, "v", 2],
-            [8, 3, "v", 2],
-            [2, 2, "h", 1],
-            [7, 5, "h", 1],
-            [6, 1, "h", 2],
-            [2, 6, "h", 2],
-        ],
-    },
-    {
-        name: "Crossroads",
-        segments: [
-            [2, 2, "h", 2],
-            [4, 2, "v", 1],
-            [6, 2, "h", 2],
-            [6, 2, "v", 1],
-            [2, 5, "h", 2],
-            [4, 4, "v", 1],
-            [6, 5, "h", 2],
-            [6, 4, "v", 1],
-        ],
-    },
-    {
-        name: "Bankshot",
-        segments: [
-            [4, 3, "h", 2],
-            [4, 4, "h", 2],
-            [3, 2, "v", 2],
-            [7, 3, "v", 2],
-            [2, 2, "h", 1],
-            [7, 5, "h", 1],
-            [6, 1, "h", 2],
-            [2, 6, "h", 2],
-        ],
-    },
-];
+// Start with an open grid and insert mirrored walls while retaining connected
+// loops. Unlike the original spanning-tree maze, no cell becomes a dead end.
 export function makeMaze(seed) {
-    const layout = ARENAS[(seed >>> 0) % ARENAS.length];
-    const walls = [
+    const random = rng(seed),
+        key = (a, b) => [Math.min(a, b), Math.max(a, b)].join("-"),
+        links = Array.from({ length: COLS * ROWS }, () => []),
+        candidates = [];
+    for (let i = 0; i < COLS * ROWS; i++) {
+        for (const j of [
+            i % COLS < COLS - 1 ? i + 1 : -1,
+            i < COLS * (ROWS - 1) ? i + COLS : -1,
+        ]) {
+            if (j < 0) continue;
+            links[i].push(j);
+            links[j].push(i);
+            candidates.push([i, j]);
+        }
+    }
+    const boundaries = [
         { x: 0, y: 0, w: W, h: 7 },
         { x: 0, y: H - 7, w: W, h: 7 },
         { x: 0, y: 0, w: 7, h: H },
         { x: W - 7, y: 0, w: 7, h: H },
-        ...layout.segments.map(([x, y, direction, length]) => ({
-            x: x * CELL - 4,
-            y: y * CELL - 4,
-            w: direction === "h" ? CELL * length + 8 : 8,
-            h: direction === "v" ? CELL * length + 8 : 8,
-        })),
     ];
-    const maze = {
-        walls,
-        links: Array.from({ length: COLS * ROWS }, () => []),
-        seed,
-        name: layout.name,
-        revision: "tactical-arenas-v2",
-    };
-    // Derive the graph from physical clearance, never from the old maze's edges.
-    // This keeps model waypoints consistent with the walls visible on screen.
-    for (let i = 0; i < COLS * ROWS; i++) {
-        const neighbors = [
-            i % COLS < COLS - 1 ? i + 1 : -1,
-            i < COLS * (ROWS - 1) ? i + COLS : -1,
-        ];
-        for (const j of neighbors) {
-            if (j < 0) continue;
-            const a = center(i),
-                b = center(j);
-            let clear = true;
-            for (let d = 0; d <= CELL; d += 3) {
-                if (
-                    blocked(
-                        maze,
-                        a.x + ((b.x - a.x) * d) / CELL,
-                        a.y + ((b.y - a.y) * d) / CELL,
-                    )
-                ) {
-                    clear = false;
-                    break;
-                }
-            }
-            if (clear) {
-                maze.links[i].push(j);
-                maze.links[j].push(i);
-            }
-        }
+    const wallFor = ([a, b]) =>
+        b - a === 1
+            ? {
+                  x: ((a % COLS) + 1) * CELL - 4,
+                  y: Math.floor(a / COLS) * CELL - 4,
+                  w: 8,
+                  h: CELL + 8,
+              }
+            : {
+                  x: (a % COLS) * CELL - 4,
+                  y: (Math.floor(a / COLS) + 1) * CELL - 4,
+                  w: CELL + 8,
+                  h: 8,
+              };
+    for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
+    const maze = {
+        walls: boundaries,
+        links,
+        seed,
+        name: `Loop Maze ${String((seed >>> 0) % 997).padStart(3, "0")}`,
+        revision: "loop-mazes-v3",
+    };
+    // Paired walls can exceed this soft density target by one segment.
+    const removed = new Set(),
+        target = [28, 32, 36][(seed >>> 0) % 3];
+    for (const [a, b] of candidates) {
+        const pair = [
+            ...new Map(
+                [
+                    [a, b],
+                    [COLS * ROWS - 1 - b, COLS * ROWS - 1 - a],
+                ].map((edge) => [key(...edge), edge]),
+            ).values(),
+        ];
+        if (pair.some(([x, y]) => removed.has(key(x, y)))) continue;
+        const walls = pair.map(wallFor);
+        // Keep an inward-facing exit from both spawn regions.
+        if (
+            walls.some((w) =>
+                [11, 58].some((i) => {
+                    const p = center(i),
+                        direction = i === 11 ? 1 : -1;
+                    for (let d = 0; d <= 150; d += 3)
+                        if (circleWall(p.x + direction * d, p.y, RADIUS, w))
+                            return true;
+                    return false;
+                }),
+            )
+        )
+            continue;
+        for (const [x, y] of pair) {
+            links[x] = links[x].filter((n) => n !== y);
+            links[y] = links[y].filter((n) => n !== x);
+        }
+        const seen = new Set([0]),
+            queue = [0];
+        for (let i = 0; i < queue.length; i++)
+            for (const n of links[queue[i]])
+                if (!seen.has(n)) {
+                    seen.add(n);
+                    queue.push(n);
+                }
+        const safe =
+            seen.size === COLS * ROWS &&
+            links.every((l) => l.length >= 2) &&
+            Array.from({ length: COLS * ROWS }, (_, i) => i).every(
+                (i) =>
+                    i === 11 || i === 58 || route(maze, 11, 58, i).length > 0,
+            );
+        if (!safe) {
+            for (const [x, y] of pair) {
+                links[x].push(y);
+                links[y].push(x);
+            }
+            continue;
+        }
+        for (const [x, y] of pair) removed.add(key(x, y));
+        maze.walls.push(...walls);
+        if (removed.size >= target) break;
+    }
+    // Stable order makes tied navigation choices independent of rejected walls.
+    links.forEach((l) => l.sort((a, b) => a - b));
     return maze;
 }
 export const center = (i) => ({
@@ -206,7 +221,11 @@ export function traceShot(maze, tank, angle, maxTime = 2.8, target = null) {
     let selfHit = false,
         hit = false,
         firstBounceTime = null;
-    for (let k = 0; k < Math.ceil(Math.min(maxTime, 8) * 240); k++) {
+    for (
+        let k = 0;
+        k < Math.ceil(Math.min(maxTime, SHELL_LIFETIME) * 240);
+        k++
+    ) {
         const prev = b.bounces;
         advanceBullet(b, 1 / 240, maze.walls);
         if (firstBounceTime === null && b.bounces) firstBounceTime = b.age;
@@ -361,7 +380,7 @@ export function bulletForecast(game, bullet, p, horizon = 0.8) {
         closestTime = null,
         hitTime = null;
     for (let k = 0; k <= Math.ceil(horizon * 60); k++) {
-        if (b.age >= 8) break;
+        if (b.age >= SHELL_LIFETIME) break;
         // The short muzzle grace is identical to physics, not immunity to friendly fire.
         if (!(b.owner === p.id && b.age < 0.15 && b.bounces === 0)) {
             const d = distance(b, p),
@@ -474,7 +493,7 @@ export function forecastMovement(
         );
         travel += distance(p, before);
         for (const b of bullets) {
-            if (b.age >= 8) continue;
+            if (b.age >= SHELL_LIFETIME) continue;
             advanceBullet(b, dt, game.maze.walls);
             if (b.owner === id && b.age < 0.15 && b.bounces === 0) continue;
             const margin = distance(b, p) - (RADIUS + 3);
@@ -548,7 +567,7 @@ export function forecastShot(
             attempted = true;
             const shell = shellFrom(p),
                 ammo = game.bullets.filter(
-                    (b) => b.owner === id && b.age + time < 8,
+                    (b) => b.owner === id && b.age + time < SHELL_LIFETIME,
                 ).length;
             if (
                 t.cooldown > time ||
@@ -587,36 +606,36 @@ export function forecastShot(
 }
 export const AVOIDANCE_PROFILES = Object.freeze({
     light: Object.freeze({
-        label: "Light",
-        interval: 0.12,
-        horizon: 0.45,
-        trigger: 0.3,
-        maxDuration: 0.2,
-        cooldown: 0.75,
-        minHold: 0.08,
-        releaseMargin: 2,
+        label: "Reactive",
+        interval: 0.06,
+        horizon: 0.65,
+        trigger: 0.48,
+        maxDuration: 0.4,
+        cooldown: 0.28,
+        minHold: 0.1,
+        releaseMargin: 3,
         instantRefresh: false,
     }),
     standard: Object.freeze({
-        label: "Standard",
-        interval: 0.1,
-        horizon: 0.6,
-        trigger: 0.45,
-        maxDuration: 0.35,
-        cooldown: 0.45,
-        minHold: 0.1,
-        releaseMargin: 4,
+        label: "Balanced",
+        interval: 0.05,
+        horizon: 0.8,
+        trigger: 0.62,
+        maxDuration: 0.5,
+        cooldown: 0.2,
+        minHold: 0.12,
+        releaseMargin: 5,
         instantRefresh: false,
     }),
     strong: Object.freeze({
-        label: "Strong",
-        interval: 0.05,
-        horizon: 0.9,
-        trigger: 0.9,
-        maxDuration: Infinity,
-        cooldown: 0,
-        minHold: 0.15,
-        releaseMargin: 8,
+        label: "Protective",
+        interval: 1 / 30,
+        horizon: 0.95,
+        trigger: 0.78,
+        maxDuration: 0.65,
+        cooldown: 0.12,
+        minHold: 0.14,
+        releaseMargin: 7,
         instantRefresh: true,
     }),
 });
@@ -656,7 +675,7 @@ export function buildAvoidance(game, id) {
     for (let k = 0; k < steps; k++) {
         const samples = [];
         for (const b of shells) {
-            if (b.age >= 8) continue;
+            if (b.age >= SHELL_LIFETIME) continue;
             for (let s = 0; s < 4; s++) {
                 advanceBullet(b, dt / 4, game.maze.walls);
                 if (!(b.owner === id && b.age < 0.15 && b.bounces === 0))
@@ -813,7 +832,7 @@ export function buildObservation(
             vx: round(b.vx),
             vy: round(b.vy),
             bounces: b.bounces,
-            life_s: round(Math.max(0, 8 - b.age)),
+            life_s: round(Math.max(0, SHELL_LIFETIME - b.age)),
             closest_px: Number.isFinite(f.min) ? round(f.min) : null,
             closest_s:
                 f.closestTime === null
@@ -1016,7 +1035,7 @@ export class Game {
         this.tanks = [a, b].map((p, id) => ({
             id,
             ...center(p),
-            angle: id === 0 ? 0 : Math.PI,
+            angle: p === 11 ? 0 : Math.PI,
             alive: true,
             cooldown: 0,
             drive: "stop",
@@ -1153,7 +1172,7 @@ export class Game {
             id: `${this.roundSerial}-${t.id}-${this.shots[t.id]}`,
         });
         this.shots[t.id]++;
-        t.cooldown = 0.48;
+        t.cooldown = FIRE_COOLDOWN;
         t.recoil = 1;
         this.effects.push({
             type: "muzzle",
@@ -1404,7 +1423,9 @@ export class Game {
                 if (b.dead) break;
             }
         }
-        this.bullets = this.bullets.filter((b) => !b.dead && b.age < 8);
+        this.bullets = this.bullets.filter(
+            (b) => !b.dead && b.age < SHELL_LIFETIME,
+        );
         for (const id of deaths) {
             const t = this.tanks[id];
             t.alive = false;

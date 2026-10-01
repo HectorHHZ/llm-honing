@@ -1,4 +1,6 @@
+import { STRATEGIES, rangeCost } from "./strategies.js";
 import {
+    SHELL_LIFETIME,
     DRIVE,
     TURNS,
     SPEED,
@@ -56,14 +58,22 @@ function arrival(game, id, delay) {
     }
     return p;
 }
-export function buildPlans(game, id, { reactionDelay = 0.3 } = {}) {
+export function buildPlans(
+    game,
+    id,
+    { reactionDelay = 0.3, strategy = STRATEGIES.baseline } = {},
+) {
     const t = game.tanks[id],
         enemy = game.tanks[1 - id],
         p = arrival(game, id, reactionDelay),
         los = visible(game.maze, p, enemy);
-    const aim = findAimDirections(game.maze, t, enemy),
+    const aim = findAimDirections(game.maze, t, enemy, {
+            limit: strategy.multiAim ? 6 : 3,
+        }),
         arrivalAim = reactionDelay
-            ? findAimDirections(game.maze, p, enemy)
+            ? findAimDirections(game.maze, p, enemy, {
+                  limit: strategy.multiAim ? 6 : 3,
+              })
             : aim;
     const path = route(game.maze, cellOf(p), cellOf(enemy));
     let target = enemy;
@@ -80,80 +90,131 @@ export function buildPlans(game, id, { reactionDelay = 0.3 } = {}) {
             arrivalAim.best?.angle ??
             Math.atan2(target.y - p.y, target.x - p.x),
         error = angleDelta(targetHeading, p.angle);
-    const duration = PLAN_DURATION,
+    const duration = strategy.adaptiveHold
+            ? clamp(reactionDelay + 0.15, PLAN_DURATION, 1.2)
+            : PLAN_DURATION,
         actions = [];
     for (const drive of Object.keys(DRIVE))
         for (const turn of Object.keys(TURNS)) {
-            // A bounded key press at physical angular speed, not a snapped/independent turret.
-            const direction = TURN_INPUT[turn],
-                toward = direction && Math.sign(error) === direction;
-            const turnDuration = direction
-                ? Math.round(
-                      Math.min(
-                          duration,
-                          toward ? Math.abs(error) / TURN_SPEED : 0.18,
-                      ) * 60,
-                  ) / 60
-                : 0;
-            const commandDuration = Math.max(
-                turnDuration + 1 / 60,
-                drive === "stop"
-                    ? duration
-                    : clamp(distance(p, target) / SPEED, 0.1, duration),
-            );
-            const controls = { drive, turn },
-                movement = forecastMovement(game, id, controls, {
+            const variants = [];
+            for (const heading of strategy.multiAim && arrivalAim.options.length
+                ? arrivalAim.options.map((a) => a.angle)
+                : [targetHeading]) {
+                const error = angleDelta(heading, p.angle);
+                // A bounded key press at physical angular speed, not a snapped/independent turret.
+                const direction = TURN_INPUT[turn],
+                    toward = direction && Math.sign(error) === direction;
+                const turnDuration = direction
+                    ? Math.round(
+                          Math.min(
+                              duration,
+                              toward ? Math.abs(error) / TURN_SPEED : 0.18,
+                          ) * 60,
+                      ) / 60
+                    : 0;
+                const commandDuration = Math.max(
+                    turnDuration + 1 / 60,
+                    drive === "stop"
+                        ? duration
+                        : clamp(distance(p, target) / SPEED, 0.1, duration),
+                );
+                const controls = { drive, turn },
+                    movement = forecastMovement(game, id, controls, {
+                        reactionDelay,
+                        controlDuration: commandDuration,
+                        turnDuration,
+                        horizon:
+                            reactionDelay +
+                            Math.max(
+                                commandDuration + 0.2,
+                                strategy.safetyHorizon || 0,
+                            ),
+                    });
+                const fireDelay = turnDuration;
+                const shot = forecastShot(game, id, controls, {
                     reactionDelay,
                     controlDuration: commandDuration,
                     turnDuration,
-                    horizon: reactionDelay + commandDuration + 0.2,
+                    fireDelay,
+                    horizon: 3,
                 });
-            const fireDelay = turnDuration;
-            const shot = forecastShot(game, id, controls, {
-                reactionDelay,
-                controlDuration: commandDuration,
-                turnDuration,
-                fireDelay,
-                horizon: 3,
-            });
-            const errorAfter = Math.abs(
-                angleDelta(targetHeading, movement.angle),
-            );
-            const progress =
-                distance(p, target) -
-                Math.hypot(movement.x - target.x, movement.y - target.y);
-            const hitPenalty =
-                movement.hitTime === null ? 0 : 1500 - 100 * movement.hitTime;
-            let score = progress - errorAfter * 50 - hitPenalty;
-            if (firingLane) {
-                score =
-                    (shot.enemyHitTime !== null && shot.selfHitTime === null
-                        ? 180
-                        : 0) -
-                    errorAfter * 85 +
-                    (distance(p, enemy) > 180 ? progress * 0.2 : 0) -
-                    hitPenalty;
+                const errorAfter = Math.abs(
+                    angleDelta(heading, movement.angle),
+                );
+                const progress =
+                    distance(p, target) -
+                    Math.hypot(movement.x - target.x, movement.y - target.y);
+                const hitPenalty =
+                    movement.hitTime === null
+                        ? 0
+                        : 1500 - 100 * movement.hitTime;
+                let score = progress - errorAfter * 50 - hitPenalty;
+                if (firingLane) {
+                    score =
+                        (shot.enemyHitTime !== null && shot.selfHitTime === null
+                            ? 180
+                            : 0) -
+                        errorAfter * 85 +
+                        (distance(p, enemy) > 180 ? progress * 0.2 : 0) -
+                        hitPenalty;
+                }
+                if (
+                    strategy.shotSpeedWeight &&
+                    shot.enemyHitTime !== null &&
+                    shot.selfHitTime === null
+                )
+                    score +=
+                        Math.max(0, 3 - shot.enemyHitTime - fireDelay) *
+                        strategy.shotSpeedWeight;
+                const rangeAfter = Math.hypot(
+                    movement.x - enemy.x,
+                    movement.y - enemy.y,
+                );
+                const spacingProgress =
+                    rangeCost(distance(p, enemy), strategy) -
+                    rangeCost(rangeAfter, strategy);
+                if (los || firingLane)
+                    score += spacingProgress * strategy.spacingWeight;
+                if (strategy.clearanceWeight)
+                    score -=
+                        Math.max(
+                            0,
+                            strategy.clearanceMargin - movement.clearance,
+                        ) * strategy.clearanceWeight;
+                // Prefer useful fire without driving into point-blank range.
+                if (strategy.spacingWeight && rangeAfter < 100)
+                    score -= (100 - rangeAfter) * 2;
+                // Do not repeatedly drive into a wall or turn away from the chosen corridor.
+                if (drive !== "stop" && movement.travel < 5) score -= 45;
+                const allowFire =
+                    shot.canFire &&
+                    shot.selfHitTime === null &&
+                    shot.enemyHitTime !== null;
+                const plan = {
+                    id: motionId(drive, turn),
+                    controls,
+                    duration: commandDuration,
+                    turnDuration,
+                    fireDelay,
+                    movement,
+                    shot,
+                    score,
+                    allowFire,
+                    target: { x: target.x, y: target.y },
+                    aimHeading: heading,
+                    rangeAfter,
+                    spacingProgress,
+                };
+                plan.description = `Drive ${drive} for ${Math.round(commandDuration * 1000)}ms; turn ${turn} for ${Math.round(turnDuration * 1000)}ms; ${firingLane ? "verified hit direction" : "waypoint"} error after ${Math.round((errorAfter * 180) / Math.PI)}deg; target progress ${Math.round(progress)}px; existing shell collision ${movement.hitTime === null ? "none" : Math.round(movement.hitTime * 1000) + "ms"}; shot after turn: enemy hit ${shot.enemyHitTime === null ? "none" : Math.round(shot.enemyHitTime * 1000) + "ms"}, self hit ${shot.selfHitTime === null ? "none" : Math.round(shot.selfHitTime * 1000) + "ms"}.`;
+                if (strategy.multiAim)
+                    plan.description += ` Chosen barrel heading ${round((heading * 180) / Math.PI)}deg; enemy range after ${round(rangeAfter)}px; preferred range ${strategy.spacingWeight ? `${strategy.minRange}-${strategy.maxRange}px` : "unrestricted"}; spacing improvement ${round(spacingProgress)}px.`;
+                if (strategy.clearanceWeight)
+                    plan.description += ` Minimum shell clearance ${round(movement.clearance)}px; prefer at least ${strategy.clearanceMargin}px. Enemy range ${round(rangeAfter)}px; comfortable range ${strategy.minRange}-${strategy.maxRange}px.`;
+                variants.push(plan);
             }
-            // Do not repeatedly drive into a wall or turn away from the chosen corridor.
-            if (drive !== "stop" && movement.travel < 5) score -= 45;
-            const allowFire =
-                shot.canFire &&
-                shot.selfHitTime === null &&
-                shot.enemyHitTime !== null;
-            const plan = {
-                id: motionId(drive, turn),
-                controls,
-                duration: commandDuration,
-                turnDuration,
-                fireDelay,
-                movement,
-                shot,
-                score,
-                allowFire,
-                target: { x: target.x, y: target.y },
-            };
-            plan.description = `Drive ${drive} for ${Math.round(commandDuration * 1000)}ms; turn ${turn} for ${Math.round(turnDuration * 1000)}ms; ${firingLane ? "verified hit direction" : "waypoint"} error after ${Math.round((errorAfter * 180) / Math.PI)}deg; target progress ${Math.round(progress)}px; existing shell collision ${movement.hitTime === null ? "none" : Math.round(movement.hitTime * 1000) + "ms"}; shot after turn: enemy hit ${shot.enemyHitTime === null ? "none" : Math.round(shot.enemyHitTime * 1000) + "ms"}, self hit ${shot.selfHitTime === null ? "none" : Math.round(shot.selfHitTime * 1000) + "ms"}.`;
-            actions.push(plan);
+            actions.push(
+                variants.reduce((best, p) => (p.score > best.score ? p : best)),
+            );
         }
     const best = Math.max(...actions.map((a) => a.score));
     const admissible = actions
@@ -167,23 +228,29 @@ export function buildPlans(game, id, { reactionDelay = 0.3 } = {}) {
         round(b.vx),
         round(b.vy),
         b.bounces,
-        round(8 - b.age),
+        round(SHELL_LIFETIME - b.age),
     ]);
-    const aimingText =
+    let aimingText =
         aimContext(aim) +
         aimContext(
             arrivalAim,
             `AIM AT PREDICTED RESPONSE POSITION x=${round(p.x)},y=${round(p.y)},heading=${round((p.angle * 180) / Math.PI)}deg AFTER ${Math.round(reactionDelay * 1000)}ms`,
+        );
+    if (strategy.allAnglePrompt)
+        aimingText = aimingText.replaceAll(
+            "Rotate the hull toward the first verified direction",
+            "Compare the verified directions; each motion specifies its selected barrel heading",
         );
     const bulletText = `All ${bullets.length} bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: ${JSON.stringify(bullets)}. `;
     const weaponState =
         avoidanceContext(game, id) +
         `One hit kills; own shells are lethal. Weapon mechanically available ammo=${5 - game.bullets.filter((b) => b.owner === id).length}/5, cooldown=${Math.round(t.cooldown * 1000)}ms. ` +
         `Me (${round(t.x)},${round(t.y)}), heading=${round((t.angle * 180) / Math.PI)}deg; enemy (${round(enemy.x)},${round(enemy.y)}). ` +
-        `Verified aim at predicted response position: ${JSON.stringify(arrivalAim.best)}. ` +
+        `Verified aim at predicted response position: ${JSON.stringify(strategy.allAnglePrompt ? arrivalAim.options : arrivalAim.best)}. ` +
         bulletText +
         `Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading. All walls were included. Enemy held stationary; horizon 3s; movement can invalidate an aim hint. Latest state is checked again before firing.`;
     const state =
+        `STRATEGY ${strategy.id}: ${strategy.description} ` +
         aimingText +
         avoidanceContext(game, id) +
         `Tank duel. One hit kills. ALL shells including own are lethal. Fixed barrel rotates with hull at ${round((TURN_SPEED * 180) / Math.PI)}deg/s; drive ${SPEED}px/s. No instantaneous aiming. Full tank radius ${RADIUS}px, shell radius 3px.\n` +
@@ -231,13 +298,34 @@ export function buildPlans(game, id, { reactionDelay = 0.3 } = {}) {
         },
     };
 }
-export function applyPlanDecision(game, id, response) {
-    const current = buildPlans(game, id, { reactionDelay: 0 }),
+export function applyPlanDecision(
+    game,
+    id,
+    response,
+    strategy = STRATEGIES.baseline,
+) {
+    const current = buildPlans(game, id, { reactionDelay: 0, strategy }),
         requested = response.motion_id;
     let plan = current.actions.find((a) => a.id === requested);
     if (!plan) throw Error("Unknown motion plan");
     // Revalidate stale geometry. Never silently use a weapon result conditioned on a different motion.
-    if (!current.admissible.includes(requested)) {
+    const retainIntent =
+        strategy.revalidateSlack &&
+        plan.movement.hitTime === null &&
+        plan.movement.clearance >= 0 &&
+        plan.score >=
+            Math.max(...current.actions.map((p) => p.score)) -
+                strategy.revalidateSlack &&
+        (plan.controls.drive === "stop" || plan.movement.travel >= 5);
+    if (!current.admissible.includes(requested) && retainIntent) {
+        game.emit("plan_intent_retained", {
+            player: id,
+            motion_id: requested,
+            score: plan.score,
+            safety_clearance: plan.movement.clearance,
+        });
+    }
+    if (!current.admissible.includes(requested) && !retainIntent) {
         const chosen = current.admissible.reduce(
             (best, k) =>
                 response.probabilities.motion[k] >

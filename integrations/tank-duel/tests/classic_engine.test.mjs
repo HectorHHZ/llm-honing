@@ -543,7 +543,7 @@ test("a human can still hold the fire key to shoot repeatedly", () => {
     const g = emptyGame();
     for (let i = 0; i < 65; i++)
         g.step(1 / 60, { 0: { drive: 0, turn: 0, fire: true } });
-    assert.equal(g.shots[0], 3);
+    assert.equal(g.shots[0], 4);
 });
 test("fire guard blocks imminent self-hit and records raw fire without changing movement", () => {
     const g = emptyGame();

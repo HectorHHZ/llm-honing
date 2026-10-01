@@ -1,3 +1,4 @@
+import { AdaptiveCadence } from "./cadence.js";
 import { mountClassicSetup } from "../classic/setup.js";
 import { defaultSeats, seatProtocol } from "./seat-config.js";
 import { mountShell } from "./shell.js";
@@ -36,6 +37,7 @@ export async function boot(adapter) {
                 addFeed(`${side(player)} ${field} updated.`, player);
                 update();
             } else {
+                cadenceModels.forEach((c) => c.reset());
                 health = [null, null];
                 healthSerial = healthSerial.map((n) => n + 1);
                 error = "Connecting selected models";
@@ -61,6 +63,7 @@ export async function boot(adapter) {
         generation = 0,
         serial = 0,
         trajectory = false;
+    const cadenceModels = [new AdaptiveCadence(), new AdaptiveCadence()];
     let pending = [null, null],
         seatEpoch = [0, 0],
         next = [0, 0],
@@ -250,6 +253,7 @@ export async function boot(adapter) {
             created_at: new Date().toISOString(),
             edition,
             physics_revision: "full-footprint-v1",
+            rules_revision: classic ? "loop-ammo-dodge-v3" : "auto-aim-v1",
             map_revision: game.maze.revision || "maze-v1",
             players: seats.map((s, i) => ({
                 player: i,
@@ -362,11 +366,20 @@ export async function boot(adapter) {
             !game.tanks[player].alive
         )
             return;
-        const settings = { ...seats[player] };
+        const settings = {
+            ...seats[player],
+            interval:
+                seats[player].intervalMode === "auto"
+                    ? cadenceModels[player].interval
+                    : seats[player].interval,
+        };
         const { backend, controllerMode, interval } = settings;
         const observed = adapter.observe(game, player, {
                 ...settings,
-                rtt: latest[player]?.rtt,
+                rtt:
+                    settings.intervalMode === "auto"
+                        ? cadenceModels[player].prediction
+                        : latest[player]?.rtt,
             }),
             round = game.roundSerial,
             epoch = generation,
@@ -381,6 +394,7 @@ export async function boot(adapter) {
             decision_interval_ms: interval,
             bullet_count: observed.bulletCount,
             physics_revision: "full-footprint-v1",
+            rules_revision: classic ? "loop-ammo-dodge-v3" : "auto-aim-v1",
             map_revision: game.maze.revision || "maze-v1",
             configuration: settings,
         };
@@ -414,6 +428,7 @@ export async function boot(adapter) {
             )
                 return;
             if (r.status === 429) {
+                cadenceModels[player].busy();
                 next[player] = performance.now() + interval;
                 return;
             }
@@ -427,6 +442,7 @@ export async function boot(adapter) {
                 );
             const rtt = performance.now() - sent,
                 stale = rtt > 1600;
+            cadenceModels[player].observe(rtt);
             record.push({
                 player,
                 round: game.round,
@@ -438,6 +454,7 @@ export async function boot(adapter) {
                 response,
                 rtt_ms: rtt,
                 actual_interval_ms: cadence,
+                cadence_calibration: cadenceModels[player].stats,
                 applied: !stale,
             });
             if (record.length > 20000) record.shift();
@@ -450,8 +467,7 @@ export async function boot(adapter) {
                 return;
             }
             const applied = adapter.apply(game, player, response, {
-                controllerMode,
-                interval,
+                ...settings,
             });
             record.at(-1).execution = applied;
             counts[player]++;
@@ -508,7 +524,11 @@ export async function boot(adapter) {
             $("assist").querySelector("span").textContent =
                 mode !== "local" && game.assistEnabled ? "On" : "Off";
         }
-        setup?.render(health, isAI);
+        setup?.render(
+            health,
+            isAI,
+            cadenceModels.map((c) => c.stats),
+        );
         $("assist-note").textContent =
             mode === "local"
                 ? "Your shells can hit you. Make every bounce count."
@@ -516,7 +536,7 @@ export async function boot(adapter) {
                   ? seats
                         .map(
                             (s, i) =>
-                                `${side(i)}: ${!isAI(i) ? "Keyboard" : "Dodge " + (s.assistEnabled ? s.assistProfile : "Off")}`,
+                                `${side(i)}: ${!isAI(i) ? "Keyboard" : "Dodge " + (s.assistEnabled ? { light: "Reactive", standard: "Balanced", strong: "Protective" }[s.assistProfile] : "Off")}`,
                         )
                         .join(" · ")
                   : adapter.assistNote(game);
@@ -534,7 +554,7 @@ export async function boot(adapter) {
             seats
                 .map(
                     (s, i) =>
-                        `${side(i)} · ${modelName(i)} · ${health[i] ? "connected" : "offline"} · ${s.interval} ms scheduling floor`,
+                        `${side(i)} · ${modelName(i)} · ${health[i] ? "connected" : "offline"} · ${s.intervalMode === "auto" ? "Auto " + cadenceModels[i].interval : s.interval} ms scheduling floor`,
                 )
                 .join(" | ") + ". Actual latency is measured below.";
         const overlay =

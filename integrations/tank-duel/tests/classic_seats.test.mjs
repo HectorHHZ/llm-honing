@@ -96,8 +96,8 @@ test("different levels and shot guards persist over resets and round changes", (
         advance();
         assert.equal(assistEnabledFor(g, 0), true);
         assert.equal(assistEnabledFor(g, 1), false);
-        assert.equal(avoidanceProfile(g, 0).trigger, 0.3);
-        assert.equal(avoidanceProfile(g, 1).trigger, 0.9);
+        assert.equal(avoidanceProfile(g, 0).trigger, 0.48);
+        assert.equal(avoidanceProfile(g, 1).trigger, 0.78);
         assert.match(
             avoidanceContext(g, 0),
             /Shot guard=ON.*avoidance=ON.*Level=light/,

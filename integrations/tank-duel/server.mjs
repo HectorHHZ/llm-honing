@@ -15,6 +15,7 @@ const types = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".svg": "image/svg+xml",
+    ".json": "application/json; charset=utf-8",
 };
 export function configuration(env = process.env) {
     const editions = { classic: [], "auto-aim": [] };
@@ -122,7 +123,7 @@ export function createGameServer(config = configuration()) {
                 "Referrer-Policy": "same-origin",
             });
             res.end(
-                type.startsWith("application/json")
+                type.startsWith("application/json") && !Buffer.isBuffer(data)
                     ? JSON.stringify(data)
                     : data,
             );

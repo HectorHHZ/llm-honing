@@ -1,3 +1,4 @@
+import { strategyFor } from "./strategies.js";
 import {
     Game,
     makeMaze,
@@ -63,19 +64,30 @@ export const adapter = {
     observe(
         game,
         id,
-        { controllerMode, interval, rtt, contextVersion = "full" },
+        {
+            controllerMode,
+            interval,
+            rtt,
+            contextVersion = "full",
+            decisionVersion,
+        },
     ) {
         const controlDuration = Math.max(
                 MODEL_CONTROL_SECONDS,
                 interval / 1000 + 0.3,
             ),
             opts = {
+                strategy: strategyFor({ controllerMode, decisionVersion }),
                 reactionDelay: responseDelay(rtt ?? 300),
                 controlDuration,
             };
         if (controllerMode === "plans" && contextVersion !== "full")
             throw Error("Planned steering requires full tactical context");
-        const revision = contextRevision({ controllerMode, contextVersion });
+        const revision = contextRevision({
+            controllerMode,
+            contextVersion,
+            decisionVersion,
+        });
         const obs =
             controllerMode === "plans"
                 ? buildPlans(game, id, opts)
@@ -143,8 +155,14 @@ export const adapter = {
             validProbabilities(r.probabilities?.turn, Object.keys(TURNS))
         );
     },
-    apply(game, id, r, { controllerMode, interval }) {
-        if (controllerMode === "plans") return applyPlanDecision(game, id, r);
+    apply(game, id, r, { controllerMode, interval, decisionVersion }) {
+        if (controllerMode === "plans")
+            return applyPlanDecision(
+                game,
+                id,
+                r,
+                strategyFor({ controllerMode, decisionVersion }),
+            );
         game.setControls(
             id,
             r.controls,

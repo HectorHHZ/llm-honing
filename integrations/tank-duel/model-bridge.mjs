@@ -169,6 +169,34 @@ export async function decideWithHoning(backend, edition, body, signal) {
         calls = [],
         started = performance.now();
     async function predict(state, questions, suffix) {
+        // Laya's native option pointers allow 48 tokens each. Preserve every
+        // forecast in the state and use concise pointers, never truncate it.
+        state +=
+            "\n\nOPTION FORECASTS:\n" +
+            Object.entries(questions)
+                .map(([head, q]) =>
+                    Object.entries(q.criteria)
+                        .map(
+                            ([id, description]) =>
+                                `${head}/${id}: ${description}`,
+                        )
+                        .join("\n"),
+                )
+                .join("\n");
+        questions = Object.fromEntries(
+            Object.entries(questions).map(([head, q]) => [
+                head,
+                {
+                    ...q,
+                    criteria: Object.fromEntries(
+                        Object.keys(q.criteria).map((id) => [
+                            id,
+                            `${id}: use the ${head}/${id} forecast in state.`,
+                        ]),
+                    ),
+                },
+            ]),
+        );
         const id = body.id + ":" + suffix,
             reply = await upstream(
                 backend,
@@ -208,7 +236,9 @@ export async function decideWithHoning(backend, edition, body, signal) {
                 keys = Object.keys(q.criteria);
             if (
                 !validProbabilities(a?.probabilities, keys) ||
-                a.choice !== argmax(a.probabilities, keys)
+                !keys.includes(a.choice) ||
+                a.probabilities[a.choice] <
+                    Math.max(...keys.map((k) => a.probabilities[k]))
             )
                 throw new HttpError(
                     502,

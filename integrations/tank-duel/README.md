@@ -39,7 +39,7 @@ the tab also pauses the game. A keyboard is required; the layout scales to
 small screens for viewing, but there are no touch controls.
 
 Classic's **Match setup** has independent Blue and Red settings: model/checkpoint,
-decision version, context, 50–1,000 ms scheduling, dodge toggle/strength and raw
+decision version, context, measured Auto or 50–1,000 ms scheduling, dodge toggle/strength and raw
 shot guard. Collapse it for recordings. Settings persist in this browser/origin.
 Model, decision, context or interval changes restart the match and invalidate
 in-flight responses; assistance changes apply to that seat immediately. The
@@ -61,8 +61,7 @@ uses `GET /v1/health` and `POST /v1/decide`; the loaded backend must support
 choice questions and return complete native probability distributions. The
 bridge accepts the existing Laya, Kev and NanoJev decision contract. Additional
 families, including a djev/DiffusionGemma backend, can use the same interface
-when available in the configured Honing server. This demo does not install,
-download, load or pin model weights, or change any backend implementation.
+when available in the configured Honing server. The game server does not load weights. The optional `scripts/serve-honing.py` launcher serves the pinned Laya / Laya Typed / Kev 0.8B / Kev 4B models using native Honing implementations; see [Arena lab](docs/arena-lab.md).
 
 Use the model server's documented setup to prepare its checkpoint, pins and
 GPU. Allow enough context for the full maze, all ten shells and every offered
@@ -117,16 +116,16 @@ Each seat validates responses against its own selected endpoint and seat ID.
 
 The **Gemma planned vs NanoJev independent** preset selects the two named
 families when available. Blue uses planned steering, Red uses independent
-controls, both use Full tactical context, 100 ms scheduling and Light dodge.
+controls, both use Full tactical context, Auto scheduling and Reactive dodge.
 Either dodge can then be turned off independently. This is a control-policy
 comparison using the configured checkpoints, **not an assertion that an
 archived first-generation prompt or older weights were restored**.
 
-| Decision version          | Context                                     | Behavior                                                                                                                                               |
-| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Current · planned v1      | Full tactical (`planned-aim-v1`)            | Joint motion and conditional weapon, bounded turning, geometric selection and fresh shot validation.                                                   |
-| Independent · controls v3 | Full tactical (`state-v7-avoidance-levels`) | Independent drive/turn/weapon with existing aim hints and motion/shot forecasts; no joint-plan filtering.                                              |
-| Independent · controls v3 | Arena only · v1 (`arena-v1`)                | Newly added minimal profile: positions, headings, walls, all shells, timing and own assistance state; no aim hints, waypoints or trajectory forecasts. |
+| Decision version | Context                                     | Behavior                                                                                                                                               |
+| ---------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Classic Aim      | Full tactical (`planned-aim-v1`)            | Joint motion and conditional weapon, bounded turning, geometric selection and fresh shot validation.                                                   |
+| Free Controls    | Full tactical (`state-v7-avoidance-levels`) | Independent drive/turn/weapon with existing aim hints and motion/shot forecasts; no joint-plan filtering.                                              |
+| Free Controls    | Arena only · v1 (`arena-v1`)                | Newly added minimal profile: positions, headings, walls, all shells, timing and own assistance state; no aim hints, waypoints or trajectory forecasts. |
 
 Planned steering requires its full tactical context. Every profile includes
 shells from both sides. Dodge Off disables the local emergency controller for
@@ -163,11 +162,14 @@ cancelled. Displayed drive/turn probabilities are marginals of the joint motion
 distribution. **Raw controls** exposes independent drive/turn/fire choices for
 experiments and can cause self-hits.
 
-Classic's default **Light** dodge checks every 120 ms, reacts only to predicted
-hits within 300 ms, intervenes for at most 200 ms, then cools down for 750 ms.
-Standard and Strong remain available. Auto Aim's separate optional dodge checks
-700 ms ahead every 50 ms and defaults **off**. Dodge assistance never controls
-keyboard players. All interventions appear in match exports.
+Classic's **Reactive** dodge (the persisted `light` ID) checks every 60 ms,
+reacts to a predicted hit within 480 ms, takes control for at most 400 ms, then
+cools down for 280 ms. **Balanced** uses a 620 ms trigger / 500 ms burst /
+200 ms cooldown. **Protective** uses 780 / 650 / 120 ms. All three are bounded;
+none changes bullet speed, collision size or damage. The model's original
+command resumes after a burst if still valid. Auto Aim's separate optional
+dodge checks 700 ms ahead every 50 ms and defaults off. Keyboard players are
+never assisted. All interventions appear in match exports.
 
 The export records each player's backend, reported model metadata, decision and
 context versions, interval and assist settings. Each decision also snapshots
@@ -180,17 +182,32 @@ separately in the details and export.
 
 ## Classic arenas
 
-Classic uses three rotationally symmetric tactical layouts: **Crossroads** has
-four L-shaped covers around a central crossing; **Switchback** has staggered
-screens and flanking loops; **Bankshot** has parallel central walls and offset
-side cover for ricochet shots. Each has 8–10 interior wall sections, with
-at least 79 px of passage clearance for a 44 px tank footprint. All navigation
-cells remain reachable, with alternative routes around cover and clear spawn exits.
-Navigation links are derived from actual tank clearance
-against those walls, so model waypoints match the visible layout. Rounds rotate
-layouts deterministically; **New arena** selects a different layout and
-**Restart** keeps the match seed. Exports identify this map set as
-`tactical-arenas-v2`. Auto Aim retains its maze generator.
+Classic uses seeded, rotationally symmetric **Loop Mazes**, with 28–37 interior
+wall segments on a 10 × 7 grid. Every cell has at least two exits, every cell is
+reachable, and no single intermediate cell cuts the route between spawns.
+Spawn exits have clear inward lanes. Corridors retain enough clearance for the
+44 px tank footprint. Rounds change maps deterministically; New arena changes
+the seed and Restart keeps it. Map revision: `loop-mazes-v3`.
+
+Classic shells expire after **4.5 seconds** (previously 8), releasing their ammo
+slot. Fire cooldown is **300 ms** (previously 480 ms). Five active shells per
+tank and lethal self-hits remain. Forecasts use the same lifetime as physics.
+Auto Aim retains its own maze and ammunition rules.
+
+## Adaptive cadence and strategy experiments
+
+Auto cadence learns each seat independently from its last 40 successful requests.
+After four samples, the scheduling floor follows the 20th percentile of RTT;
+forecasting uses the 75th percentile. Busy responses cause a decaying backoff.
+One request per seat remains in flight; this measures attainable speed, not an
+inference acceleration. Model changes clear calibration. Model identity details
+show the floor, median, p95 and sample count. Manual scheduling remains available.
+
+Strategy IDs preserve old baselines. Candidates are evaluated with real model
+requests, paired seeds and swapped seats, then checked on unused seeds before
+promotion. Losing trials remain in the experiment history and are not labelled
+improvements. These are controller/context iterations, not model weight training.
+See [Arena lab and measured results](docs/arena-lab.md).
 
 ## Collision rules
 

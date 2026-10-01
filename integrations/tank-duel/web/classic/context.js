@@ -1,4 +1,5 @@
 import {
+    SHELL_LIFETIME,
     W,
     H,
     SPEED,
@@ -32,7 +33,7 @@ export function buildArenaContext(
             vx: round(b.vx),
             vy: round(b.vy),
             bounces: b.bounces,
-            remaining_s: round(Math.max(0, 8 - b.age)),
+            remaining_s: round(Math.max(0, SHELL_LIFETIME - b.age)),
         }));
     const state =
         `CONTEXT arena-v1. Tank duel: one hit kills; ALL shells including your own are lethal. Walls reflect shells. ` +

@@ -49,10 +49,10 @@ test("default is light and does not preempt a distant threat that the old level 
     const event = light.events.find(
         (e) => e.type === "assist" && e.player === 0,
     );
-    assert.ok(event.hit_ms <= 300);
-    assert.ok(event.time >= 0.3);
+    assert.ok(event.hit_ms <= 480);
+    assert.ok(event.time >= 0.1);
 });
-test("model responses cannot extend a light burst past 200ms", () => {
+test("model responses cannot extend a light burst past 400ms", () => {
     const g = incoming("light", 100);
     untilActive(g);
     const began = g.tanks[0].avoidance.startedAt;
@@ -62,19 +62,19 @@ test("model responses cannot extend a light burst past 200ms", () => {
         g.step(1 / 60);
         if (g.tanks[0].assistActive) count++;
     }
-    assert.ok(count <= 12);
-    assert.ok(g.elapsed - began <= 0.2 + 1 / 60);
+    assert.ok(count <= 24);
+    assert.ok(g.elapsed - began <= 0.4 + 1 / 60);
     assert.ok(
         g.events.some(
             (e) =>
                 e.type === "assist_end" &&
                 e.player === 0 &&
-                e.reason === "burst_limit",
+                ["burst_limit", "safe_path"].includes(e.reason),
         ),
     );
-    assert.ok(g.tanks[0].assistCooldownUntil - g.elapsed >= 0.74);
+    assert.ok(g.tanks[0].assistCooldownUntil - g.elapsed >= 0.27);
 });
-test("new shells and model commands do not bypass the 750ms cooldown", () => {
+test("new shells and model commands do not bypass the 280ms cooldown", () => {
     const g = incoming("light", 100);
     untilActive(g);
     while (g.tanks[0].assistActive) g.step(1 / 60);
@@ -113,8 +113,8 @@ test("short-burst predictions stop the dodge at its deadline", () => {
         const replay = incoming();
         replay.bullets = [];
         replay.setAssistEnabled(false);
-        replay.setControls(0, { ...f.controls, fire: false }, 0.2);
-        for (let k = 0; k < 27; k++) replay.step(1 / 60);
+        replay.setControls(0, { ...f.controls, fire: false }, 0.4);
+        for (let k = 0; k < 39; k++) replay.step(1 / 60);
         assert.ok(
             Math.hypot(f.x - replay.tanks[0].x, f.y - replay.tanks[0].y) < 0.01,
         );
@@ -127,7 +127,7 @@ test("response-time forecast returns to original controls after a burst, includi
     untilActive(g);
     const t = g.tanks[0];
     assert.deepEqual(forecastCurrentControls(g, t, 0.05), t.avoidance.controls);
-    assert.deepEqual(forecastCurrentControls(g, t, 0.25), {
+    assert.deepEqual(forecastCurrentControls(g, t, 0.45), {
         drive: "stop",
         turn: "none",
     });
@@ -169,7 +169,7 @@ test("current strength, real cadence and cooldown are visible in context", () =>
     const g = incoming("light", 100);
     untilActive(g);
     while (g.tanks[0].assistActive) g.step(1 / 60);
-    assert.ok(avoidanceContext(g, 0).includes("remaining cooldown=750ms"));
+    assert.ok(avoidanceContext(g, 0).includes("remaining cooldown=280ms"));
 });
 test("changing level clears an existing override and round reset preserves the selection", () => {
     const g = incoming("strong");
