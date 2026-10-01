@@ -39,34 +39,48 @@ export function rng(seed) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
-// Sparse, rotationally symmetric cover: open routes and readable ricochet lanes.
-// Coordinates stay on cell boundaries so every navigation cell remains usable.
+// Rotationally symmetric cover, flanking loops and bank-shot lanes.
+// [column, row, direction, length] stays on navigation-cell boundaries.
 const ARENAS = [
     {
-        name: "Side Cover",
+        name: "Switchback",
         segments: [
-            [3, 2, "v"],
-            [7, 2, "v"],
-            [3, 4, "v"],
-            [7, 4, "v"],
+            [4, 1, "v", 2],
+            [6, 4, "v", 2],
+            [3, 3, "h", 1],
+            [6, 4, "h", 1],
+            [2, 2, "v", 2],
+            [8, 3, "v", 2],
+            [2, 2, "h", 1],
+            [7, 5, "h", 1],
+            [6, 1, "h", 2],
+            [2, 6, "h", 2],
         ],
     },
     {
-        name: "Open Field",
+        name: "Crossroads",
         segments: [
-            [3, 2, "h"],
-            [6, 2, "h"],
-            [3, 5, "h"],
-            [6, 5, "h"],
+            [2, 2, "h", 2],
+            [4, 2, "v", 1],
+            [6, 2, "h", 2],
+            [6, 2, "v", 1],
+            [2, 5, "h", 2],
+            [4, 4, "v", 1],
+            [6, 5, "h", 2],
+            [6, 4, "v", 1],
         ],
     },
     {
-        name: "Crossfire",
+        name: "Bankshot",
         segments: [
-            [3, 2, "h"],
-            [6, 5, "h"],
-            [7, 2, "v"],
-            [3, 4, "v"],
+            [4, 3, "h", 2],
+            [4, 4, "h", 2],
+            [3, 2, "v", 2],
+            [7, 3, "v", 2],
+            [2, 2, "h", 1],
+            [7, 5, "h", 1],
+            [6, 1, "h", 2],
+            [2, 6, "h", 2],
         ],
     },
 ];
@@ -77,11 +91,11 @@ export function makeMaze(seed) {
         { x: 0, y: H - 7, w: W, h: 7 },
         { x: 0, y: 0, w: 7, h: H },
         { x: W - 7, y: 0, w: 7, h: H },
-        ...layout.segments.map(([x, y, direction]) => ({
+        ...layout.segments.map(([x, y, direction, length]) => ({
             x: x * CELL - 4,
             y: y * CELL - 4,
-            w: direction === "h" ? CELL + 8 : 8,
-            h: direction === "v" ? CELL + 8 : 8,
+            w: direction === "h" ? CELL * length + 8 : 8,
+            h: direction === "v" ? CELL * length + 8 : 8,
         })),
     ];
     const maze = {
@@ -89,7 +103,7 @@ export function makeMaze(seed) {
         links: Array.from({ length: COLS * ROWS }, () => []),
         seed,
         name: layout.name,
-        revision: "open-arenas-v1",
+        revision: "tactical-arenas-v2",
     };
     // Derive the graph from physical clearance, never from the old maze's edges.
     // This keeps model waypoints consistent with the walls visible on screen.

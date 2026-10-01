@@ -180,13 +180,17 @@ separately in the details and export.
 
 ## Classic arenas
 
-Classic uses three simple, rotationally symmetric layouts: Open Field, Side
-Cover and Crossfire. Each has just four short interior walls, wide open routes
-and a clear center. Navigation links are derived from actual tank clearance
+Classic uses three rotationally symmetric tactical layouts: **Crossroads** has
+four L-shaped covers around a central crossing; **Switchback** has staggered
+screens and flanking loops; **Bankshot** has parallel central walls and offset
+side cover for ricochet shots. Each has 8–10 interior wall sections, with
+at least 79 px of passage clearance for a 44 px tank footprint. All navigation
+cells remain reachable, with alternative routes around cover and clear spawn exits.
+Navigation links are derived from actual tank clearance
 against those walls, so model waypoints match the visible layout. Rounds rotate
 layouts deterministically; **New arena** selects a different layout and
 **Restart** keeps the match seed. Exports identify this map set as
-`open-arenas-v1`. Auto Aim retains its maze generator.
+`tactical-arenas-v2`. Auto Aim retains its maze generator.
 
 ## Collision rules
 

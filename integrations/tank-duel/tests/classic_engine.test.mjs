@@ -21,10 +21,27 @@ import {
     responseDelay,
 } from "../web/classic/engine.js";
 
-test("generated mazes are reproducible, connected, and every cell center is traversable", () => {
+test("arenas are reproducible, symmetric, connected and have clear alternative routes", () => {
     for (let seed = 0; seed < 30; seed++) {
         const maze = makeMaze(seed);
         assert.deepEqual(maze, makeMaze(seed));
+        for (const w of maze.walls.slice(4))
+            assert.ok(
+                maze.walls.some(
+                    (other) =>
+                        other.x === W - w.x - w.w &&
+                        other.y === H - w.y - w.h &&
+                        other.w === w.w &&
+                        other.h === w.h,
+                ),
+                `${maze.name}: asymmetric cover`,
+            );
+        for (const spawn of [11, 58]) {
+            const p = center(spawn),
+                direction = spawn === 11 ? 1 : -1;
+            for (let d = 0; d <= 150; d += 3)
+                assert.equal(blocked(maze, p.x + direction * d, p.y), false);
+        }
         for (let i = 0; i < COLS * ROWS; i++) {
             if (i)
                 assert.ok(
@@ -33,6 +50,10 @@ test("generated mazes are reproducible, connected, and every cell center is trav
                 );
             const p = center(i);
             assert.equal(blocked(maze, p.x, p.y), false);
+            assert.ok(maze.links[i].length >= 2, `${maze.name}: dead end ${i}`);
+            // A tank occupying a single cell must not cut off the only route.
+            if (i !== 11 && i !== 58)
+                assert.ok(route(maze, 11, 58, i).length > 0);
             // Waypoints must use openings that fit the complete tank body.
             for (const j of maze.links[i]) {
                 const end = center(j);
