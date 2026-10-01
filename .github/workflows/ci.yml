@@ -100,6 +100,25 @@ jobs:
           npm test
           npm run format:check
 
+  tank-duel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integrations/tank-duel/package-lock.json
+      - name: Check both tank games and the model bridge
+        working-directory: integrations/tank-duel
+        run: |
+          npm ci
+          npm test
+          npm run format:check
+
   e2e:
     # End to end on every pull request: the processes a run starts, talking as they do in a run, with no GPU, game
     # files, or model weights. GPU and in-game checks of a model or engine change are run by hand and reported in the
@@ -128,6 +147,8 @@ jobs:
           python scripts/e2e/check_campaign.py "$RUNNER_TEMP/campaign" --expect harness="rolled back" --expect train=published
       - name: Serving end to end (decision server process, the match's Node client stack)
         run: scripts/e2e/serving.sh "$RUNNER_TEMP/serving"
+      - name: Tank games end to end (decision server, HTTP bridge, both engines)
+        run: node scripts/e2e/tank-duel.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
