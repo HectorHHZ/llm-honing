@@ -21,10 +21,7 @@ Run: ``python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json`
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
-import os
-import shutil
 import statistics
 import sys
 from collections.abc import Mapping, Sequence
@@ -68,6 +65,7 @@ from honing.core import (
     TrainJobSpec,
     UtilizationTelemetry,
 )
+from honing.e2e.components import build_component, missing_requirements
 from honing.release import EpisodeEvaluator, Gate, ReleaseChain, WinLossSelector
 
 # Built in this order; ``rollout`` and ``evaluator`` are optional.
@@ -171,34 +169,6 @@ def grader(
 # ---------------------------------------------------------------- config
 
 
-def _build(spec: Mapping[str, object], context: E2EContext, slot: str, protocol: type) -> object:
-    target = str(spec.get("factory", ""))
-    module_name, _, function_name = target.partition(":")
-    if not module_name or not function_name:
-        raise ContractError(f"the {slot} component needs a factory named 'package.module:function', got {target!r}")
-    try:
-        factory = getattr(importlib.import_module(module_name), function_name)
-    except (ImportError, AttributeError) as error:
-        raise ContractError(f"cannot load the {slot} factory {target!r}: {error}") from None
-    args = spec.get("args", {})
-    if not isinstance(args, Mapping):
-        raise ContractError(f"the {slot} component's args must be an object")
-    component = factory(context, **args)
-    if not isinstance(component, protocol):
-        raise ContractError(
-            f"the {slot} factory {target!r} returned {type(component).__name__}, not a {protocol.__name__}"
-        )
-    return component
-
-
-def missing_requirements(requires: Mapping[str, Sequence[str]]) -> list[str]:
-    """Every environment variable, command, or path the config needs and this machine lacks."""
-    missing = [f"environment variable {name}" for name in requires.get("env", ()) if not os.environ.get(name)]
-    missing += [f"command {name}" for name in requires.get("commands", ()) if shutil.which(name) is None]
-    missing += [f"path {path}" for path in requires.get("paths", ()) if not Path(os.path.expandvars(path)).exists()]
-    return missing
-
-
 def _tasks(suite: RA2Suite, selection: Mapping[str, object]) -> tuple[Any, ...]:
     split = str(selection.get("split", "val"))
     if split not in get_args(Split):
@@ -243,7 +213,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     components = config.get("components", {})
     for slot, protocol, required in SLOTS:
         if slot in components:
-            context.components[slot] = _build(components[slot], context, slot, protocol)
+            context.components[slot] = build_component(components[slot], context, slot, protocol)
         elif required:
             raise ContractError(f"the config names no {slot} component")
     unknown = set(components) - {slot for slot, _, _ in SLOTS}

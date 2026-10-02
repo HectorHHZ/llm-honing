@@ -1,0 +1,15 @@
+"""Check the harness runner a pipeline config names against Honing's contract; see honing/e2e/check.py.
+
+Run from the repository root:
+    python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from honing.e2e.check import main
+
+if __name__ == "__main__":
+    sys.exit(main())

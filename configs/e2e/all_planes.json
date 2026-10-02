@@ -1,0 +1,172 @@
+{
+  "description": "Every plane in one campaign with no GPU, model, or game: the walking skeleton's fakes for model, data, training, compression, and the harness method, and the reference workspace runner around a stand-in agent process that calls a stand-in OpenAI-compatible policy server. Replace the runner and grader entries to test a harness framework (OpenHands, Reef) in a full campaign.",
+  "work_dir": "runs/e2e-all-planes",
+  "requires": {
+    "env": [],
+    "commands": [],
+    "paths": []
+  },
+  "tasks": {
+    "factory": "tests.fakes.pipeline:tasks"
+  },
+  "harness_seed": {
+    "factory": "tests.fakes.pipeline:harness_seed"
+  },
+  "components": {
+    "model_source": {
+      "factory": "tests.fakes.pipeline:model_source"
+    },
+    "endpoints": {
+      "factory": "tests.fakes.pipeline:endpoints"
+    },
+    "trainer": {
+      "factory": "tests.fakes.pipeline:trainer",
+      "args": {
+        "gain": 0.1
+      }
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "rollout": {
+      "factory": "tests.fakes.pipeline:rollout"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "tests.fakes.pipeline:runner"
+    },
+    "grader": {
+      "factory": "tests.fakes.pipeline:grader"
+    },
+    "method": {
+      "factory": "tests.fakes.pipeline:method"
+    }
+  },
+  "conformance": {
+    "probe": {
+      "factory": "honing.e2e.workspace_runner:workspace_probe"
+    },
+    "concurrent": 4
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    },
+    "prune": {
+      "no_regression": {
+        "max_regression": 0.05
+      }
+    },
+    "quantize": {
+      "no_regression": {
+        "max_regression": 0.01
+      }
+    }
+  },
+  "defaults": {
+    "train": {
+      "algorithm": "sft",
+      "steps": 10
+    },
+    "budget": {
+      "keep_ratio": 0.75
+    },
+    "recovery": {
+      "algorithm": "distill",
+      "steps": 10,
+      "teacher": {
+        "kind": "lineage",
+        "ref": "parent",
+        "placement": "engine"
+      }
+    },
+    "scheme": {
+      "weight_format": "int4",
+      "granularity": "group",
+      "group_size": 128
+    }
+  },
+  "schedule": [
+    {
+      "kind": "train",
+      "algorithm": "sft",
+      "steps": 10
+    },
+    {
+      "kind": "prune",
+      "keep_ratio": 0.75
+    },
+    {
+      "kind": "quantize",
+      "scheme": {
+        "weight_format": "int4",
+        "granularity": "group",
+        "group_size": 128
+      }
+    },
+    {
+      "kind": "train",
+      "algorithm": "sft",
+      "steps": 10,
+      "numerics": {
+        "mode": "fake_quant_qat",
+        "scheme": {
+          "weight_format": "int4",
+          "granularity": "group",
+          "group_size": 128
+        }
+      }
+    },
+    {
+      "kind": "quantize",
+      "scheme": {
+        "weight_format": "int4",
+        "granularity": "group",
+        "group_size": 128
+      }
+    },
+    {
+      "kind": "harness",
+      "label": "verify"
+    },
+    {
+      "kind": "harness",
+      "label": "nothing-left"
+    },
+    {
+      "kind": "train",
+      "algorithm": "grpo",
+      "steps": 10,
+      "rollout": "harness"
+    },
+    {
+      "kind": "rollback",
+      "to": "r0001"
+    }
+  ],
+  "expect": [
+    "published",
+    "published",
+    "rolled back",
+    "published",
+    "published",
+    "published",
+    "skipped",
+    "published",
+    "restored"
+  ]
+}
