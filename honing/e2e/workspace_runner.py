@@ -95,7 +95,7 @@ class WorkspaceEpisodeRunner:
                 )
                 try:
                     exit_code = await asyncio.wait_for(process.wait(), self._timeout)
-                except TimeoutError:
+                except asyncio.TimeoutError:  # the builtin TimeoutError only from Python 3.11
                     process.kill()
                     await process.wait()
                     exit_code = TIMED_OUT
