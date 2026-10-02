@@ -49,7 +49,9 @@ class ChatModelError(HoningError):
         self.attempts = attempts
         status = "no status" if status_code is None else f"status {status_code}"
         plural = "" if attempts == 1 else "s"
-        super().__init__(f"chat completion for {model!r} failed after {attempts} attempt{plural}: {error_type} ({status})")
+        super().__init__(
+            f"chat completion for {model!r} failed after {attempts} attempt{plural}: {error_type} ({status})"
+        )
 
 
 @dataclass(frozen=True)

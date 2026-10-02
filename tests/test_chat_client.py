@@ -16,7 +16,7 @@ from typing import ClassVar
 
 import pytest
 
-from honing.core import ChatMessage, ContractError, protocols, validate_method_state
+from honing.core import ChatMessage, ChatReply, ContractError, protocols, validate_method_state
 from honing.harness.models import ChatModelError, LiteLLMChatModel
 
 # Read when litellm is imported: use the price map bundled with the pinned
@@ -55,7 +55,9 @@ class Stub(BaseHTTPRequestHandler):
                 "object": "chat.completion",
                 "created": 1,
                 "model": body["model"],
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": "hello"}, "finish_reason": "stop"}],
+                "choices": [
+                    {"index": 0, "message": {"role": "assistant", "content": "hello"}, "finish_reason": "stop"}
+                ],
                 "usage": {"prompt_tokens": 11, "completion_tokens": 3, "total_tokens": 14},
             }
         else:
@@ -96,7 +98,7 @@ def client(api_base: str, model: str = PRICED_MODEL, **settings: object) -> tupl
     return chat, sleeps
 
 
-def complete(chat: LiteLLMChatModel) -> object:
+def complete(chat: LiteLLMChatModel) -> ChatReply:
     return chat.complete(MESSAGES, max_tokens=64, temperature=0.5)
 
 
@@ -140,7 +142,7 @@ def test_a_server_error_is_retried_then_succeeds(stub: str) -> None:
 
     reply = complete(chat)
 
-    assert getattr(reply, "text") == "hello"
+    assert reply.text == "hello"
     assert len(Stub.requests) == 2
     assert sleeps == [0.25]
 
@@ -254,9 +256,9 @@ def test_cost_comes_from_the_bundled_price_map_without_a_remote_connection(
     local = complete(client(stub, LOCAL_MODEL)[0])
 
     expected = 11 * price["input_cost_per_token"] + 3 * price["output_cost_per_token"]
-    assert getattr(priced, "cost_usd") == pytest.approx(expected)
+    assert priced.cost_usd == pytest.approx(expected)
     assert expected > 0
-    assert getattr(local, "cost_usd") is None
+    assert local.cost_usd is None
     assert connected and all(isinstance(address, tuple) and address[0] == "127.0.0.1" for address in connected)
     source = litellm.litellm_core_utils.get_model_cost_map.get_model_cost_map_source_info()
     assert (source["source"], source["is_env_forced"]) == ("local", True)
@@ -387,7 +389,9 @@ def test_a_real_model_answers() -> None:
         api_key_env=os.environ.get("HONING_LITELLM_SMOKE_KEY_ENV"),
     )
 
-    reply = chat.complete([ChatMessage(role="user", content="Reply with the word ok.")], max_tokens=16, temperature=0.0)
+    reply = chat.complete(
+        [ChatMessage(role="user", content="Reply with the word ok.")], max_tokens=16, temperature=0.0
+    )
 
     assert reply.text.strip()
     assert reply.input_tokens > 0
