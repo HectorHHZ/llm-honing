@@ -12,6 +12,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+
 from gepa.core.data_loader import ensure_loader
 from gepa.gepa_utils import select_program_candidate_from_pareto_front
 from gepa.proposer.base import CandidateProposal

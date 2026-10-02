@@ -10,6 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+
 from gepa.utils.stop_condition import MaxMetricCallsStopper
 
 from honing.core import (
