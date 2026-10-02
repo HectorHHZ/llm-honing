@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import random
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -241,30 +242,57 @@ def test_the_campaign_serves_a_selected_child_keeps_a_rejected_one_and_rollback_
 
 @pytest.mark.unit
 @pytest.mark.parametrize("kind", ["train", "prune", "quantize"])
-def test_after_a_weight_move_a_gepa_move_is_refused_before_any_episode_runs(tmp_path: Path, kind: str) -> None:
-    # Weights are assumed frozen under GEPA: a prune publishes an edited master
-    # (campaign.py:237-249) and a quantize publishes serving weights (campaign.py:260-265),
-    # and either changes the checksum head.policy() reports (candidate.py:78-81).
-    method = SpyGEPAMethod([_reply("Add the numbers."), _reply("Add the numbers and order the list.")])
+def test_after_a_weight_move_gepa_starts_over_from_the_served_harness(tmp_path: Path, kind: str) -> None:
+    # A prune publishes an edited master (campaign.py:237-249) and a quantize publishes
+    # serving weights (campaign.py:260-265); either changes the checksum head.policy()
+    # reports (candidate.py:78-81), as a train does.
+    method = SpyGEPAMethod(
+        [_reply("Add the numbers."), _reply("Order the list."), _reply("Add the numbers and order the list.")]
+    )
     fixture = build_campaign(tmp_path, method=method, make_runner=KeywordRunner)
     campaign = fixture.campaign
     first = campaign.advance(_move("sum")).release
     assert first is not None
+    rejected = campaign.advance(_move("sort"))
+    assert rejected.decision is not None and not rejected.decision.selected
     changed = campaign.advance(Move(kind=kind))  # type: ignore[arg-type]
     assert changed.release is not None, f"the {kind} move must publish for the test to mean anything"
-    assert changed.release.policy().checkpoint.checksum != first.policy().checkpoint.checksum
+    retrained = changed.release.policy().checkpoint.checksum
+    assert retrained != first.policy().checkpoint.checksum
+    carried = Archive.from_state(changed.release.method_state)
+    assert len(carried.candidates) == 3 and carried.validation_policy == first.policy().checkpoint.checksum
     runs = fixture.runner.runs
 
-    with pytest.raises(ContractError, match="validation scores were taken under weights"):
-        campaign.advance(_move("sort"))
-    assert fixture.runner.runs == runs
+    moved = campaign.advance(_move("sort"))
+
+    assert fixture.runner.runs > runs
+    assert moved.decision is not None and moved.decision.selected and moved.release is not None
+    archive = Archive.from_state(moved.release.method_state)
+    # Only the served harness survives, as the new seed, scored by this gate under the new weights.
+    assert [dict(c.components)[INSTRUCTIONS_PATH] for c in archive.candidates] == [
+        "Add the numbers.",
+        "Add the numbers and order the list.",
+    ]
+    assert archive.candidates[0].parent is None and archive.candidates[1].parent == 0
+    assert archive.validation_policy == retrained
+    assert archive.candidates[0].validation_scores is not None
+    # The budget counts the whole campaign: the minibatches, then the new seed's and the child's validation.
+    assert archive.metric_calls == carried.metric_calls + 2 + 3 + 3
+
+    # Rolling back to a release under the old weights brings back the archive scored under them.
+    campaign.rollback(first.release_id)
+    campaign.advance(_move("sum"))
+    assert method.states[-1] == dict(first.method_state)
 
 
 @pytest.mark.unit
-def test_propose_refuses_other_weights_before_drawing_running_or_reflecting() -> None:
+def test_propose_under_other_weights_starts_over_before_drawing_a_parent() -> None:
     chat = FakeChatModel([_reply("Add the numbers.")])
     method = GEPAMethod(chat, GEPAConfig(max_metric_calls=1000), TASK_IDS)
     _, state = _judge(method, method.initial_state(_seed()), "Add.", _evaluation((0.75, 0.5, 0.5), (0.5,) * 3))
+    _, state = _judge(method, state, "Order.", _evaluation((0.25, 0.75, 0.5), (0.5,) * 3))
+    scored = Archive.from_state(state)
+    assert scored.served == 1 and len(scored.candidates) == 3 and len(scored.fronts()) == 3
     retrained = FakeModelSource(WORLD, quality=0.6).materialize(Path("unused"))
     assert retrained.checkpoint.checksum != CHECKSUM
     runner = FakeEpisodeRunner(WORLD)
@@ -279,10 +307,33 @@ def test_propose_refuses_other_weights_before_drawing_running_or_reflecting() ->
         episode_budget=100,
     )
 
-    with pytest.raises(ContractError, match="validation scores were taken under weights"):
-        method.propose(context)
-    assert runner.runs == 0
-    assert chat.conversations == []
+    result = method.propose(context)
+
+    archive = Archive.from_state(result.state)
+    # The parent is the served harness, the only candidate left: the reflection rewrote "Add.".
+    assert "Add." in chat.conversations[0][0].content
+    assert dict(archive.candidates[0].components)[INSTRUCTIONS_PATH] == "Add."
+    assert archive.served == 0 and archive.validation_policy is None
+    assert all(c.validation_scores is None for c in archive.candidates)
+    assert archive.metric_calls == scored.metric_calls + result.episodes_spent
+    assert result.episodes_spent == runner.runs > 0
+
+
+@pytest.mark.unit
+def test_restarting_keeps_the_budget_rng_and_sampler_and_only_the_served_candidate() -> None:
+    method = _method()
+    _, state = _judge(method, method.initial_state(_seed()), "Add.", _evaluation((0.75, 0.5, 0.5), (0.5,) * 3))
+    archive, _ = Archive.from_state(state).next_minibatch(["a", "b", "c"], 2)
+
+    restarted = archive.restart_from_served()
+
+    assert restarted.candidates == (
+        replace(archive.candidates[archive.served], parent=None, validation_scores=None, minibatch_scores=()),
+    )
+    assert (restarted.served, restarted.validation_policy) == (0, None)
+    kept = ("task_ids", "rng_state", "metric_calls", "iteration", "train_ids", "train_order", "train_epoch")
+    assert all(getattr(restarted, name) == getattr(archive, name) for name in kept)
+    assert Archive.from_state(json.loads(json.dumps(restarted.to_state()))) == restarted
 
 
 @pytest.mark.unit

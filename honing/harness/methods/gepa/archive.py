@@ -104,7 +104,8 @@ class Archive:
     ``validation_policy`` is the checksum of the weights every validation
     score was taken under, ``None`` until the first one is recorded. Upstream
     GEPA holds the model fixed; Honing can change the weights between harness
-    moves, and a score from other weights is not comparable.
+    moves, and a score from other weights is not comparable, so
+    :meth:`restart_from_served` starts the search over under the new weights.
 
     The last five fields are the training-minibatch sampler's state:
     ``iteration`` counts the minibatches drawn (upstream's ``state.i + 1``),
@@ -347,6 +348,20 @@ class Archive:
                 f" not {checksum}"
             )
         return replace(self, validation_policy=checksum)
+
+    def restart_from_served(self) -> Archive:
+        """Start the search over from the served candidate, for weights other than ``validation_policy``.
+
+        Every score was taken under the old weights, so only the served
+        candidate is kept, unscored, as the new seed; the next gate scores it
+        under the new weights, as it scored the first seed. The budget, the RNG
+        and the minibatch sampler carry on, so ``metric_calls`` counts the
+        whole campaign. The dropped candidates stay in the releases that
+        published them, and a rollback to one of those brings them back.
+        """
+        served = self.candidates[self.served]
+        seed = ArchiveCandidate(components=served.components, parent=None, component_cursor=served.component_cursor)
+        return replace(self, candidates=(seed,), served=0, validation_policy=None)
 
     def charge(self, metric_calls: int) -> Archive:
         """Add episodes spent to the budget."""

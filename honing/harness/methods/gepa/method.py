@@ -139,7 +139,8 @@ class GEPAMethod:
     ``validation_task_ids`` are the gate's tasks, in the gate's order: the
     archive stores validation scores in that order. The minibatches are drawn
     from ``EvolveContext.tasks``, which a move can set to a training split the
-    gate never sees.
+    gate never sees. After a move changes the weights, the search starts over
+    from the served harness (:meth:`Archive.restart_from_served`).
     """
 
     name = "gepa"
@@ -170,10 +171,13 @@ class GEPAMethod:
         config = self.config
         archive = Archive.from_state(context.state)
         self._check_components(archive, context)
-        # Refused before anything is drawn or run: a parent picked from scores under
-        # other weights, and a child the selector would refuse, both waste episodes.
-        # The pinned archive is discarded; the pin is recorded only with scores.
-        archive.under_policy(context.policy.checkpoint.checksum)
+        # A train, prune or quantize move changed the weights since the archive was
+        # scored. Scores under other weights are not comparable, so the search starts
+        # over from the served harness before a parent is drawn from them; the next
+        # gate scores that harness under the new weights.
+        checksum = context.policy.checkpoint.checksum
+        if archive.validation_policy is not None and archive.validation_policy != checksum:
+            archive = archive.restart_from_served()
         # Upstream checks the budget before each iteration starts (engine.py:731), so an
         # iteration may overshoot it; nothing is drawn or run once it is reached.
         if archive.metric_calls >= config.max_metric_calls:
