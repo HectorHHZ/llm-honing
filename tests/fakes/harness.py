@@ -13,6 +13,7 @@ from honing.core import (
     EvolveContext,
     Grade,
     HarnessFile,
+    HarnessFileKind,
     HarnessProposal,
     HarnessSpec,
     MethodRequirements,
@@ -36,12 +37,15 @@ SEED_HARNESS = HarnessSpec(
 class FakeEpisodeRunner:
     """Runs no agent. The final output reports the answer's quality and whether the agent verified it."""
 
-    def __init__(self, world: FakeWorld, instruction_bonus: float = 0.05) -> None:
+    def __init__(
+        self,
+        world: FakeWorld,
+        instruction_bonus: float = 0.05,
+        file_kinds: frozenset[HarnessFileKind] = frozenset({"instructions", "skill"}),
+    ) -> None:
         self.world = world
         self.bonus = instruction_bonus
-        self.support = RunnerSupport(
-            agents=frozenset({"claude_code"}), file_kinds=frozenset({"instructions", "skill"}), programmable_loop=False
-        )
+        self.support = RunnerSupport(agents=frozenset({"claude_code"}), file_kinds=file_kinds, programmable_loop=False)
         self.runs = 0
 
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
