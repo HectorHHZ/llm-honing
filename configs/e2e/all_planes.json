@@ -62,6 +62,29 @@
     },
     "concurrent": 4
   },
+  "trainer_check": {
+    "jobs": [
+      {
+        "algorithm": "sft",
+        "steps": 10
+      },
+      {
+        "algorithm": "grpo",
+        "steps": 10,
+        "rollout": "harness"
+      },
+      {
+        "algorithm": "distill",
+        "steps": 10,
+        "teacher": {
+          "kind": "lineage",
+          "ref": "parent",
+          "placement": "engine"
+        }
+      }
+    ],
+    "samples_per_task": 2
+  },
   "selectors": {
     "default": {
       "win_loss": {}

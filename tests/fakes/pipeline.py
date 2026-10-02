@@ -19,7 +19,18 @@ from collections.abc import Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from honing.core import HarnessSpec, PolicyEndpoint, PolicyRef, RunnerSupport, Task
+from honing.campaign import rules
+from honing.core import (
+    HarnessSpec,
+    ModelSnapshot,
+    PolicyEndpoint,
+    PolicyRef,
+    RunnerSupport,
+    Task,
+    TrainingBatch,
+    TrainJobSpec,
+    TrainResult,
+)
 from honing.e2e.components import PipelineContext
 from honing.e2e.workspace_runner import WorkspaceEpisodeRunner
 from tests.fakes.builder import TASKS
@@ -49,8 +60,25 @@ def model_source(context: PipelineContext) -> FakeModelSource:
     return FakeModelSource(_world(context))
 
 
-def trainer(context: PipelineContext, gain: float = 0.1) -> FakeTrainer:
-    return FakeTrainer(_world(context), support=SLIME_LIKE, gain=gain)
+class SlimeLikeTrainer:
+    """Satisfies Trainer with the BackendSupport the walking skeleton expects of Slime (``SLIME_LIKE``).
+
+    A starting point for a real backend's stand-in: it refuses a job or batch the campaign's rules would refuse,
+    as a real trainer must, then trains the fake model.
+    """
+
+    def __init__(self, world: FakeWorld, gain: float) -> None:
+        self._inner = FakeTrainer(world, support=SLIME_LIKE, gain=gain)
+        self.support = SLIME_LIKE
+
+    def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult:
+        rules.algorithm_requirements_met(job, self.support)
+        rules.batch_meets_contract(job, batch)
+        return self._inner.train(job, base, batch)
+
+
+def trainer(context: PipelineContext, gain: float = 0.1) -> SlimeLikeTrainer:
+    return SlimeLikeTrainer(_world(context), gain)
 
 
 def data(context: PipelineContext) -> ListDatasetProvider:

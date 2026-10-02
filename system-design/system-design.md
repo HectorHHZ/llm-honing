@@ -719,3 +719,6 @@ framework sits behind (harness files in a workspace, an agent process, an OpenAI
 policy endpoint), and `scripts/e2e/check_runner.py` checks any runner against what a
 campaign needs from it: declared support, episodes that name what they ran, delivery of
 every harness file kind, concurrent episodes, a second event loop, and the gate.
+`scripts/e2e/check_trainer.py` does the same for a trainer: declared support the rules
+accept, jobs trained on batches drawn as the campaign draws them, new weights in the
+release's format, no overwritten checkpoint, and refusal of what it does not declare.
