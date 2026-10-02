@@ -33,8 +33,10 @@ $ pytest
 ## End-to-end
 
 <!--
-CI runs the end-to-end checks on every pull request (the `e2e` job: a dry-run
-campaign and a decision server with the match's Node client). Name its result.
+CI runs the end-to-end checks on every pull request (the `e2e` job: the
+all-planes pipeline, the harness runner contract, a dry-run RA2 campaign, and a
+decision server with the match's Node client). Name its result. A new harness
+runner also needs scripts/e2e/check_runner.py on its own config.
 
 A change to a model family, a trainer, the decision server, or the engine side
 also needs an end-to-end run CI cannot do, on a GPU or in a real game: the

@@ -711,3 +711,11 @@ rule a case it allows and one it refuses.
 
 What it does not prove: that any real method works. Each implementation step replaces a
 fake and must keep the skeleton passing.
+
+[`scripts/e2e/honing_pipeline.py`](../scripts/e2e/README.md) runs the same kind of
+campaign from a config that names each component by import path, so a real component
+joins by replacing one entry. Its harness runner is a reference at the boundary an agent
+framework sits behind (harness files in a workspace, an agent process, an OpenAI-compatible
+policy endpoint), and `scripts/e2e/check_runner.py` checks any runner against what a
+campaign needs from it: declared support, episodes that name what they ran, delivery of
+every harness file kind, concurrent episodes, a second event loop, and the gate.

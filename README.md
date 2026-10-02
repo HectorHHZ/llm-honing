@@ -137,7 +137,10 @@ plays matches and is gated and trained through Honing.
 | Data plane | the batch contracts, and RA2 demonstration and rollout providers | dataset and feedback providers |
 
 [`integrations/ra2/README.md`](integrations/ra2/README.md) runs the RA2 loop
-end to end, and CI runs its dry run on every pull request. The implementation
+end to end, and CI runs its dry run on every pull request.
+[`scripts/e2e/`](scripts/e2e/README.md) runs one campaign through every plane
+from a config that names each component, and checks a harness runner
+(OpenHands, Reef, ...) against what a campaign needs from it, before it joins one. The implementation
 steps are in [`system-design/system-design.md`](system-design/system-design.md#7-implementation-steps).
 
 The [RICOCHET tank demo](integrations/tank-duel/README.md) offers two English sketch-style browser games: hull steering and automatic turret aiming. Both run locally without a model; set `HONING_URL` to enable model duels with live decision context and match exports.
