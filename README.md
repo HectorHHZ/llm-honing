@@ -133,7 +133,7 @@ plays matches and is gated and trained through Honing.
 | Compression | contracts, rules, and CPU fakes | an expert-drop editor on a small MoE |
 | Post-training | Laya, Kev and NanoJev trainers: SFT and GRPO on typed decisions (`honing/backends/jev`) | a Slime backend for language models |
 | Harness self-evolve | contracts, and the RA2 runner, grader, and harness (`honing/backends/ra2`) | GEPA ([#77](https://github.com/HectorHHZ/llm-honing/pull/77), in review) |
-| Serving | an HTTP decision server for Laya, Kev and NanoJev, plus a [djev / DiffusionGemma bridge](integrations/djev/README.md) | managed SGLang and vLLM deployments |
+| Serving | an HTTP decision server for Laya, Kev, NanoJev and StartLux-Decision (0.8B, 4B, 27B), plus a [djev / DiffusionGemma bridge](integrations/djev/README.md) | managed SGLang and vLLM deployments |
 | Data plane | the batch contracts, and RA2 demonstration and rollout providers | dataset and feedback providers |
 
 [`integrations/ra2/README.md`](integrations/ra2/README.md) runs the RA2 loop

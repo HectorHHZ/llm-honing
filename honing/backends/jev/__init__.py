@@ -2,8 +2,9 @@
 
 A decision model answers typed questions about a state with a probability for
 every option. :mod:`honing.backends.jev.laya` loads the Laya family and
-:mod:`honing.backends.jev.kev` and :mod:`honing.backends.jev.nanojev` the Kev
-and NanoJev families; :mod:`honing.backends.jev.djev` bridges a remote
+:mod:`honing.backends.jev.kev`, :mod:`honing.backends.jev.nanojev` and
+:mod:`honing.backends.jev.startlux` the Kev, NanoJev and StartLux-Decision
+families; :mod:`honing.backends.jev.djev` bridges a remote
 DiffusionGemma structured-read server;
 :mod:`honing.backends.jev.server` serves any :class:`DecisionModel` over HTTP,
 and :class:`JevEndpoints` lets a runner find the server for a policy.
