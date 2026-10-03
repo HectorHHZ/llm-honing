@@ -397,21 +397,27 @@ def test_a_read_only_directory_in_the_way_of_grader_files_scores_zero(tmp_path: 
 NOT_ROOT = pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, reason="root ignores permissions")
 
 
+UNREADABLE_FILES = ("zeta", "b10", "b2", "x_y", "secret.txt", "aa", "alpha", "Q")
+
+
 @NOT_ROOT
-def test_files_the_grader_may_not_read_score_zero_and_are_named(tmp_path: Path, agent: Path) -> None:
-    secret = agent / "secret.txt"
-    secret.write_text("x")
+def test_files_the_grader_may_not_read_score_zero_and_are_named_in_order(tmp_path: Path, agent: Path) -> None:
+    # Enough names that the directory order is unsorted on APFS and on ext4 alike.
     closed = agent / "closed"
     closed.mkdir()
-    secret.chmod(0)
-    closed.chmod(0)
+    unreadable = [agent / name for name in UNREADABLE_FILES]
+    for path in unreadable:
+        path.write_text("x")
+    for path in [*unreadable, closed]:
+        path.chmod(0)
     try:
         grade = _local_grade(tmp_path, agent, _python(PASS))
     finally:
-        secret.chmod(0o644)
+        for path in unreadable:
+            path.chmod(0o644)
         closed.chmod(0o755)
-    named = "the workspace holds files the grader may not read: 'closed', 'secret.txt'"
-    assert grade == Grade(score=0.0, feedback=named)
+    named = ", ".join(map(repr, sorted([*UNREADABLE_FILES, "closed"])))
+    assert grade == Grade(score=0.0, feedback=f"the workspace holds files the grader may not read: {named}")
 
 
 @pytest.mark.parametrize(

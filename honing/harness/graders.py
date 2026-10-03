@@ -277,7 +277,9 @@ def _unreadable(error: shutil.Error, workspace: Path) -> UngradableWorkspaceErro
         if not path.is_relative_to(workspace) or os.access(path, os.R_OK | (os.X_OK if path.is_dir() else 0)):
             return None
         names.append(path.relative_to(workspace).as_posix())
-    listed = ", ".join(map(repr, names))
+    # Sorted, because ``copytree`` reports in directory order, which differs between
+    # filesystems, and the same workspace must get the same feedback everywhere.
+    listed = ", ".join(map(repr, sorted(names)))
     return UngradableWorkspaceError(f"the workspace holds files the grader may not read: {listed}")
 
 
