@@ -1,0 +1,158 @@
+{
+  "description": "OpenHands answering a few OfficeQA questions with a cheap hosted model (DeepSeek V4 Flash through OpenRouter). The harness plane is real: the OpenHands runner, OfficeQA's own scorer, and a scripted method whose two moves add a search skill and then widen the toolset, each gated on the same questions. Every other plane is the walking skeleton's fake and is never scheduled. Fetch the data first: python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016",
+  "work_dir": "runs/e2e-openhands-officeqa",
+  "requires": {
+    "env": [
+      "OPENROUTER_API_KEY"
+    ],
+    "commands": [],
+    "paths": [
+      "integrations/openhands/.venv/bin/python",
+      "integrations/officeqa/.cache/corpus",
+      "integrations/officeqa/.cache/officeqa_full.csv"
+    ]
+  },
+  "tasks": {
+    "factory": "honing.backends.officeqa.e2e:tasks",
+    "args": {
+      "data_dir": "{root}/integrations/officeqa/.cache",
+      "uids": [
+        "UID0002",
+        "UID0006",
+        "UID0016"
+      ]
+    }
+  },
+  "harness_seed": {
+    "factory": "honing.backends.officeqa.e2e:seed_harness"
+  },
+  "components": {
+    "model_source": {
+      "factory": "honing.backends.hosted:model_source",
+      "args": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "deepseek/deepseek-v4-flash",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "input_usd_per_million": 0.028,
+        "output_usd_per_million": 0.056
+      }
+    },
+    "endpoints": {
+      "factory": "honing.backends.hosted:endpoints",
+      "args": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "deepseek/deepseek-v4-flash",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "input_usd_per_million": 0.028,
+        "output_usd_per_million": 0.056
+      }
+    },
+    "trainer": {
+      "factory": "tests.fakes.pipeline:trainer"
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "rollout": {
+      "factory": "tests.fakes.pipeline:rollout"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "honing.backends.openhands.e2e:runner",
+      "args": {
+        "tools": [
+          "terminal",
+          "file_editor",
+          "grep",
+          "glob",
+          "task_tracker"
+        ],
+        "default_tools": [
+          "terminal",
+          "file_editor"
+        ],
+        "mcp_registry": {},
+        "mounts": {
+          "corpus": "{root}/integrations/officeqa/.cache/corpus"
+        },
+        "concurrency": 2,
+        "timeout_seconds": 600,
+        "max_iterations": 25,
+        "max_budget_usd": 0.05
+      }
+    },
+    "grader": {
+      "factory": "honing.backends.officeqa.e2e:grader",
+      "args": {
+        "data_dir": "{root}/integrations/officeqa/.cache",
+        "uids": [
+          "UID0002",
+          "UID0006",
+          "UID0016"
+        ]
+      }
+    },
+    "method": {
+      "factory": "honing.harness.methods.scripted:method",
+      "args": {
+        "edits": [
+          {
+            "path": "skills/treasury-bulletins/SKILL.md",
+            "kind": "skill",
+            "content": "---\nname: treasury-bulletins\ndescription: How to find a figure in Treasury Bulletin text files without reading them whole.\ntriggers:\n  - treasury\n  - bulletin\n---\n# Finding figures in Treasury Bulletins\n\nEach bulletin is several hundred kilobytes of text. Never print a whole file.\n\n1. Pick the issue first. A figure for a period is usually published in an issue after that period ends, and later\n   issues revise earlier numbers. If the question names an issue, use that one.\n2. Search before reading: `grep -n -i \"<table or row keyword>\" corpus/<file>` finds the table, then read only the\n   lines around the match (`sed -n 'START,ENDp' corpus/<file>`).\n3. Read the table's header for its unit (millions, thousands, percent) and its period (fiscal or calendar year) before\n   taking a number, and convert to the unit the question asks for.\n4. Do arithmetic with a command (`python3 -c \"...\"`), not in your head.\n5. Before answering, re-read the row and column you used and check they match every condition in the question.\n",
+            "note": "add a skill for searching Treasury Bulletins"
+          },
+          {
+            "path": "openhands/agent.json",
+            "kind": "settings",
+            "json": {
+              "tools": [
+                "terminal",
+                "file_editor",
+                "grep",
+                "glob"
+              ],
+              "max_iterations": 25
+            },
+            "note": "give the agent the grep and glob tools"
+          }
+        ]
+      }
+    }
+  },
+  "conformance": {
+    "probe": {
+      "factory": "honing.backends.openhands.e2e:probe"
+    },
+    "concurrent": 2
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    }
+  },
+  "schedule": [
+    {
+      "kind": "harness",
+      "label": "add-search-skill"
+    },
+    {
+      "kind": "harness",
+      "label": "add-search-tools"
+    }
+  ]
+}

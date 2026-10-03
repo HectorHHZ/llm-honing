@@ -1,0 +1,2 @@
+openhands-sdk==1.50.1
+openhands-tools==1.50.1

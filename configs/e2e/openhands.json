@@ -1,0 +1,202 @@
+{
+  "description": "Every plane in one campaign, as all_planes.json, with OpenHands as the harness agent: each episode is an OpenHands conversation (integrations/openhands/worker.py in its own Python 3.12 environment) that calls the stand-in OpenAI-compatible policy server. Checks the plumbing on a CPU; needs the OpenHands environment from integrations/openhands/README.md. OpenHands' own system prompt already asks the agent to verify its work, which is the stand-in policy's only harness signal, so the scripted 'verify' harness move ties and is rolled back here (twice, since a rejected method proposes again) where all_planes.json publishes it.",
+  "work_dir": "runs/e2e-openhands",
+  "requires": {
+    "env": [],
+    "commands": [],
+    "paths": [
+      "integrations/openhands/.venv/bin/python"
+    ]
+  },
+  "tasks": {
+    "factory": "tests.fakes.pipeline:tasks"
+  },
+  "harness_seed": {
+    "factory": "honing.backends.openhands.e2e:seed_harness"
+  },
+  "components": {
+    "model_source": {
+      "factory": "tests.fakes.pipeline:model_source"
+    },
+    "endpoints": {
+      "factory": "tests.fakes.pipeline:endpoints"
+    },
+    "trainer": {
+      "factory": "tests.fakes.pipeline:trainer",
+      "args": {
+        "gain": 0.1
+      }
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "rollout": {
+      "factory": "tests.fakes.pipeline:rollout"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "honing.backends.openhands.e2e:runner",
+      "args": {
+        "concurrency": 4,
+        "timeout_seconds": 300,
+        "max_iterations": 5
+      }
+    },
+    "grader": {
+      "factory": "tests.fakes.pipeline:grader"
+    },
+    "method": {
+      "factory": "tests.fakes.pipeline:method"
+    }
+  },
+  "conformance": {
+    "probe": {
+      "factory": "honing.backends.openhands.e2e:probe"
+    },
+    "concurrent": 4
+  },
+  "trainer_check": {
+    "jobs": [
+      {
+        "algorithm": "sft",
+        "steps": 10
+      },
+      {
+        "algorithm": "grpo",
+        "steps": 10,
+        "rollout": "harness"
+      },
+      {
+        "algorithm": "distill",
+        "steps": 10,
+        "teacher": {
+          "kind": "lineage",
+          "ref": "parent",
+          "placement": "engine"
+        }
+      }
+    ],
+    "samples_per_task": 2
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    },
+    "prune": {
+      "no_regression": {
+        "max_regression": 0.05
+      }
+    },
+    "quantize": {
+      "no_regression": {
+        "max_regression": 0.01
+      }
+    }
+  },
+  "defaults": {
+    "train": {
+      "algorithm": "sft",
+      "steps": 10
+    },
+    "budget": {
+      "keep_ratio": 0.75
+    },
+    "recovery": {
+      "algorithm": "distill",
+      "steps": 10,
+      "teacher": {
+        "kind": "lineage",
+        "ref": "parent",
+        "placement": "engine"
+      }
+    },
+    "scheme": {
+      "weight_format": "int4",
+      "granularity": "group",
+      "group_size": 128
+    }
+  },
+  "schedule": [
+    {
+      "kind": "train",
+      "algorithm": "sft",
+      "steps": 10
+    },
+    {
+      "kind": "prune",
+      "keep_ratio": 0.75
+    },
+    {
+      "kind": "quantize",
+      "scheme": {
+        "weight_format": "int4",
+        "granularity": "group",
+        "group_size": 128
+      }
+    },
+    {
+      "kind": "train",
+      "algorithm": "sft",
+      "steps": 10,
+      "numerics": {
+        "mode": "fake_quant_qat",
+        "scheme": {
+          "weight_format": "int4",
+          "granularity": "group",
+          "group_size": 128
+        }
+      }
+    },
+    {
+      "kind": "quantize",
+      "scheme": {
+        "weight_format": "int4",
+        "granularity": "group",
+        "group_size": 128
+      }
+    },
+    {
+      "kind": "harness",
+      "label": "verify"
+    },
+    {
+      "kind": "harness",
+      "label": "nothing-left"
+    },
+    {
+      "kind": "train",
+      "algorithm": "grpo",
+      "steps": 10,
+      "rollout": "harness"
+    },
+    {
+      "kind": "rollback",
+      "to": "r0001"
+    }
+  ],
+  "expect": [
+    "published",
+    "published",
+    "rolled back",
+    "published",
+    "published",
+    "rolled back",
+    "rolled back",
+    "published",
+    "restored"
+  ]
+}

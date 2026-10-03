@@ -61,6 +61,8 @@ include = ["honing", "honing.*"]
 
 [tool.isort]
 profile = "black"          # black-compatible
+# Vendored unchanged from upstream; formatting it would make the diff against upstream non-empty.
+extend_skip = ["honing/backends/officeqa/reward.py"]
 line_length = 119          # keep in sync with [tool.black] and [tool.ruff]
 py_version = 310
 known_first_party = ["honing"]
@@ -72,10 +74,13 @@ line_length = 119
 # for a Python newer than the project supports; 26.5.1 warns that its own AST
 # safety check cannot then verify the result. Sync with requires-python.
 target-version = ["py310"]
+force-exclude = "honing/backends/officeqa/reward.py"
 
 [tool.ruff]
 target-version = "py310"   # sync with requires-python
 line-length = 119          # sync with [tool.black] and [tool.isort]
+extend-exclude = ["honing/backends/officeqa/reward.py"]
+force-exclude = true      # pre-commit passes files explicitly; still skip the excluded ones
 
 [tool.ruff.lint]
 select = [
@@ -109,6 +114,11 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["torch", "torch.*", "laya", "laya.*", "kev", "kev.*", "peft", "peft.*", "huggingface_hub", "huggingface_hub.*", "transformers", "transformers.*", "safetensors", "safetensors.*"]
 ignore_missing_imports = true
+
+# Vendored unchanged from databricks/officeqa; it is checked by its tests, not by mypy.
+[[tool.mypy.overrides]]
+module = ["honing.backends.officeqa.reward"]
+ignore_errors = true
 
 # gepa is an optional extra; the documented ".[dev]" setup must type-check without it.
 [[tool.mypy.overrides]]
