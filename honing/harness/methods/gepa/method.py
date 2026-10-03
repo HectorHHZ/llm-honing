@@ -1,11 +1,12 @@
-"""GEPA's reflective proposal as a Honing evolution method.
+"""GEPA as a Honing evolution method: reflective proposal, then selection on the gate's validation run.
 
 One call to :meth:`GEPAMethod.propose` is one iteration of upstream GEPA's
 ``ReflectiveMutationProposer``: sample a parent from the archive, score it on a
 training minibatch, reflect on one of its components with a chat model, score
 the child on the same minibatch, and propose the child only if its minibatch sum
-strictly beats the parent's. The full validation run is the campaign's gate;
-recording its scores and selecting on them is #25.
+strictly beats the parent's. The full validation run is the campaign's gate:
+:class:`GEPASelector` decides on its per-task scores, and
+:meth:`GEPAMethod.record` stores them in the archive whatever the verdict.
 
 Upstream is used for the pure pieces only: the prompt renderer and output
 extractor of ``InstructionProposalSignature``. The loop stays here, because the
@@ -83,13 +84,53 @@ class GEPAConfig:
         return self.reflection_prompt_template
 
 
-class _SelectorPendingIssue25:
-    """Stands in for ``GEPASelector`` until #25; the gate cannot decide on a GEPA candidate yet."""
+class GEPASelector:
+    """Serve a GEPA candidate when its validation mean strictly beats the served candidate's stored mean.
+
+    Upstream GEPA has no gate. It adds every child it scores on the validation
+    set, and its best candidate is the one with the highest mean, the earliest
+    on a tie (``FullEvaluationPolicy.get_best_program``). Selecting on a strict
+    improvement over the served candidate keeps the served pointer on that same
+    candidate. The stored mean is compared, not the gate's fresh run of the
+    incumbent, because upstream never scores a candidate twice. Before the seed
+    has scores, the gate's incumbent side is the seed's validation run.
+
+    Only an evaluation of the archive's validation tasks, with episode records
+    under the weights the archive's scores were taken under, is accepted. A
+    duel's relative scores fail the first check.
+    """
 
     name = "gepa"
 
     def decide(self, candidate: UpdateCandidate, evaluation: EvaluationResult) -> SelectionDecision:
-        raise NotImplementedError("#25")
+        archive = Archive.from_state(candidate.method_state)
+        if evaluation.task_ids != archive.task_ids:
+            raise ContractError(
+                f"the gate scored tasks {list(evaluation.task_ids)}, but GEPA validates on"
+                f" {list(archive.task_ids)}; give the gate GEPA's validation tasks, in order"
+            )
+        stored = archive.candidates[archive.served].validation_scores
+        served_mean = mean(evaluation.incumbent_scores if stored is None else stored)
+        candidate_mean = mean(evaluation.candidate_scores)
+        selected = candidate_mean > served_mean
+        # Settled here only for the metrics; record settles the same way.
+        settled = settle(archive, evaluation, selected)
+        on_a_front = set().union(*settled.fronts().values())
+        return SelectionDecision(
+            outcome="select" if selected else "reject",
+            policy=self.name,
+            reason=(
+                f"validation mean {candidate_mean:.4g} against {served_mean:.4g} for served"
+                f" candidate {archive.served}; a tie keeps the served candidate"
+            ),
+            metrics={
+                "gepa_archive_size": float(len(settled.candidates)),
+                "gepa_front_size": float(len(on_a_front)),
+                "gepa_metric_calls": float(settled.metric_calls),
+                "gepa_candidate_mean": candidate_mean,
+                "gepa_served_mean": served_mean,
+            },
+        )
 
 
 class GEPAMethod:
@@ -98,7 +139,8 @@ class GEPAMethod:
     ``validation_task_ids`` are the gate's tasks, in the gate's order: the
     archive stores validation scores in that order. The minibatches are drawn
     from ``EvolveContext.tasks``, which a move can set to a training split the
-    gate never sees.
+    gate never sees. After a move changes the weights, the search starts over
+    from the served harness (:meth:`Archive.restart_from_served`).
     """
 
     name = "gepa"
@@ -108,7 +150,7 @@ class GEPAMethod:
         # Only ``instructions`` is required of the runner: a runner without ``skill``
         # files (RA2's) must still accept GEPA. The seed decides which kinds are rewritten.
         self.requires = MethodRequirements(file_kinds=frozenset({"instructions"}))
-        self.selector = _SelectorPendingIssue25()
+        self.selector = GEPASelector()
         self.chat_model = chat_model
         self.config = config
         self.validation_task_ids = tuple(validation_task_ids)
@@ -129,6 +171,13 @@ class GEPAMethod:
         config = self.config
         archive = Archive.from_state(context.state)
         self._check_components(archive, context)
+        # A train, prune or quantize move changed the weights since the archive was
+        # scored. Scores under other weights are not comparable, so the search starts
+        # over from the served harness before a parent is drawn from them; the next
+        # gate scores that harness under the new weights.
+        checksum = context.policy.checkpoint.checksum
+        if archive.validation_policy is not None and archive.validation_policy != checksum:
+            archive = archive.restart_from_served()
         # Upstream checks the budget before each iteration starts (engine.py:731), so an
         # iteration may overshoot it; nothing is drawn or run once it is reached.
         if archive.metric_calls >= config.max_metric_calls:
@@ -193,7 +242,18 @@ class GEPAMethod:
         evaluation: EvaluationResult,
         decision: SelectionDecision,
     ) -> Mapping[str, object]:
-        raise NotImplementedError("#25")
+        """Store the gate's scores for the proposed child, selected or not, and serve it if it was selected.
+
+        A rejected child stays in the archive and joins every task front it
+        leads or ties, so it can still be a parent. The served pointer follows
+        the gate's decision, because it must name the harness the chain published.
+        """
+        archive = Archive.from_state(state)
+        if _spec_of(proposal.spec, archive.candidates[-1]).spec_id != proposal.spec.spec_id:
+            raise ContractError(
+                "the proposal is not GEPA's newest candidate; record the state propose returned with it"
+            )
+        return settle(archive, evaluation, decision.selected).to_state()
 
     def _check_components(self, archive: Archive, context: EvolveContext) -> None:
         """Every component must still be a rewritable file the runner declares it can run."""
@@ -261,6 +321,47 @@ class GEPAMethod:
             _LOGGER.exception("GEPA reflection on %s failed; proposing nothing this iteration", path)
             return ""
         return extract_text(reply.text)
+
+
+def settle(archive: Archive, evaluation: EvaluationResult, selected: bool) -> Archive:
+    """The archive after the gate's validation run of its newest candidate, charged as upstream charges it.
+
+    The seed takes its scores from the first gate's incumbent side, and both
+    runs cost one metric call per task: upstream charges the seed's full
+    validation (state.py:704) and each child's (engine.py:282). A later
+    incumbent run is the gate's, not GEPA's, and is not charged.
+    """
+    child = len(archive.candidates) - 1
+    require(
+        child >= 1 and archive.candidates[child].validation_scores is None,
+        "the gate settles GEPA's newest candidate, which must not be validated yet",
+    )
+    archive = archive.under_policy(_policy_of(evaluation))
+    tasks = len(evaluation.task_ids)
+    if archive.candidates[archive.served].validation_scores is None:
+        # The served pointer moves only to a validated candidate, so this is the seed's first gate.
+        require(archive.served == 0, f"served candidate {archive.served} has no validation scores")
+        archive = archive.validate(0, evaluation.task_ids, evaluation.incumbent_scores).charge(tasks)
+    archive = archive.validate(child, evaluation.task_ids, evaluation.candidate_scores).charge(tasks)
+    return archive.with_served(child) if selected else archive
+
+
+def mean(scores: Sequence[float]) -> float:
+    """``sum / len``, as upstream averages validation scores (state.py:444), not ``statistics.fmean``.
+
+    The two can round differently, and on a tie that decides which candidate is served.
+    """
+    return sum(scores) / len(scores)
+
+
+def _policy_of(evaluation: EvaluationResult) -> str:
+    """The checksum of the weights the gate ran under, from its episode records."""
+    checksums = {record.policy_checksum for record in evaluation.records}
+    if len(checksums) != 1:
+        raise ContractError(
+            f"GEPA needs the gate's episode records, all under one set of weights; got checksums {sorted(checksums)}"
+        )
+    return checksums.pop()
 
 
 def improves(before: Sequence[float], after: Sequence[float]) -> bool:
