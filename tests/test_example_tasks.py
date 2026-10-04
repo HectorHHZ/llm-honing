@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -55,6 +57,57 @@ def test_the_reference_fix_scores_one(task_id: str, tmp_path: Path) -> None:
     workspace = _agent_copy(task_id, tmp_path)
     shutil.copytree(SUITE / task_id / "reference", workspace, dirs_exist_ok=True)
     assert _grade(task_id, workspace) == Grade(score=1.0, feedback="3 of 3 tests pass.")
+
+
+def _entries() -> list[tuple[str, str]]:
+    """Every task of every manifest in the suite's directory, so a task added later is checked too."""
+    return [
+        (manifest.name, entry.task_id)
+        for manifest in sorted(SUITE.glob("*.jsonl"))
+        for entry in load_task_suite(manifest).entries
+    ]
+
+
+@pytest.mark.parametrize(("manifest", "task_id"), _entries())
+def test_every_task_is_solvable_and_starts_unsolved(manifest: str, task_id: str, tmp_path: Path) -> None:
+    suite = load_task_suite(SUITE / manifest)
+    entry = suite.entry(task_id)
+    grader = CommandGrader(suite, timeout_seconds=60)
+
+    def grade(workspace: Path) -> Grade:
+        outcome = EpisodeOutcome(
+            task_id=task_id, spec_id="h-seed", policy_checksum="sha", exit_code=0, workspace_location=str(workspace)
+        )
+        return asyncio.run(grader.grade(entry.task, outcome))
+
+    start = tmp_path / "start"
+    shutil.copytree(entry.workspace, start)
+    fixed = tmp_path / "fixed"
+    shutil.copytree(entry.workspace, fixed)
+    shutil.copytree(entry.workspace.parent / "reference", fixed, dirs_exist_ok=True)
+
+    assert grade(start).score < 1.0
+    assert grade(fixed).score == 1.0
+
+
+def test_a_returned_bool_matches_only_the_same_bool(tmp_path: Path) -> None:
+    shutil.copy(SUITE / "grader" / "grade.py", tmp_path / "grade.py")
+    (tmp_path / "echo.py").write_text("def echo(value):\n    return value\n")
+    cases = [([True], True), ([False], False), ([True], 1), ([1], True), ([1], 1), ([0], False)]
+    spec = {"module": "echo", "function": "echo", "cases": [{"args": a, "expected": e} for a, e in cases]}
+    (tmp_path / "cases.json").write_text(json.dumps(spec))
+
+    result = subprocess.run(
+        [sys.executable, "-I", "grade.py", "cases.json"], cwd=tmp_path, capture_output=True, text=True, check=True
+    )
+    grade = json.loads(result.stdout)
+
+    assert grade["score"] == pytest.approx(3 / 6)
+    assert grade["feedback"].split("\n")[1:] == [
+        "echo(True) returned True, expected 1",
+        "echo(1) returned 1, expected True",
+        "echo(0) returned 0, expected False",
+    ]
 
 
 # The agent writes the workspace, so it must not be able to change how its work is graded.

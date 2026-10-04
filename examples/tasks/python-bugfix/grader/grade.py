@@ -64,9 +64,11 @@ def short(value: object) -> str:
 
 
 def same(value: object, expected: object) -> bool:
-    numbers = (int, float)
-    if isinstance(value, numbers) and isinstance(expected, numbers):
-        return not isinstance(value, bool) and not isinstance(expected, bool) and value == expected
+    # A bool is an int, so it is matched first: True equals True, but not 1.
+    if isinstance(value, bool) or isinstance(expected, bool):
+        return type(value) is type(expected) and value == expected
+    if isinstance(value, (int, float)) and isinstance(expected, (int, float)):
+        return value == expected
     return type(value) is type(expected) and value == expected
 
 
