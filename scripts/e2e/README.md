@@ -83,7 +83,7 @@ It needs the `gepa` and `litellm` extras (`uv pip install -e ".[dev,gepa,litellm
 | Agent | `scripts/e2e/minimal_agent.py`, run by the workspace runner: reads `AGENTS.md` and `skills/*.md`, sends the task's files to the policy, writes back the files it returns |
 | Policy | an OpenAI-compatible API (`components.endpoints`), called by the agent with the key named by `api_key_env` |
 | Reflection | `LiteLLMChatModel` inside `GEPAMethod` (`components.method.args.reflection`) |
-| Schedule | 6 GEPA moves, a rollback to `r0001`, 6 more; `max_metric_calls` is 60, so the last moves skip on the budget |
+| Schedule | 6 GEPA moves, a rollback to `r0001`, 16 more; `max_metric_calls` is 60. Every move charges at least 3 metric calls (the parent's minibatch), and `r0001` holds at least 16 from the first gate, so the run reaches the budget whatever the models reply |
 
 The model is pinned in `models`, `components.endpoints` and `components.method`; change all three together. The key is read only from the environment variables the config names. The agent receives only that variable, and the run checks that no file it wrote holds a key.
 
