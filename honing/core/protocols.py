@@ -166,6 +166,18 @@ class ChatModel(Protocol):
 
 
 @runtime_checkable
+class ProposerAgent(Protocol):
+    """A coding agent a method runs in a working directory, where it reads and writes files.
+
+    ``instructions`` is the method's skill text; how the agent receives it, and
+    how the session is logged, is the implementation's concern. Returns the
+    agent's exit code. Synchronous, like ``propose``.
+    """
+
+    def run(self, prompt: str, workdir: Path, *, instructions: str) -> int: ...
+
+
+@runtime_checkable
 class PolicyEndpoints(Protocol):
     """Finds the engine serving a policy. Raises ``ContractError`` for a policy no engine serves."""
 

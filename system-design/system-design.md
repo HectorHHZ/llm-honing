@@ -331,9 +331,10 @@ class EvolveMethod(Protocol):
     def record(self, state, proposal, evaluation, decision) -> Mapping[str, object]: ...
 ```
 
-Methods that reflect or propose call a model through `ChatModel`, and runners find the
-engine behind a policy through `PolicyEndpoints`; both are protocols in `honing/core`, and
-their implementations live outside it.
+Methods that reflect or propose call a model through `ChatModel`, methods whose proposer is
+a coding agent working in a directory (Meta-Harness) run it through `ProposerAgent`, and
+runners find the engine behind a policy through `PolicyEndpoints`; all are protocols in
+`honing/core`, and their implementations live outside it.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
