@@ -592,9 +592,23 @@ def usage_report(run_log: RunLog, policy_price_model: str | None) -> dict[str, A
 
 @dataclass(frozen=True)
 class Check:
+    """One check's verdict. ``not_exercised`` means the run never produced what it checks: no check failed."""
+
     name: str
     passed: bool
     detail: str
+    not_exercised: bool = False
+
+
+# A real model publishes rarely, so a run can end without a rejection or a publish to roll back to.
+# Those two checks then say so; every other failure is a real one.
+RERUN_CHECKS = frozenset({"4 rejected stays", "6 rollback"})
+
+
+def only_not_exercised(checks: Sequence[Mapping[str, Any]], names: frozenset[str] = RERUN_CHECKS) -> bool:
+    """Whether some checks failed, and each of them only because the run did not exercise it and is in ``names``."""
+    failed = [check for check in checks if not check["passed"]]
+    return bool(failed) and all(check.get("not_exercised") and check["name"] in names for check in failed)
 
 
 def _records(work_dir: Path) -> list[dict[str, Any]]:
@@ -671,7 +685,7 @@ def check_run(
 
 def _check_extracted(gated: Sequence[_Move], run_log: RunLog, harness_of: Mapping[str, HarnessSpec]) -> Check:
     if not gated:
-        return Check("1 extracted", False, "not exercised: no candidate reached the gate")
+        return Check("1 extracted", False, "not exercised: no candidate reached the gate", not_exercised=True)
     problems = []
     for move in gated:
         assert move.record is not None
@@ -708,7 +722,7 @@ def _check_extracted(gated: Sequence[_Move], run_log: RunLog, harness_of: Mappin
 def _check_prompts(moves: Sequence[_Move], run_log: RunLog) -> Check:
     reflected = [r for r in run_log.reflections if r.get("ok")]
     if not reflected:
-        return Check("2 reflection prompt", False, "not exercised: no reflection call succeeded")
+        return Check("2 reflection prompt", False, "not exercised: no reflection call succeeded", not_exercised=True)
     problems = []
     for row in reflected:
         parents = [e for e in run_log.episodes if e["move"] == row["move"] and e["phase"] == "parent"]
@@ -732,7 +746,7 @@ def _check_gate_scores(
     gated: Sequence[_Move], run_log: RunLog, harness_of: Mapping[str, HarnessSpec], validation_ids: Sequence[str]
 ) -> Check:
     if not gated:
-        return Check("3 gate on real scores", False, "not exercised: no gate decision")
+        return Check("3 gate on real scores", False, "not exercised: no gate decision", not_exercised=True)
     problems = []
     for move in gated:
         assert move.record is not None
@@ -764,7 +778,7 @@ def _check_gate_scores(
 def _check_rejected_stay(moves: Sequence[_Move]) -> Check:
     rejects = [m for m in moves if m.record is not None and m.record["op"] == "reject"]
     if not rejects:
-        return Check("4 rejected stays", False, "not exercised: the gate rejected nothing")
+        return Check("4 rejected stays", False, "not exercised: the gate rejected nothing", not_exercised=True)
     problems = []
     for reject in rejects:
         assert reject.record is not None
@@ -869,23 +883,32 @@ def _check_identities(moves: Sequence[_Move], run_log: RunLog, validation_ids: S
 def _check_rollbacks(moves: Sequence[_Move], run_log: RunLog) -> Check:
     rollbacks = [m for m in moves if m.step["move"] == "rollback"]
     if not rollbacks:
-        return Check("6 rollback", False, "not exercised: the schedule has no rollback")
-    problems = []
+        return Check("6 rollback", False, "the schedule has no rollback")
+    problems: list[str] = []
+    unexercised: list[str] = []
     for move in rollbacks:
         step = move.step
         if step["result"] != "restored":
-            problems.append(f"move {move.index}: {step['result']} ({step.get('reason')})")
+            # Nothing published, so there is nothing to restore: the run did not exercise the rollback.
+            # A named release that does not exist is a real failure.
+            nothing_published = step.get("to") == FIRST_PUBLISH
+            (unexercised if nothing_published else problems).append(
+                f"move {move.index}: {step['result']} ({step.get('reason')})"
+            )
             continue
         if not step["exercised"]:
-            problems.append(f"move {move.index}: not exercised, the state already was {step['to']}'s")
+            unexercised.append(f"move {move.index}: the state already was {step['to']}'s")
         keys = ("harness_restored", "state_restored", "served_matches_harness")
         problems.extend(f"move {move.index}: {key} is false" for key in keys if not step[key])
         after = [m for m in moves if m.index > move.index and m.index in run_log.starts]
         target = next(r for r in _records(run_log.work_dir) if r.get("release_id") == step["to"])
         if after and _canonical(run_log.starts[after[0].index]) != _canonical(target["candidate"]["method_state"]):
             problems.append(f"move {after[0].index} did not start from {step['to']}'s state")
-    detail = "; ".join(problems) or "archive and served harness restored together, and the next move starts there"
-    return Check("6 rollback", not problems, detail)
+    if problems:
+        return Check("6 rollback", False, "; ".join(problems + unexercised))
+    if unexercised:
+        return Check("6 rollback", False, "not exercised: " + "; ".join(unexercised), not_exercised=True)
+    return Check("6 rollback", True, "archive and served harness restored together, and the next move starts there")
 
 
 def _check_failed_reflections(moves: Sequence[_Move], run_log: RunLog) -> Check:
@@ -916,7 +939,7 @@ def _check_faults(moves: Sequence[_Move], run_log: RunLog) -> Check:
 def _check_budget_stop(moves: Sequence[_Move], max_metric_calls: int) -> Check:
     final = next((m for m in reversed(moves) if m.record is not None and m.record["op"] != "rollback"), None)
     if final is None or final.record is None:
-        return Check("budget stop", False, "not exercised: no harness record")
+        return Check("budget stop", False, "not exercised: no harness record", not_exercised=True)
     archive = Archive.from_state(_state(final.record))
     stopped = final.record["op"] == "skip" and final.record["episodes_spent"] == 0
     return Check(
@@ -1016,10 +1039,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "work_dir": str(work_dir),
     }
     checks = check_run(summary, run_log, work_dir, validation_ids, max_metric_calls)
-    summary["checks"] = [{"name": c.name, "passed": c.passed, "detail": c.detail} for c in checks]
+    summary["checks"] = [
+        {"name": c.name, "passed": c.passed, "detail": c.detail, "not_exercised": c.not_exercised} for c in checks
+    ]
     (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     scan = key_scan(work_dir, _key_names(config))
-    summary["checks"].append({"name": scan.name, "passed": scan.passed, "detail": scan.detail})
+    summary["checks"].append({"name": scan.name, "passed": scan.passed, "detail": scan.detail, "not_exercised": False})
     (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     for step in summary["steps"]:
@@ -1035,8 +1060,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"policy: {json.dumps(usage['policy'])}")
     print(f"total cost (USD): {usage['total_cost_usd']}")
     for check in summary["checks"]:
-        print(f"[{'pass' if check['passed'] else 'FAIL'}] {check['name']}: {check['detail']}")
+        verdict = "pass" if check["passed"] else "NOT EXERCISED" if check["not_exercised"] else "FAIL"
+        print(f"[{verdict}] {check['name']}: {check['detail']}")
     print(f"in {work_dir}")
+    if only_not_exercised(summary["checks"]):
+        names = [check["name"] for check in summary["checks"] if not check["passed"]]
+        print(
+            f"not exercised, rerun: {', '.join(names)}. No check failed; the models did not produce what these need."
+        )
     if result["aborted"]:
         return 3
     return 0 if all(check["passed"] for check in summary["checks"]) else 1
@@ -1059,6 +1090,7 @@ __all__ = [
     "key_scan",
     "main",
     "manifest_runner",
+    "only_not_exercised",
     "openai_endpoints",
     "run_live",
     "suite_tasks",

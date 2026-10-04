@@ -243,6 +243,29 @@ def test_a_live_schedule_step_it_cannot_run_is_refused(entry: dict[str, Any], me
         check_schedule([{"kind": "harness"}, entry])
 
 
+def _check(name: str, passed: bool = True, not_exercised: bool = False) -> dict[str, Any]:
+    return {"name": name, "passed": passed, "detail": "", "not_exercised": not_exercised}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("checks", "skip"),
+    [
+        ([_check("1 extracted"), _check("6 rollback")], False),
+        ([_check("4 rejected stays", False, True)], True),
+        ([_check("4 rejected stays", False, True), _check("6 rollback", False, True)], True),
+        ([_check("3 gate on real scores", False, True)], False),
+        ([_check("6 rollback", False)], False),
+        ([_check("4 rejected stays", False, True), _check("5c every episode accounted for", False)], False),
+    ],
+    ids=["all-pass", "no-rejection", "no-rejection-no-rollback", "no-gate", "real-rollback-failure", "mixed"],
+)
+def test_only_an_unexercised_rejection_or_rollback_is_a_rerun(checks: list[dict[str, Any]], skip: bool) -> None:
+    from honing.e2e.gepa_live import only_not_exercised
+
+    assert only_not_exercised(checks) is skip
+
+
 @pytest.mark.unit
 def test_every_required_plane_must_be_named(tmp_path: Path) -> None:
     config = _config()

@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
 pytest.importorskip("litellm", reason="requires the optional 'litellm' extra")
 
+from honing.e2e.gepa_live import only_not_exercised
 from tests.test_gepa_live_offline import Run
 
 REPO = Path(__file__).resolve().parents[1]
@@ -76,9 +77,14 @@ def assert_no_key(run: Run) -> None:
 def test_the_live_run_passes_every_check(tmp_path: Path) -> None:
     run = run_live(live_config(), tmp_path)
 
+    assert_no_key(run)
+    # A real model publishes rarely, so a run can end without a rejection or a publish to roll back
+    # to. That is not a failure of the code under test: skip, and say to rerun. Anything else fails.
+    if only_not_exercised(run.summary["checks"]):
+        names = [check["name"] for check in run.summary["checks"] if not check["passed"]]
+        pytest.skip(f"not exercised, rerun: {', '.join(names)}")
     failed = [check for check in run.summary["checks"] if not check["passed"]]
     assert run.code == 0 and not failed, failed
-    assert_no_key(run)
 
 
 def test_a_bad_reflection_key_is_a_logged_skip(tmp_path: Path) -> None:

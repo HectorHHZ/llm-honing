@@ -274,6 +274,11 @@ def test_moves_until_a_publish_stop_at_their_cap_and_leave_no_rollback_target(
     ]  # fmt: skip
     assert run.summary["steps"][-1]["reason"] == "no harness release was published before the rollback"
     assert run.checks["6 rollback"]["passed"] is False
+    # Nothing reached the gate either, so the checks that need it were not exercised, rejection included.
+    assert {name for name, check in run.checks.items() if check["not_exercised"]} == {
+        "1 extracted", "2 reflection prompt", "3 gate on real scores", "4 rejected stays", "6 rollback"
+    }  # fmt: skip
+    assert "not exercised, rerun" not in run.stdout  # checks 1 to 3 are not ones a rerun is for
 
 
 @pytest.mark.integration
@@ -297,3 +302,30 @@ def test_a_schedule_the_live_run_cannot_run_is_refused_before_anything_runs(stub
 
     assert run.code == 2 and "cannot start: schedule step 1:" in run.stderr
     assert not run.work_dir.exists()
+
+
+@pytest.mark.integration
+def test_a_run_whose_only_gap_is_an_unexercised_rollback_says_rerun(stub: OpenAIStub, tmp_path: Path) -> None:
+    # The stub's first move is rejected, so one move until a publish ends with nothing to roll back to.
+    schedule = [
+        {"kind": "harness_until_publish", "label": "pre_training", "max_moves": 1},
+        {"kind": "rollback", "to": "first_publish"},
+        {"kind": "harness", "label": "pre_training", "repeat": 40},
+    ]
+    run = run_script(offline_config(stub, schedule=schedule), tmp_path)
+
+    failed = [check for check in run.summary["checks"] if not check["passed"]]
+    assert [(check["name"], check["not_exercised"]) for check in failed] == [("6 rollback", True)]
+    assert run.code == 1
+    assert "[NOT EXERCISED] 6 rollback: not exercised: move 2: not runnable" in run.stdout
+    assert "not exercised, rerun: 6 rollback." in run.stdout
+
+
+@pytest.mark.integration
+def test_a_rollback_to_a_release_that_does_not_exist_is_a_real_failure(stub: OpenAIStub, tmp_path: Path) -> None:
+    schedule = [{"kind": "harness", "label": "pre_training"}, {"kind": "rollback", "to": "r0099"}]
+    run = run_script(offline_config(stub, schedule=schedule), tmp_path)
+
+    rollback = run.checks["6 rollback"]
+    assert (rollback["passed"], rollback["not_exercised"]) == (False, False)
+    assert "no release 'r0099'" in rollback["detail"]
