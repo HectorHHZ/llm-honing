@@ -101,7 +101,7 @@ Under `--work-dir`, the run writes the release chain (`releases/commits.jsonl`),
 | `budget stop` | the last move proposed nothing because `metric_calls` reached `max_metric_calls` |
 | `8 no key written` | no file under the work directory holds a key |
 
-Real models publish rarely: over five live runs, a first publish came in about 14% of the moves before one, and one run had none in 12 moves. So a run can end without a rejection or without a publish to roll back to. When checks 4 and 6 are the only ones that fail, and only because the run did not exercise them, the script prints `[NOT EXERCISED]` and `not exercised, rerun`, and `tests/test_gepa_live.py` skips with that reason; the exit code is still 1. Rerun. The real fix is more GEPA iterations per harness move (up to K, until a child passes its minibatch), proposed on #92.
+Real models publish rarely: over six live runs, a first publish came in about 14% of the moves before one (5 in 36), and one run had none in 12 moves. So a run can end without a rejection or without a publish to roll back to. When checks 4 and 6 are the only ones that fail, and only because the run did not exercise them, the script prints `[NOT EXERCISED]` and `not exercised, rerun`, and `tests/test_gepa_live.py` skips with that reason; the exit code is still 1. Rerun. The real fix is more GEPA iterations per harness move (up to K, until a child passes its minibatch), proposed on #92.
 
 The live schedule has its own step kinds: `{"kind": "harness", "repeat": n}`, `{"kind": "harness_until_publish", "max_moves": n}`, and `{"kind": "rollback", "to": "first_publish"}` (or a release id).
 
