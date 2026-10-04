@@ -32,6 +32,7 @@ CONFIG = REPO / "configs/e2e/gepa_live.json"
 KEY_ENV = "HONING_STUB_KEY"
 KEY = "sk-stub-0123456789abcdef"
 HARNESS_MOVE = {"kind": "harness", "label": "pre_training"}
+STUB_MODEL = {"provider": "openai", "name": "stub-model"}
 
 
 @pytest.fixture
@@ -52,14 +53,14 @@ def offline_config(
 ) -> dict[str, Any]:
     config = json.loads(CONFIG.read_text())
     config["requires"]["env"] = [KEY_ENV]
-    config["models"]["policy"]["price_model"] = None
+    config["model"] = STUB_MODEL  # the one pin both models reference
     components = config["components"]
-    components["endpoints"]["args"] = {"base_url": stub.url(policy), "model": "stub-policy"}
+    components["endpoints"]["args"]["base_url"] = stub.url(policy)
     components["runner"]["args"].update(
         {"api_key_env": KEY_ENV, "agent_timeout_seconds": 10, "agent_max_attempts": 2, **(runner_settings or {})}
     )
     components["method"]["args"]["reflection"] = {
-        "model": "openai/stub-reflection",
+        **components["method"]["args"]["reflection"],
         "api_base": stub.url(reflection),
         "api_key_env": KEY_ENV,
         "timeout_seconds": 10,
@@ -138,7 +139,9 @@ def test_the_run_passes_every_check_against_the_stub(stub: OpenAIStub, tmp_path:
     assert usage["policy"]["episodes"] == usage["policy"]["calls"] == len(run.rows("episodes"))
     assert usage["reflection"]["calls"] == len(run.rows("reflections")) > 0
     assert usage["policy"]["prompt_tokens"] == 100 * usage["policy"]["calls"]  # the stub's usage, summed
-    assert run.summary["models"]["policy"]["model"] == "gpt-4.1-mini-2025-04-14"
+    assert run.summary["model"] == STUB_MODEL
+    # Both models used the one pin: the agent sent its name, litellm sent the same name.
+    assert {model for _, model in stub.calls} == {"stub-model"}
     assert_no_key(run)
 
 

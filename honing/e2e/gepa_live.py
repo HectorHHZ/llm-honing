@@ -334,8 +334,18 @@ def harness_seed(
     )
 
 
-def openai_endpoints(context: PipelineContext, base_url: str, model: str) -> OpenAIEndpoints:
-    return OpenAIEndpoints(base_url, model)
+def model_name(model: str | Mapping[str, str]) -> str:
+    """The provider's own id for a model pin ``{"provider": ..., "name": ...}``, or the id itself."""
+    return model if isinstance(model, str) else str(model["name"])
+
+
+def litellm_model(model: str | Mapping[str, str]) -> str:
+    """litellm's ``provider/name`` string for a model pin, or the string itself."""
+    return model if isinstance(model, str) else f"{model['provider']}/{model['name']}"
+
+
+def openai_endpoints(context: PipelineContext, base_url: str, model: str | Mapping[str, str]) -> OpenAIEndpoints:
+    return OpenAIEndpoints(base_url, model_name(model))
 
 
 def manifest_runner(
@@ -393,7 +403,7 @@ def gepa_method(
     """GEPA validating on the suite's ``validation_split``, which must be the gate's tasks in order."""
     run_log = _run_log(context)
     validation = [task.task_id for task in _suite(context, manifest).tasks(validation_split)]  # type: ignore[arg-type]
-    chat = RecordingChatModel(LiteLLMChatModel(**reflection), run_log)
+    chat = RecordingChatModel(LiteLLMChatModel(**{**reflection, "model": litellm_model(reflection["model"])}), run_log)
     return LiveGEPAMethod(run_log, chat, GEPAConfig(**gepa), validation)
 
 
@@ -447,6 +457,10 @@ def run_live(pipeline: PipelineRun, options: LiveOptions) -> dict[str, Any]:
         # rollback is its own step, so the gate's verdict is named for what it was.
         if step["result"] == "rolled back":
             step["result"] = "rejected"
+        # GEPA decides against the served candidate's stored mean, not the gate's fresh run of
+        # the incumbent (GEPASelector.decide), so the summary shows both.
+        if outcome.decision is not None and "gepa_served_mean" in outcome.decision.metrics:
+            step["served_mean"] = outcome.decision.metrics["gepa_served_mean"]
         steps.append({"index": index, "label": entry.get("label"), **step})
     run_log.write()
     return {"steps": steps, "aborted": aborted}
@@ -936,10 +950,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary: dict[str, Any] = {
         "config": str(args.config),
         "git_commit": _git_commit(args.root),
-        "models": config.get("models", {}),
+        "model": config.get("model"),
         "head": pipeline.campaign.chain.head().release_id,
         **result,
-        "usage": usage_report(run_log, config.get("models", {}).get("policy", {}).get("price_model")),
+        "usage": usage_report(run_log, litellm_model(config["model"]) if "model" in config else None),
         "work_dir": str(work_dir),
     }
     checks = check_run(summary, run_log, work_dir, validation_ids, max_metric_calls)
@@ -951,8 +965,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     for step in summary["steps"]:
         scores = (
-            f" (candidate {step['candidate_mean']:.3f} vs incumbent {step['incumbent_mean']:.3f})"
-            if step.get("candidate_mean") is not None
+            f" (candidate {step['candidate_mean']:.3f} vs served {step['served_mean']:.3f};"
+            f" fresh incumbent run {step['incumbent_mean']:.3f})"
+            if step.get("served_mean") is not None
             else ""
         )
         print(f"{step['index']}. {step['move']}: {step['result']}{scores}: {step.get('reason', '')}")

@@ -18,7 +18,7 @@ One script is the exception: `gepa_live.py` calls real model APIs, needs a key, 
 
 ## The all-planes pipeline
 
-`configs/e2e/all_planes.json` names one component per slot, by import path (`{"factory": "package.module:function", "args": {...}}`). A real implementation replaces a fake by changing its entry.
+`configs/e2e/all_planes.json` names one component per slot, by import path (`{"factory": "package.module:function", "args": {...}}`). A real implementation replaces a fake by changing its entry. Any value may be `{"ref": "dotted.path"}`, which is replaced by the value at that path in the same config, so a setting several entries share is written once.
 
 | Plane | Slots | Default |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ It needs the `gepa` and `litellm` extras (`uv pip install -e ".[dev,gepa,litellm
 | Reflection | `LiteLLMChatModel` inside `GEPAMethod` (`components.method.args.reflection`) |
 | Schedule | 6 GEPA moves, a rollback to `r0001`, 16 more; `max_metric_calls` is 60. Every move charges at least 3 metric calls (the parent's minibatch), and `r0001` holds at least 16 from the first gate, so the run reaches the budget whatever the models reply |
 
-The model is pinned in `models`, `components.endpoints` and `components.method`; change all three together. The key is read only from the environment variables the config names. The agent receives only that variable, and the run checks that no file it wrote holds a key.
+The model is pinned once, in `model` (`{"provider": ..., "name": ...}`); the policy endpoint and the reflection model both reference it as `{"ref": "model"}`. The key is read only from the environment variables the config names. The agent receives only that variable, and the run checks that no file it wrote holds a key.
 
 Under `--work-dir`, the run writes the release chain (`releases/commits.jsonl`), `summary.json` (steps, checks, calls, tokens, cost), `run.log`, `episodes.jsonl`, `reflections.jsonl`, `faults.jsonl`, and every agent's workspace. It exits 0 only if every check passes:
 

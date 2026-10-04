@@ -29,7 +29,13 @@ from honing.core import (
     RunnerSupport,
     Task,
 )
-from honing.e2e import WorkspaceDeliveryProbe, WorkspaceEpisodeRunner, check_runner, probe_harness
+from honing.e2e import (
+    WorkspaceDeliveryProbe,
+    WorkspaceEpisodeRunner,
+    check_runner,
+    probe_harness,
+    resolve_references,
+)
 from honing.e2e.check import main as check_main
 from honing.e2e.components import PipelineContext
 from honing.e2e.pipeline import build, main, run
@@ -151,7 +157,8 @@ def no_tasks(context: PipelineContext) -> tuple[Task, ...]:
 def test_a_harness_move_gets_its_own_tasks_and_budget_while_the_gate_keeps_tasks(tmp_path: Path) -> None:
     config = _config(
         harness_tasks={"factory": "tests.test_e2e_pipeline:first_task"},
-        harness={"episode_budget": 4},
+        budget=4,
+        harness={"episode_budget": {"ref": "budget"}},  # build resolves references first
         schedule=[{"kind": "harness", "label": "verify"}],
         expect=["published"],
     )
@@ -174,6 +181,47 @@ def test_without_harness_entries_a_harness_move_gets_the_gates_tasks_and_no_budg
     run(pipeline)
 
     assert pipeline.context.shared["seen"] == [(tuple(task.task_id for task in TASKS), 0)]
+
+
+@pytest.mark.unit
+def test_a_reference_is_replaced_by_the_value_it_names() -> None:
+    config = {
+        "model": {"provider": "openai", "name": "m-1"},
+        "alias": {"ref": "model"},
+        "components": {"a": {"args": {"model": {"ref": "alias"}, "names": [{"ref": "model.name"}, "x"]}}},
+    }
+
+    resolved = resolve_references(config)
+
+    assert resolved["components"]["a"]["args"] == {"model": config["model"], "names": ["m-1", "x"]}
+    assert config["alias"] == {"ref": "model"}  # the input is not changed
+    # An object with other keys besides "ref" is an ordinary value.
+    assert resolve_references({"x": {"ref": "y", "other": 1}}) == {"x": {"ref": "y", "other": 1}}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ({"a": {"ref": "missing.path"}}, "no 'missing.path'"),
+        ({"a": {"ref": "b"}, "b": {"ref": "a"}}, "form a cycle: b -> a -> b"),
+    ],
+)
+def test_a_reference_to_nothing_or_to_itself_is_refused(config: dict[str, Any], message: str) -> None:
+    with pytest.raises(ContractError, match=message):
+        resolve_references(config)
+
+
+@pytest.mark.unit
+def test_the_live_config_pins_its_model_in_one_entry() -> None:
+    path = REPO / "configs/e2e/gepa_live.json"
+    config = json.loads(path.read_text())
+    resolved = resolve_references(config)
+
+    pin = config["model"]
+    assert resolved["components"]["endpoints"]["args"]["model"] == pin
+    assert resolved["components"]["method"]["args"]["reflection"]["model"] == pin
+    assert path.read_text().count(pin["name"]) == 1
 
 
 @pytest.mark.unit

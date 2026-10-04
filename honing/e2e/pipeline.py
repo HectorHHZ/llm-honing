@@ -70,7 +70,7 @@ from honing.core import (
     Trainer,
     TrainJobSpec,
 )
-from honing.e2e.components import PipelineContext, build_component, missing_requirements
+from honing.e2e.components import PipelineContext, build_component, missing_requirements, resolve_references
 from honing.release import AcceptAll, EpisodeEvaluator, Gate, NoRegressionSelector, ReleaseChain, WinLossSelector
 
 # Built in this order; a factory can read the components built before it.
@@ -169,6 +169,7 @@ class PipelineRun:
 
 def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -> PipelineRun:
     """Check the environment, build every component, and start the campaign (release 0 is published)."""
+    config = resolve_references(config)
     missing = missing_requirements(config.get("requires", {}))
     if missing:
         raise ContractError("this config needs " + ", ".join(missing))

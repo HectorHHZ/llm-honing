@@ -7,8 +7,10 @@ providers do), ``/slow/v1`` answers after ``SLOW_SECONDS``, and
 ``/window-A-B/v1`` fails policy calls ``A`` to ``B - 1`` (counted from 0) with
 429, so an outage can start and end inside a run.
 
-The policy (any model without ``reflection`` in its name) answers as the
-minimal agent expects. It knows each task's reference fix and returns it when
+Both models can share one name, as the live config's single model pin makes
+them, so a request is told apart by its shape: the minimal agent always sends
+a system message, and GEPA's reflection sends one user message. The policy
+answers as the minimal agent expects. It knows each task's reference fix and returns it when
 the system prompt names every hidden convention the task's cases rely on, and
 the task's file unchanged otherwise; a task with no convention is always fixed.
 So the harness decides the score, as it would with a real model. One
@@ -70,7 +72,9 @@ class _Handler(BaseHTTPRequestHandler):
         if route != "v1/chat/completions":
             self._send(404, {"error": {"message": "no such route"}})
             return
-        if mode.startswith("window-") and "reflection" not in str(body.get("model")):
+        messages = body.get("messages", [])
+        reflection = not any(message.get("role") == "system" for message in messages)
+        if mode.startswith("window-") and not reflection:
             low, high = (int(bound) for bound in mode.removeprefix("window-").split("-"))
             with self.server._lock:
                 index = self.server.window_calls
@@ -83,11 +87,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if mode == "slow":
             time.sleep(SLOW_SECONDS)
-        messages = body.get("messages", [])
-        if "reflection" in str(body.get("model")):
-            text = self.server.reflect(str(messages[-1]["content"]))
-        else:
-            text = _policy_reply(messages)
+        text = self.server.reflect(str(messages[-1]["content"])) if reflection else _policy_reply(messages)
         self._send(
             200,
             {
