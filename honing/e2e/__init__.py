@@ -8,6 +8,8 @@
 - :mod:`honing.e2e.workspace_runner` is a reference runner at the boundary an
   agent framework sits behind: harness files in a workspace, an agent process,
   the policy's endpoint.
+- :mod:`honing.e2e.gepa_live` runs GEPA against real model APIs and checks the
+  run from what it wrote.
 """
 
 from honing.e2e.components import PipelineContext, build_component, missing_requirements

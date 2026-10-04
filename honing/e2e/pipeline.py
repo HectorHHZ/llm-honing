@@ -10,7 +10,11 @@ changing one entry. The slots cover every plane:
 - harness: ``runner``, ``grader``, ``method``
 - gate: ``evaluator`` (optional; the default plays the runner on ``tasks``)
 
-``tasks`` and ``harness_seed`` are factories too. The ``schedule`` lists moves
+``tasks`` and ``harness_seed`` are factories too. ``tasks`` are the gate's;
+an optional ``harness_tasks`` factory gives a harness move its own tasks (a
+method's training split the gate never sees), and ``harness.episode_budget``
+what a harness move may spend on its own episodes (default 0: a method that
+runs episodes, as GEPA does, needs it). The ``schedule`` lists moves
 (``train``, ``prune``, ``quantize``, ``harness``) and ``rollback`` steps; each
 move is gated, and a rollback restores an earlier release and checks that its
 weights and harness came back. ``expect`` gives each step's result
@@ -180,10 +184,12 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             context.components[slot] = build_component(components[slot], context, slot, protocol)
         elif required:
             raise ContractError(f"the config names no {slot} component")
-    tasks = build_component(config["tasks"], context, "tasks", tuple)
+    tasks = _tasks(config["tasks"], context, "tasks")
+    harness_tasks = _tasks(config["harness_tasks"], context, "harness_tasks") if "harness_tasks" in config else tasks
     seed = build_component(config["harness_seed"], context, "harness_seed", HarnessSpec)
-    if not tasks or not all(isinstance(task, Task) for task in tasks):  # type: ignore[attr-defined]
-        raise ContractError("the tasks factory must return a non-empty tuple of Task")
+    episode_budget = config.get("harness", {}).get("episode_budget", 0)
+    if not isinstance(episode_budget, int) or isinstance(episode_budget, bool) or episode_budget < 0:
+        raise ContractError(f"harness.episode_budget must be an integer >= 0, got {episode_budget!r}")
     c = context.components
     selectors = config.get("selectors", {"default": {"win_loss": {}}})
     evaluator = c.get("evaluator") or EpisodeEvaluator(c["runner"], c["grader"], tasks)  # type: ignore[arg-type]
@@ -208,7 +214,8 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             runner=c["runner"],  # type: ignore[arg-type]
             grader=c["grader"],  # type: ignore[arg-type]
             method=c["method"],  # type: ignore[arg-type]
-            tasks=tasks,  # type: ignore[arg-type]
+            tasks=harness_tasks,
+            episode_budget=episode_budget,
         ),
         defaults=_defaults(config),
         rollout=c.get("rollout"),  # type: ignore[arg-type]
@@ -222,6 +229,13 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     if expect and (len(expect) != len(schedule) or set(expect) - set(RESULTS)):
         raise ContractError(f"expect needs one of {list(RESULTS)} per schedule step")
     return PipelineRun(campaign, schedule, expect, context)
+
+
+def _tasks(spec: Mapping[str, Any], context: PipelineContext, slot: str) -> tuple[Task, ...]:
+    tasks = build_component(spec, context, slot, tuple)
+    if not tasks or not all(isinstance(task, Task) for task in tasks):  # type: ignore[attr-defined]
+        raise ContractError(f"the {slot} factory must return a non-empty tuple of Task")
+    return tasks  # type: ignore[return-value]
 
 
 def _step(outcome: StepOutcome) -> dict[str, object]:

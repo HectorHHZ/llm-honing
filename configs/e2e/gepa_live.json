@@ -1,0 +1,108 @@
+{
+  "description": "GEPA end to end against real model APIs, with no GPU (#100): a minimal agent calls a hosted OpenAI-compatible policy, a command grader scores its edits, and GEPA reflects through litellm. The model, data, training and compression planes are the walking skeleton's fakes; a harness move never touches them. Six harness moves, a rollback to the first published harness, then six more, so the run ends on GEPA's budget.",
+  "work_dir": "runs/e2e-gepa-live",
+  "requires": {
+    "env": ["OPENAI_API_KEY"],
+    "commands": ["python3"],
+    "paths": []
+  },
+  "models": {
+    "policy": {
+      "provider": "openai",
+      "model": "gpt-4.1-mini-2025-04-14",
+      "price_model": "openai/gpt-4.1-mini-2025-04-14"
+    },
+    "reflection": {
+      "provider": "openai",
+      "model": "openai/gpt-4.1-mini-2025-04-14",
+      "client": "litellm==1.102.1"
+    }
+  },
+  "tasks": {
+    "factory": "honing.e2e.gepa_live:suite_tasks",
+    "args": {"manifest": "examples/tasks/python-bugfix/gepa-live.jsonl", "split": "val"}
+  },
+  "harness_tasks": {
+    "factory": "honing.e2e.gepa_live:suite_tasks",
+    "args": {"manifest": "examples/tasks/python-bugfix/gepa-live.jsonl", "split": "train"}
+  },
+  "harness": {
+    "episode_budget": 6
+  },
+  "harness_seed": {
+    "factory": "honing.e2e.gepa_live:harness_seed",
+    "args": {
+      "directory": "examples/harnesses/gepa-live-seed",
+      "files": {"AGENTS.md": "instructions", "skills/debugging.md": "skill"}
+    }
+  },
+  "components": {
+    "model_source": {"factory": "tests.fakes.pipeline:model_source"},
+    "endpoints": {
+      "factory": "honing.e2e.gepa_live:openai_endpoints",
+      "args": {"base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini-2025-04-14"}
+    },
+    "trainer": {"factory": "tests.fakes.pipeline:trainer"},
+    "data": {"factory": "tests.fakes.pipeline:data"},
+    "scorer": {"factory": "tests.fakes.pipeline:scorer"},
+    "selector": {"factory": "tests.fakes.pipeline:selector"},
+    "editor": {"factory": "tests.fakes.pipeline:editor"},
+    "quantizer": {"factory": "tests.fakes.pipeline:quantizer"},
+    "telemetry": {"factory": "tests.fakes.pipeline:telemetry"},
+    "runner": {
+      "factory": "honing.e2e.gepa_live:manifest_runner",
+      "args": {
+        "command": ["{python}", "{root}/scripts/e2e/minimal_agent.py"],
+        "manifest": "examples/tasks/python-bugfix/gepa-live.jsonl",
+        "api_key_env": "OPENAI_API_KEY",
+        "agents": ["minimal"],
+        "file_kinds": ["instructions", "skill"],
+        "concurrency": 4,
+        "timeout_seconds": 180,
+        "agent_timeout_seconds": 60,
+        "agent_max_attempts": 3,
+        "agent_max_tokens": 2048
+      }
+    },
+    "grader": {
+      "factory": "honing.e2e.gepa_live:command_grader",
+      "args": {"manifest": "examples/tasks/python-bugfix/gepa-live.jsonl", "timeout_seconds": 120}
+    },
+    "method": {
+      "factory": "honing.e2e.gepa_live:gepa_method",
+      "args": {
+        "manifest": "examples/tasks/python-bugfix/gepa-live.jsonl",
+        "reflection": {
+          "model": "openai/gpt-4.1-mini-2025-04-14",
+          "api_key_env": "OPENAI_API_KEY",
+          "timeout_seconds": 60,
+          "max_attempts": 3
+        },
+        "gepa": {
+          "max_metric_calls": 60,
+          "minibatch_size": 3,
+          "reflection_temperature": 1.0,
+          "rng_seed": 0
+        }
+      }
+    }
+  },
+  "live": {
+    "max_consecutive_faults": 3
+  },
+  "schedule": [
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "rollback", "to": "r0001"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"},
+    {"kind": "harness", "label": "pre_training"}
+  ]
+}

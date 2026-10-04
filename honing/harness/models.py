@@ -207,6 +207,29 @@ def _missing_keys(litellm: ModuleType, chat: LiteLLMChatModel, error: Exception,
     return [str(name) for name in missing] if isinstance(missing, list) else []
 
 
+def completion_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    """litellm's price for these tokens of ``model``, or ``None`` when it has none.
+
+    For calls that do not go through :class:`LiteLLMChatModel`, such as an
+    agent's own calls to its policy, priced from the same bundled map.
+    """
+    require(input_tokens >= 0 and output_tokens >= 0, "token counts must be >= 0")
+    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    import litellm
+
+    try:
+        prompt_cost, completion_cost = litellm.cost_per_token(
+            model=model, prompt_tokens=input_tokens, completion_tokens=output_tokens
+        )
+    except Exception:
+        # As in _cost_usd: litellm raises for a model missing from its price map.
+        return None
+    cost = prompt_cost + completion_cost
+    if not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
+        return None
+    return float(cost)
+
+
 def _cost_usd(litellm: ModuleType, response: object) -> float | None:
     """litellm's price for the reply, or ``None`` when it has none, or none above zero, for the model."""
     try:

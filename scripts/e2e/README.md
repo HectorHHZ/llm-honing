@@ -14,6 +14,8 @@ Every script here runs on a CPU with no model or GPU, and CI's `e2e` job runs ea
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
 | `node scripts/e2e/tank-war.mjs` | a decision server, Tank War's HTTP bridge, and both decision interfaces; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each interface plays |
 
+One script is the exception: `gepa_live.py` calls real model APIs, needs a key, and costs money, so CI runs it only against a local stub (below).
+
 ## The all-planes pipeline
 
 `configs/e2e/all_planes.json` names one component per slot, by import path (`{"factory": "package.module:function", "args": {...}}`). A real implementation replaces a fake by changing its entry.
@@ -65,6 +67,47 @@ A harness framework enters as an `EpisodeRunner` (`honing.core`) with its `Runne
 4. `python scripts/e2e/honing_pipeline.py --config <yours>` runs the full campaign with your runner in it.
 
 `tests/test_e2e_pipeline.py` shows each check failing on a runner that breaks it.
+
+## GEPA against real model APIs
+
+```
+export OPENAI_API_KEY=...
+python scripts/e2e/gepa_live.py --config configs/e2e/gepa_live.json --work-dir runs/gepa-live-1
+```
+
+It needs the `gepa` and `litellm` extras (`uv pip install -e ".[dev,gepa,litellm]"`) and `python3` on `PATH` for the grader. Nothing is served locally and no GPU is used.
+
+| Part | What runs |
+| --- | --- |
+| Tasks | `examples/tasks/python-bugfix/gepa-live.jsonl`: 6 train and 5 val bug-fix tasks, graded by `CommandGrader` on the fraction of hidden cases passed |
+| Agent | `scripts/e2e/minimal_agent.py`, run by the workspace runner: reads `AGENTS.md` and `skills/*.md`, sends the task's files to the policy, writes back the files it returns |
+| Policy | an OpenAI-compatible API (`components.endpoints`), called by the agent with the key named by `api_key_env` |
+| Reflection | `LiteLLMChatModel` inside `GEPAMethod` (`components.method.args.reflection`) |
+| Schedule | 6 GEPA moves, a rollback to `r0001`, 6 more; `max_metric_calls` is 60, so the last moves skip on the budget |
+
+The model is pinned in `models`, `components.endpoints` and `components.method`; change all three together. The key is read only from the environment variables the config names. The agent receives only that variable, and the run checks that no file it wrote holds a key.
+
+Under `--work-dir`, the run writes the release chain (`releases/commits.jsonl`), `summary.json` (steps, checks, calls, tokens, cost), `run.log`, `episodes.jsonl`, `reflections.jsonl`, `faults.jsonl`, and every agent's workspace. It exits 0 only if every check passes:
+
+| Check | Passes when |
+| --- | --- |
+| `1 extracted` | each gated candidate is its parent with one component replaced by the extracted reflection reply |
+| `2 reflection prompt` | each reflection prompt holds the task prompt, the agent's output and the grader's feedback for every parent episode |
+| `3 gate on real scores` | the archive stores the graded gate episodes' scores, and at least one candidate reached the gate |
+| `4 rejected stays` | a candidate the gate rejected stays in the archive (needs at least one rejection) |
+| `5a`-`5d` | `metric_calls` matches GEPA's charges per move and on the final path; every agent the runner started is in `commits.jsonl` or `faults.jsonl`; an abandoned move charges nothing |
+| `6 rollback` | the rollback restores the archive and the served harness together, and the next move starts from them |
+| `7a`, `7b` | a failed reflection call is a skip that charged only its parent's episodes; an abandoned move left no record |
+| `budget stop` | the last move proposed nothing because `metric_calls` reached `max_metric_calls` |
+| `8 no key written` | no file under the work directory holds a key |
+
+A model's replies differ from run to run, so a run can end without a rejection or a selection; checks 4 and 6 then fail as "not exercised". Rerun, or lengthen the schedule.
+
+**Failures.** A reflection call that fails after the client's retries (bad key, rate limit, timeout) logs one line and proposes nothing. If the policy cannot be reached after the agent's retries, the agent exits 75 and the move is abandoned: GEPA's state is unchanged, and the move's episodes and tokens go to `faults.jsonl`. After 3 abandoned moves in a row the run stops with exit code 3.
+
+**Cost.** About 200 agent episodes with one policy call each, and about 10 reflection calls. At the prices in litellm's bundled map for `gpt-4.1-mini-2025-04-14` ($0.40 per million input tokens, $1.60 per million output tokens), that is roughly $0.10 to $0.30. `summary.json` reports the actual calls, tokens and cost.
+
+**Tests.** `tests/test_gepa_live_offline.py` runs this script against a loopback stub for both models, including rate limits, bad keys, timeouts and an outage inside a move; CI's `test-litellm` job runs it. `tests/test_gepa_live.py` (marker `live`) runs it on the real provider and is skipped unless the key is set.
 
 ## Plugging in a trainer (Slime, ...)
 

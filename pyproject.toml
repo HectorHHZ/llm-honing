@@ -131,6 +131,7 @@ markers = [
     "integration: several components together; may start subprocesses",
     "gpu: requires an accelerator; skipped in CI",
     "slow: takes more than roughly ten seconds",
+    "live: calls real model APIs and costs money; skipped unless its key variables are set",
 ]
 
 [tool.coverage.run]

@@ -8,7 +8,10 @@ on runners that break one part of the contract each.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
+import signal
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -16,13 +19,22 @@ from typing import Any
 
 import pytest
 
-from honing.core import ContractError, EpisodeOutcome, HarnessSpec, PolicyRef, RunnerSupport, Task
+from honing.core import (
+    ContractError,
+    EpisodeOutcome,
+    EvolveContext,
+    HarnessSpec,
+    PolicyRef,
+    ProposeResult,
+    RunnerSupport,
+    Task,
+)
 from honing.e2e import WorkspaceDeliveryProbe, WorkspaceEpisodeRunner, check_runner, probe_harness
 from honing.e2e.check import main as check_main
 from honing.e2e.components import PipelineContext
 from honing.e2e.pipeline import build, main, run
 from tests.fakes.builder import TASKS
-from tests.fakes.harness import SEED_HARNESS, FakeEpisodeRunner, FakeTaskGrader
+from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeEpisodeRunner, FakeTaskGrader
 from tests.fakes.model import FakeModelSource, FakeWorld
 from tests.fakes.pipeline import FakePolicyEndpoints
 from tests.fakes.pipeline import runner as workspace_runner
@@ -102,11 +114,66 @@ def test_a_runner_is_swapped_by_changing_one_config_entry(tmp_path: Path) -> Non
         ({"schedule": [{"kind": "serve"}], "expect": []}, "not 'serve'"),
         ({"expect": ["published"]}, "expect needs one of"),
         ({"requires": {"commands": ["no-such-command-xyz"]}}, "command no-such-command-xyz"),
+        ({"harness": {"episode_budget": -1}}, "episode_budget must be an integer >= 0"),
+        ({"harness_tasks": {"factory": "tests.test_e2e_pipeline:no_tasks"}}, "harness_tasks factory must return"),
     ],
 )
 def test_a_bad_config_is_refused_before_anything_runs(tmp_path: Path, change: dict[str, Any], message: str) -> None:
     with pytest.raises(ContractError, match=message):
         build(_config(**change), REPO, tmp_path / "out")
+
+
+class RecordingMethod(AppendInstructionMethod):
+    """Remembers the tasks and episode budget each harness move gave it."""
+
+    def __init__(self, seen: list[tuple[tuple[str, ...], int]]) -> None:
+        super().__init__()
+        self._seen = seen
+
+    def propose(self, context: EvolveContext) -> ProposeResult:
+        self._seen.append((tuple(task.task_id for task in context.tasks), context.episode_budget))
+        return super().propose(context)
+
+
+def recording_method(context: PipelineContext) -> RecordingMethod:
+    return RecordingMethod(context.shared.setdefault("seen", []))  # type: ignore[arg-type]
+
+
+def first_task(context: PipelineContext) -> tuple[Task, ...]:
+    return TASKS[:1]
+
+
+def no_tasks(context: PipelineContext) -> tuple[Task, ...]:
+    return ()
+
+
+@pytest.mark.unit
+def test_a_harness_move_gets_its_own_tasks_and_budget_while_the_gate_keeps_tasks(tmp_path: Path) -> None:
+    config = _config(
+        harness_tasks={"factory": "tests.test_e2e_pipeline:first_task"},
+        harness={"episode_budget": 4},
+        schedule=[{"kind": "harness", "label": "verify"}],
+        expect=["published"],
+    )
+    config["components"] = {**config["components"], "method": {"factory": "tests.test_e2e_pipeline:recording_method"}}
+    pipeline = build(config, REPO, tmp_path / "out")
+
+    summary = run(pipeline)
+
+    assert summary["failures"] == []
+    assert pipeline.context.shared["seen"] == [((TASKS[0].task_id,), 4)]
+    assert summary["steps"][0]["episodes"] == 2 * len(TASKS)
+
+
+@pytest.mark.unit
+def test_without_harness_entries_a_harness_move_gets_the_gates_tasks_and_no_budget(tmp_path: Path) -> None:
+    config = _config(schedule=[{"kind": "harness", "label": "verify"}], expect=["published"])
+    config["components"] = {**config["components"], "method": {"factory": "tests.test_e2e_pipeline:recording_method"}}
+    pipeline = build(config, REPO, tmp_path / "out")
+
+    run(pipeline)
+
+    assert pipeline.context.shared["seen"] == [(tuple(task.task_id for task in TASKS), 0)]
 
 
 @pytest.mark.unit
@@ -252,6 +319,112 @@ def test_an_agent_that_outlives_its_timeout_is_killed_and_reported(tmp_path: Pat
     outcome = asyncio.run(slow.run(SEED_HARNESS, TASKS[0], policy))
 
     assert outcome.exit_code == -9 and outcome.final_output == ""
+
+
+def _python_agent(tmp_path: Path, context: PipelineContext, code: str, **options: Any) -> WorkspaceEpisodeRunner:
+    return WorkspaceEpisodeRunner(
+        command=[sys.executable, "-c", code],
+        workspaces=tmp_path / "workspaces",
+        endpoints=context.components["endpoints"],
+        support=RunnerSupport(
+            agents=frozenset({"claude_code"}), file_kinds=frozenset({"instructions", "skill"}), programmable_loop=False
+        ),
+        **options,
+    )
+
+
+def _policy(snapshot: Any) -> PolicyRef:
+    return PolicyRef(checkpoint=snapshot.checkpoint, architecture=snapshot.architecture, variant="master")
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@pytest.mark.unit
+def test_a_cancelled_episode_kills_its_agent(tmp_path: Path) -> None:
+    context, snapshot = _setup(tmp_path)
+    pid_file = tmp_path / "agent.pid"
+    code = f"import os, pathlib, time; pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(30)"
+    runner = _python_agent(tmp_path, context, code)
+
+    async def fail_once_the_agent_runs() -> None:
+        while not pid_file.exists():
+            await asyncio.sleep(0.01)
+        raise RuntimeError("a sibling episode failed")
+
+    async def gate() -> None:
+        # As GEPA's minibatch does: one failure ends the gather, and asyncio.run cancels the rest.
+        await asyncio.gather(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)), fail_once_the_agent_runs())
+
+    with pytest.raises(RuntimeError, match="a sibling episode failed"):
+        asyncio.run(gate())
+    pid = int(pid_file.read_text())
+    try:
+        assert not _alive(pid)
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+
+
+@pytest.mark.unit
+def test_a_tasks_starting_files_are_copied_in_under_the_harness(tmp_path: Path) -> None:
+    context, snapshot = _setup(tmp_path)
+    start = tmp_path / "start"
+    (start / "pkg").mkdir(parents=True)
+    (start / "buggy.py").write_text("x = 1\n")
+    (start / "pkg" / "module.py").write_text("y = 2\n")
+    runner = _python_agent(
+        tmp_path, context, "pass", seed_workspace=lambda task: start if task.task_id == TASKS[0].task_id else None
+    )
+
+    seeded = Path(str(asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot))).workspace_location))
+    bare = Path(str(asyncio.run(runner.run(SEED_HARNESS, TASKS[1], _policy(snapshot))).workspace_location))
+
+    assert (seeded / "buggy.py").read_text() == "x = 1\n"
+    assert (seeded / "pkg" / "module.py").read_text() == "y = 2\n"
+    assert all((seeded / path).read_text() == file.content for path, file in SEED_HARNESS.files)
+    assert json.loads((seeded / "task.json").read_text())["task_id"] == TASKS[0].task_id
+    assert not (bare / "buggy.py").exists()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("clash", ["task.json", "result.json", "harness"])
+def test_starting_files_that_clash_with_runner_or_harness_files_are_refused(tmp_path: Path, clash: str) -> None:
+    context, snapshot = _setup(tmp_path)
+    start = tmp_path / "start"
+    name = SEED_HARNESS.files[0][0] if clash == "harness" else clash
+    (start / name).parent.mkdir(parents=True, exist_ok=True)
+    (start / name).write_text("stale")
+    runner = _python_agent(tmp_path, context, "pass", seed_workspace=lambda task: start)
+
+    with pytest.raises(ContractError, match=f"starting files use names .*{name}"):
+        asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
+
+
+@pytest.mark.unit
+def test_the_agent_gets_only_the_base_and_forwarded_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context, snapshot = _setup(tmp_path)
+    monkeypatch.setenv("E2E_TEST_SECRET", "not-for-the-agent")
+    monkeypatch.setenv("E2E_TEST_FORWARDED", "for-the-agent")
+    code = "import json, os; open('env.json', 'w').write(json.dumps(dict(os.environ)))"
+    runner = _python_agent(
+        tmp_path, context, code, forward_environment=["E2E_TEST_FORWARDED"], environment={"E2E_TEST_EXTRA": "1"}
+    )
+
+    outcome = asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
+    seen = json.loads((Path(str(outcome.workspace_location)) / "env.json").read_text())
+
+    assert "E2E_TEST_SECRET" not in seen
+    assert seen["E2E_TEST_FORWARDED"] == "for-the-agent" and seen["E2E_TEST_EXTRA"] == "1"
+    assert seen["PATH"] == os.environ["PATH"]
+    assert {"HONING_POLICY_URL", "HONING_POLICY_MODEL", "HONING_POLICY_CHECKSUM", "HONING_WORKSPACE"} <= set(seen)
 
 
 @pytest.mark.unit
