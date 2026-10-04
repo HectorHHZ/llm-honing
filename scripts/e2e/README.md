@@ -83,7 +83,7 @@ It needs the `gepa` and `litellm` extras (`uv pip install -e ".[dev,gepa,litellm
 | Agent | `scripts/e2e/minimal_agent.py`, run by the workspace runner: reads `AGENTS.md` and `skills/*.md`, sends the task's files to the policy, writes back the files it returns |
 | Policy | an OpenAI-compatible API (`components.endpoints`), called by the agent with the key named by `api_key_env` |
 | Reflection | `LiteLLMChatModel` inside `GEPAMethod` (`components.method.args.reflection`) |
-| Schedule | 6 GEPA moves, a rollback to `r0001`, 16 more; `max_metric_calls` is 60. Every move charges at least 3 metric calls (the parent's minibatch), and `r0001` holds at least 16 from the first gate, so the run reaches the budget whatever the models reply |
+| Schedule | GEPA moves until the first publish (at most 12), one more, a rollback to that first publish, then 29 more; `max_metric_calls` is 100. Every move charges at least 3 metric calls (the parent's minibatch), and the first publish holds at least 16, so the run reaches the budget whatever the models reply |
 
 The model is pinned once, in `model` (`{"provider": ..., "name": ...}`); the policy endpoint and the reflection model both reference it as `{"ref": "model"}`. The key is read only from the environment variables the config names. The agent receives only that variable, and the run checks that no file it wrote holds a key.
 
@@ -101,7 +101,9 @@ Under `--work-dir`, the run writes the release chain (`releases/commits.jsonl`),
 | `budget stop` | the last move proposed nothing because `metric_calls` reached `max_metric_calls` |
 | `8 no key written` | no file under the work directory holds a key |
 
-A model's replies differ from run to run, so a run can end without a rejection or a selection; checks 4 and 6 then fail as "not exercised". Rerun, or lengthen the schedule.
+A model's replies differ from run to run, so a run can end without a rejection, or without a publish in its first 12 moves; checks 4 and 6 then fail as "not exercised". Rerun.
+
+The live schedule has its own step kinds: `{"kind": "harness", "repeat": n}`, `{"kind": "harness_until_publish", "max_moves": n}`, and `{"kind": "rollback", "to": "first_publish"}` (or a release id).
 
 **Failures.** A reflection call that fails after the client's retries (bad key, rate limit, timeout) logs one line and proposes nothing. If the policy cannot be reached after the agent's retries, the agent exits 75 and the move is abandoned: GEPA's state is unchanged, and the move's episodes and tokens go to `faults.jsonl`. After 3 abandoned moves in a row the run stops with exit code 3.
 

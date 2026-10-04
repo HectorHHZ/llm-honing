@@ -135,6 +135,12 @@ def test_the_run_passes_every_check_against_the_stub(stub: OpenAIStub, tmp_path:
     assert run.code == 0, run.stdout + run.stderr
     ops = [record["op"] for record in run.records]
     assert "reject" in ops and "publish" in ops[1:] and "rollback" in ops
+    # Harness moves until the first publish, one more, then a rollback to that publish.
+    steps = run.summary["steps"]
+    rollback = next(step for step in steps if step["move"] == "rollback")
+    first = next(step for step in steps if step["result"] == "published")
+    assert rollback["index"] == first["index"] + 2 and rollback["to"] == first["release"]
+    assert rollback["exercised"]
     usage = run.summary["usage"]
     assert usage["policy"]["episodes"] == usage["policy"]["calls"] == len(run.rows("episodes"))
     assert usage["reflection"]["calls"] == len(run.rows("reflections")) > 0
@@ -250,3 +256,44 @@ def test_an_outage_inside_a_move_abandons_only_that_move(stub: OpenAIStub, tmp_p
     for name in ("5a metric calls per move", "5b metric calls on the final path", "5c every episode accounted for"):
         assert run.checks[name]["passed"], run.checks[name]
     assert_no_key(run)
+
+
+@pytest.mark.integration
+def test_moves_until_a_publish_stop_at_their_cap_and_leave_no_rollback_target(
+    stub: OpenAIStub, tmp_path: Path
+) -> None:
+    # A bad reflection key: nothing is ever proposed, so nothing is published.
+    schedule = [
+        {"kind": "harness_until_publish", "label": "pre_training", "max_moves": 3},
+        {"kind": "rollback", "to": "first_publish"},
+    ]
+    run = run_script(offline_config(stub, reflection="401", schedule=schedule), tmp_path)
+
+    assert [(step["move"], step["result"]) for step in run.summary["steps"]] == [
+        ("harness", "skipped"), ("harness", "skipped"), ("harness", "skipped"), ("rollback", "not runnable")
+    ]  # fmt: skip
+    assert run.summary["steps"][-1]["reason"] == "no harness release was published before the rollback"
+    assert run.checks["6 rollback"]["passed"] is False
+
+
+@pytest.mark.integration
+def test_the_rollback_goes_to_the_first_publish_when_later_moves_publish_too(stub: OpenAIStub, tmp_path: Path) -> None:
+    schedule = [
+        {"kind": "harness_until_publish", "label": "pre_training", "max_moves": 12},
+        {"kind": "harness", "label": "pre_training", "repeat": 8},
+        {"kind": "rollback", "to": "first_publish"},
+    ]
+    run = run_script(offline_config(stub, schedule=schedule), tmp_path)
+
+    published = [step["release"] for step in run.summary["steps"] if step["result"] == "published"]
+    assert len(published) >= 2, "a later move must publish too, or this test shows nothing"
+    assert run.summary["steps"][-1]["to"] == published[0]
+    assert run.checks["6 rollback"]["passed"], run.checks["6 rollback"]
+
+
+@pytest.mark.integration
+def test_a_schedule_the_live_run_cannot_run_is_refused_before_anything_runs(stub: OpenAIStub, tmp_path: Path) -> None:
+    run = run_script(offline_config(stub, schedule=[{"kind": "train"}]), tmp_path)
+
+    assert run.code == 2 and "cannot start: schedule step 1:" in run.stderr
+    assert not run.work_dir.exists()

@@ -415,18 +415,47 @@ class LiveOptions:
     max_consecutive_faults: int = 3
 
 
-def run_live(pipeline: PipelineRun, options: LiveOptions) -> dict[str, Any]:
+FIRST_PUBLISH = "first_publish"
+
+
+def check_schedule(schedule: Sequence[Mapping[str, Any]]) -> None:
+    """Refuse a schedule ``run_live`` cannot run, before anything runs.
+
+    Entries: ``{"kind": "harness", "repeat": n}`` (``repeat`` defaults to 1);
+    ``{"kind": "harness_until_publish", "max_moves": n}``, harness moves until
+    one publishes or ``n`` have run; and ``{"kind": "rollback", "to": id}``,
+    where ``to`` is a release id or ``"first_publish"``, the first harness
+    release this run published.
+    """
+    for number, entry in enumerate(schedule, start=1):
+        kind = entry.get("kind")
+        count = {"harness": entry.get("repeat", 1), "harness_until_publish": entry.get("max_moves")}.get(str(kind))
+        if kind == "rollback":
+            if not isinstance(entry.get("to"), str):
+                raise ContractError(f"schedule step {number}: a rollback names a release id or {FIRST_PUBLISH!r}")
+        elif kind in ("harness", "harness_until_publish"):
+            if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+                key = "repeat" if kind == "harness" else "max_moves"
+                raise ContractError(f"schedule step {number}: {key} must be an integer >= 1, got {count!r}")
+        else:
+            raise ContractError(f"schedule step {number}: a live run has harness moves and rollbacks, not {kind!r}")
+
+
+class _AbortedError(Exception):
+    """Enough moves in a row were abandoned that the run stops."""
+
+
+def run_live(pipeline: PipelineRun, schedule: Sequence[Mapping[str, Any]], options: LiveOptions) -> dict[str, Any]:
     """Run the schedule; an unavailable policy abandons its move, and enough of them in a row end the run."""
     campaign, run_log = pipeline.campaign, _run_log(pipeline.context)
     steps: list[dict[str, Any]] = []
     consecutive = 0
-    aborted = None
-    for index, entry in enumerate(pipeline.schedule, start=1):
+    first_publish: str | None = None
+
+    def harness_move(index: int, entry: Mapping[str, Any]) -> dict[str, Any]:
+        nonlocal consecutive
         run_log.move, run_log.phase = index, "parent"
-        if entry.get("kind") == "rollback":
-            steps.append(_rollback(campaign, run_log, index, str(entry["to"])))
-            continue
-        move = _move(entry)
+        move = _move({"kind": "harness", "label": entry.get("label")})
         try:
             outcome = campaign.advance(move)
         except PolicyUnavailableError as error:
@@ -447,10 +476,8 @@ def run_live(pipeline: PipelineRun, options: LiveOptions) -> dict[str, Any]:
             steps.append({"index": index, "move": move.kind, "label": entry.get("label"), "result": "abandoned"})
             consecutive += 1
             if consecutive >= options.max_consecutive_faults:
-                aborted = f"{consecutive} moves in a row abandoned: the policy is unavailable"
-                _LOGGER.error("stopping the run: %s", aborted)
-                break
-            continue
+                raise _AbortedError(f"{consecutive} moves in a row abandoned: the policy is unavailable") from None
+            return steps[-1]
         consecutive = 0
         step = _step(outcome)
         # The pipeline calls a gated candidate that was not published "rolled back"; here a
@@ -462,13 +489,41 @@ def run_live(pipeline: PipelineRun, options: LiveOptions) -> dict[str, Any]:
         if outcome.decision is not None and "gepa_served_mean" in outcome.decision.metrics:
             step["served_mean"] = outcome.decision.metrics["gepa_served_mean"]
         steps.append({"index": index, "label": entry.get("label"), **step})
+        return steps[-1]
+
+    index = 0
+    aborted = None
+    try:
+        for entry in schedule:
+            kind = entry["kind"]
+            if kind == "rollback":
+                index += 1
+                run_log.move, run_log.phase = index, "parent"
+                to = first_publish if entry["to"] == FIRST_PUBLISH else str(entry["to"])
+                steps.append(_rollback(campaign, run_log, index, to))
+                continue
+            until_publish = kind == "harness_until_publish"
+            for _ in range(int(entry["max_moves"] if until_publish else entry.get("repeat", 1))):
+                index += 1
+                step = harness_move(index, entry)
+                if step["result"] == "published" and first_publish is None:
+                    first_publish = str(step["release"])
+                if until_publish and step["result"] == "published":
+                    break
+    except _AbortedError as stop:
+        aborted = str(stop)
+        _LOGGER.error("stopping the run: %s", aborted)
     run_log.write()
     return {"steps": steps, "aborted": aborted}
 
 
-def _rollback(campaign: Any, run_log: RunLog, index: int, to: str) -> dict[str, Any]:
+def _rollback(campaign: Any, run_log: RunLog, index: int, to: str | None) -> dict[str, Any]:
     head = campaign.chain.head()
     current = run_log.ends[-1] if run_log.ends else head.method_state
+    if to is None:
+        reason = "no harness release was published before the rollback"
+        _LOGGER.error("rollback to the first publish cannot run: %s", reason)
+        return {"index": index, "move": "rollback", "result": "not runnable", "to": FIRST_PUBLISH, "reason": reason}
     try:
         target = campaign.chain.get(to)
     except ReleaseError as error:
@@ -934,15 +989,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--work-dir", type=Path, help="output directory (must not exist); overrides the config")
     args = parser.parse_args(argv)
     config = json.loads(args.config.read_text(encoding="utf-8"))
+    schedule = config.get("schedule", [])
     try:
-        pipeline = build(config, args.root, args.work_dir)
+        check_schedule(schedule)
+        # The live schedule has kinds the pipeline does not run, so the pipeline gets none.
+        pipeline = build({**config, "schedule": [], "expect": []}, args.root, args.work_dir)
     except (ContractError, ImportError) as error:
         print(f"cannot start: {error}", file=sys.stderr)
         return 2
     work_dir = pipeline.context.work_dir
     _configure_logging(work_dir)
     live = config.get("live", {})
-    result = run_live(pipeline, LiveOptions(max_consecutive_faults=int(live.get("max_consecutive_faults", 3))))
+    options = LiveOptions(max_consecutive_faults=int(live.get("max_consecutive_faults", 3)))
+    result = run_live(pipeline, schedule, options)
     run_log = _run_log(pipeline.context)
     method = pipeline.context.component("method")
     validation_ids = list(method.validation_task_ids)
@@ -993,6 +1052,7 @@ __all__ = [
     "RecordingGrader",
     "RunLog",
     "check_run",
+    "check_schedule",
     "command_grader",
     "gepa_method",
     "harness_seed",

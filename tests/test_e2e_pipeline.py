@@ -225,6 +225,25 @@ def test_the_live_config_pins_its_model_in_one_entry() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        ({"kind": "train"}, "a live run has harness moves and rollbacks, not 'train'"),
+        ({"kind": "harness", "repeat": 0}, "repeat must be an integer >= 1"),
+        ({"kind": "harness_until_publish"}, "max_moves must be an integer >= 1"),
+        ({"kind": "harness_until_publish", "max_moves": True}, "max_moves must be an integer >= 1"),
+        ({"kind": "rollback"}, "a rollback names a release id"),
+    ],
+)
+def test_a_live_schedule_step_it_cannot_run_is_refused(entry: dict[str, Any], message: str) -> None:
+    from honing.e2e.gepa_live import check_schedule
+
+    check_schedule([{"kind": "harness"}, {"kind": "rollback", "to": "first_publish"}])
+    with pytest.raises(ContractError, match=f"schedule step 2: {message}"):
+        check_schedule([{"kind": "harness"}, entry])
+
+
+@pytest.mark.unit
 def test_every_required_plane_must_be_named(tmp_path: Path) -> None:
     config = _config()
     config["components"] = {k: v for k, v in config["components"].items() if k != "quantizer"}
