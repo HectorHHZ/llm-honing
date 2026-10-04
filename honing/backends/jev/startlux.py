@@ -38,6 +38,7 @@ import importlib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -46,7 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from honing.backends.jev.kev import STATE_OVERRUN
+from honing.backends.jev.kev import QUESTION_OVERRUN, STATE_OVERRUN
 from honing.backends.jev.laya import gpu_lock
 from honing.backends.jev.token_budget import SECTIONS
 from honing.core import ArchitectureSpec, CheckpointRef, LayerShape, ModelSnapshot
@@ -191,7 +192,13 @@ def option_count(question: Mapping[str, Any]) -> int:
 
 
 def checked_answer(key: str, question: Mapping[str, Any], answer: Any) -> dict[str, Any]:
-    """Refuse a partial or invalid answer; a choice keeps the offered order and must be its distribution's argmax."""
+    """Refuse a partial or invalid answer. A choice's probabilities are returned in the offered order, and its
+    choice must be an offered option with the highest probability.
+
+    StartLux breaks a tie by its own order, which for a choice over 26 options
+    is the finalists' first-round ranking, so a tied choice is kept as StartLux
+    made it.
+    """
     if not isinstance(answer, Mapping) or answer.get("type") != question["type"]:
         raise ValueError(f"StartLux answered question {key} with another type")
     if question["type"] == "noul":
@@ -208,10 +215,10 @@ def checked_answer(key: str, question: Mapping[str, Any], answer: Any) -> dict[s
         raise ValueError("Model probabilities must cover exactly the offered choices")
     values = [probabilities[k] for k in keys]
     _probabilities(values, key)
-    best = keys[max(range(len(keys)), key=values.__getitem__)]
-    if answer.get("choice") != best:
-        raise ValueError("Model choice differs from deterministic argmax in offered order")
-    return {**answer, "choice": best, "probabilities": dict(zip(keys, values, strict=True))}
+    choice = answer.get("choice")
+    if choice not in probabilities or probabilities[choice] != max(values):
+        raise ValueError("Model choice is not an offered option with the highest probability")
+    return {**answer, "probabilities": dict(zip(keys, values, strict=True))}
 
 
 def pack_request(
@@ -285,6 +292,44 @@ def rendered_rows(prompts: Any, state: str, question: Mapping[str, Any], group: 
             start = end
         return rows
     return [prompts.from_systemone(state, dict(question))]
+
+
+def later_round_sizes(options: int, group: int, keep: int, max_options: int) -> list[int]:
+    """How many options each prompt after the first round can hold, for a choice over ``max_options`` options.
+
+    This follows ``StartLuxDecision._wide``: the options split into
+    near-equal groups of at most ``group``, and the top ``keep`` of each go on.
+    Finalists over ``max_options`` run as a new wide choice, whose largest
+    group is listed, and the last round is one prompt over all finalists.
+    """
+    sizes: list[int] = []
+    while True:
+        groups = -(-options // group)
+        size, extra = divmod(options, groups)
+        options = sum(min(keep, size + (1 if index < extra else 0)) for index in range(groups))
+        if options <= max_options:
+            return [*sizes, options]
+        sizes.append(-(-options // -(-options // group)))
+
+
+def longest_round(prompts: Any, tokenizer: Any, state: str, question: Mapping[str, Any], size: int) -> dict[str, Any]:
+    """The longest prompt a later round of ``size`` options can render, as a row to render.
+
+    Which options reach a later round depends on the model's first-round
+    scores, so the row holds the ``size`` options whose lines take the most
+    tokens. Each id gets a trailing ``_``, which keeps it from reading as a
+    bare letter or number, so every line shows its id and description, the
+    longest form StartLux renders for it. The Qwen tokenizers split at line
+    breaks, so a prompt's length is the sum of its lines and no set of
+    finalists renders a longer prompt.
+    """
+    criteria = question["criteria"]
+
+    def line_tokens(key: str) -> int:
+        return len(tokenizer.encode(f"{key}_: {prompts.value_text(criteria[key]) or ''}", add_special_tokens=False))
+
+    longest = sorted(criteria, key=line_tokens, reverse=True)[:size]
+    return prompts.from_systemone(state, dict(question, criteria={f"{key}_": criteria[key] for key in longest}))
 
 
 class StartLuxDecisionModel:
@@ -369,11 +414,17 @@ class StartLuxDecisionModel:
         return difference
 
     def _measure(self, state: str, questions: Mapping[str, Any]) -> dict[str, int]:
+        """The longest prompt each question can render: its first-round prompts and, for a choice over 26 options,
+        the longest prompt each later round can render."""
         prompts, tokenizer = self._prompts, self._engine.tok
-        group = getattr(self._engine, "group", 25)
+        group, keep = self._engine.group, self._engine.keep
         lengths = {}
         for key, question in questions.items():
             rows = rendered_rows(prompts, state, question, group)
+            criteria = question.get("criteria") or {}
+            if len(rows) > 1:
+                for size in later_round_sizes(len(criteria), group, keep, prompts.MAX_OPTIONS):
+                    rows.append(longest_round(prompts, tokenizer, state, question, size))
             lengths[key] = max(len(prompts.render_ids(row, tokenizer, max_length=2**31)[0]) for row in rows)
         return lengths
 
@@ -388,7 +439,14 @@ class StartLuxDecisionModel:
             self._max_length,
         )
         with contextlib.redirect_stdout(sys.stderr):
-            raw, usage = self._engine.decide(state, dict(questions))
+            try:
+                raw, usage = self._engine.decide(state, dict(questions))
+            except ValueError as error:
+                # StartLux's own limit check. The measure above should prevent it; if a prompt still overruns, the
+                # refusal uses the wording RA2Grader scores as 0.
+                if re.fullmatch(r"length \d+ > \d+", str(error)):
+                    raise ValueError(QUESTION_OVERRUN.format(key=", ".join(questions), detail=str(error))) from error
+                raise
         if set(raw) != set(questions):
             raise ValueError("StartLux returned a partial question batch")
         answers = {key: checked_answer(key, question, raw[key]) for key, question in questions.items()}  # type: ignore[arg-type]

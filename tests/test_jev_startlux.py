@@ -15,13 +15,15 @@ from typing import Any
 import pytest
 
 from honing.backends.jev import startlux
-from honing.backends.jev.kev import STATE_OVERRUN
+from honing.backends.jev.kev import QUESTION_OVERRUN, STATE_OVERRUN
 from honing.backends.jev.model import DecisionModel
 from honing.backends.jev.server import main as server_main
 from honing.backends.jev.startlux import (
     StartLuxDecisionModel,
     StartLuxSettings,
     checked_answer,
+    later_round_sizes,
+    longest_round,
     pack_request,
     rendered_rows,
     startlux_snapshot,
@@ -58,25 +60,31 @@ class WordTokenizer:
 
 
 def _from_systemone(state: str, spec: dict[str, Any]) -> dict[str, Any]:
-    return {"state": state, "instructions": spec["instructions"], "options": list(spec.get("criteria") or ["y", "n"])}
+    criteria = spec.get("criteria") or {"y": "", "n": ""}
+    return {"state": state, "instructions": spec["instructions"], "options": list(criteria), "criteria": criteria}
 
 
 def _render_ids(row: dict[str, Any], tokenizer: WordTokenizer, max_length: int) -> tuple[list[str], list[str]]:
-    """StartLux's prompt, reduced: a fixed system line, the evidence, the question, and one line per option."""
-    text = f"system line Evidence: {row['state']} Question: {row['instructions']} Options: {' '.join(row['options'])}"
+    """StartLux's prompt, reduced: a fixed system line, the evidence, the question, and one ``id: text`` line each."""
+    lines = " ".join(f"{key}: {text}" for key, text in row["criteria"].items())
+    text = f"system line Evidence: {row['state']} Question: {row['instructions']} Options: {lines}"
     return tokenizer.encode(text), row["options"]
 
 
-PROMPTS = types.SimpleNamespace(MAX_OPTIONS=26, from_systemone=_from_systemone, render_ids=_render_ids)
-# The fixed words of a rendered question: "system line Evidence: Question: Which action now? Options: A B".
-FIXED_TOKENS = 10
+PROMPTS = types.SimpleNamespace(
+    MAX_OPTIONS=26, from_systemone=_from_systemone, render_ids=_render_ids, value_text=lambda value: value
+)
+# The fixed words of a rendered question: "system line Evidence: Question: Which action now? Options: A: wait
+# B: build power".
+FIXED_TOKENS = 13
 
 
 class FakeEngine:
-    """StartLuxDecision reduced to what Honing calls: its tokenizer, group size, and decide."""
+    """StartLuxDecision reduced to what Honing calls: its tokenizer, wide-choice settings, and decide."""
 
     tok = WordTokenizer()
     group = 25
+    keep = 3
 
     def __init__(self, answers: dict[str, Any]) -> None:
         self.answers = answers
@@ -118,8 +126,8 @@ def test_the_state_packs_the_four_sections_and_each_question_is_measured_by_its_
 
 @pytest.mark.unit
 def test_trimming_drops_whole_entries_oldest_logs_first_then_newest_memory_and_details() -> None:
-    # All of it is 28 tokens; 21 leaves room for the fixed words, the essential entries, and five more words.
-    _, _, trimmed = pack_request(PARTS, QUESTIONS, _measure, _count, max_length=21)
+    # All of it is 31 tokens; 23 leaves room for the fixed words, the essential entries, and five more words.
+    _, _, trimmed = pack_request(PARTS, QUESTIONS, _measure, _count, max_length=23)
 
     assert trimmed == [
         {"section": "logs", "text": "tick 3 moved"},
@@ -184,11 +192,87 @@ def test_an_answer_must_cover_the_options_sum_to_one_and_choose_its_argmax() -> 
         ({**good, "probabilities": {"A": 1.0}}, "cover exactly the offered choices"),
         ({**good, "probabilities": {"A": 0.5, "B": 0.6}}, "do not sum to one"),
         ({**good, "probabilities": {"A": float("nan"), "B": 1.0}}, "Invalid model probability"),
-        ({**good, "choice": "A"}, "differs from deterministic argmax"),
+        ({**good, "choice": "A"}, "not an offered option with the highest probability"),
+        ({**good, "choice": "C"}, "not an offered option with the highest probability"),
         ({**good, "type": "noul"}, "another type"),
     ]:
         with pytest.raises(ValueError, match=message):
             checked_answer("g1", question, answer)
+
+
+@pytest.mark.unit
+def test_later_rounds_follow_startlux_s_wide_choice_rounds() -> None:
+    # 30 options: two groups of 15, three finalists each, one final prompt of 6.
+    assert later_round_sizes(30, group=25, keep=3, max_options=26) == [6]
+    # 300 options: 12 groups of 25 give 36 finalists, which run as a wide choice of two groups of 18, then 6.
+    assert later_round_sizes(300, group=25, keep=3, max_options=26) == [18, 6]
+
+
+def _wide_question() -> dict[str, Any]:
+    """30 options in two groups of 15; the first three of each group have long descriptions."""
+    long = " ".join(["heavy armoured column"] * 20)
+    criteria = {f"u{i}": (long if i % 15 < 3 else f"unit {i}") for i in range(30)}
+    return {"pick": {"type": "choice", "instructions": "Which unit?", "criteria": criteria}}
+
+
+@pytest.mark.unit
+def test_a_wide_choice_is_budgeted_for_its_final_round() -> None:
+    questions = _wide_question()
+    criteria = questions["pick"]["criteria"]
+    finalists = {key: criteria[key] for key in ("u0", "u1", "u2", "u15", "u16", "u17")}
+    final_round = dict(questions["pick"], criteria=finalists)
+    parts = {"essential": ["tick 90"], "logs": [" ".join(["log"] * 40)] * 4}
+    state = "\n".join(parts["essential"] + parts["logs"])
+    first_round = max(
+        len(_render_ids(row, WordTokenizer(), 0)[0]) for row in rendered_rows(PROMPTS, state, questions["pick"], 25)
+    )
+    final = len(_render_ids(_from_systemone(state, final_round), WordTokenizer(), 0)[0])
+    assert first_round < final  # the six long finalists render a longer prompt than any first-round group
+
+    _, audit, trimmed = pack_request(
+        parts, questions, lambda text: _measure(text, questions), _count, max_length=first_round
+    )
+
+    # Measured by its first round alone the request would fit; its final round would not, so logs are trimmed.
+    assert trimmed and all(entry["section"] == "logs" for entry in trimmed)
+    assert audit["pick"]["inputTokens"] <= first_round
+
+
+@pytest.mark.unit
+def test_the_longest_later_round_holds_the_longest_options_with_their_ids_shown() -> None:
+    questions = _wide_question()
+    row = longest_round(PROMPTS, WordTokenizer(), "state", questions["pick"], 6)
+    assert row["options"] == ["u0_", "u1_", "u2_", "u15_", "u16_", "u17_"]
+    assert row["criteria"]["u0_"] == questions["pick"]["criteria"]["u0"]
+
+
+@pytest.mark.unit
+def test_a_tie_keeps_the_choice_startlux_made_by_its_finalist_order() -> None:
+    criteria = {f"unit{i}": f"unit {i}" for i in range(30)}
+    question = {"type": "choice", "instructions": "Which unit?", "criteria": criteria}
+    probabilities = dict.fromkeys(criteria, 0.0)
+    probabilities.update({"unit0": 0.4, "unit1": 0.4, "unit15": 0.2})
+    # unit1 led the first round, so StartLux's final round lists it before unit0 and chooses it on the tie.
+    answer = {"type": "choice", "choice": "unit1", "confidence": 0.37, "probabilities": probabilities}
+
+    checked = checked_answer("pick", question, answer)
+
+    assert checked["choice"] == "unit1" and list(checked["probabilities"]) == list(criteria)
+    with pytest.raises(ValueError, match="not an offered option with the highest probability"):
+        checked_answer("pick", question, {**answer, "choice": "unit15"})
+
+
+@pytest.mark.unit
+def test_an_overrun_inside_startlux_is_refused_in_words_the_grader_scores_as_zero() -> None:
+    class Overrun(FakeEngine):
+        def decide(self, state: str, questions: dict[str, Any]) -> tuple[dict[str, Any], dict[str, int]]:
+            raise ValueError("length 8520 > 8192")
+
+    model = StartLuxDecisionModel(Overrun({}), PROMPTS, {"temperatureByType": {}}, 100)
+    with pytest.raises(ValueError) as refused:
+        model.predict(PARTS, QUESTIONS)
+    assert str(refused.value) == QUESTION_OVERRUN.format(key="g1", detail="length 8520 > 8192")
+    assert any(marker in str(refused.value) for marker in OVER_BUDGET)
 
 
 @pytest.mark.unit
