@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from honing.campaign import ScriptedScheduler
-from honing.core import Move, protocols
+from honing.core import ContractError, Move, protocols
+from honing.e2e.components import PipelineContext
 from honing.harness.methods.scripted import ScriptedEdit, ScriptedMethod, method
 from tests.fakes.builder import build_campaign
 from tests.fakes.harness import INSTRUCTIONS_PATH
@@ -46,6 +47,20 @@ def test_the_factory_writes_json_settings_and_declares_the_kinds_it_edits() -> N
     assert isinstance(built, protocols.EvolveMethod)
     assert built.edits[0].content == '{\n  "tools": [\n    "grep"\n  ]\n}\n'
     assert built.requires.file_kinds == frozenset({"settings", "instructions"})
+
+
+@pytest.mark.unit
+def test_an_edit_can_come_from_a_local_file(tmp_path: Path) -> None:
+    (tmp_path / "SKILL.md").write_text("---\nname: s\ndescription: d\n---\nx\n")
+
+    built = method(
+        PipelineContext(root=tmp_path, work_dir=tmp_path),
+        edits=[{"path": "skills/s/SKILL.md", "kind": "skill", "file": "{root}/SKILL.md"}],
+    )
+
+    assert built.edits[0].content.startswith("---\nname: s")
+    with pytest.raises(ContractError, match="exactly one of content, json, and file"):
+        method(None, edits=[{"path": "a", "kind": "skill", "content": "x", "file": "y"}])
 
 
 @pytest.mark.unit

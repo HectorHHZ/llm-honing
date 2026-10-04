@@ -1,19 +1,10 @@
-"""A model behind a hosted OpenAI-compatible API, as a policy a harness runner can call.
+"""A model behind a hosted OpenAI-compatible API (OpenRouter, a provider's endpoint) as a Honing policy.
 
-Honing's releases are built around weights it holds: a release's master is a
-Hugging Face safetensors checkpoint. A model reached through an API (OpenRouter,
-a provider's own endpoint) has no weights Honing can read, so this module gives
-it a stand-in snapshot whose checksum is derived from the endpoint and the model
-name. That is enough to run and gate harness moves against the model, which is
-what the harness plane needs from it. It cannot be trained, pruned, or quantized,
-and nothing here pretends otherwise: the snapshot's location is ``hosted://...``.
-
-Core has no weight format for a hosted model yet; the stand-in reuses the master
-format so a release can hold it. Representing hosted models properly is a core
-change for its own issue.
-
-The key is never stored. ``api_key_env`` names the environment variable a runner
-reads it from.
+Honing holds no weights for such a model, so it gets a stand-in snapshot whose
+checksum comes from the endpoint and model name. That is enough to run and gate
+harness moves against it; training, pruning, or quantizing it means nothing.
+Core has no weight format for hosted models, so the stand-in reuses the master
+format and marks its location ``hosted://``.
 """
 
 from __future__ import annotations
@@ -34,13 +25,20 @@ from honing.core import (
     require,
 )
 
-# One layer of size one: the snapshot is an identifier, not a description of the model's shape.
 _PLACEHOLDER = ArchitectureSpec.uniform_layers(num_layers=1, hidden_size=1, attention_heads=1, ffn_size=1)
 
 
 @dataclass(frozen=True)
 class HostedModel:
-    """One model at one OpenAI-compatible endpoint, with its prices in US dollars per million tokens."""
+    """One model at one OpenAI-compatible endpoint.
+
+    Attributes:
+        base_url: The endpoint's root, ending in ``/v1`` for most providers.
+        model: The name the endpoint serves the model under.
+        api_key_env: The environment variable holding the key; the key itself is never stored.
+        input_usd_per_million: The price of input tokens, if known.
+        output_usd_per_million: The price of output tokens, if known.
+    """
 
     base_url: str
     model: str
@@ -58,11 +56,12 @@ class HostedModel:
 
     @property
     def checksum(self) -> str:
-        """Stable for one endpoint and model name; a different model is a different policy."""
+        """The stand-in checksum: stable for one endpoint and model name."""
         digest = hashlib.sha256(f"{self.base_url.rstrip('/')}|{self.model}".encode()).hexdigest()
         return f"hosted-{digest[:16]}"
 
     def snapshot(self) -> ModelSnapshot:
+        """Returns the stand-in snapshot a release holds for this model."""
         checkpoint = CheckpointRef(
             location=f"hosted://{self.base_url.split('://', 1)[1].rstrip('/')}/{self.model}",
             weight_format=MASTER_WEIGHT_FORMAT,
@@ -71,62 +70,100 @@ class HostedModel:
         return ModelSnapshot(checkpoint=checkpoint, architecture=_PLACEHOLDER, parameters=1)
 
     def endpoint(self) -> PolicyEndpoint:
-        # "sglang" is the runtime that speaks OpenAI-compatible chat completions; core has no other.
+        """Returns the endpoint; ``sglang`` is core's runtime for OpenAI-compatible chat."""
         return PolicyEndpoint(
-            base_url=self.base_url.rstrip("/"),
-            tokenizer_location="hosted",
-            served_model=self.model,
-            runtime="sglang",
+            base_url=self.base_url.rstrip("/"), tokenizer_location="hosted", served_model=self.model, runtime="sglang"
         )
 
 
 class HostedModelSource:
-    """Satisfies :class:`~honing.core.ModelSource`: the hosted model's stand-in snapshot."""
+    """Satisfies :class:`~honing.core.ModelSource` with a hosted model's stand-in snapshot.
+
+    Args:
+        model: The hosted model.
+    """
 
     def __init__(self, model: HostedModel) -> None:
-        self.model = model
+        self._model = model
 
     def materialize(self, work_dir: Path) -> ModelSnapshot:
-        return self.model.snapshot()
+        """Returns the stand-in snapshot.
+
+        Args:
+            work_dir: Unused; nothing is downloaded.
+        """
+        return self._model.snapshot()
 
 
 class HostedEndpoints:
-    """Satisfies :class:`~honing.core.PolicyEndpoints` for hosted models, keyed by their stand-in checksums."""
+    """Satisfies :class:`~honing.core.PolicyEndpoints` for hosted models.
+
+    Args:
+        *models: The hosted models a campaign may run against.
+
+    Raises:
+        ContractError: No model was given.
+    """
 
     def __init__(self, *models: HostedModel) -> None:
         require(len(models) > 0, "HostedEndpoints needs at least one model")
-        self.models = {model.checksum: model for model in models}
+        self._models = {model.checksum: model for model in models}
 
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
+        """Returns the endpoint serving ``policy``.
+
+        Args:
+            policy: A hosted model's stand-in policy.
+
+        Raises:
+            ContractError: No hosted model has that checksum.
+        """
         return self.hosted(policy).endpoint()
 
     def hosted(self, policy: PolicyRef) -> HostedModel:
-        """The hosted model behind a policy, for a runner that also needs its key and prices."""
+        """Returns the hosted model behind ``policy``, for a runner that needs its key and prices.
+
+        Args:
+            policy: A hosted model's stand-in policy.
+
+        Raises:
+            ContractError: No hosted model has that checksum.
+        """
         try:
-            return self.models[policy.checkpoint.checksum]
+            return self._models[policy.checkpoint.checksum]
         except KeyError:
             raise ContractError(f"no hosted model serves checkpoint {policy.checkpoint.checksum!r}") from None
 
 
-# ---------------------------------------------------------------- factories for a pipeline config
-
-
-def _model(context: object, args: Mapping[str, object]) -> HostedModel:
-    """One HostedModel per run, shared by the model source and the endpoints built from the same args."""
-    shared = getattr(context, "shared", None)
-    model = HostedModel(**args)  # type: ignore[arg-type]
-    if isinstance(shared, dict):
-        existing = shared.setdefault(f"hosted:{model.checksum}", model)
-        if existing != model:
-            raise ContractError(f"two configs name hosted model {model.model} differently")
-    return model
-
-
 def model_source(context: object, **model: object) -> HostedModelSource:
-    """``{"base_url": ..., "model": ..., "api_key_env": ..., "input_usd_per_million": ..., ...}``"""
-    return HostedModelSource(_model(context, model))
+    """Builds the model source for a pipeline config.
+
+    Args:
+        context: The pipeline context.
+        **model: :class:`HostedModel` fields.
+
+    Returns:
+        The model source.
+    """
+    return HostedModelSource(_shared_model(context, model))
 
 
 def endpoints(context: object, **model: object) -> HostedEndpoints:
-    """The same args as :func:`model_source`."""
-    return HostedEndpoints(_model(context, model))
+    """Builds the endpoints for a pipeline config, from the same fields as :func:`model_source`.
+
+    Args:
+        context: The pipeline context.
+        **model: :class:`HostedModel` fields.
+
+    Returns:
+        The endpoints.
+    """
+    return HostedEndpoints(_shared_model(context, model))
+
+
+def _shared_model(context: object, fields: Mapping[str, object]) -> HostedModel:
+    model = HostedModel(**fields)  # type: ignore[arg-type]
+    shared = getattr(context, "shared", None)
+    if isinstance(shared, dict) and shared.setdefault(f"hosted:{model.checksum}", model) != model:
+        raise ContractError(f"the config describes hosted model {model.model} two different ways")
+    return model

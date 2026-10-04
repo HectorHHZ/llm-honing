@@ -12,7 +12,10 @@
     "factory": "tests.fakes.pipeline:tasks"
   },
   "harness_seed": {
-    "factory": "honing.backends.openhands.e2e:seed_harness"
+    "factory": "honing.backends.openhands.e2e:seed_harness",
+    "args": {
+      "instructions": "Solve the task.\n"
+    }
   },
   "components": {
     "model_source": {

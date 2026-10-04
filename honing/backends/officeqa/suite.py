@@ -1,14 +1,8 @@
-"""OfficeQA questions as Honing tasks.
+"""OfficeQA questions (databricks/officeqa, CC-BY-SA 4.0) as Honing tasks.
 
-OfficeQA (databricks/officeqa, CC-BY-SA 4.0) asks numeric and short-answer
-questions about U.S. Treasury Bulletins. A row has ``uid``, ``question``,
-``answer``, ``source_docs`` (page URLs), ``source_files`` (the bulletin text
-files, one per line), and ``difficulty``. The task's prompt is the question plus
-the protocol the grader depends on: where the documents are, and that the
-answer goes inside ``<FINAL_ANSWER>`` tags. How to search them is the harness's
-business, not the task's.
-
-The answer and source files stay in the suite; a task carries only its id and prompt.
+A task's prompt is the question plus what the grader depends on: where the
+documents are, and that the answer goes in ``<FINAL_ANSWER>`` tags. How to
+search the documents is left to the harness.
 """
 
 from __future__ import annotations
@@ -22,7 +16,7 @@ from honing.core import ContractError, Task, require
 
 CORPUS_DIR = "corpus"
 
-PROMPT = """{question}
+_PROMPT = """{question}
 
 The documents are U.S. Treasury Bulletins, one plain-text file per issue, in the directory `{corpus}/` of your \
 working directory (files are named treasury_bulletin_YYYY_MM.txt). Answer from those documents.
@@ -32,19 +26,34 @@ Give your final answer inside <FINAL_ANSWER></FINAL_ANSWER> tags, the value only
 
 @dataclass(frozen=True)
 class OfficeQAQuestion:
+    """One OfficeQA question and what grades it.
+
+    Attributes:
+        uid: The question's id, which is also its task id.
+        question: The question text.
+        answer: The reference answer.
+        source_files: The bulletin files that hold the answer.
+        difficulty: ``easy`` or ``hard``.
+    """
+
     uid: str
     question: str
     answer: str
     source_files: tuple[str, ...]
     difficulty: str
 
-    def task(self, corpus: str = CORPUS_DIR) -> Task:
-        return Task(task_id=self.uid, prompt=PROMPT.format(question=self.question.strip(), corpus=corpus))
+    def task(self) -> Task:
+        """Returns the question as a task; the answer stays here."""
+        return Task(task_id=self.uid, prompt=_PROMPT.format(question=self.question.strip(), corpus=CORPUS_DIR))
 
 
 @dataclass(frozen=True)
 class OfficeQASuite:
-    """The questions a run uses, in the order given."""
+    """The questions a run uses, in order.
+
+    Attributes:
+        questions: The questions, each named once.
+    """
 
     questions: tuple[OfficeQAQuestion, ...]
 
@@ -54,19 +63,19 @@ class OfficeQASuite:
         require(len(set(uids)) == len(uids), "an OfficeQA suite names each question once")
 
     def tasks(self) -> tuple[Task, ...]:
+        """Returns the questions as tasks, in order."""
         return tuple(q.task() for q in self.questions)
 
-    def question(self, task_id: str) -> OfficeQAQuestion:
-        for q in self.questions:
-            if q.uid == task_id:
-                return q
-        raise ContractError(f"task {task_id!r} is not in the OfficeQA suite")
-
     def question_for(self, task: Task) -> OfficeQAQuestion:
-        """The task's question, by id, or by prompt for a copy of a task under another id.
+        """Returns a task's question, matched by id or, for a copy under another id, by prompt.
 
-        Copies are how a runner's concurrency is checked (``honing.e2e.conformance``):
-        the same task several times at once, each under its own id.
+        The conformance check runs copies of one task under new ids to test concurrency.
+
+        Args:
+            task: A task from :meth:`tasks`, or a copy of one.
+
+        Raises:
+            ContractError: The task is not one of the suite's.
         """
         for q in self.questions:
             if q.uid == task.task_id or q.task().prompt == task.prompt:
@@ -75,6 +84,17 @@ class OfficeQASuite:
 
 
 def read_questions(csv_path: Path) -> dict[str, OfficeQAQuestion]:
+    """Reads every question in an OfficeQA CSV.
+
+    Args:
+        csv_path: ``officeqa_full.csv`` or ``officeqa_pro.csv``.
+
+    Returns:
+        The questions by uid.
+
+    Raises:
+        ContractError: A required column is missing.
+    """
     with csv_path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     missing = {"uid", "question", "answer", "source_files"} - set(rows[0] if rows else {})
@@ -93,7 +113,18 @@ def read_questions(csv_path: Path) -> dict[str, OfficeQAQuestion]:
 
 
 def load_suite(csv_path: Path, uids: Sequence[str]) -> OfficeQASuite:
-    """The named questions, refusing an unknown uid."""
+    """Loads the named questions from an OfficeQA CSV.
+
+    Args:
+        csv_path: The questions file.
+        uids: The questions to use, in order.
+
+    Returns:
+        The suite.
+
+    Raises:
+        ContractError: A uid is not in the file.
+    """
     questions = read_questions(csv_path)
     unknown = [uid for uid in uids if uid not in questions]
     if unknown:

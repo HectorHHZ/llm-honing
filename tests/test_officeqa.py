@@ -66,7 +66,10 @@ def test_a_suite_keeps_the_named_questions_in_order(csv_path: Path) -> None:
     suite = load_suite(csv_path, ["UID0008", "UID0002"])
 
     assert [t.task_id for t in suite.tasks()] == ["UID0008", "UID0002"]
-    assert suite.question("UID0008").source_files == ("treasury_bulletin_2012_06.txt", "treasury_bulletin_2022_06.txt")
+    assert suite.question_for(suite.tasks()[0]).source_files == (
+        "treasury_bulletin_2012_06.txt",
+        "treasury_bulletin_2022_06.txt",
+    )
     prompt = suite.tasks()[1].prompt
     assert prompt.startswith("What were VA expenditures in FY 1934?")
     assert "`corpus/`" in prompt and "<FINAL_ANSWER></FINAL_ANSWER>" in prompt

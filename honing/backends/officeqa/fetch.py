@@ -1,13 +1,8 @@
-"""Download a few OfficeQA questions and only the bulletins they need.
+"""Download chosen OfficeQA questions and only the bulletins they need, instead of the 460 MB corpus.
 
-The dataset is gated on Hugging Face (accepted automatically): set ``HF_TOKEN``
-to a token whose account has accepted it. The full transformed corpus is about
-460 MB; this fetches the questions' source bulletins plus ``--neighbors``
-issues on each side of each, so the agent still has to find the right one.
+The dataset is gated on Hugging Face (approved automatically); ``HF_TOKEN`` must belong to an account that accepted it.
 
 Run: ``python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016``
-
-Writes ``<out>/officeqa_full.csv``, ``<out>/corpus/*.txt``, and ``<out>/manifest.json`` (each file and its SHA-256).
 """
 
 from __future__ import annotations
@@ -25,9 +20,9 @@ from pathlib import Path
 
 from honing.backends.officeqa.suite import CORPUS_DIR, read_questions
 
-DATASET = "https://huggingface.co/datasets/databricks/officeqa/resolve/main"
+_DATASET = "https://huggingface.co/datasets/databricks/officeqa/resolve/main"
 QUESTIONS = "officeqa_full.csv"
-TRANSFORMED = "treasury_bulletins_parsed/transformed"
+_TRANSFORMED = "treasury_bulletins_parsed/transformed"
 _ISSUE = re.compile(r"^treasury_bulletin_(\d{4})_(\d{2})\.txt$")
 
 
@@ -40,7 +35,15 @@ def _download(url: str, target: Path, token: str) -> None:
 
 
 def neighbors(name: str, count: int) -> list[str]:
-    """The bulletin itself and ``count`` monthly issues on each side (some may not exist)."""
+    """Names a bulletin and the monthly issues around it, some of which may not exist.
+
+    Args:
+        name: A file such as ``treasury_bulletin_1944_01.txt``.
+        count: Issues to include on each side.
+
+    Returns:
+        The file names, oldest first; just ``name`` if it is not a dated bulletin.
+    """
     match = _ISSUE.match(name)
     if match is None or count == 0:
         return [name]
@@ -49,9 +52,26 @@ def neighbors(name: str, count: int) -> list[str]:
 
 
 def fetch(out: Path, uids: Sequence[str], neighbor_count: int, token: str) -> dict[str, str]:
+    """Downloads the questions file and the bulletins the named questions need.
+
+    Writes ``<out>/officeqa_full.csv``, ``<out>/corpus/``, and ``<out>/manifest.json``.
+    Files already present are kept.
+
+    Args:
+        out: The data directory.
+        uids: The questions.
+        neighbor_count: Issues to fetch on each side of each source bulletin.
+        token: A Hugging Face token.
+
+    Returns:
+        The SHA-256 of each bulletin, by file name.
+
+    Raises:
+        SystemExit: A uid is not in the dataset.
+    """
     csv_path = out / QUESTIONS
     if not csv_path.exists():
-        _download(f"{DATASET}/{QUESTIONS}", csv_path, token)
+        _download(f"{_DATASET}/{QUESTIONS}", csv_path, token)
     questions = read_questions(csv_path)
     unknown = [uid for uid in uids if uid not in questions]
     if unknown:
@@ -62,7 +82,7 @@ def fetch(out: Path, uids: Sequence[str], neighbor_count: int, token: str) -> di
         target = out / CORPUS_DIR / name
         if not target.exists():
             try:
-                _download(f"{DATASET}/{TRANSFORMED}/{name}", target, token)
+                _download(f"{_DATASET}/{_TRANSFORMED}/{name}", target, token)
             except urllib.error.HTTPError as error:
                 if error.code == 404 and name not in {f for uid in uids for f in questions[uid].source_files}:
                     continue  # a neighbor that was never published
@@ -74,6 +94,14 @@ def fetch(out: Path, uids: Sequence[str], neighbor_count: int, token: str) -> di
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Runs the fetch from the command line.
+
+    Args:
+        argv: The arguments; defaults to ``sys.argv[1:]``.
+
+    Returns:
+        The process exit code.
+    """
     parser = argparse.ArgumentParser(description="Download OfficeQA questions and the bulletins they need.")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--uids", required=True, help="comma-separated question uids, e.g. UID0002,UID0006")

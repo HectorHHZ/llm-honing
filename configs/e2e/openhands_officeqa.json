@@ -24,7 +24,15 @@
     }
   },
   "harness_seed": {
-    "factory": "honing.backends.officeqa.e2e:seed_harness"
+    "factory": "honing.backends.openhands.e2e:seed_harness",
+    "args": {
+      "instructions": "You answer questions about the documents in your working directory.\nLook figures up in the documents rather than answering from memory, and report them in the unit the question asks for.\n",
+      "tools": [
+        "terminal",
+        "file_editor"
+      ],
+      "max_iterations": 25
+    }
   },
   "components": {
     "model_source": {
@@ -113,8 +121,8 @@
           {
             "path": "skills/treasury-bulletins/SKILL.md",
             "kind": "skill",
-            "content": "---\nname: treasury-bulletins\ndescription: How to find a figure in Treasury Bulletin text files without reading them whole.\ntriggers:\n  - treasury\n  - bulletin\n---\n# Finding figures in Treasury Bulletins\n\nEach bulletin is several hundred kilobytes of text. Never print a whole file.\n\n1. Pick the issue first. A figure for a period is usually published in an issue after that period ends, and later\n   issues revise earlier numbers. If the question names an issue, use that one.\n2. Search before reading: `grep -n -i \"<table or row keyword>\" corpus/<file>` finds the table, then read only the\n   lines around the match (`sed -n 'START,ENDp' corpus/<file>`).\n3. Read the table's header for its unit (millions, thousands, percent) and its period (fiscal or calendar year) before\n   taking a number, and convert to the unit the question asks for.\n4. Do arithmetic with a command (`python3 -c \"...\"`), not in your head.\n5. Before answering, re-read the row and column you used and check they match every condition in the question.\n",
-            "note": "add a skill for searching Treasury Bulletins"
+            "note": "add a skill for searching Treasury Bulletins",
+            "file": "{root}/integrations/officeqa/skills/treasury-bulletins/SKILL.md"
           },
           {
             "path": "openhands/agent.json",
