@@ -30,7 +30,7 @@ def tasks(context: object, data_dir: str, uids: Sequence[str]) -> tuple[Task, ..
 
 
 def grader(
-    context: object, data_dir: str, uids: Sequence[str], tolerance: float = 0.0, reveal_answer: bool = False
+    context: object, data_dir: str, uids: Sequence[str], tolerance: float = 0.0, reveal_answer: bool = True
 ) -> OfficeQAGrader:
     """Builds the grader for the named questions.
 
@@ -39,7 +39,7 @@ def grader(
         data_dir: The fetched data directory.
         uids: The questions, as given to :func:`tasks`.
         tolerance: The relative error accepted.
-        reveal_answer: Put reference answers in feedback.
+        reveal_answer: Put reference answers in the feedback of zero scores.
 
     Returns:
         The grader.

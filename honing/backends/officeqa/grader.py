@@ -18,20 +18,22 @@ class OfficeQAGrader:
     A score is 1 when the last ``<FINAL_ANSWER>`` matches the reference within
     ``tolerance``, else 0. An agent that did not finish scores 0 with the reason
     rather than raising, since the harness may be why. Feedback names the
-    agent's answer and the source bulletin, and leaves out the reference answer
-    unless ``reveal_answer`` is set: a method that saw answers could write them
-    into a skill, and the next gate on the same questions would reward the leak.
+    agent's answer, the reference answer, and the source bulletin, which gives a
+    reflective method the most to work with. A method can then write answers
+    into a skill and pass the next gate on the same questions by memory; set
+    ``reveal_answer`` to False, or gate on questions the method never sees, when
+    that matters.
 
     Args:
         suite: The questions being graded.
         tolerance: The relative error accepted; 0 is the benchmark's setting.
-        reveal_answer: Put the reference answer in the feedback of a wrong answer.
+        reveal_answer: Put the reference answer in the feedback of every zero score.
 
     Raises:
         ContractError: ``tolerance`` is outside ``[0, 1)``.
     """
 
-    def __init__(self, suite: OfficeQASuite, tolerance: float = 0.0, reveal_answer: bool = False) -> None:
+    def __init__(self, suite: OfficeQASuite, tolerance: float = 0.0, reveal_answer: bool = True) -> None:
         require(0.0 <= tolerance < 1.0, f"tolerance must be in [0, 1), got {tolerance}")
         self._suite = suite
         self._tolerance = tolerance
@@ -52,17 +54,17 @@ class OfficeQAGrader:
         """
         question = self._suite.question_for(task)
         where = ", ".join(question.source_files) or "an unlisted bulletin"
+        label = f" The reference answer is {question.answer!r}." if self._reveal else ""
         if outcome.exit_code == _TIMED_OUT:
-            return Grade(0.0, f"The agent was stopped at the time limit before answering. The figure is in {where}.")
+            return Grade(0.0, f"The agent was stopped at the time limit before answering.{label} It is in {where}.")
         if outcome.exit_code != 0:
-            return Grade(0.0, f"The agent did not finish ({_status(outcome)}). The figure is in {where}.")
+            return Grade(0.0, f"The agent did not finish ({_status(outcome)}).{label} It is in {where}.")
         if "<final_answer>" not in outcome.final_output.lower():
-            return Grade(0.0, f"The agent answered without <FINAL_ANSWER> tags. The figure is in {where}.")
+            return Grade(0.0, f"The agent answered without <FINAL_ANSWER> tags.{label} It is in {where}.")
         answer = reward.extract_final_answer(outcome.final_output)
         if reward.score_answer(question.answer, outcome.final_output, self._tolerance) >= 1.0:
             return Grade(1.0, f"Correct: answered {answer!r}, from {where}.")
-        expected = f" The reference answer is {question.answer!r}." if self._reveal else ""
-        return Grade(0.0, f"Incorrect: answered {answer!r}. The figure is in {where}.{expected}")
+        return Grade(0.0, f"Incorrect: answered {answer!r}.{label} It is in {where}.")
 
 
 def _status(outcome: EpisodeOutcome) -> str:

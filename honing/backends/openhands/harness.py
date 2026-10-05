@@ -137,11 +137,11 @@ def plan_agent(spec: HarnessSpec, policy: ToolPolicy, max_iterations: int) -> Ag
     servers = _mcp_settings(spec.get(MCP_SETTINGS), policy)
     files = tuple(path for path in settings if path not in (AGENT_SETTINGS, MCP_SETTINGS))
 
-    routes = {path: "system_message" for path in by_kind.get("instructions", [])}
+    routes = dict.fromkeys(by_kind.get("instructions", []), "system_message")
     for skill in skills:
         routes[skill.path] = f"skill:{skill.name}"
-        routes.update({resource: f"skill_resource:{skill.name}" for resource in skill.resources})
-    routes.update({path: "workspace_file" for path in files})
+        routes.update(dict.fromkeys(skill.resources, f"skill_resource:{skill.name}"))
+    routes.update(dict.fromkeys(files, "workspace_file"))
     if AGENT_SETTINGS in settings:
         routes[AGENT_SETTINGS] = "tools"
     if MCP_SETTINGS in settings:

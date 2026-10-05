@@ -91,7 +91,7 @@ def test_an_unknown_question_is_refused(csv_path: Path) -> None:
         (
             "<FINAL_ANSWER>508</FINAL_ANSWER>",
             0.0,
-            "Incorrect: answered '508'. The figure is in treasury_bulletin_1944",
+            "Incorrect: answered '508'. The reference answer is '507'. It is in treasury_bulletin_1944",
         ),
         ("The answer is 507.", 0.0, "without <FINAL_ANSWER> tags"),
     ],
@@ -108,15 +108,14 @@ def test_answers_are_scored_by_officeqa_s_own_scorer(
 
 
 @pytest.mark.unit
-def test_a_wrong_answer_s_feedback_hides_the_reference_unless_asked(tmp_path: Path, csv_path: Path) -> None:
+def test_feedback_carries_the_reference_answer_unless_told_not_to(tmp_path: Path, csv_path: Path) -> None:
     suite = load_suite(csv_path, ["UID0002"])
-    outcome = _outcome(tmp_path, "<FINAL_ANSWER>508</FINAL_ANSWER>")
+    wrong = _outcome(tmp_path, "<FINAL_ANSWER>508</FINAL_ANSWER>")
+    untagged = _outcome(tmp_path, "It is 507.")
 
-    hidden = _grade(OfficeQAGrader(suite), outcome)
-    shown = _grade(OfficeQAGrader(suite, reveal_answer=True), outcome)
-
-    assert "507" not in (hidden.feedback or "")
-    assert "reference answer is '507'" in (shown.feedback or "")
+    assert "reference answer is '507'" in (_grade(OfficeQAGrader(suite), wrong).feedback or "")
+    assert "reference answer is '507'" in (_grade(OfficeQAGrader(suite), untagged).feedback or "")
+    assert "507" not in (_grade(OfficeQAGrader(suite, reveal_answer=False), wrong).feedback or "")
 
 
 @pytest.mark.unit

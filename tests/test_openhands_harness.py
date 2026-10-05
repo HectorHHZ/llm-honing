@@ -42,7 +42,7 @@ def test_each_kind_takes_its_route() -> None:
         ("b.md", HarnessFile("instructions", "second")),
         ("AGENTS.md", HarnessFile("instructions", "first")),
         ("skills/search/SKILL.md", _skill()),
-        ("skills/search/scripts/find.sh", _skill("grep -rn \"$1\" .\n")),
+        ("skills/search/scripts/find.sh", _skill('grep -rn "$1" .\n')),
         ("skills/search/references/tables.md", _skill("units are in headers\n")),
         ("notes/style.md", _skill("be brief\n")),
         ("config/extra.yaml", HarnessFile("settings", "a: 1\n")),
@@ -177,7 +177,7 @@ def test_a_harness_directory_maps_onto_kinds(tmp_path: Path) -> None:
         "skills/search/SKILL.md": "skill",
     }
     (tmp_path / "notes.txt").write_text("stray\n")
-    with pytest.raises(ContractError, match="outside the harness layout: \\['notes.txt'\\]"):
+    with pytest.raises(ContractError, match=r"outside the harness layout: \['notes\.txt'\]"):
         harness_from_directory(tmp_path)
 
 
