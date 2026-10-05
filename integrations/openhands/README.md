@@ -97,7 +97,7 @@ The scripted method in `configs/e2e/openhands_officeqa.json` proposes two edits:
 
 ## Known gaps
 
-- Core cannot represent a hosted model. `honing.backends.hosted` gives one a stand-in snapshot so harness moves can be gated; nothing stops a config from scheduling a train move on it.
+- Core cannot represent a model it only reaches through a URL. `honing.backends.llm_gateway` gives one a stand-in snapshot so harness moves can be gated; nothing stops a config from scheduling a train move on it.
 - `PolicyEndpoint.runtime` has no OpenAI-compatible value; the runner uses `sglang`, as the stand-in policy server does.
 - The agent runs on the host, as the current user, in `work/`. Mounts are symlinks and not write-protected. A sandbox (#16) should come before a method searches over toolsets.
 - `command`, `hook`, and `program` files are refused.

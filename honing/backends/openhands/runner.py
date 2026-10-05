@@ -20,7 +20,7 @@ import weakref
 from collections.abc import Mapping
 from pathlib import Path
 
-from honing.backends.hosted import HostedEndpoints
+from honing.backends.llm_gateway import GatewayEndpoints
 from honing.backends.openhands.harness import AGENT, AgentPlan, ToolPolicy, plan_agent
 from honing.core import (
     ContractError,
@@ -50,7 +50,7 @@ class OpenHandsEpisodeRunner:
         worker: The worker script.
         workspaces: Where episode directories are created.
         endpoints: Resolves a policy to its OpenAI-compatible endpoint. With
-            :class:`~honing.backends.hosted.HostedEndpoints`, the worker also
+            :class:`~honing.backends.llm_gateway.GatewayEndpoints`, the worker also
             gets the model's API key (through the environment, never on disk)
             and prices.
         tools: What a harness may give the agent.
@@ -171,16 +171,16 @@ class OpenHandsEpisodeRunner:
         if endpoint.runtime != "sglang":
             raise ContractError(f"OpenHands needs an OpenAI-compatible endpoint, not a {endpoint.runtime} one")
         access: dict[str, object] = {"base_url": endpoint.base_url, "model": endpoint.served_model}
-        if isinstance(self._endpoints, HostedEndpoints):
-            hosted = self._endpoints.hosted(policy)
-            key = hosted.api_key_env
+        if isinstance(self._endpoints, GatewayEndpoints):
+            model = self._endpoints.model(policy)
+            key = model.api_key_env
             if key is not None and not (self._environment.get(key) or os.environ.get(key)):
-                raise ContractError(f"{hosted.model} needs its API key in the environment variable {key}")
+                raise ContractError(f"{model.model} needs its API key in the environment variable {key}")
             access["api_key_env"] = key
-            if hosted.input_usd_per_million is not None:
-                access["input_cost_per_token"] = hosted.input_usd_per_million / 1e6
-            if hosted.output_usd_per_million is not None:
-                access["output_cost_per_token"] = hosted.output_usd_per_million / 1e6
+            if model.input_usd_per_million is not None:
+                access["input_cost_per_token"] = model.input_usd_per_million / 1e6
+            if model.output_usd_per_million is not None:
+                access["output_cost_per_token"] = model.output_usd_per_million / 1e6
         return access
 
     def _prepare(self, spec: HarnessSpec, task: Task, plan: AgentPlan, access: Mapping[str, object]) -> Path:

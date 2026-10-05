@@ -36,7 +36,7 @@
   },
   "components": {
     "model_source": {
-      "factory": "honing.backends.hosted:model_source",
+      "factory": "honing.backends.llm_gateway:model_source",
       "args": {
         "base_url": "https://openrouter.ai/api/v1",
         "model": "deepseek/deepseek-v4-flash",
@@ -46,7 +46,7 @@
       }
     },
     "endpoints": {
-      "factory": "honing.backends.hosted:endpoints",
+      "factory": "honing.backends.llm_gateway:endpoints",
       "args": {
         "base_url": "https://openrouter.ai/api/v1",
         "model": "deepseek/deepseek-v4-flash",

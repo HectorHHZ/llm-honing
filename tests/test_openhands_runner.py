@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from honing.backends.hosted import HostedEndpoints, HostedModel, endpoints, model_source
+from honing.backends.llm_gateway import GatewayEndpoints, GatewayModel, endpoints, model_source
 from honing.backends.openhands import (
     AGENT_SETTINGS,
     OpenHandsDeliveryProbe,
@@ -37,7 +37,7 @@ from honing.e2e.components import PipelineContext
 
 REPO = Path(__file__).resolve().parents[1]
 FAKE_WORKER = REPO / "tests/fakes/openhands_worker.py"
-MODEL = HostedModel(
+MODEL = GatewayModel(
     base_url="https://example.invalid/api/v1",
     model="vendor/cheap-model",
     api_key_env="HONING_TEST_KEY",
@@ -60,7 +60,7 @@ def _key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HONING_TEST_KEY", "secret-value-123")
 
 
-def _policy(model: HostedModel = MODEL) -> PolicyRef:
+def _policy(model: GatewayModel = MODEL) -> PolicyRef:
     snapshot = model.snapshot()
     return PolicyRef(snapshot.checkpoint, snapshot.architecture, "master")
 
@@ -72,7 +72,7 @@ def _runner(tmp_path: Path, **overrides: object) -> OpenHandsEpisodeRunner:
         "python": Path(sys.executable),
         "worker": FAKE_WORKER,
         "workspaces": tmp_path / "workspaces",
-        "endpoints": HostedEndpoints(MODEL),
+        "endpoints": GatewayEndpoints(MODEL),
         "tools": ToolPolicy(allowed=frozenset({"terminal", "file_editor", "grep"})),
         "mounts": {"corpus": corpus},
         **overrides,
@@ -227,16 +227,16 @@ def test_bad_settings_are_refused_at_construction(tmp_path: Path, overrides: dic
 
 
 @pytest.mark.unit
-def test_a_hosted_model_is_one_stable_policy(tmp_path: Path) -> None:
-    same = HostedModel(base_url="https://example.invalid/api/v1/", model="vendor/cheap-model")
-    other = HostedModel(base_url="https://example.invalid/api/v1", model="vendor/other")
+def test_a_gateway_model_is_one_stable_policy(tmp_path: Path) -> None:
+    same = GatewayModel(base_url="https://example.invalid/api/v1/", model="vendor/cheap-model")
+    other = GatewayModel(base_url="https://example.invalid/api/v1", model="vendor/other")
     context = PipelineContext(root=tmp_path, work_dir=tmp_path)
 
     assert MODEL.checksum == same.checksum != other.checksum
-    assert MODEL.snapshot().checkpoint.location == "hosted://example.invalid/api/v1/vendor/cheap-model"
-    assert HostedEndpoints(MODEL).resolve(_policy()).served_model == "vendor/cheap-model"
-    with pytest.raises(ContractError, match="no hosted model serves"):
-        HostedEndpoints(other).resolve(_policy())
+    assert MODEL.snapshot().checkpoint.location == "gateway://example.invalid/api/v1/vendor/cheap-model"
+    assert GatewayEndpoints(MODEL).resolve(_policy()).served_model == "vendor/cheap-model"
+    with pytest.raises(ContractError, match="no gateway model serves"):
+        GatewayEndpoints(other).resolve(_policy())
     fields = {"base_url": "https://example.invalid/api/v1", "model": "m"}
     snapshot = model_source(context, **fields).materialize(tmp_path)
     assert endpoints(context, **fields).resolve(PolicyRef(snapshot.checkpoint, snapshot.architecture, "master"))
