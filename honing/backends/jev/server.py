@@ -21,6 +21,7 @@ Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the
 - Laya: ``--model typed-decisions --model-config-dir <records> --laya-source <checkout>``
 - Kev: ``--family kev --kev-source <checkout>``
 - NanoJev: ``--family nanojev --nanojev-source <checkout>``
+- StartLux-Decision: ``--family startlux --startlux-source <checkout> --model startlux-4b``
 - djev: ``--family djev --djev-url http://127.0.0.1:8011 --model dgemma`` (no local pins/GPU)
 """
 
@@ -174,7 +175,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve a local decision model or bridge a remote djev server.")
-    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "djev"), default="laya")
+    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "startlux", "djev"), default="laya")
     parser.add_argument("--pins", type=Path, help="local families: pins.json naming source and model revisions")
     parser.add_argument(
         "--model",
@@ -184,6 +185,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--laya-source", type=Path, help="laya: Laya checkout at the pinned revision")
     parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")
     parser.add_argument("--nanojev-source", type=Path, help="nanojev: NanoJev checkout at the pinned revision")
+    parser.add_argument(
+        "--startlux-source", type=Path, help="startlux: StartLux-Decision checkout at the pinned revision"
+    )
     parser.add_argument("--djev-url", help="djev: upstream base URL, optionally ending in /v1")
     parser.add_argument("--djev-timeout", type=float, default=60.0)
     parser.add_argument("--djev-samples", type=int, default=1)
@@ -191,7 +195,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--dtype", choices=("bf16", "fp32"), default="bf16", help="kev: serving precision")
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
-    parser.add_argument("--max-len", type=int, default=2048, help="laya, nanojev: input token limit")
+    parser.add_argument(
+        "--max-len", type=int, help="laya, nanojev (default 2048), startlux (default 8192): input token limit"
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
@@ -225,6 +231,22 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
         )
     if args.pins is None:
         parser.error("local model families need --pins")
+    if args.family == "startlux":
+        from honing.backends.jev.startlux import StartLuxDecisionModel, StartLuxSettings
+
+        if args.startlux_source is None:
+            parser.error("--family startlux needs --startlux-source")
+        if args.checkpoint_manifest is not None:
+            parser.error("startlux serves the pinned releases only; it has no trained checkpoints yet")
+        return StartLuxDecisionModel.load(
+            StartLuxSettings(
+                pins_path=args.pins,
+                source_dir=args.startlux_source,
+                model=args.model or "startlux-4b",
+                gpu=args.gpu,
+                max_length=args.max_len or 8192,
+            )
+        )
     if args.family == "nanojev":
         from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings
 
@@ -237,7 +259,7 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
                 model=args.model or "nanojev",
                 gpu=args.gpu,
                 checkpoint_manifest=args.checkpoint_manifest,
-                max_length=args.max_len,
+                max_length=args.max_len or 2048,
             )
         )
     if args.family == "kev":
@@ -267,7 +289,7 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
             source_dir=args.laya_source,
             gpu=args.gpu,
             checkpoint_manifest=args.checkpoint_manifest,
-            max_len=args.max_len,
+            max_len=args.max_len or 2048,
         )
     )
 

@@ -35,6 +35,18 @@ The Kev family has no counterpart in #49, so these compare Honing with Kev's own
 | `kev_serving.sh <out>` | same computation: 56 of 56 identical; fp32: identical; `kev.serve` defaults: largest difference 0.009, one near-tie (0.1918 vs 0.1932) chosen differently |
 | `kev_training.py` | sft validation loss 2.01 to 1.31; the trained checkpoint serves at temperature 1.0; grpo raises the favored option from 0.39 to 0.9994, on 16 of 16 states; 3.5 minutes for all three steps |
 
+## StartLux-Decision against StartLux's own server
+
+`startlux_serving.py <our-gpu> <reference-gpu> <out>` starts `startlux_decision.server` at the pinned commit on one GPU and loads Honing's `StartLuxDecisionModel` on another. It sends both the 24 serving requests plus 3 with long logs that make Honing trim the state; the reference gets the state text Honing sent the model. It needs the environment from `scripts/setup-startlux.sh` (`STARTLUX_PYTHON`, `STARTLUX_SOURCE_DIR`), and `STARTLUX_MODEL` picks the size. Results on H100s, 56 questions per model:
+
+| Model | Graph and eager paths (41 questions) | Requests StartLux runs on its shared-prefix path (15 questions) | Median latency, untrimmed requests |
+|---|---|---|---|
+| `startlux-0.8b` | identical probabilities | same choice 15 of 15, largest difference 0.008 | 8.3 ms |
+| `startlux-4b` | identical probabilities | same choice 15 of 15, largest difference 0.028 | 14.4 ms |
+| `startlux-27b` | identical probabilities | same choice 12 of 15, largest difference 0.012 | 49.0 ms |
+
+The 15 differing questions come from requests with two or more questions over 4,096 tokens, where the reference reads the letters in bf16 and Honing, with that path off, reads them in fp32. The three 27B questions that choose differently are near-ties in the reference's bf16 values; one is an exact tie (0.3535 and 0.3535). All three servers passed StartLux's own graph self-test with a difference of 0.0 over 40 graphs. The long requests trimmed 2,873 entries in all, and the longest prompt was 8,179 tokens.
+
 ## Real game controller parity on CPU
 
 `game_parity.py` compares the original #49 controller with the extracted

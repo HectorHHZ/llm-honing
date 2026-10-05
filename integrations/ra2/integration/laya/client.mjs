@@ -6,8 +6,14 @@ const PYTHON_VARIABLE = {
     laya: "LAYA_PYTHON",
     kev: "KEV_PYTHON",
     nanojev: "NANOJEV_PYTHON",
+    startlux: "STARTLUX_PYTHON",
 };
-const SETTING_PREFIX = { laya: "LAYA", kev: "KEV", nanojev: "NANOJEV" };
+const SETTING_PREFIX = {
+    laya: "LAYA",
+    kev: "KEV",
+    nanojev: "NANOJEV",
+    startlux: "STARTLUX",
+};
 export class LayaClient {
     constructor({
         family = "laya",
