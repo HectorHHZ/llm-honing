@@ -138,6 +138,14 @@ Fill in every section of the pull request template. In particular:
   evidence.
 - **Compatibility** describes changes to protocols, configuration, persisted
   data, or dependencies. Write "None" when unaffected.
+- **End-to-end** reports the CI `e2e` result and any run CI cannot do. When
+  that run trains anything, either a harness evolving or model weights being
+  post-trained, it also links the run's Weights & Biases (wandb) log. The log
+  records every step (each iteration, or each training step) with its scores
+  or losses, plus the commit and configuration the run used. Make the run
+  readable by the maintainers, and put the charts a reviewer needs in the pull
+  request as well, as #105 does. If the run could not log to wandb, say why
+  and attach the same numbers some other way.
 - **AI assistance** names any tool that made a non-trivial contribution.
 
 A pull request needs one maintainer approval and a green CI run to merge.
