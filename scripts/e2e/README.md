@@ -1,6 +1,6 @@
 # End-to-end runs
 
-Every script here runs on a CPU with no model, GPU, or game, and CI's `e2e` job runs each on every pull request.
+Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on every pull request, except the two OpenHands configs, which need their own environment and, for OfficeQA, a model key ([integrations/openhands/README.md](../../integrations/openhands/README.md)).
 
 | Command | What it runs |
 | --- | --- |
@@ -8,6 +8,8 @@ Every script here runs on a CPU with no model, GPU, or game, and CI's `e2e` job 
 | `python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json` | the checks a harness runner must pass before it joins a campaign |
 | `python scripts/e2e/check_trainer.py --config configs/e2e/all_planes.json` | the checks a trainer must pass before it joins a campaign |
 | `python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json` | the RA2 runner and grader in a campaign, with stand-in match processes |
+| `python scripts/e2e/check_runner.py --config configs/e2e/openhands.json` (and `honing_pipeline.py`) | the runner checks and the all-planes campaign with OpenHands as the agent, against the stand-in policy; needs the OpenHands environment, so CI does not run it |
+| `python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json` (and `honing_pipeline.py`) | OpenHands on three OfficeQA questions with a real model; needs `OPENROUTER_API_KEY` and fetched data, so CI does not run it |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
 | `node scripts/e2e/tank-duel.mjs` | a decision server, the tank games' HTTP bridge, and both engines; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each engine plays |
 

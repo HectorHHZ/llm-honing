@@ -1,5 +1,5 @@
 {
-  "description": "OpenHands answering a few OfficeQA questions with a cheap hosted model (DeepSeek V4 Flash through OpenRouter). The harness plane is real: the OpenHands runner, OfficeQA's own scorer, and a scripted method whose two moves add a search skill and then widen the toolset, each gated on the same questions. Every other plane is the walking skeleton's fake and is never scheduled. Fetch the data first: python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016",
+  "description": "OpenHands on three real OfficeQA questions with a cheap model (DeepSeek V4 Flash on OpenRouter), about $0.11 per script. Needs OPENROUTER_API_KEY, the OpenHands environment, and the data: python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016 (with HF_TOKEN). Run: python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json, then the same with honing_pipeline.py. Only the harness plane is real; its two scripted moves add a search skill, then the grep and glob tools, each gated on the same three questions. The other planes are fakes that are never scheduled but must be named.",
   "work_dir": "runs/e2e-openhands-officeqa",
   "requires": {
     "env": [
