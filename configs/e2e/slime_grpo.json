@@ -1,0 +1,138 @@
+{
+  "description": "Slime's declared support in a full campaign on a CPU: GRPO moves on harness rollouts alternate with harness evolution, each judged by the gate, then a rollback. The trainer is a stand-in that declares honing.backends.slime.SUPPORT and writes every batch in Slime's rollout layout; scripts/e2e/slime_grpo_step.py runs the real SlimeTrainer on a GPU.",
+  "work_dir": "runs/e2e-slime-grpo",
+  "requires": {
+    "env": [],
+    "commands": [],
+    "paths": []
+  },
+  "tasks": {
+    "factory": "tests.fakes.pipeline:tasks"
+  },
+  "harness_seed": {
+    "factory": "tests.fakes.pipeline:harness_seed"
+  },
+  "components": {
+    "model_source": {
+      "factory": "tests.fakes.pipeline:model_source"
+    },
+    "endpoints": {
+      "factory": "tests.fakes.pipeline:endpoints"
+    },
+    "trainer": {
+      "factory": "tests.fakes.slime:trainer",
+      "args": {
+        "gain": 0.1
+      }
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "rollout": {
+      "factory": "tests.fakes.pipeline:rollout"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "tests.fakes.pipeline:runner"
+    },
+    "grader": {
+      "factory": "tests.fakes.pipeline:grader"
+    },
+    "method": {
+      "factory": "tests.fakes.pipeline:method"
+    }
+  },
+  "conformance": {
+    "probe": {
+      "factory": "honing.e2e.workspace_runner:workspace_probe"
+    },
+    "concurrent": 4
+  },
+  "trainer_check": {
+    "jobs": [
+      {
+        "algorithm": "grpo",
+        "steps": 1,
+        "rollout": "harness"
+      }
+    ],
+    "samples_per_task": 2
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    },
+    "prune": {
+      "no_regression": {
+        "max_regression": 0.05
+      }
+    },
+    "quantize": {
+      "no_regression": {
+        "max_regression": 0.01
+      }
+    }
+  },
+  "defaults": {
+    "train": {
+      "algorithm": "grpo",
+      "steps": 1,
+      "rollout": "harness"
+    },
+    "budget": {
+      "keep_ratio": 0.75
+    },
+    "scheme": {
+      "weight_format": "int4",
+      "granularity": "group",
+      "group_size": 128
+    }
+  },
+  "schedule": [
+    {
+      "kind": "train",
+      "algorithm": "grpo",
+      "steps": 1,
+      "rollout": "harness"
+    },
+    {
+      "kind": "harness",
+      "label": "verify"
+    },
+    {
+      "kind": "train",
+      "algorithm": "grpo",
+      "steps": 1,
+      "rollout": "harness"
+    },
+    {
+      "kind": "harness",
+      "label": "nothing-left"
+    },
+    {
+      "kind": "rollback",
+      "to": "r0001"
+    }
+  ],
+  "expect": [
+    "published",
+    "published",
+    "published",
+    "skipped",
+    "restored"
+  ]
+}

@@ -25,6 +25,21 @@ Every script here runs on a CPU with no model, GPU, or game, and CI's `e2e` job 
 
 `schedule` lists the steps and `expect` their results; a run whose results differ exits 1. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
 
+## The Slime trainer
+
+`configs/e2e/slime_grpo.json` is the all-planes campaign with Slime's declared support (`honing.backends.slime.SUPPORT`) in the `trainer` slot: GRPO moves on harness rollouts alternate with harness evolution, then a rollback. Its trainer is a stand-in that writes every batch in Slime's rollout layout, because the fake model's checkpoints are not Hugging Face directories. `check_trainer.py` and `honing_pipeline.py` both take it.
+
+The real `SlimeTrainer` needs a GPU and Slime's image. On a cluster without Docker:
+
+```bash
+scripts/e2e/setup-slime-enroot.sh                     # once per node; creates the enroot container "slime"
+git clone https://github.com/THUDM/slime.git /path/to/slime && git -C /path/to/slime checkout 41014d1f
+python scripts/e2e/slime_grpo_step.py --base /path/to/Qwen2.5-1.5B-Instruct --work-dir /tmp/honing-slime \
+    --enroot slime --slime-source /path/to/slime --gpus 0
+```
+
+It samples grouped arithmetic answers from the base model with SGLang, runs one GRPO step through `SlimeTrainer` (Slime train-only on those rollouts), and samples the trained checkpoint on held-out questions. `report.json` has the reward before and after and Slime's metrics. One H100 is enough for a 1.5B model; the run takes about ten minutes, most of it starting SGLang and Megatron.
+
 ## Plugging in a harness runner (OpenHands, Reef, ...)
 
 A harness framework enters as an `EpisodeRunner` (`honing.core`) with its `RunnerSupport`, graded by a `TaskGrader`. `honing.e2e.WorkspaceEpisodeRunner` is the reference: it writes the harness files into a fresh workspace, starts the agent with the policy's OpenAI-compatible endpoint in `HONING_POLICY_URL` and `HONING_POLICY_MODEL`, and collects `result.json` and `transcript.jsonl`.
