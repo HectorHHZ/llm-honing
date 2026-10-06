@@ -1,5 +1,5 @@
 {
-  "description": "OpenHands on three real OfficeQA questions with a cheap model (DeepSeek V4 Flash on OpenRouter), about $0.11 per script. Needs OPENROUTER_API_KEY, the OpenHands environment, and the data: python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016 (with HF_TOKEN). Run: python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json, then the same with honing_pipeline.py. Only the harness plane is real; its two scripted moves add a search skill, then the grep and glob tools, each gated on the same three questions. The other planes are fakes that are never scheduled but must be named.",
+  "description": "OpenHands on three real OfficeQA questions with a cheap model (DeepSeek V4 Flash on OpenRouter), about $0.11 per script. Needs OPENROUTER_API_KEY, the OpenHands environment, and the data: python -m integrations.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016 (with HF_TOKEN). Run: python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json, then the same with honing_pipeline.py. Only the harness plane is real; its two scripted moves add a search skill, then the grep and glob tools, each gated on the same three questions. The other planes are fakes that are never scheduled but must be named.",
   "work_dir": "runs/e2e-openhands-officeqa",
   "requires": {
     "env": [
@@ -9,11 +9,12 @@
     "paths": [
       "integrations/openhands/.venv/bin/python",
       "integrations/officeqa/.cache/corpus",
-      "integrations/officeqa/.cache/officeqa_full.csv"
+      "integrations/officeqa/.cache/officeqa_full.csv",
+      "integrations/officeqa/.cache/reward.py"
     ]
   },
   "tasks": {
-    "factory": "honing.backends.officeqa.e2e:tasks",
+    "factory": "integrations.officeqa.e2e:tasks",
     "args": {
       "data_dir": "{root}/integrations/officeqa/.cache",
       "uids": [
@@ -104,7 +105,7 @@
       }
     },
     "grader": {
-      "factory": "honing.backends.officeqa.e2e:grader",
+      "factory": "integrations.officeqa.e2e:grader",
       "args": {
         "data_dir": "{root}/integrations/officeqa/.cache",
         "uids": [
@@ -115,7 +116,7 @@
       }
     },
     "method": {
-      "factory": "honing.harness.methods.scripted:method",
+      "factory": "integrations.officeqa.scripted:method",
       "args": {
         "edits": [
           {

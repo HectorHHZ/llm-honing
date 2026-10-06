@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from integrations.officeqa.scripted import ScriptedEdit, ScriptedMethod, method
 
 from honing.campaign import ScriptedScheduler
 from honing.core import ContractError, Move, protocols
 from honing.e2e.components import PipelineContext
-from honing.harness.methods.scripted import ScriptedEdit, ScriptedMethod, method
 from tests.fakes.builder import build_campaign
 from tests.fakes.harness import INSTRUCTIONS_PATH
 

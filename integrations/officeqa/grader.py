@@ -1,15 +1,47 @@
-"""Grade OfficeQA episodes with OfficeQA's own scorer, vendored unchanged in :mod:`honing.backends.officeqa.reward`."""
+"""Grade OfficeQA episodes with OfficeQA's own scorer, which :mod:`integrations.officeqa.fetch` downloads."""
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import json
+import re
+from collections.abc import Callable
 from pathlib import Path
 
-from honing.backends.officeqa import reward
-from honing.backends.officeqa.suite import OfficeQASuite
-from honing.core import EpisodeOutcome, Grade, Task, require
+from integrations.officeqa.fetch import SCORER_SHA256
+from integrations.officeqa.suite import OfficeQASuite
+
+from honing.core import ContractError, EpisodeOutcome, Grade, Task, require
+
+Scorer = Callable[[str, str, float], float]
+"""``score(reference, prediction, tolerance)``: 1.0 when the prediction matches, else 0.0."""
 
 _TIMED_OUT = -9
+_FINAL_ANSWER = re.compile(r"<FINAL_ANSWER>\s*(.*?)\s*</FINAL_ANSWER>", re.DOTALL | re.IGNORECASE)
+
+
+def load_scorer(path: Path) -> Scorer:
+    """Loads ``score_answer`` from OfficeQA's ``reward.py``, refusing any other file.
+
+    Args:
+        path: The ``reward.py`` the fetcher wrote.
+
+    Returns:
+        The scorer.
+
+    Raises:
+        ContractError: The file is missing or is not the pinned ``reward.py``.
+    """
+    if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != SCORER_SHA256:
+        raise ContractError(f"{path} is not OfficeQA's pinned reward.py; run python -m integrations.officeqa.fetch")
+    spec = importlib.util.spec_from_file_location("officeqa_reward", path)
+    if spec is None or spec.loader is None:
+        raise ContractError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    score: Scorer = module.score_answer
+    return score
 
 
 class OfficeQAGrader:
@@ -26,6 +58,7 @@ class OfficeQAGrader:
 
     Args:
         suite: The questions being graded.
+        scorer: OfficeQA's scorer, from :func:`load_scorer`.
         tolerance: The relative error accepted; 0 is the benchmark's setting.
         reveal_answer: Put the reference answer in the feedback of every zero score.
 
@@ -33,9 +66,12 @@ class OfficeQAGrader:
         ContractError: ``tolerance`` is outside ``[0, 1)``.
     """
 
-    def __init__(self, suite: OfficeQASuite, tolerance: float = 0.0, reveal_answer: bool = True) -> None:
+    def __init__(
+        self, suite: OfficeQASuite, scorer: Scorer, tolerance: float = 0.0, reveal_answer: bool = True
+    ) -> None:
         require(0.0 <= tolerance < 1.0, f"tolerance must be in [0, 1), got {tolerance}")
         self._suite = suite
+        self._scorer = scorer
         self._tolerance = tolerance
         self._reveal = reveal_answer
 
@@ -59,12 +95,12 @@ class OfficeQAGrader:
             return Grade(0.0, f"The agent was stopped at the time limit before answering.{label} It is in {where}.")
         if outcome.exit_code != 0:
             return Grade(0.0, f"The agent did not finish ({_status(outcome)}).{label} It is in {where}.")
-        if "<final_answer>" not in outcome.final_output.lower():
+        answers = _FINAL_ANSWER.findall(outcome.final_output)
+        if not answers:
             return Grade(0.0, f"The agent answered without <FINAL_ANSWER> tags.{label} It is in {where}.")
-        answer = reward.extract_final_answer(outcome.final_output)
-        if reward.score_answer(question.answer, outcome.final_output, self._tolerance) >= 1.0:
-            return Grade(1.0, f"Correct: answered {answer!r}, from {where}.")
-        return Grade(0.0, f"Incorrect: answered {answer!r}.{label} It is in {where}.")
+        if self._scorer(question.answer, outcome.final_output, self._tolerance) >= 1.0:
+            return Grade(1.0, f"Correct: answered {answers[-1]!r}, from {where}.")
+        return Grade(0.0, f"Incorrect: answered {answers[-1]!r}.{label} It is in {where}.")
 
 
 def _status(outcome: EpisodeOutcome) -> str:

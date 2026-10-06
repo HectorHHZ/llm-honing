@@ -23,7 +23,7 @@ python scripts/e2e/honing_pipeline.py --config configs/e2e/openhands.json
 Three OfficeQA questions with DeepSeek V4 Flash on OpenRouter. Needs `HF_TOKEN` (the dataset is gated, approved automatically) and `OPENROUTER_API_KEY`:
 
 ```bash
-python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016
+python -m integrations.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016
 python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json
 python scripts/e2e/honing_pipeline.py --config configs/e2e/openhands_officeqa.json
 ```
@@ -91,9 +91,9 @@ A harness asking for a tool or server outside the policy is refused with `harnes
 
 ## OfficeQA
 
-`honing.backends.officeqa` is OfficeQA as a task suite. The prompt carries what the grader needs (the documents are in `corpus/`, the answer goes in `<FINAL_ANSWER>` tags); search advice belongs in the harness. `OfficeQAGrader` scores with OfficeQA's own `reward.py`, vendored unchanged, at tolerance 0, and its feedback gives the agent's answer, the reference answer, and the source bulletin, so a reflective method can see exactly what went wrong. A method can then memorize answers into a skill and pass the next gate on the same questions; set `reveal_answer` to false, or gate on held-out questions, when that matters. `fetch.py` downloads the chosen questions and only their bulletins.
+`integrations/officeqa` is OfficeQA as an example task suite, kept outside the `honing` package. The prompt carries what the grader needs (the documents are in `corpus/`, the answer goes in `<FINAL_ANSWER>` tags); search advice belongs in the harness. `OfficeQAGrader` scores with OfficeQA's own `reward.py`, which the fetcher downloads at a pinned commit and checks by hash, at tolerance 0, and its feedback gives the agent's answer, the reference answer, and the source bulletin, so a reflective method can see exactly what went wrong. A method can then memorize answers into a skill and pass the next gate on the same questions; set `reveal_answer` to false, or gate on held-out questions, when that matters. `fetch.py` downloads the chosen questions, only their bulletins, and the scorer.
 
-The scripted method in `configs/e2e/openhands_officeqa.json` proposes two edits: the skill in `integrations/officeqa/skills/treasury-bulletins/`, then the `grep` and `glob` tools. With three questions and one episode each, a gate mostly measures sampling noise; the config demonstrates the loop, not that either edit helps.
+The scripted method (`integrations/officeqa/scripted.py`) in `configs/e2e/openhands_officeqa.json` proposes two edits: the skill in `integrations/officeqa/skills/treasury-bulletins/`, then the `grep` and `glob` tools. With three questions and one episode each, a gate mostly measures sampling noise; the config demonstrates the loop, not that either edit helps.
 
 ## Known gaps
 

@@ -9,10 +9,21 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from integrations.officeqa.fetch import SCORER, neighbors
+from integrations.officeqa.grader import OfficeQAGrader, load_scorer
+from integrations.officeqa.suite import load_suite
 
-from honing.backends.officeqa import OfficeQAGrader, load_suite, reward
-from honing.backends.officeqa.fetch import neighbors
 from honing.core import ContractError, EpisodeOutcome, Grade, protocols
+
+FETCHED = Path(__file__).resolve().parents[1] / "integrations/officeqa/.cache"
+
+
+def _exact(reference: str, prediction: str, tolerance: float) -> float:
+    """Stands in for OfficeQA's scorer: the last tagged answer, digits only, against the reference's digits."""
+    tagged = prediction.rsplit("<FINAL_ANSWER>", 1)[-1].split("</FINAL_ANSWER>")[0]
+    digits = "".join(ch for ch in tagged if ch.isdigit())
+    return float(digits == "".join(ch for ch in reference if ch.isdigit()))
+
 
 ROWS = [
     {
@@ -99,7 +110,7 @@ def test_an_unknown_question_is_refused(csv_path: Path) -> None:
 def test_answers_are_scored_by_officeqa_s_own_scorer(
     tmp_path: Path, csv_path: Path, final_output: str, score: float, feedback: str
 ) -> None:
-    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]))
+    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]), _exact)
 
     grade = _grade(grader, _outcome(tmp_path, final_output))
 
@@ -113,9 +124,9 @@ def test_feedback_carries_the_reference_answer_unless_told_not_to(tmp_path: Path
     wrong = _outcome(tmp_path, "<FINAL_ANSWER>508</FINAL_ANSWER>")
     untagged = _outcome(tmp_path, "It is 507.")
 
-    assert "reference answer is '507'" in (_grade(OfficeQAGrader(suite), wrong).feedback or "")
-    assert "reference answer is '507'" in (_grade(OfficeQAGrader(suite), untagged).feedback or "")
-    assert "507" not in (_grade(OfficeQAGrader(suite, reveal_answer=False), wrong).feedback or "")
+    assert "reference answer is '507'" in (_grade(OfficeQAGrader(suite, _exact), wrong).feedback or "")
+    assert "reference answer is '507'" in (_grade(OfficeQAGrader(suite, _exact), untagged).feedback or "")
+    assert "507" not in (_grade(OfficeQAGrader(suite, _exact, reveal_answer=False), wrong).feedback or "")
 
 
 @pytest.mark.unit
@@ -130,7 +141,7 @@ def test_feedback_carries_the_reference_answer_unless_told_not_to(tmp_path: Path
 def test_an_agent_that_did_not_finish_scores_zero_with_the_reason(
     tmp_path: Path, csv_path: Path, exit_code: int, status: str, feedback: str
 ) -> None:
-    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]))
+    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]), _exact)
 
     grade = _grade(grader, _outcome(tmp_path, "<FINAL_ANSWER>507</FINAL_ANSWER>", exit_code, status))
 
@@ -140,7 +151,7 @@ def test_an_agent_that_did_not_finish_scores_zero_with_the_reason(
 
 @pytest.mark.unit
 def test_a_copy_of_a_task_under_another_id_grades_as_the_original(tmp_path: Path, csv_path: Path) -> None:
-    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]))
+    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]), _exact)
     copy = replace(grader._suite.tasks()[0], task_id="UID0002-3")
 
     grade = asyncio.run(grader.grade(copy, _outcome(tmp_path, "<FINAL_ANSWER>507</FINAL_ANSWER>")))
@@ -150,14 +161,27 @@ def test_a_copy_of_a_task_under_another_id_grades_as_the_original(tmp_path: Path
 
 @pytest.mark.unit
 def test_the_grader_satisfies_the_task_grader_protocol(csv_path: Path) -> None:
-    assert isinstance(OfficeQAGrader(load_suite(csv_path, ["UID0002"])), protocols.TaskGrader)
+    assert isinstance(OfficeQAGrader(load_suite(csv_path, ["UID0002"]), _exact), protocols.TaskGrader)
 
 
 @pytest.mark.unit
-def test_the_vendored_scorer_is_upstream_s() -> None:
-    assert reward.score_answer("103,375", "<FINAL_ANSWER>103375</FINAL_ANSWER>") == 1.0
-    assert reward.score_answer("507", "<FINAL_ANSWER>507.6</FINAL_ANSWER>", tolerance=0.0) == 0.0
-    assert reward.score_answer("507", "<FINAL_ANSWER>507.6</FINAL_ANSWER>", tolerance=0.01) == 1.0
+@pytest.mark.skipif(not (FETCHED / SCORER).exists(), reason="OfficeQA's scorer has not been fetched")
+def test_the_fetched_scorer_is_officeqa_s() -> None:
+    score = load_scorer(FETCHED / SCORER)
+
+    assert score("103,375", "<FINAL_ANSWER>103375</FINAL_ANSWER>", 0.0) == 1.0
+    assert score("507", "<FINAL_ANSWER>507.6</FINAL_ANSWER>", 0.0) == 0.0
+    assert score("507", "<FINAL_ANSWER>507.6</FINAL_ANSWER>", 0.01) == 1.0
+
+
+@pytest.mark.unit
+def test_a_scorer_other_than_the_pinned_one_is_refused(tmp_path: Path) -> None:
+    (tmp_path / SCORER).write_text("def score_answer(*args):\n    return 1.0\n")
+
+    with pytest.raises(ContractError, match=r"not OfficeQA's pinned reward\.py"):
+        load_scorer(tmp_path / SCORER)
+    with pytest.raises(ContractError, match=r"not OfficeQA's pinned reward\.py"):
+        load_scorer(tmp_path / "missing.py")
 
 
 @pytest.mark.unit

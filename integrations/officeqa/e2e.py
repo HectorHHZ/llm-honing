@@ -1,6 +1,6 @@
 """Factories that put OfficeQA into a pipeline config (see :mod:`honing.e2e.components`).
 
-``data_dir`` is what :mod:`honing.backends.officeqa.fetch` wrote, and may use ``{root}`` and environment variables.
+``data_dir`` is what :mod:`integrations.officeqa.fetch` wrote, and may use ``{root}`` and environment variables.
 """
 
 from __future__ import annotations
@@ -9,9 +9,10 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from honing.backends.officeqa.fetch import QUESTIONS
-from honing.backends.officeqa.grader import OfficeQAGrader
-from honing.backends.officeqa.suite import OfficeQASuite, load_suite
+from integrations.officeqa.fetch import QUESTIONS, SCORER
+from integrations.officeqa.grader import OfficeQAGrader, load_scorer
+from integrations.officeqa.suite import OfficeQASuite, load_suite
+
 from honing.core import Task
 
 
@@ -44,11 +45,16 @@ def grader(
     Returns:
         The grader.
     """
-    return OfficeQAGrader(_suite(context, data_dir, uids), tolerance=tolerance, reveal_answer=reveal_answer)
+    scorer = load_scorer(_data_dir(context, data_dir) / SCORER)
+    return OfficeQAGrader(_suite(context, data_dir, uids), scorer, tolerance=tolerance, reveal_answer=reveal_answer)
+
+
+def _data_dir(context: object, data_dir: str) -> Path:
+    return Path(os.path.expandvars(data_dir.format(root=str(getattr(context, "root", "."))))).expanduser()
 
 
 def _suite(context: object, data_dir: str, uids: Sequence[str]) -> OfficeQASuite:
-    path = Path(os.path.expandvars(data_dir.format(root=str(getattr(context, "root", "."))))).expanduser()
+    path = _data_dir(context, data_dir)
     shared = getattr(context, "shared", None)
     key = f"officeqa:{path}:{','.join(uids)}"
     cached = shared.get(key) if isinstance(shared, dict) else None

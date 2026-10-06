@@ -1,4 +1,4 @@
-"""OfficeQA questions (databricks/officeqa, CC-BY-SA 4.0) as Honing tasks.
+"""OfficeQA questions (CC-BY-SA 4.0) as Honing tasks.
 
 A task's prompt is the question plus what the grader depends on: where the
 documents are, and that the answer goes in ``<FINAL_ANSWER>`` tags. How to

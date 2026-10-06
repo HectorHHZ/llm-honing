@@ -1,8 +1,11 @@
-"""Download chosen OfficeQA questions and only the bulletins they need, instead of the 460 MB corpus.
+"""Download chosen OfficeQA questions, only the bulletins they need, and OfficeQA's own scorer.
 
-The dataset is gated on Hugging Face (approved automatically); ``HF_TOKEN`` must belong to an account that accepted it.
+The dataset is gated on Hugging Face (approved automatically); ``HF_TOKEN`` must belong to an account that
+accepted it. The scorer, ``reward.py``, is fetched from GitHub at a pinned commit and checked against its hash,
+so grading uses exactly the benchmark's code without copying it into this repository.
 
-Run: ``python -m honing.backends.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016``
+Run from the repository root:
+``python -m integrations.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016``
 """
 
 from __future__ import annotations
@@ -18,16 +21,22 @@ import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 
-from honing.backends.officeqa.suite import CORPUS_DIR, read_questions
+from integrations.officeqa.suite import CORPUS_DIR, read_questions
 
 _DATASET = "https://huggingface.co/datasets/databricks/officeqa/resolve/main"
 QUESTIONS = "officeqa_full.csv"
+SCORER = "reward.py"
+SCORER_SHA256 = "0d91698c87df6d889339aac36f63ae0966607f169890b0bf8b472b26bfe8138f"
+_SCORER_URL = (
+    "https://raw.githubusercontent.com/databricks/officeqa/7b9a3c154ef9fb40215bb67934afc43e6799de16/reward.py"
+)
 _TRANSFORMED = "treasury_bulletins_parsed/transformed"
 _ISSUE = re.compile(r"^treasury_bulletin_(\d{4})_(\d{2})\.txt$")
 
 
-def _download(url: str, target: Path, token: str) -> None:
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+def _download(url: str, target: Path, token: str | None) -> None:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=120) as response:
         data = response.read()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -52,10 +61,10 @@ def neighbors(name: str, count: int) -> list[str]:
 
 
 def fetch(out: Path, uids: Sequence[str], neighbor_count: int, token: str) -> dict[str, str]:
-    """Downloads the questions file and the bulletins the named questions need.
+    """Downloads the questions file, the bulletins the named questions need, and the scorer.
 
-    Writes ``<out>/officeqa_full.csv``, ``<out>/corpus/``, and ``<out>/manifest.json``.
-    Files already present are kept.
+    Writes ``<out>/officeqa_full.csv``, ``<out>/corpus/``, ``<out>/reward.py``, and
+    ``<out>/manifest.json``. Files already present are kept.
 
     Args:
         out: The data directory.
@@ -67,8 +76,13 @@ def fetch(out: Path, uids: Sequence[str], neighbor_count: int, token: str) -> di
         The SHA-256 of each bulletin, by file name.
 
     Raises:
-        SystemExit: A uid is not in the dataset.
+        SystemExit: A uid is not in the dataset, or the scorer's hash differs from the pin.
     """
+    scorer = out / SCORER
+    if not scorer.exists():
+        _download(_SCORER_URL, scorer, None)
+    if hashlib.sha256(scorer.read_bytes()).hexdigest() != SCORER_SHA256:
+        raise SystemExit(f"{scorer} is not OfficeQA's reward.py at the pinned commit; delete it and fetch again")
     csv_path = out / QUESTIONS
     if not csv_path.exists():
         _download(f"{_DATASET}/{QUESTIONS}", csv_path, token)
