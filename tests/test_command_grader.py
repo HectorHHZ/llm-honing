@@ -20,7 +20,8 @@ from typing import Any
 
 import pytest
 
-from honing.core import ContractError, EpisodeOutcome, Grade, Task, TaskGrader
+from honing.core import ContractError, EpisodeOutcome, Grade, HarnessSpec, PolicyRef, RunnerSupport, Task, TaskGrader
+from honing.e2e import check_runner
 from honing.harness.graders import (
     FINAL_OUTPUT_ENV,
     METADATA_ENV,
@@ -33,6 +34,8 @@ from honing.harness.graders import (
     local_workspace,
 )
 from honing.harness.tasks import TaskSuite, load_task_suite
+from tests.fakes.harness import SEED_HARNESS
+from tests.fakes.model import FakeModelSource, FakeWorld
 from tests.fakes.tasks import FakeCommandSandbox, task_line, write_manifest
 
 
@@ -602,3 +605,46 @@ def test_a_cancelled_grade_closes_its_subprocess_on_its_own_loop(
         asyncio.run(cancel_soon())
         gc.collect()
     assert unraisable == []
+
+
+class _SuiteBlindRunner:
+    """A runner that never reads the suite: each episode gets its own empty workspace."""
+
+    support = RunnerSupport(
+        agents=frozenset({"claude_code"}), file_kinds=frozenset({"instructions", "skill"}), programmable_loop=False
+    )
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+        self._count = 0
+
+    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        self._count += 1
+        workspace = self._root / f"episode-{self._count}"
+        workspace.mkdir(parents=True)
+        return EpisodeOutcome(
+            task_id=task.task_id,
+            spec_id=spec.spec_id,
+            policy_checksum=policy.checkpoint.checksum,
+            exit_code=0,
+            workspace_location=str(workspace),
+        )
+
+
+def test_a_command_grader_passes_the_runner_conformance_checks(tmp_path: Path) -> None:
+    # The concurrent check once renamed tasks (t1-0, t1-1, ...), which no suite holds.
+    (tmp_path / "suite").mkdir()
+    grader_argv = _python(PASS)
+    lines = [task_line("t1", grader=grader_argv), task_line("t2", grader=grader_argv)]
+    suite = load_task_suite(write_manifest(tmp_path / "suite", lines))
+    checks = check_runner(
+        _SuiteBlindRunner(tmp_path / "episodes"),
+        CommandGrader(suite, timeout_seconds=60),
+        seed=SEED_HARNESS,
+        tasks=suite.tasks("train"),
+        snapshot=FakeModelSource(FakeWorld()).materialize(tmp_path / "model"),
+    )
+    results = {check.name: (check.passed, check.detail) for check in checks}
+    # Only delivery fails: this runner writes no harness files and no probe is given.
+    assert {name for name, (passed, _) in results.items() if not passed} == {"delivery"}
+    assert results["concurrent"] == (True, "4 episodes at once finished")
