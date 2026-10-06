@@ -111,6 +111,34 @@ The live schedule has its own step kinds: `{"kind": "harness", "repeat": n}`, `{
 
 **Tests.** `tests/test_gepa_live_offline.py` runs this script against a loopback stub for both models, including rate limits, bad keys, timeouts and an outage inside a move; CI's `test-litellm` job runs it. `tests/test_gepa_live.py` (marker `live`) runs it on the real provider and is skipped unless the key is set.
 
+## Logging a run to W&B
+
+A pull request whose end-to-end run trains, as `gepa_live.py` does, links the run's Weights & Biases log (`CONTRIBUTING.md`, "Pull requests"). `honing_pipeline.py` and `gepa_live.py` log a run when their config has a `logging` block. The committed configs have none, so CI and a run without the block log nothing and never import `wandb`. To log a run, copy the config under `runs/` (ignored by git), add the block, and commit your code first, so the logged commit is not `-dirty`:
+
+```json
+"logging": {"wandb": {"project": "llm-honing-e2e", "tags": ["issue-100", "gepa", "live"]}}
+```
+
+The run goes to your own W&B account: `entity` is optional and defaults to the key's. Make the project public, or share it with the maintainers, so the link opens for them.
+
+```
+uv pip install -e ".[dev,gepa,litellm,wandb]"
+export WANDB_API_KEY=...
+python scripts/e2e/gepa_live.py --config runs/gepa_live.logged.json --work-dir runs/gepa-live-7
+```
+
+`"mode": "offline"` writes the run under `<work-dir>/wandb` for a later `wandb sync` and needs no key; the default, `"online"`, needs `WANDB_API_KEY` and refuses to start without it. The script prints the run's link at the start and at the end; put it in the PR's End-to-end section, with the charts a reviewer needs.
+
+| Logged | Where |
+| --- | --- |
+| one step per schedule step, rollbacks and abandoned moves included: `move/kind`, `move/label`, `move/result`, `move/release`, `move/published` | history |
+| the gate's metrics, the candidate's size and `method_episodes`, as `candidate/*`; the selector's metrics as `selector/*` (for GEPA, `selector/gepa_metric_calls`, archive and front sizes, both means) | history |
+| the gate's episode count (`gate/episodes`); for `gepa_live.py`, each move's agent processes, policy and reflection calls, tokens and cost (`usage/*`) | history |
+| the script, the git commit, the pinned model and the config (variable names only) | run config |
+| `summary.json` and `releases/commits.jsonl`, uploaded at the end as copies that name the work directory, the repository and the home directory `<work_dir>`, `<repo>` and `~` | files |
+
+Not logged: keys or environment variables, task prompts, agent outputs, grader feedback, reflection prompts and replies, and decision reasons, which can quote any of these. `commits.jsonl` does hold the harness files GEPA wrote. wandb's own capture of the console, code, git state, installed packages and machine metadata is turned off. If a file under the work directory holds the value of a key the config names, or of `WANDB_API_KEY`, nothing is uploaded and the run exits 1. Only `honing/e2e/tracking.py` imports `wandb`; `tests/test_e2e_tracking.py` and `tests/test_gepa_live_offline.py` run against a stand-in package in `tests/fakes/wandb_stub`, so CI never installs it.
+
 ## Plugging in a trainer (Slime, ...)
 
 A training backend enters as a `Trainer` (`honing.core`) with its `BackendSupport`. The campaign checks every job against that support before calling the trainer (`honing/campaign/rules.py`), draws the batch from `data` or, for on-policy algorithms, from `rollout`, and gates the `TrainResult`.

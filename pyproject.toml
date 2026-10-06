@@ -44,6 +44,8 @@ gepa = ["gepa==0.1.4"]
 # The ChatModel client (honing/harness/models.py). Pinned exactly, never a range: 1.82.7 and 1.82.8
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
 litellm = ["litellm==1.102.1"]
+# Opt-in W&B logging for end-to-end runs (honing/e2e/tracking.py). Pinned exactly, like litellm.
+wandb = ["wandb==0.30.0"]
 
 [project.urls]
 Homepage = "https://github.com/HectorHHZ/llm-honing"
@@ -121,6 +123,11 @@ ignore_missing_imports = true
 # litellm is an optional extra; the documented ".[dev]" setup must type-check without it.
 [[tool.mypy.overrides]]
 module = ["litellm.*"]
+ignore_missing_imports = true
+
+# wandb is an optional extra; the documented ".[dev]" setup must type-check without it.
+[[tool.mypy.overrides]]
+module = ["wandb.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

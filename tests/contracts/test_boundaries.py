@@ -6,6 +6,8 @@
   dependency; Reef is a design reference and is never imported.
 - Only ``honing/harness/models.py`` imports litellm, an optional extra whose
   pin is reviewed on its own.
+- Only ``honing/e2e/tracking.py`` imports wandb, another optional extra, and
+  only when a run asks to be logged.
 - Retired design terms stay out of code and the specification.
 """
 
@@ -78,6 +80,17 @@ def test_only_the_chat_client_imports_litellm(repo_root: Path) -> None:
         if "litellm" in imported_top_levels(path)
     ]
     assert importers == ["honing/harness/models.py"]
+
+
+@pytest.mark.unit
+def test_only_the_run_tracker_imports_wandb(repo_root: Path) -> None:
+    package = repo_root / "honing"
+    importers = [
+        str(path.relative_to(repo_root))
+        for path in sorted(package.rglob("*.py"))
+        if "wandb" in imported_top_levels(path)
+    ]
+    assert importers == ["honing/e2e/tracking.py"]
 
 
 @pytest.mark.unit

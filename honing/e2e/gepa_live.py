@@ -14,7 +14,8 @@ The run writes, under its work directory, the release chain, ``summary.json``,
 agent process), ``reflections.jsonl`` (one row per reflection call) and
 ``faults.jsonl`` (one row per abandoned move). Each check in
 :func:`check_run` passes or fails with the rows that show why, and the run exits 0 only
-if every one passes.
+if every one passes. A ``logging`` block in the config also logs the run to
+W&B, one step per move with its API calls and tokens (:mod:`honing.e2e.tracking`).
 
 An unavailable policy (the agent exits 75 after its own retries) raises
 :class:`PolicyUnavailableError`. The move is abandoned: the campaign has not
@@ -31,7 +32,6 @@ import contextvars
 import json
 import logging
 import os
-import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -60,6 +60,16 @@ from honing.core import (
 )
 from honing.e2e.components import PipelineContext
 from honing.e2e.pipeline import PipelineRun, _move, _step, build
+from honing.e2e.tracking import (
+    WANDB_KEY_ENV,
+    ChainRecords,
+    NullTracker,
+    RunTracker,
+    git_commit,
+    run_config,
+    start_tracker,
+    step_values,
+)
 from honing.e2e.workspace_runner import WorkspaceEpisodeRunner
 from honing.harness.graders import CommandGrader
 from honing.harness.methods.gepa import Archive, GEPAConfig, GEPAMethod, extract_text
@@ -71,7 +81,7 @@ _LOGGER = logging.getLogger(__name__)
 POLICY_UNAVAILABLE = 75  # the minimal agent's exit code, EX_TEMPFAIL
 RUN_LOG = "run_log"
 # Loggers that could print a request; kept quiet whatever the host configures.
-_QUIET_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy", "litellm", "httpx", "openai")
+_QUIET_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy", "litellm", "httpx", "openai", "wandb")
 
 
 class PolicyUnavailableError(HoningError):
@@ -413,6 +423,7 @@ def gepa_method(
 @dataclass(frozen=True)
 class LiveOptions:
     max_consecutive_faults: int = 3
+    policy_price_model: str | None = None  # litellm's name for the policy, to price its tokens
 
 
 FIRST_PUBLISH = "first_publish"
@@ -445,12 +456,23 @@ class _AbortedError(Exception):
     """Enough moves in a row were abandoned that the run stops."""
 
 
-def run_live(pipeline: PipelineRun, schedule: Sequence[Mapping[str, Any]], options: LiveOptions) -> dict[str, Any]:
+def run_live(
+    pipeline: PipelineRun,
+    schedule: Sequence[Mapping[str, Any]],
+    options: LiveOptions,
+    tracker: RunTracker | None = None,
+) -> dict[str, Any]:
     """Run the schedule; an unavailable policy abandons its move, and enough of them in a row end the run."""
     campaign, run_log = pipeline.campaign, _run_log(pipeline.context)
+    tracker = tracker or NullTracker()
+    records = ChainRecords(campaign.chain.record_path)
     steps: list[dict[str, Any]] = []
     consecutive = 0
     first_publish: str | None = None
+
+    def log_step(index: int) -> None:
+        usage = move_usage(run_log, index, options.policy_price_model)
+        tracker.log_step(index, step_values(steps[-1], records.new(), usage))
 
     def harness_move(index: int, entry: Mapping[str, Any]) -> dict[str, Any]:
         nonlocal consecutive
@@ -474,6 +496,7 @@ def run_live(pipeline: PipelineRun, schedule: Sequence[Mapping[str, Any]], optio
                 }
             )
             steps.append({"index": index, "move": move.kind, "label": entry.get("label"), "result": "abandoned"})
+            log_step(index)
             consecutive += 1
             if consecutive >= options.max_consecutive_faults:
                 raise _AbortedError(f"{consecutive} moves in a row abandoned: the policy is unavailable") from None
@@ -489,6 +512,7 @@ def run_live(pipeline: PipelineRun, schedule: Sequence[Mapping[str, Any]], optio
         if outcome.decision is not None and "gepa_served_mean" in outcome.decision.metrics:
             step["served_mean"] = outcome.decision.metrics["gepa_served_mean"]
         steps.append({"index": index, "label": entry.get("label"), **step})
+        log_step(index)
         return steps[-1]
 
     index = 0
@@ -501,6 +525,7 @@ def run_live(pipeline: PipelineRun, schedule: Sequence[Mapping[str, Any]], optio
                 run_log.move, run_log.phase = index, "parent"
                 to = first_publish if entry["to"] == FIRST_PUBLISH else str(entry["to"])
                 steps.append(_rollback(campaign, run_log, index, to))
+                log_step(index)
                 continue
             until_publish = kind == "harness_until_publish"
             for _ in range(int(entry["max_moves"] if until_publish else entry.get("repeat", 1))):
@@ -557,6 +582,32 @@ def _sum_usage(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
         for key in total:
             total[key] += int(row.get("usage", {}).get(key, 0))
     return total
+
+
+def move_usage(run_log: RunLog, index: int, policy_price_model: str | None) -> dict[str, Any]:
+    """One move's agent processes, policy calls and reflection calls, with their tokens and cost."""
+    episodes = [row for row in run_log.episodes if row["move"] == index]
+    reflections = [row for row in run_log.reflections if row["move"] == index]
+    ok = [row for row in reflections if row.get("ok")]
+    priced = [row["cost_usd"] for row in ok if row.get("cost_usd") is not None]
+    policy = _sum_usage(episodes)
+    return {
+        "episodes": len(episodes),
+        "policy_calls": policy["calls"],
+        "policy_failed_calls": policy["failed_calls"],
+        "policy_prompt_tokens": policy["prompt_tokens"],
+        "policy_completion_tokens": policy["completion_tokens"],
+        "policy_cost_usd": (
+            completion_cost_usd(policy_price_model, policy["prompt_tokens"], policy["completion_tokens"])
+            if policy_price_model
+            else None
+        ),
+        "reflection_calls": len(reflections),
+        "reflection_failed_calls": len(reflections) - len(ok),
+        "reflection_input_tokens": sum(int(row["input_tokens"]) for row in ok),
+        "reflection_output_tokens": sum(int(row["output_tokens"]) for row in ok),
+        "reflection_cost_usd": sum(priced) if len(priced) == len(ok) else None,
+    }
 
 
 def usage_report(run_log: RunLog, policy_price_model: str | None) -> dict[str, Any]:
@@ -978,20 +1029,9 @@ def _key_names(config: Any) -> list[str]:
                 walk(item)
 
     walk(config)
+    if isinstance(config, Mapping) and config.get("logging"):
+        names.append(WANDB_KEY_ENV)
     return sorted(set(names))
-
-
-def _git_commit(root: Path) -> str:
-    try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True, timeout=10
-        ).stdout.strip()
-        dirty = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True, timeout=10
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
-    return commit + ("-dirty" if dirty else "")
 
 
 def _configure_logging(work_dir: Path) -> None:
@@ -1022,30 +1062,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     work_dir = pipeline.context.work_dir
     _configure_logging(work_dir)
+    try:
+        tracker = start_tracker(
+            pipeline.tracking,
+            name=work_dir.name,
+            work_dir=work_dir,
+            root=args.root,
+            config=run_config(config, args.root, "gepa_live"),
+        )
+    except Exception as error:  # wandb raises its own errors for a bad key, project or network
+        print(f"cannot start logging: {type(error).__name__}: {error}", file=sys.stderr)
+        return 2
+    if tracker.url:
+        print(f"wandb: {tracker.url}")
     live = config.get("live", {})
-    options = LiveOptions(max_consecutive_faults=int(live.get("max_consecutive_faults", 3)))
-    result = run_live(pipeline, schedule, options)
-    run_log = _run_log(pipeline.context)
-    method = pipeline.context.component("method")
-    validation_ids = list(method.validation_task_ids)
-    max_metric_calls = int(method.config.max_metric_calls)
-    summary: dict[str, Any] = {
-        "config": str(args.config),
-        "git_commit": _git_commit(args.root),
-        "model": config.get("model"),
-        "head": pipeline.campaign.chain.head().release_id,
-        **result,
-        "usage": usage_report(run_log, litellm_model(config["model"]) if "model" in config else None),
-        "work_dir": str(work_dir),
-    }
-    checks = check_run(summary, run_log, work_dir, validation_ids, max_metric_calls)
-    summary["checks"] = [
-        {"name": c.name, "passed": c.passed, "detail": c.detail, "not_exercised": c.not_exercised} for c in checks
-    ]
-    (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    scan = key_scan(work_dir, _key_names(config))
-    summary["checks"].append({"name": scan.name, "passed": scan.passed, "detail": scan.detail, "not_exercised": False})
-    (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    options = LiveOptions(
+        max_consecutive_faults=int(live.get("max_consecutive_faults", 3)),
+        policy_price_model=litellm_model(config["model"]) if "model" in config else None,
+    )
+    code = 1
+    try:
+        summary = _run_and_check(pipeline, schedule, options, tracker, config, args.config, args.root)
+        code = 3 if summary["aborted"] else 0 if all(check["passed"] for check in summary["checks"]) else 1
+    finally:
+        # After the key scan, so a run whose files hold a key uploads none of them.
+        problems = tracker.finish(work_dir, _key_names(config), failed=code != 0)
 
     for step in summary["steps"]:
         scores = (
@@ -1068,9 +1109,47 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             f"not exercised, rerun: {', '.join(names)}. No check failed; the models did not produce what these need."
         )
-    if result["aborted"]:
-        return 3
-    return 0 if all(check["passed"] for check in summary["checks"]) else 1
+    for problem in problems:
+        print("logging:", problem, file=sys.stderr)
+    if tracker.url:
+        print(f"wandb: {tracker.url}")
+    return 1 if problems and code == 0 else code
+
+
+def _run_and_check(
+    pipeline: PipelineRun,
+    schedule: Sequence[Mapping[str, Any]],
+    options: LiveOptions,
+    tracker: RunTracker,
+    config: Mapping[str, Any],
+    config_path: Path,
+    root: Path,
+) -> dict[str, Any]:
+    """Run the schedule, check the run, and write ``summary.json``; returns the summary."""
+    work_dir = pipeline.context.work_dir
+    result = run_live(pipeline, schedule, options, tracker)
+    run_log = _run_log(pipeline.context)
+    method = pipeline.context.component("method")
+    validation_ids = list(method.validation_task_ids)
+    max_metric_calls = int(method.config.max_metric_calls)
+    summary: dict[str, Any] = {
+        "config": str(config_path),
+        "git_commit": git_commit(root),
+        "model": config.get("model"),
+        "head": pipeline.campaign.chain.head().release_id,
+        **result,
+        "usage": usage_report(run_log, options.policy_price_model),
+        "work_dir": str(work_dir),
+    }
+    checks = check_run(summary, run_log, work_dir, validation_ids, max_metric_calls)
+    summary["checks"] = [
+        {"name": c.name, "passed": c.passed, "detail": c.detail, "not_exercised": c.not_exercised} for c in checks
+    ]
+    (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    scan = key_scan(work_dir, _key_names(config))
+    summary["checks"].append({"name": scan.name, "passed": scan.passed, "detail": scan.detail, "not_exercised": False})
+    (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return summary
 
 
 __all__ = [
@@ -1090,6 +1169,7 @@ __all__ = [
     "key_scan",
     "main",
     "manifest_runner",
+    "move_usage",
     "only_not_exercised",
     "openai_endpoints",
     "run_live",

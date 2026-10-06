@@ -10,6 +10,7 @@
   the policy's endpoint.
 - :mod:`honing.e2e.gepa_live` runs GEPA against real model APIs and checks the
   run from what it wrote.
+- :mod:`honing.e2e.tracking` logs a run to W&B when its config asks for it.
 """
 
 from honing.e2e.components import PipelineContext, build_component, missing_requirements, resolve_references

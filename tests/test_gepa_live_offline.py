@@ -102,14 +102,14 @@ class Run:
         return (self.work_dir / "run.log").read_text()
 
 
-def run_script(config: dict[str, Any], tmp_path: Path) -> Run:
+def run_script(config: dict[str, Any], tmp_path: Path, env: dict[str, str] | None = None) -> Run:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(config))
     work_dir = tmp_path / "run"
     result = subprocess.run(
         [sys.executable, "scripts/e2e/gepa_live.py", "--config", str(path), "--work-dir", str(work_dir)],
         cwd=REPO,
-        env={**os.environ, KEY_ENV: KEY},
+        env={**os.environ, KEY_ENV: KEY, **(env or {})},
         capture_output=True,
         text=True,
         timeout=600,
@@ -329,3 +329,105 @@ def test_a_rollback_to_a_release_that_does_not_exist_is_a_real_failure(stub: Ope
     rollback = run.checks["6 rollback"]
     assert (rollback["passed"], rollback["not_exercised"]) == (False, False)
     assert "no release 'r0099'" in rollback["detail"]
+
+
+# ---------------------------------------------------------------- W&B logging, against tests/fakes/wandb_stub
+
+WANDB_STUB = REPO / "tests/fakes/wandb_stub"
+WANDB_KEY = "wandb-stub-key-0123456789abcdef"
+LOGGING = {"wandb": {"project": "honing-e2e", "entity": "honing", "tags": ["issue-100", "gepa", "live"]}}
+
+
+def run_logged(config: dict[str, Any], tmp_path: Path, **env: str) -> tuple[Run, list[dict[str, Any]]]:
+    calls = tmp_path / "wandb-calls.jsonl"
+    run = run_script(
+        {**config, "logging": LOGGING},
+        tmp_path,
+        {"PYTHONPATH": str(WANDB_STUB), "HONING_FAKE_WANDB_LOG": str(calls), "WANDB_API_KEY": WANDB_KEY, **env},
+    )
+    return run, [json.loads(line) for line in calls.read_text().split("\n") if line.strip()]
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_a_logged_run_logs_each_step_with_its_usage_and_no_private_text(stub: OpenAIStub, tmp_path: Path) -> None:
+    schedule = [
+        {"kind": "harness_until_publish", "label": "pre_training", "max_moves": 12},
+        HARNESS_MOVE,
+        {"kind": "rollback", "to": "first_publish"},
+        {**HARNESS_MOVE, "repeat": 2},
+    ]
+    run, calls = run_logged(offline_config(stub, schedule=schedule), tmp_path)
+
+    assert calls[0]["call"] == "init" and calls[0]["config"]["script"] == "gepa_live"
+    assert calls[0]["config"]["model"] == STUB_MODEL and calls[0]["tags"] == ["issue-100", "gepa", "live"]
+    logs = {call["step"]: call["data"] for call in calls if call["call"] == "log"}
+    steps = run.summary["steps"]
+    assert list(logs) == [step["index"] for step in steps]
+    episodes, reflections = run.rows("episodes"), run.rows("reflections")
+    for step in steps:
+        data = logs[step["index"]]
+        assert (data["move/kind"], data["move/result"]) == (step["move"], step["result"])
+        if step["move"] != "harness":
+            continue
+        mine = [row for row in episodes if row["move"] == step["index"]]
+        assert data["usage/episodes"] == len(mine) > 0
+        assert data["usage/policy_calls"] == sum(row["usage"]["calls"] for row in mine)
+        assert data["usage/reflection_calls"] == sum(row["move"] == step["index"] for row in reflections)
+        if step["result"] in ("published", "rejected"):
+            assert {
+                "selector/gepa_metric_calls",
+                "selector/gepa_archive_size",
+                "candidate/gate_candidate_mean",
+            } <= set(data)
+    assert any(step["result"] == "rejected" for step in steps) and any(step["move"] == "rollback" for step in steps)
+    usage = run.summary["usage"]
+    assert sum(data.get("usage/policy_prompt_tokens", 0) for data in logs.values()) == usage["policy"]["prompt_tokens"]
+    assert sum(data.get("usage/reflection_calls", 0) for data in logs.values()) == usage["reflection"]["calls"]
+
+    # What was logged holds no prompt, output, feedback or reply; the uploaded files hold no key.
+    logged = json.dumps([call for call in calls if call["call"] in ("init", "log")])
+    private = [row[name] for row in episodes for name in ("final_output", "feedback")]
+    private += [row[name] for row in reflections for name in ("prompt", "reply") if row.get(name)]
+    private = [text for text in private if isinstance(text, str) and len(text) >= 20]
+    assert private and not [text for text in private if text in logged]
+    everything = json.dumps(calls)
+    assert KEY not in everything and WANDB_KEY not in everything
+    saves = [call for call in calls if call["call"] == "save"]
+    upload = run.work_dir / "wandb-upload"
+    assert [Path(call["path"]).relative_to(upload).as_posix() for call in saves] == [
+        "summary.json",
+        "releases/commits.jsonl",
+    ]
+    assert not [call for call in saves if str(run.work_dir) in call["content"] or str(REPO) in call["content"]]
+    assert calls[-1] == {"call": "finish", "exit_code": 0 if run.code == 0 else 1}
+
+
+@pytest.mark.integration
+def test_a_logged_run_logs_abandoned_moves(stub: OpenAIStub, tmp_path: Path) -> None:
+    config = offline_config(stub, policy="401", schedule=[HARNESS_MOVE] * 2, max_consecutive_faults=100)
+
+    run, calls = run_logged(config, tmp_path)
+
+    assert [step["result"] for step in run.summary["steps"]] == ["abandoned"] * 2
+    logs = [call for call in calls if call["call"] == "log"]
+    assert [call["step"] for call in logs] == [1, 2]
+    for call in logs:
+        assert call["data"]["move/result"] == "abandoned" and call["data"]["usage/episodes"] == 3
+        assert not [key for key in call["data"] if key.startswith(("candidate/", "selector/"))]
+    assert calls[-1] == {"call": "finish", "exit_code": 1}
+
+
+@pytest.mark.integration
+def test_a_logged_run_whose_files_hold_the_wandb_key_fails_and_uploads_nothing(
+    stub: OpenAIStub, tmp_path: Path
+) -> None:
+    config = offline_config(stub, policy="401", schedule=[HARNESS_MOVE])
+
+    run, calls = run_logged(config, tmp_path, HONING_FAKE_WANDB_LEAK="init")
+
+    scan = run.checks["8 no key written"]
+    assert not scan["passed"] and "wandb/leak-init.txt" in scan["detail"]
+    assert "save" not in [call["call"] for call in calls]
+    assert "logging: wandb/leak-init.txt holds a key; nothing was uploaded" in run.stderr
+    assert run.code != 0 and WANDB_KEY not in run.stdout + run.stderr
