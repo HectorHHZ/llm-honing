@@ -1,11 +1,11 @@
-"""A stand-in for SlimeTrainer in the all-planes pipeline (``configs/e2e/slime_grpo.json``).
+"""A stand-in for SlimeTrainer in the all-planes pipeline (``configs/e2e/slime.json``).
 
 It declares the real :data:`honing.backends.slime.SUPPORT`, refuses what the
 campaign's rules refuse, and converts every batch into Slime's rollout layout
 (:func:`honing.backends.slime.slime_samples`) before training the fake model, so
 a batch the real trainer could not write fails here too. The fake world's
 checkpoints are not Hugging Face directories, so the real trainer cannot run in
-this pipeline; ``scripts/e2e/slime_grpo_step.py`` runs it on a GPU.
+this pipeline; ``scripts/e2e/slime_train_step.py`` runs it on a GPU.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class SlimeStandIn:
         rules.batch_meets_contract(job, batch)
         if batch is None:
             raise ContractError(f"{job.algorithm} needs a batch")
-        _, layout = slime_samples(batch)
+        _, layout = slime_samples(batch, rewarded=job.algorithm == "grpo")
         self.layouts.append((layout.prompts, layout.samples_per_prompt))
         return self._inner.train(job, base, batch)
 

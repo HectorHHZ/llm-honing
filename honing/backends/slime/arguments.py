@@ -8,17 +8,33 @@ decoder families Slime loads straight from Hugging Face weights (``llama``,
 ``qwen2``, ``qwen3``), so the arguments always match the checkpoint being
 trained. Other families are refused until their arguments are written out.
 
-:func:`grpo_train_args` is the train-only GRPO job: Slime reads the rollout
-Honing wrote (``--load-debug-rollout-data``), never starts SGLang, loads the
-policy and the KL reference from the base checkpoint, and saves the trained
-policy as a Hugging Face directory (``--save-hf``).
+:func:`train_args` is one train-only job: Slime reads the samples Honing
+wrote (``--load-debug-rollout-data``), never starts SGLang, loads the policy
+from the base checkpoint, and saves the trained policy as a Hugging Face
+directory (``--save-hf``). The algorithm adds its own arguments:
+
+``grpo``
+    The GRPO advantage over each group's rewards, with the KL to the base
+    checkpoint computed and reported (``--use-kl-loss``).
+``sft``
+    Slime's ``sft_loss``: the negative log-likelihood of the trained tokens,
+    with no advantages (``--disable-compute-advantages-and-returns``).
+``opd``
+    On-policy distillation with the teacher loaded in Megatron
+    (``--use-opd --opd-type megatron --opd-teacher-load``): the teacher scores
+    the tokens the student sampled, and ``opd_kl_coef`` times the per-token
+    reverse KL is subtracted from the advantage. Samples without a group or
+    reward have no task advantage, so the update is pure distillation; grouped,
+    rewarded samples add GRPO's advantage. On-policy self-distillation is the
+    same job with an earlier checkpoint of the same model as the teacher. The
+    teacher must share the student's architecture.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -74,20 +90,78 @@ def megatron_model_args(config: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
-class GrpoSettings:
-    """The GRPO hyperparameters Honing sets. Anything else goes through ``extra_args``."""
+class JobSettings:
+    """What every job sets. Anything else goes through ``extra_args``, appended last."""
 
     lr: float = 1e-6
-    kl_loss_coef: float = 0.0
-    eps_clip: float = 0.2
-    eps_clip_high: float = 0.28
     max_tokens_per_gpu: int = 9216
     seed: int = 1234
     extra_args: tuple[str, ...] = ()
 
 
-def grpo_train_args(
+@dataclass(frozen=True)
+class GrpoSettings(JobSettings):
+    kl_loss_coef: float = 0.0
+    eps_clip: float = 0.2
+    eps_clip_high: float = 0.28
+
+
+@dataclass(frozen=True)
+class SftSettings(JobSettings):
+    lr: float = 1e-5
+
+
+@dataclass(frozen=True)
+class OpdSettings(JobSettings):
+    opd_kl_coef: float = 1.0
+    eps_clip: float = 0.2
+    eps_clip_high: float = 0.28
+
+
+@dataclass(frozen=True)
+class SlimeSettings:
+    """The settings for each algorithm the Slime trainer runs."""
+
+    grpo: GrpoSettings = field(default_factory=GrpoSettings)
+    sft: SftSettings = field(default_factory=SftSettings)
+    opd: OpdSettings = field(default_factory=OpdSettings)
+
+
+def _algorithm_args(algorithm: str, settings: SlimeSettings, base: Path, teacher: Path | None) -> tuple[str, ...]:
+    if algorithm == "grpo":
+        grpo = settings.grpo
+        return (
+            "--advantage-estimator", "grpo",
+            "--ref-load", str(base),
+            "--use-kl-loss",
+            "--kl-loss-coef", repr(grpo.kl_loss_coef),
+            "--kl-loss-type", "low_var_kl",
+            "--entropy-coef", "0.0",
+            "--eps-clip", repr(grpo.eps_clip),
+            "--eps-clip-high", repr(grpo.eps_clip_high),
+        )  # fmt: skip
+    if algorithm == "sft":
+        return ("--loss-type", "sft_loss", "--disable-compute-advantages-and-returns")
+    if algorithm == "opd":
+        if teacher is None:
+            raise ContractError("opd needs a teacher checkpoint")
+        opd = settings.opd
+        return (
+            "--advantage-estimator", "grpo",
+            "--use-opd",
+            "--opd-type", "megatron",
+            "--opd-teacher-load", str(teacher),
+            "--opd-kl-coef", repr(opd.opd_kl_coef),
+            "--entropy-coef", "0.0",
+            "--eps-clip", repr(opd.eps_clip),
+            "--eps-clip-high", repr(opd.eps_clip_high),
+        )  # fmt: skip
+    raise ContractError(f"the Slime trainer has no arguments for {algorithm}")
+
+
+def train_args(
     *,
+    algorithm: str,
     base: Path,
     rollout_template: str,
     save_hf: str,
@@ -97,16 +171,16 @@ def grpo_train_args(
     steps: int,
     gpus: int,
     model_args: Sequence[str],
-    settings: GrpoSettings,
+    settings: SlimeSettings,
+    teacher: Path | None = None,
 ) -> tuple[str, ...]:
-    """Arguments to ``train.py`` for ``steps`` optimizer steps over one rollout of ``prompts`` groups.
+    """Arguments to ``train.py`` for ``steps`` optimizer steps of ``algorithm`` over one rollout.
 
-    Slime saves only at a save interval, and writes its Megatron checkpoint (``save``, without optimizer state)
-    before the Hugging Face copy (``save_hf``) the campaign reads.
-
-    The KL loss is always computed (``--use-kl-loss``) so its value is reported, and it only changes the
-    update when ``kl_loss_coef`` is non-zero.
+    The rollout holds ``prompts`` groups of ``samples_per_prompt``. Slime saves only at a save interval, and
+    writes its Megatron checkpoint (``save``, without optimizer state) before the Hugging Face copy (``save_hf``)
+    the campaign reads.
     """
+    job: JobSettings = getattr(settings, algorithm, JobSettings())
     samples = prompts * samples_per_prompt
     if samples % steps:
         raise ContractError(f"{samples} samples do not split into {steps} equal optimizer steps")
@@ -118,7 +192,6 @@ def grpo_train_args(
         *model_args,
         "--hf-checkpoint", str(base),
         "--load", str(base),
-        "--ref-load", str(base),
         "--save", save,
         "--save-interval", "1",
         "--no-save-optim",
@@ -129,15 +202,9 @@ def grpo_train_args(
         "--rollout-batch-size", str(prompts),
         "--n-samples-per-prompt", str(samples_per_prompt),
         "--global-batch-size", str(samples // steps),
-        "--advantage-estimator", "grpo",
-        "--use-kl-loss",
-        "--kl-loss-coef", repr(settings.kl_loss_coef),
-        "--kl-loss-type", "low_var_kl",
-        "--entropy-coef", "0.0",
-        "--eps-clip", repr(settings.eps_clip),
-        "--eps-clip-high", repr(settings.eps_clip_high),
+        *_algorithm_args(algorithm, settings, base, teacher),
         "--optimizer", "adam",
-        "--lr", repr(settings.lr),
+        "--lr", repr(job.lr),
         "--lr-decay-style", "constant",
         "--weight-decay", "0.1",
         "--adam-beta1", "0.9",
@@ -145,12 +212,12 @@ def grpo_train_args(
         "--tensor-model-parallel-size", "1",
         "--pipeline-model-parallel-size", "1",
         "--use-dynamic-batch-size",
-        "--max-tokens-per-gpu", str(settings.max_tokens_per_gpu),
+        "--max-tokens-per-gpu", str(job.max_tokens_per_gpu),
         "--attention-dropout", "0.0",
         "--hidden-dropout", "0.0",
         "--accumulate-allreduce-grads-in-fp32",
         "--attention-softmax-in-fp32",
         "--attention-backend", "flash",
-        "--seed", str(settings.seed),
-        *settings.extra_args,
+        "--seed", str(job.seed),
+        *job.extra_args,
     )  # fmt: skip

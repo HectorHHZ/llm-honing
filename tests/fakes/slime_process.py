@@ -44,6 +44,9 @@ def train(argv: list[str]) -> int:
     if not rollout.is_file():
         print(f"no rollout at {rollout}", file=sys.stderr)
         return 1
+    if "--use-opd" in argv and not (Path(_option(argv, "--opd-teacher-load")) / "config.json").is_file():
+        print("opd teacher is not a checkpoint", file=sys.stderr)
+        return 1
     base = Path(_option(argv, "--load"))
     target = Path(_option(argv, "--save-hf").format(rollout_id=0))
     shutil.copytree(base, target)

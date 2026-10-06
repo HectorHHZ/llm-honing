@@ -5,7 +5,7 @@ Each prompt is a small arithmetic question that asks for the answer in
 returns each answer's token ids and log-probabilities, the record an agent
 adapter (slime.agent's ``OpenAIAdapter``) keeps per session. The reward is 1
 when the boxed answer is right and 0 otherwise. The output is a JSON list of
-:class:`~honing.core.PolicySample` fields, which ``slime_grpo_step.py`` turns
+:class:`~honing.core.PolicySample` fields, which ``slime_train_step.py`` turns
 into a ``TrainingBatch``; the prompt tokens carry mask 0 and log-probability 0.0.
 
     python3 scripts/e2e/slime_rollouts.py --model DIR --out rollouts.json --prompts 16 --samples-per-prompt 8

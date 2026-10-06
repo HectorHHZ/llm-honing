@@ -2,7 +2,7 @@
 # Import Slime's image with enroot and create a container named "slime" on this node, for clusters without Docker.
 #
 # The tag is the one docker/version.txt names at the pinned Slime commit (41014d1f, pyproject's runtime group). The
-# image's own Slime checkout is a few commits older, so slime_grpo_step.py runs a checkout at the pin
+# image's own Slime checkout is a few commits older, so slime_train_step.py runs a checkout at the pin
 # (--slime-source) ahead of it. The image is about 30 GB: keep it on node-local disk and rerun on each node.
 #
 #   scripts/e2e/setup-slime-enroot.sh [tag]

@@ -7,7 +7,15 @@ metrics Slime logged. :mod:`~honing.backends.slime.worker` is the part that runs
 inside the image.
 """
 
-from honing.backends.slime.arguments import GrpoSettings, grpo_train_args, megatron_model_args
+from honing.backends.slime.arguments import (
+    GrpoSettings,
+    JobSettings,
+    OpdSettings,
+    SftSettings,
+    SlimeSettings,
+    megatron_model_args,
+    train_args,
+)
 from honing.backends.slime.rollout_data import RolloutLayout, policy_sample, read_samples, slime_samples, write_samples
 from honing.backends.slime.trainer import (
     SUPPORT,
@@ -23,16 +31,20 @@ __all__ = [
     "SUPPORT",
     "GrpoSettings",
     "HFModelSource",
+    "JobSettings",
+    "OpdSettings",
     "RolloutLayout",
+    "SftSettings",
     "SlimeEnvironment",
     "SlimeRunError",
+    "SlimeSettings",
     "SlimeTrainer",
     "SlimeTrainerSettings",
-    "grpo_train_args",
     "hf_snapshot",
     "megatron_model_args",
     "policy_sample",
     "read_samples",
     "slime_samples",
+    "train_args",
     "write_samples",
 ]

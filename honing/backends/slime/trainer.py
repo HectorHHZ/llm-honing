@@ -5,6 +5,8 @@ samples and the campaign checks them; :class:`SlimeTrainer` writes them in
 Slime's rollout layout (:mod:`honing.backends.slime.rollout_data`) and runs
 Slime train-only on them (``--load-debug-rollout-data --debug-train-only``), so
 Slime never generates, and never publishes, weights the gate has not judged.
+It runs ``grpo``, ``sft``, and ``opd`` (:mod:`honing.backends.slime.arguments`);
+on-policy self-distillation is ``opd`` with a ``lineage`` teacher.
 
 Slime runs in its own image with its own torch, CUDA build, and Megatron. Each
 job is a subprocess in that environment (:class:`SlimeEnvironment`), and only
@@ -32,7 +34,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from honing.backends.slime.arguments import GrpoSettings, grpo_train_args, megatron_model_args, read_config
+from honing.backends.slime.arguments import SlimeSettings, megatron_model_args, read_config, train_args
 from honing.backends.slime.rollout_data import slime_samples, write_samples
 from honing.campaign import rules
 from honing.core import (
@@ -43,6 +45,7 @@ from honing.core import (
     ContractError,
     HoningError,
     ModelSnapshot,
+    TeacherRef,
     TrainingBatch,
     TrainJobSpec,
     TrainResult,
@@ -53,7 +56,7 @@ SUPPORT = BackendSupport(
     architectures="uniform",
     train_numerics=frozenset({"bf16"}),
     weight_formats=frozenset({"hf_safetensors"}),
-    algorithms=(("grpo", "native"),),
+    algorithms=(("sft", "native"), ("opd", "native"), ("grpo", "native")),
     contracts=LANGUAGE_MODEL_CONTRACTS,
 )
 SLIME_REVISION = "41014d1f29e201137fdffce737bb8bac65bc5219"
@@ -97,12 +100,17 @@ class SlimeTrainerSettings:
     ``gpus`` are indices. With ``lock_gpus`` every one is locked for the whole job and must have no other compute
     process; without it they are passed through as ``CUDA_VISIBLE_DEVICES`` unchecked, for a machine whose GPUs a
     scheduler already isolates.
+
+    ``teachers`` maps a teacher's ``ref`` to a Hugging Face checkpoint for ``opd``. A ``lineage`` teacher named
+    ``parent`` is the job's base checkpoint and needs no entry. Teachers are loaded in Megatron next to the student
+    (``placement="in_process"``), so they share its architecture and must be visible inside the environment.
     """
 
     environment: SlimeEnvironment
     work_dir: Path
     gpus: tuple[str, ...] = ("0",)
-    grpo: GrpoSettings = field(default_factory=GrpoSettings)
+    algorithms: SlimeSettings = field(default_factory=SlimeSettings)
+    teachers: Mapping[str, Path] = field(default_factory=dict)
     lock_dir: Path | None = None
     lock_gpus: bool = True
     timeout_s: float = 6 * 3600
@@ -208,18 +216,18 @@ class SlimeTrainer:
         rules.batch_meets_contract(job, batch)
         if batch is None:  # batch_meets_contract refuses a missing batch; this narrows the type
             raise ContractError(f"{job.algorithm} needs a batch")
-        if job.algorithm != "grpo":
-            raise ContractError(f"the Slime trainer runs grpo only, not {job.algorithm}")
         if base.checkpoint.weight_format != "hf_safetensors":
             raise ContractError("the Slime trainer starts from a Hugging Face checkpoint")
         settings = self._settings
         base_dir = Path(base.checkpoint.location)
+        teacher = None if job.teacher is None else self._teacher(job.teacher, base_dir)
         run = settings.work_dir / f"{job.algorithm}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
         run.mkdir(parents=True)
 
-        rows, layout = slime_samples(batch)
+        rows, layout = slime_samples(batch, rewarded=job.algorithm == "grpo")
         write_samples(run / "rollout" / "0.json", rows)
-        args = grpo_train_args(
+        args = train_args(
+            algorithm=job.algorithm,
             base=base_dir,
             rollout_template=str(run / "rollout" / "{rollout_id}.pt"),
             save_hf=str(run / "hf" / "{rollout_id}"),
@@ -229,7 +237,8 @@ class SlimeTrainer:
             steps=job.steps,
             gpus=len(settings.gpus),
             model_args=megatron_model_args(read_config(base_dir)),
-            settings=settings.grpo,
+            settings=settings.algorithms,
+            teacher=teacher,
         )
         (run / "job.json").write_text(
             json.dumps({"job": _jsonable(job), "batch_id": batch.batch_id, "train_args": list(args)}, indent=2) + "\n"
@@ -266,12 +275,28 @@ class SlimeTrainer:
             "checksum": snapshot.checkpoint.checksum,
             "job": _jsonable(job),
             "batch_id": batch.batch_id,
+            "teacher": None if teacher is None else str(teacher),
             "samples": len(rows),
             "slime_revision": SLIME_REVISION,
             "metrics": metrics,
         }
         (run / "checkpoint.json").write_text(json.dumps(manifest, indent=2) + "\n")
         return TrainResult(snapshot=snapshot, metrics=metrics)
+
+    def _teacher(self, teacher: TeacherRef, base: Path) -> Path:
+        """The checkpoint an ``opd`` teacher names; refuses a teacher Slime cannot load beside the student."""
+        if teacher.placement != "in_process":
+            raise ContractError(
+                "the Slime trainer loads the teacher in Megatron beside the student (placement 'in_process'); "
+                f"a teacher served by its own engine ({teacher.kind} {teacher.ref!r}) needs its scores in the rollout"
+            )
+        if teacher.kind == "lineage" and teacher.ref == "parent":
+            return base
+        if teacher.ref not in self._settings.teachers:
+            raise ContractError(f"no checkpoint for teacher {teacher.ref!r}; add it to SlimeTrainerSettings.teachers")
+        path = Path(self._settings.teachers[teacher.ref])
+        read_config(path)
+        return path
 
     def _run(self, argv: Sequence[str], run: Path, name: str, env: Mapping[str, str]) -> None:
         log = run / f"{name}.log"
@@ -292,7 +317,7 @@ def _jsonable(job: TrainJobSpec) -> dict[str, Any]:
 
 def _train_metrics(logged: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
     """The rollout's reward and Slime's training scalars, as finite floats."""
-    rewards = [float(row["reward"]) for row in rows if row.get("reward") is not None]
+    rewards = [float(row["metadata"]["reward"]) for row in rows if row["metadata"].get("reward") is not None]
     metrics: dict[str, float] = {"train_steps": float(logged.get("steps", 0))}
     if rewards:
         metrics["rollout_reward_mean"] = sum(rewards) / len(rewards)

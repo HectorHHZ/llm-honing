@@ -1,6 +1,6 @@
 {
-  "description": "Slime's declared support in a full campaign on a CPU: GRPO moves on harness rollouts alternate with harness evolution, each judged by the gate, then a rollback. The trainer is a stand-in that declares honing.backends.slime.SUPPORT and writes every batch in Slime's rollout layout; scripts/e2e/slime_grpo_step.py runs the real SlimeTrainer on a GPU.",
-  "work_dir": "runs/e2e-slime-grpo",
+  "description": "Slime's declared support in a full campaign on a CPU: SFT on a dataset, on-policy self-distillation and GRPO on harness rollouts, alternating with harness evolution, each judged by the gate, then a rollback. The trainer is a stand-in that declares honing.backends.slime.SUPPORT and writes every batch in Slime's rollout layout; scripts/e2e/slime_train_step.py runs the real SlimeTrainer on a GPU.",
+  "work_dir": "runs/e2e-slime",
   "requires": {
     "env": [],
     "commands": [],
@@ -65,6 +65,20 @@
   "trainer_check": {
     "jobs": [
       {
+        "algorithm": "sft",
+        "steps": 1
+      },
+      {
+        "algorithm": "opd",
+        "steps": 1,
+        "rollout": "harness",
+        "teacher": {
+          "kind": "lineage",
+          "ref": "parent",
+          "placement": "in_process"
+        }
+      },
+      {
         "algorithm": "grpo",
         "steps": 1,
         "rollout": "harness"
@@ -89,9 +103,8 @@
   },
   "defaults": {
     "train": {
-      "algorithm": "grpo",
-      "steps": 1,
-      "rollout": "harness"
+      "algorithm": "sft",
+      "steps": 1
     },
     "budget": {
       "keep_ratio": 0.75
@@ -105,13 +118,23 @@
   "schedule": [
     {
       "kind": "train",
-      "algorithm": "grpo",
-      "steps": 1,
-      "rollout": "harness"
+      "algorithm": "sft",
+      "steps": 1
     },
     {
       "kind": "harness",
       "label": "verify"
+    },
+    {
+      "kind": "train",
+      "algorithm": "opd",
+      "steps": 1,
+      "rollout": "harness",
+      "teacher": {
+        "kind": "lineage",
+        "ref": "parent",
+        "placement": "in_process"
+      }
     },
     {
       "kind": "train",
@@ -129,6 +152,7 @@
     }
   ],
   "expect": [
+    "published",
     "published",
     "published",
     "published",

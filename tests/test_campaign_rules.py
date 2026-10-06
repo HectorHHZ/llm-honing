@@ -195,6 +195,26 @@ def test_a_batch_must_match_the_algorithm_contract() -> None:
         rules.batch_meets_contract(sft, None)
 
 
+@pytest.mark.unit
+def test_grouped_samples_meet_an_on_policy_contract_but_not_the_reverse() -> None:
+    sample = PolicySample(tokens=(1, 2), loss_mask=(0, 1), reward=1.0, logprobs=(0.0, -0.1), group="g")
+    grouped = TrainingBatch(
+        batch_id="grouped",
+        contract=DataContract(kind="grouped_on_policy_samples", requires_reward=True, requires_logprobs=True),
+        samples=(sample,),
+    )
+    ungrouped = TrainingBatch(
+        batch_id="ungrouped",
+        contract=DataContract(kind="on_policy_samples", requires_logprobs=True),
+        samples=(sample,),
+    )
+    opd = TrainJobSpec(algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="parent"))
+    rules.batch_meets_contract(opd, grouped)
+    rules.batch_meets_contract(opd, ungrouped)
+    with refused("batch_meets_contract"):
+        rules.batch_meets_contract(TrainJobSpec(algorithm="grpo", rollout="direct"), ungrouped)
+
+
 def rollout_batch(source_release: str | None, source_harness: str | None) -> TrainingBatch:
     sample = PolicySample(
         tokens=(1, 2),

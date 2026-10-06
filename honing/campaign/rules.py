@@ -120,13 +120,18 @@ def algorithm_requirements_met(job: TrainJobSpec, support: BackendSupport) -> No
 
 
 def batch_meets_contract(job: TrainJobSpec, batch: TrainingBatch | None) -> None:
-    """A training job starts only with a batch of the kind its algorithm consumes."""
+    """A training job starts only with a batch of the kind its algorithm consumes.
+
+    Grouped on-policy samples are on-policy samples that also carry a group, so they meet an
+    ``on_policy_samples`` contract: one rollout provider can feed both GRPO and on-policy distillation.
+    """
     contract = requirements_for(job).contract
     if batch is None:
         raise CampaignRuleError(
             "batch_meets_contract", f"no batch meets the {contract} contract {job.algorithm} needs"
         )
-    if batch.contract.kind != contract:
+    accepted = {contract, "grouped_on_policy_samples"} if contract == "on_policy_samples" else {contract}
+    if batch.contract.kind not in accepted:
         raise CampaignRuleError(
             "batch_meets_contract", f"{job.algorithm} needs a {contract} batch, got {batch.contract.kind}"
         )

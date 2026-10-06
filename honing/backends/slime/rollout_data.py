@@ -74,16 +74,22 @@ def grouped(samples: Sequence[PolicySample]) -> tuple[tuple[PolicySample, ...], 
     return tuple(tuple(members) for members in groups.values())
 
 
-def slime_samples(batch: TrainingBatch) -> tuple[list[dict[str, Any]], RolloutLayout]:
-    """The batch's samples as Slime sample dicts, group by group, and the rollout layout they fill."""
+def slime_samples(batch: TrainingBatch, *, rewarded: bool = True) -> tuple[list[dict[str, Any]], RolloutLayout]:
+    """The batch's samples as Slime sample dicts, group by group, and the rollout layout they fill.
+
+    With ``rewarded=False`` (SFT, on-policy distillation) every sample is its own group and its reward is
+    written as 0.0, so Slime adds no task advantage even when the batch carries groups and rewards.
+    """
     if not batch.samples:
         raise ContractError(f"Slime trains on token samples; batch {batch.batch_id} has none")
-    groups = grouped(batch.samples)
+    groups = grouped(batch.samples) if rewarded else tuple((sample,) for sample in batch.samples)
     rows: list[dict[str, Any]] = []
     for group_index, members in enumerate(groups):
         for sample in members:
             start = _prompt_length(sample)
-            metadata: dict[str, Any] = {"batch_id": batch.batch_id}
+            # Slime post-processes every sample's reward, even for SFT, so a missing reward is written as 0.0
+            # and the original is kept in the metadata for the round trip.
+            metadata: dict[str, Any] = {"batch_id": batch.batch_id, "reward": sample.reward}
             if sample.group is not None:
                 metadata["group"] = sample.group
             if sample.source_release is not None:
@@ -97,7 +103,7 @@ def slime_samples(batch: TrainingBatch) -> tuple[list[dict[str, Any]], RolloutLa
                     "tokens": list(sample.tokens),
                     "response_length": len(sample.tokens) - start,
                     "loss_mask": list(sample.loss_mask[start:]),
-                    "reward": sample.reward,
+                    "reward": sample.reward if rewarded and sample.reward is not None else 0.0,
                     "rollout_log_probs": None if sample.logprobs is None else list(sample.logprobs[start:]),
                     "status": COMPLETED,
                     "metadata": metadata,
@@ -122,12 +128,17 @@ def policy_sample(row: Mapping[str, Any]) -> PolicySample:
     return PolicySample(
         tokens=tokens,
         loss_mask=(0,) * prompt + tuple(response_mask),
-        reward=None if row.get("reward") is None else float(row["reward"]),
+        reward=_reward(row, metadata),
         logprobs=None if logprobs is None else (0.0,) * prompt + tuple(float(value) for value in logprobs),
         group=metadata.get("group"),
         source_release=metadata.get("source_release"),
         source_harness=metadata.get("source_harness"),
     )
+
+
+def _reward(row: Mapping[str, Any], metadata: Mapping[str, Any]) -> float | None:
+    value = metadata["reward"] if "reward" in metadata else row.get("reward")
+    return None if value is None else float(value)
 
 
 def write_samples(path: Path, rows: Sequence[Mapping[str, Any]], rollout_id: int = 0) -> Path:

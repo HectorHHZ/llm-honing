@@ -27,18 +27,20 @@ Every script here runs on a CPU with no model, GPU, or game, and CI's `e2e` job 
 
 ## The Slime trainer
 
-`configs/e2e/slime_grpo.json` is the all-planes campaign with Slime's declared support (`honing.backends.slime.SUPPORT`) in the `trainer` slot: GRPO moves on harness rollouts alternate with harness evolution, then a rollback. Its trainer is a stand-in that writes every batch in Slime's rollout layout, because the fake model's checkpoints are not Hugging Face directories. `check_trainer.py` and `honing_pipeline.py` both take it.
+`honing.backends.slime.SlimeTrainer` runs `sft`, `opd` (on-policy distillation, and self-distillation with a `lineage` teacher), and `grpo` as Slime train-only jobs on the batch the campaign hands it.
 
-The real `SlimeTrainer` needs a GPU and Slime's image. On a cluster without Docker:
+`configs/e2e/slime.json` is the all-planes campaign with Slime's declared support (`honing.backends.slime.SUPPORT`) in the `trainer` slot: SFT on a dataset, then self-distillation and GRPO on harness rollouts, alternating with harness evolution, then a rollback. Its trainer is a stand-in that writes every batch in Slime's rollout layout, because the fake model's checkpoints are not Hugging Face directories. `check_trainer.py` and `honing_pipeline.py` both take it, and CI runs both.
+
+The real trainer needs a GPU and Slime's image. On a cluster without Docker:
 
 ```bash
 scripts/e2e/setup-slime-enroot.sh                     # once per node; creates the enroot container "slime"
 git clone https://github.com/THUDM/slime.git /path/to/slime && git -C /path/to/slime checkout 41014d1f
-python scripts/e2e/slime_grpo_step.py --base /path/to/Qwen2.5-1.5B-Instruct --work-dir /tmp/honing-slime \
-    --enroot slime --slime-source /path/to/slime --gpus 0
+python scripts/e2e/slime_train_step.py --algorithm sft --base /path/to/Qwen2.5-1.5B-Instruct \
+    --work-dir /tmp/honing-slime --enroot slime --slime-source /path/to/slime --gpus 0
 ```
 
-It samples grouped arithmetic answers from the base model with SGLang, runs one GRPO step through `SlimeTrainer` (Slime train-only on those rollouts), and samples the trained checkpoint on held-out questions. `report.json` has the reward before and after and Slime's metrics. One H100 is enough for a 1.5B model; the run takes about ten minutes, most of it starting SGLang and Megatron.
+`--algorithm` is `grpo`, `sft`, `opd` (with `--teacher`, a checkpoint of the same architecture), or `opsd` (the base checkpoint as its own teacher). The script samples grouped arithmetic answers from the base model with SGLang, turns them into the batch the algorithm consumes (the rollout for GRPO, the correct answers for SFT, the unrewarded rollout for OPD), runs one job through `SlimeTrainer`, and samples the trained checkpoint on held-out questions. `report.json` has the reward before and after and Slime's metrics. One H100 is enough for a 1.5B model, and a run takes about ten minutes, most of it starting SGLang and Megatron.
 
 ## Plugging in a harness runner (OpenHands, Reef, ...)
 

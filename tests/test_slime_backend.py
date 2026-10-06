@@ -12,17 +12,17 @@ import pytest
 
 from honing.backends.slime import (
     SUPPORT,
-    GrpoSettings,
     SlimeEnvironment,
     SlimeRunError,
+    SlimeSettings,
     SlimeTrainer,
     SlimeTrainerSettings,
-    grpo_train_args,
     hf_snapshot,
     megatron_model_args,
     policy_sample,
     read_samples,
     slime_samples,
+    train_args,
     write_samples,
 )
 from honing.core import (
@@ -30,6 +30,7 @@ from honing.core import (
     ContractError,
     DataContract,
     PolicySample,
+    TeacherRef,
     TrainingBatch,
     TrainJobSpec,
 )
@@ -193,7 +194,8 @@ def test_an_unknown_family_is_refused() -> None:
 
 @pytest.mark.unit
 def test_grpo_arguments_train_only_on_the_given_rollout(tmp_path: Path) -> None:
-    args = grpo_train_args(
+    args = train_args(
+        algorithm="grpo",
         base=tmp_path / "base",
         rollout_template="r/{rollout_id}.pt",
         save_hf="hf/{rollout_id}",
@@ -203,7 +205,7 @@ def test_grpo_arguments_train_only_on_the_given_rollout(tmp_path: Path) -> None:
         steps=2,
         gpus=1,
         model_args=("--swiglu",),
-        settings=GrpoSettings(),
+        settings=SlimeSettings(),
     )
 
     def value(name: str) -> str:
@@ -223,7 +225,8 @@ def test_grpo_arguments_train_only_on_the_given_rollout(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_samples_that_do_not_split_into_the_steps_are_refused(tmp_path: Path) -> None:
     with pytest.raises(ContractError, match="equal optimizer steps"):
-        grpo_train_args(
+        train_args(
+            algorithm="grpo",
             base=tmp_path,
             rollout_template="r",
             save_hf="h",
@@ -233,7 +236,7 @@ def test_samples_that_do_not_split_into_the_steps_are_refused(tmp_path: Path) ->
             steps=2,
             gpus=1,
             model_args=(),
-            settings=GrpoSettings(),
+            settings=SlimeSettings(),
         )
 
 
@@ -313,7 +316,7 @@ def test_what_the_rules_refuse_never_reaches_slime(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     trainer = fake_trainer(tmp_path)
     with pytest.raises(CampaignRuleError):
-        trainer.train(TrainJobSpec(algorithm="sft"), base, None)
+        trainer.train(TrainJobSpec(algorithm="dpo"), base, None)
     with pytest.raises(CampaignRuleError):
         trainer.train(GRPO, base, None)
     assert not (tmp_path / "runs").exists()
@@ -322,5 +325,140 @@ def test_what_the_rules_refuse_never_reaches_slime(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_the_support_takes_language_models_and_never_typed_decisions() -> None:
     assert "typed_decisions" not in SUPPORT.contracts
-    assert SUPPORT.support_for("grpo") == "native"
+    assert {name for name, support in SUPPORT.algorithms if support == "native"} == {"sft", "opd", "grpo"}
+    assert SUPPORT.support_for("dpo") == "unsupported"
     assert SUPPORT.weight_formats == frozenset({"hf_safetensors"})
+
+
+# ---------------------------------------------------------------- sft and on-policy distillation
+
+
+def _args(algorithm: str, tmp_path: Path, teacher: Path | None = None) -> tuple[str, ...]:
+    return train_args(
+        algorithm=algorithm,
+        base=tmp_path / "base",
+        rollout_template="r/{rollout_id}.pt",
+        save_hf="hf/{rollout_id}",
+        save="megatron",
+        prompts=4,
+        samples_per_prompt=1,
+        steps=1,
+        gpus=1,
+        model_args=(),
+        settings=SlimeSettings(),
+        teacher=teacher,
+    )
+
+
+def token_batch() -> TrainingBatch:
+    samples = tuple(
+        PolicySample(tokens=(1, 2, 3, 4 + i), loss_mask=(0, 0, 1, 1)) for i in range(4)
+    )  # demonstrations: no reward, no group
+    return TrainingBatch(batch_id="sft-1", contract=DataContract("token_sequences"), samples=samples)
+
+
+def on_policy_batch() -> TrainingBatch:
+    samples = tuple(
+        PolicySample(tokens=(1, 2, 3, 4 + i), loss_mask=(0, 0, 1, 1), logprobs=(0.0, 0.0, -0.3, -0.2))
+        for i in range(4)
+    )
+    contract = DataContract("on_policy_samples", requires_logprobs=True)
+    return TrainingBatch(batch_id="opd-1", contract=contract, samples=samples)
+
+
+@pytest.mark.unit
+def test_sft_arguments_use_slimes_sft_loss_without_advantages(tmp_path: Path) -> None:
+    args = _args("sft", tmp_path)
+
+    assert args[args.index("--loss-type") + 1] == "sft_loss"
+    assert "--disable-compute-advantages-and-returns" in args
+    assert "--use-kl-loss" not in args and "--ref-load" not in args
+    assert args[args.index("--lr") + 1] == "1e-05"
+
+
+@pytest.mark.unit
+def test_opd_arguments_load_the_teacher_in_megatron(tmp_path: Path) -> None:
+    args = _args("opd", tmp_path, teacher=tmp_path / "teacher")
+
+    assert "--use-opd" in args
+    assert args[args.index("--opd-type") + 1] == "megatron"
+    assert args[args.index("--opd-teacher-load") + 1] == str(tmp_path / "teacher")
+    assert args[args.index("--opd-kl-coef") + 1] == "1.0"
+
+
+@pytest.mark.unit
+def test_opd_without_a_teacher_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ContractError, match="teacher"):
+        _args("opd", tmp_path)
+
+
+@pytest.mark.unit
+def test_a_missing_reward_is_written_as_zero_and_read_back_as_none(tmp_path: Path) -> None:
+    rows, layout = slime_samples(token_batch())
+
+    assert [row["reward"] for row in rows] == [0.0] * 4
+    assert (layout.prompts, layout.samples_per_prompt) == (4, 1)
+    assert read_samples(write_samples(tmp_path / "0.json", rows)) == token_batch().samples
+
+
+SFT = TrainJobSpec(algorithm="sft", steps=1)
+OPSD = TrainJobSpec(
+    algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="parent", placement="in_process")
+)
+
+
+@pytest.mark.unit
+def test_an_sft_job_trains_on_demonstrations(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    result = fake_trainer(tmp_path).train(SFT, base, token_batch())
+
+    run = Path(result.snapshot.checkpoint.location).parents[1]
+    train_args_used = json.loads((run / "job.json").read_text())["train_args"]
+    assert result.snapshot.checkpoint.checksum != base.checkpoint.checksum
+    assert "sft_loss" in train_args_used
+    assert "rollout_reward_mean" not in result.metrics
+
+
+@pytest.mark.unit
+def test_self_distillation_takes_the_parent_checkpoint_as_teacher(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    result = fake_trainer(tmp_path).train(OPSD, base, on_policy_batch())
+
+    manifest = json.loads((Path(result.snapshot.checkpoint.location).parents[1] / "checkpoint.json").read_text())
+    assert manifest["teacher"] == base.checkpoint.location
+
+
+@pytest.mark.unit
+def test_a_named_teacher_comes_from_the_settings(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    teacher = write_checkpoint(tmp_path / "teacher")
+    trainer = SlimeTrainer(
+        SlimeTrainerSettings(
+            environment=fake_environment(tmp_path),
+            work_dir=tmp_path / "runs",
+            lock_gpus=False,
+            teachers={"r0003": teacher},
+        )
+    )
+    job = TrainJobSpec(
+        algorithm="opd", rollout="direct", teacher=TeacherRef(kind="release", ref="r0003", placement="in_process")
+    )
+    result = trainer.train(job, base, on_policy_batch())
+
+    manifest = json.loads((Path(result.snapshot.checkpoint.location).parents[1] / "checkpoint.json").read_text())
+    assert manifest["teacher"] == str(teacher)
+
+
+@pytest.mark.unit
+def test_a_teacher_slime_cannot_load_is_refused_before_any_run(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    trainer = fake_trainer(tmp_path)
+    served = TrainJobSpec(algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="parent"))
+    unknown = TrainJobSpec(
+        algorithm="opd", rollout="direct", teacher=TeacherRef(kind="release", ref="r0009", placement="in_process")
+    )
+    with pytest.raises(ContractError, match="in_process"):
+        trainer.train(served, base, on_policy_batch())
+    with pytest.raises(ContractError, match="r0009"):
+        trainer.train(unknown, base, on_policy_batch())
+    assert not (tmp_path / "runs").exists()

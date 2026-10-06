@@ -36,7 +36,7 @@ lets a user turn one module on without the others.
 | Core | | Value types and protocols every plane is built against; standard library only | `honing/core` |
 | Model Source | | The initial model: an open checkpoint, or a large model compressed first | protocol + fake |
 | Data | data plane | Online feedback and offline datasets behind one batch type | contracts; RA2 demonstration and rollout providers |
-| Train | post-training | Algorithm, update policy, numerics, rollout source, and teacher; run by Slime, or by a local trainer for DPO | `LocalJevTrainer` for decision models; Slime planned |
+| Train | post-training | Algorithm, update policy, numerics, rollout source, and teacher; run by Slime, or by a local trainer for DPO | `LocalJevTrainer` for decision models; `SlimeTrainer` (SFT, OPD, GRPO) for language models |
 | Compression | compression | Pruning as score → select → edit, and post-training quantization; usable standalone | protocol + fake |
 | Harness Evolve | harness self-evolve | Harness specs, episode runs, and evolution methods before, during, and after training | contracts; RA2 runner, grader, and harness |
 | Campaign | | The scheduler, and the ordering rules every move passes before it touches weights | `honing/campaign` |

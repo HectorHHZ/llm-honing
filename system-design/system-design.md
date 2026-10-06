@@ -637,7 +637,7 @@ Steps are ordered by risk: the assumption the whole design rests on is tested fi
 | **0** | Core contracts: value types and protocols in `honing/core` | done |
 | **1** | Walking skeleton: campaign, rules, gate, and release chain, with every other plane faked | done |
 | **2** | A real expert-drop editor on a small MoE, reading and writing safetensors; `hone compress` | next |
-| **3** | `backends/slime`: SFT through Slime with safetensors ⇄ `torch_dist` conversion, plus a test that pins every Slime argument Honing emits | |
+| **3** | `backends/slime`: SFT, OPD and GRPO through Slime train-only on Honing's batches, loading and saving Hugging Face weights directly, plus a test that pins Slime's model arguments to its own scripts | in progress ([#68](https://github.com/HectorHHZ/llm-honing/issues/68)) |
 | **4** | `DatasetProvider` and `FeedbackProvider` | |
 | **5** | A rollout provider and runner on `slime.agent`; GRPO and on-policy distillation | |
 | **6** | Quantization: PTQ through Slime's tools; quantization-aware training through `numerics` | |

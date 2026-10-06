@@ -147,10 +147,10 @@ jobs:
         run: python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/runner-check"
       - name: Trainer contract (the checks a Slime trainer must pass)
         run: python scripts/e2e/check_trainer.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/trainer-check"
-      - name: Slime's declared support (trainer contract, then GRPO and harness moves in one campaign)
+      - name: Slime's declared support (trainer contract, then SFT, self-distillation, GRPO and harness moves in one campaign)
         run: |
-          python scripts/e2e/check_trainer.py --config configs/e2e/slime_grpo.json --work-dir "$RUNNER_TEMP/slime-check"
-          python scripts/e2e/honing_pipeline.py --config configs/e2e/slime_grpo.json --work-dir "$RUNNER_TEMP/slime-grpo"
+          python scripts/e2e/check_trainer.py --config configs/e2e/slime.json --work-dir "$RUNNER_TEMP/slime-check"
+          python scripts/e2e/honing_pipeline.py --config configs/e2e/slime.json --work-dir "$RUNNER_TEMP/slime"
       - name: Campaign end to end (runner, grader, gate, trainer, release chain)
         run: |
           python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json --work-dir "$RUNNER_TEMP/campaign"
