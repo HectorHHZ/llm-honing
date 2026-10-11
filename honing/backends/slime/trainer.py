@@ -6,7 +6,8 @@ Slime's rollout layout (:mod:`honing.backends.slime.rollout_data`) and runs
 Slime train-only on them (``--load-debug-rollout-data --debug-train-only``), so
 Slime never generates, and never publishes, weights the gate has not judged.
 It runs ``grpo``, ``sft``, and ``opd`` (:mod:`honing.backends.slime.arguments`);
-on-policy self-distillation is ``opd`` with a ``lineage`` teacher.
+on-policy self-distillation is ``opd`` with an earlier checkpoint of the same
+model as the teacher.
 
 Slime runs in its own image with its own torch, CUDA build, and Megatron. Each
 job is a subprocess in that environment (:class:`SlimeEnvironment`), and only
@@ -101,8 +102,9 @@ class SlimeTrainerSettings:
     process; without it they are passed through as ``CUDA_VISIBLE_DEVICES`` unchecked, for a machine whose GPUs a
     scheduler already isolates.
 
-    ``teachers`` maps a teacher's ``ref`` to a Hugging Face checkpoint for ``opd``. A ``lineage`` teacher named
-    ``parent`` is the job's base checkpoint and needs no entry. Teachers are loaded in Megatron next to the student
+    ``teachers`` maps a teacher's ``ref`` to a Hugging Face checkpoint for ``opd``, including the earlier checkpoint
+    of the same model that on-policy self-distillation learns from; the base checkpoint itself is refused as a
+    teacher, because the distillation gradient would be zero. Teachers are loaded in Megatron next to the student
     (``placement="in_process"``) with the student's model arguments, so a teacher whose ``config.json`` derives
     different arguments is refused before the job starts, and they must be visible inside the environment.
     """
@@ -292,10 +294,16 @@ class SlimeTrainer:
                 f"a teacher served by its own engine ({teacher.kind} {teacher.ref!r}) needs its scores in the rollout"
             )
         if teacher.kind == "lineage" and teacher.ref == "parent":
-            return base
+            raise ContractError(
+                "a 'lineage' teacher named 'parent' is this job's own base checkpoint, and distilling a model "
+                "from itself has a zero gradient (only weight decay moves the weights); name an earlier "
+                "checkpoint of the same model in SlimeTrainerSettings.teachers instead"
+            )
         if teacher.ref not in self._settings.teachers:
             raise ContractError(f"no checkpoint for teacher {teacher.ref!r}; add it to SlimeTrainerSettings.teachers")
         path = Path(self._settings.teachers[teacher.ref])
+        if path.resolve() == base.resolve():
+            raise ContractError(f"teacher {teacher.ref!r} is the base checkpoint {base}; distillation needs another")
         # Slime builds one Megatron model from the student's arguments and loads the teacher's weights into it,
         # so a teacher that differs in anything those arguments describe (rotary base, norm epsilon, head
         # layout) would run under the wrong definition without any error.

@@ -13,8 +13,8 @@ reaches it the way the trainer does, through a :class:`SlimeEnvironment`:
    ``sft``   the correct answers only, as demonstrations (``token_sequences``)
    ``opd``   the rollout without rewards (``on_policy_samples``), with ``--teacher``
              loaded beside the student
-   ``opsd``  the same, with the base checkpoint itself as the teacher (a
-             ``lineage`` teacher named ``parent``)
+   ``opsd``  the same, with ``--teacher`` an earlier checkpoint of the same model
+             (a ``lineage`` teacher), as on-policy self-distillation runs it
 
 3. :class:`SlimeTrainer` trains and returns a ``TrainResult``: new Hugging Face
    weights, a manifest, and Slime's metrics. The trained checkpoint answers the
@@ -25,8 +25,9 @@ reaches it the way the trainer does, through a :class:`SlimeEnvironment`:
 
 ``--enroot NAME`` enters the enroot container NAME (``setup-slime-enroot.sh``
 creates one); without it the commands run in the current environment, which
-must then be Slime's image. With ``opsd`` the teacher equals the student, so the
-distillation signal starts at zero: the run checks the path, not a gain.
+must then be Slime's image. A training rollout whose rewards are all equal
+(every answer right, or every answer truncated) ends the run: Slime's advantages
+would all be zero and the job would change the weights through weight decay alone.
 """
 
 from __future__ import annotations
@@ -86,6 +87,7 @@ def sample(env: SlimeEnvironment, model: Path, out: Path, seed: int, args: argpa
         env.python, str(ROOT / "scripts" / "e2e" / "slime_rollouts.py"),
         "--model", str(model), "--out", str(out), "--seed", str(seed),
         "--prompts", str(args.prompts), "--samples-per-prompt", str(args.samples_per_prompt),
+        "--max-new-tokens", str(args.max_new_tokens),
     ]  # fmt: skip
     log = out.with_suffix(".log")
     with log.open("w") as handle:
@@ -138,11 +140,7 @@ def job_for(algorithm: str, steps: int) -> TrainJobSpec:
         return TrainJobSpec(algorithm="grpo", rollout="direct", steps=steps)
     if algorithm == "sft":
         return TrainJobSpec(algorithm="sft", steps=steps)
-    teacher = (
-        TeacherRef(kind="release", ref="teacher", placement="in_process")
-        if algorithm == "opd"
-        else TeacherRef(kind="lineage", ref="parent", placement="in_process")
-    )
+    teacher = TeacherRef(kind="release" if algorithm == "opd" else "lineage", ref="teacher", placement="in_process")
     return TrainJobSpec(algorithm="opd", rollout="direct", teacher=teacher, steps=steps)
 
 
@@ -150,7 +148,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--algorithm", choices=ALGORITHMS, default="grpo")
     parser.add_argument("--base", type=Path, required=True, help="Hugging Face checkpoint directory")
-    parser.add_argument("--teacher", type=Path, default=None, help="teacher checkpoint for --algorithm opd")
+    parser.add_argument(
+        "--teacher",
+        type=Path,
+        default=None,
+        help="teacher checkpoint for opd; an earlier checkpoint of --base for opsd",
+    )
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--enroot", default=None, help="enroot container with Slime's image")
     parser.add_argument("--slime-source", type=Path, default=None, help="Slime checkout at the pinned commit")
@@ -158,13 +161,14 @@ def main() -> int:
     parser.add_argument("--gpus", default="0", help="comma-separated GPU indices")
     parser.add_argument("--prompts", type=int, default=16)
     parser.add_argument("--samples-per-prompt", type=int, default=8)
+    parser.add_argument("--max-new-tokens", type=int, default=256, help="generation window; thinking models need more")
     parser.add_argument("--steps", type=int, default=1)
     parser.add_argument("--lr", type=float, default=None, help="default: 1e-5 for sft, 1e-6 otherwise")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-eval", action="store_true", help="skip the held-out reward before and after")
     args = parser.parse_args()
-    if args.algorithm == "opd" and args.teacher is None:
-        parser.error("--algorithm opd needs --teacher")
+    if args.algorithm in ("opd", "opsd") and args.teacher is None:
+        parser.error(f"--algorithm {args.algorithm} needs --teacher")
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     run = args.work_dir / time.strftime(f"{args.algorithm}-step-%Y%m%d-%H%M%S")
@@ -177,6 +181,11 @@ def main() -> int:
     with gpu_locks(gpus):
         rollout = sample(env, args.base, run / "rollout-train.json", args.seed, args)
         before = None if args.no_eval else sample(env, args.base, run / "eval-before.json", args.seed + 1, args)
+    if args.algorithm == "grpo" and rollout["reward_mean"] in (0.0, 1.0):
+        raise SystemExit(
+            f"every training sample has reward {rollout['reward_mean']:.0f}, so GRPO has nothing to learn from; "
+            "raise --max-new-tokens if the answers are truncated, or use a harder or easier question set"
+        )
     batch = batch_for(args.algorithm, rollout["samples"], f"{run.name}-train", args.steps)
     trainer = SlimeTrainer(
         SlimeTrainerSettings(
@@ -197,7 +206,7 @@ def main() -> int:
     report = {
         "algorithm": args.algorithm,
         "base": {"location": str(args.base), "checksum": base.checkpoint.checksum},
-        "teacher": str(args.base if args.algorithm == "opsd" else args.teacher) if "opd" in args.algorithm else None,
+        "teacher": None if args.teacher is None else str(args.teacher),
         "trained": {"location": str(trained), "checksum": result.snapshot.checkpoint.checksum},
         "batch": {"kind": batch.contract.kind, "samples": len(batch.samples)},
         "train_rollout_reward": rollout["reward_mean"],

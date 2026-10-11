@@ -421,12 +421,25 @@ def test_an_sft_job_trains_on_demonstrations(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_self_distillation_takes_the_parent_checkpoint_as_teacher(tmp_path: Path) -> None:
-    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
-    result = fake_trainer(tmp_path).train(OPSD, base, on_policy_batch())
-
-    manifest = json.loads((Path(result.snapshot.checkpoint.location).parents[1] / "checkpoint.json").read_text())
-    assert manifest["teacher"] == base.checkpoint.location
+def test_a_teacher_equal_to_the_base_is_refused_before_any_run(tmp_path: Path) -> None:
+    checkpoint = write_checkpoint(tmp_path / "base")
+    base = hf_snapshot(checkpoint)
+    trainer = SlimeTrainer(
+        SlimeTrainerSettings(
+            environment=fake_environment(tmp_path),
+            work_dir=tmp_path / "runs",
+            lock_gpus=False,
+            teachers={"same": checkpoint},
+        )
+    )
+    named = TrainJobSpec(
+        algorithm="opd", rollout="direct", teacher=TeacherRef(kind="release", ref="same", placement="in_process")
+    )
+    with pytest.raises(ContractError, match="zero gradient"):
+        trainer.train(OPSD, base, on_policy_batch())
+    with pytest.raises(ContractError, match="is the base checkpoint"):
+        trainer.train(named, base, on_policy_batch())
+    assert not (tmp_path / "runs").exists()
 
 
 @pytest.mark.unit
