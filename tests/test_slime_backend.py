@@ -453,6 +453,26 @@ def test_a_named_teacher_comes_from_the_settings(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_a_teacher_of_another_architecture_is_refused_before_any_run(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    teacher = write_checkpoint(tmp_path / "teacher", {**QWEN2_CONFIG, "rope_theta": 10000.0, "rms_norm_eps": 1e-5})
+    trainer = SlimeTrainer(
+        SlimeTrainerSettings(
+            environment=fake_environment(tmp_path),
+            work_dir=tmp_path / "runs",
+            lock_gpus=False,
+            teachers={"other": teacher},
+        )
+    )
+    job = TrainJobSpec(
+        algorithm="opd", rollout="direct", teacher=TeacherRef(kind="release", ref="other", placement="in_process")
+    )
+    with pytest.raises(ContractError, match=r"--norm-epsilon 1e-06/1e-05; --rotary-base 1000000/10000"):
+        trainer.train(job, base, on_policy_batch())
+    assert not (tmp_path / "runs").exists()
+
+
+@pytest.mark.unit
 def test_a_teacher_slime_cannot_load_is_refused_before_any_run(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     trainer = fake_trainer(tmp_path)

@@ -103,7 +103,8 @@ class SlimeTrainerSettings:
 
     ``teachers`` maps a teacher's ``ref`` to a Hugging Face checkpoint for ``opd``. A ``lineage`` teacher named
     ``parent`` is the job's base checkpoint and needs no entry. Teachers are loaded in Megatron next to the student
-    (``placement="in_process"``), so they share its architecture and must be visible inside the environment.
+    (``placement="in_process"``) with the student's model arguments, so a teacher whose ``config.json`` derives
+    different arguments is refused before the job starts, and they must be visible inside the environment.
     """
 
     environment: SlimeEnvironment
@@ -295,7 +296,17 @@ class SlimeTrainer:
         if teacher.ref not in self._settings.teachers:
             raise ContractError(f"no checkpoint for teacher {teacher.ref!r}; add it to SlimeTrainerSettings.teachers")
         path = Path(self._settings.teachers[teacher.ref])
-        read_config(path)
+        # Slime builds one Megatron model from the student's arguments and loads the teacher's weights into it,
+        # so a teacher that differs in anything those arguments describe (rotary base, norm epsilon, head
+        # layout) would run under the wrong definition without any error.
+        differences = _argument_differences(
+            megatron_model_args(read_config(base)), megatron_model_args(read_config(path))
+        )
+        if differences:
+            raise ContractError(
+                f"teacher {teacher.ref!r} at {path} does not share the student's architecture "
+                f"({'; '.join(differences)}); Slime loads the teacher with the student's Megatron arguments"
+            )
         return path
 
     def _run(self, argv: Sequence[str], run: Path, name: str, env: Mapping[str, str]) -> None:
@@ -309,6 +320,25 @@ class SlimeTrainer:
             )
         if completed.returncode != 0:
             raise SlimeRunError(f"Slime step {name!r} exited with {completed.returncode}; see {log}")
+
+
+def _argument_differences(student: Sequence[str], teacher: Sequence[str]) -> list[str]:
+    """The Megatron model arguments two checkpoints disagree on, as ``--flag student-value/teacher-value``."""
+
+    def table(args: Sequence[str]) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for index, item in enumerate(args):
+            if item.startswith("--"):
+                following = args[index + 1] if index + 1 < len(args) else "--"
+                values[item] = "set" if following.startswith("--") else following
+        return values
+
+    mine, theirs = table(student), table(teacher)
+    return [
+        f"{flag} {mine.get(flag, 'unset')}/{theirs.get(flag, 'unset')}"
+        for flag in sorted(mine.keys() | theirs.keys())
+        if mine.get(flag) != theirs.get(flag)
+    ]
 
 
 def _jsonable(job: TrainJobSpec) -> dict[str, Any]:
