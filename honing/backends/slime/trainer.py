@@ -315,13 +315,23 @@ def _jsonable(job: TrainJobSpec) -> dict[str, Any]:
     return json.loads(json.dumps(asdict(job), default=str))
 
 
+# Slime computes the distillation signal while building advantages, before the training loop, and logs it with
+# the rollout statistics rather than the training scalars; the training batch never carries it, so ``train/``
+# has no copy of it.
+DISTILLATION_METRICS = ("rollout/opd_reverse_kl", "rollout/teacher_log_probs")
+
+
 def _train_metrics(logged: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
-    """The rollout's reward and Slime's training scalars, as finite floats."""
+    """The rollout's reward, Slime's training scalars, and its distillation metrics, as finite floats."""
     rewards = [float(row["metadata"]["reward"]) for row in rows if row["metadata"].get("reward") is not None]
     metrics: dict[str, float] = {"train_steps": float(logged.get("steps", 0))}
     if rewards:
         metrics["rollout_reward_mean"] = sum(rewards) / len(rewards)
     for tag, value in logged.get("scalars", {}).items():
-        if tag.startswith("train/") and "@" not in tag and isinstance(value, (int, float)) and math.isfinite(value):
+        if "@" in tag or not isinstance(value, (int, float)) or not math.isfinite(value):
+            continue
+        if tag.startswith("train/"):
             metrics[f"slime_{tag.removeprefix('train/')}"] = float(value)
+        elif tag in DISTILLATION_METRICS:
+            metrics[f"slime_{tag.removeprefix('rollout/')}"] = float(value)
     return metrics

@@ -282,6 +282,7 @@ def test_a_grpo_job_returns_new_hf_weights_with_a_manifest(tmp_path: Path) -> No
     assert manifest["batch_id"] == "b1"
     assert result.metrics["slime_kl_loss"] == pytest.approx(0.003)
     assert result.metrics["rollout_reward_mean"] == pytest.approx(0.5)
+    assert "slime_opd_reverse_kl" not in result.metrics
 
 
 @pytest.mark.unit
@@ -447,6 +448,8 @@ def test_a_named_teacher_comes_from_the_settings(tmp_path: Path) -> None:
 
     manifest = json.loads((Path(result.snapshot.checkpoint.location).parents[1] / "checkpoint.json").read_text())
     assert manifest["teacher"] == str(teacher)
+    assert result.metrics["slime_opd_reverse_kl"] == pytest.approx(0.04)
+    assert result.metrics["slime_teacher_log_probs"] == pytest.approx(-0.5)
 
 
 @pytest.mark.unit
