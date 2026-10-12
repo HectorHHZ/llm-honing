@@ -367,6 +367,21 @@ def on_policy_batch() -> TrainingBatch:
     return TrainingBatch(batch_id="opd-1", contract=contract, samples=samples)
 
 
+def privileged_batch() -> TrainingBatch:
+    """On-policy samples also scored by the policy under privileged context, as self-distillation needs."""
+    samples = tuple(
+        PolicySample(
+            tokens=(1, 2, 3, 4 + i),
+            loss_mask=(0, 0, 1, 1),
+            logprobs=(0.0, 0.0, -0.3, -0.2),
+            teacher_logprobs=(0.0, 0.0, -0.1, -0.05),
+        )
+        for i in range(4)
+    )
+    contract = DataContract("on_policy_samples", requires_logprobs=True, requires_teacher_logprobs=True)
+    return TrainingBatch(batch_id="opsd-1", contract=contract, samples=samples)
+
+
 @pytest.mark.unit
 def test_sft_arguments_use_slimes_sft_loss_without_advantages(tmp_path: Path) -> None:
     args = _args("sft", tmp_path)
@@ -388,9 +403,12 @@ def test_opd_arguments_load_the_teacher_in_megatron(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_opd_without_a_teacher_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(ContractError, match="teacher"):
-        _args("opd", tmp_path)
+def test_opd_without_a_teacher_checkpoint_reads_the_scores_from_the_rollout(tmp_path: Path) -> None:
+    args = _args("opd", tmp_path)
+
+    assert "--use-opd" in args
+    assert args[args.index("--opd-type") + 1] == "sglang"
+    assert "--opd-teacher-load" not in args
 
 
 @pytest.mark.unit
@@ -406,6 +424,38 @@ SFT = TrainJobSpec(algorithm="sft", steps=1)
 OPSD = TrainJobSpec(
     algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="parent", placement="in_process")
 )
+SELF_DISTILLATION = TrainJobSpec(
+    algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="self", placement="engine")
+)
+
+
+@pytest.mark.unit
+def test_teacher_scores_round_trip_through_the_slime_layout(tmp_path: Path) -> None:
+    rows, _ = slime_samples(privileged_batch(), rewarded=False)
+
+    assert rows[0]["teacher_log_probs"] == pytest.approx([-0.1, -0.05])
+    assert read_samples(write_samples(tmp_path / "0.json", rows)) == privileged_batch().samples
+
+
+@pytest.mark.unit
+def test_self_distillation_trains_on_the_teacher_scores_the_samples_carry(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    result = fake_trainer(tmp_path).train(SELF_DISTILLATION, base, privileged_batch())
+
+    run = Path(result.snapshot.checkpoint.location).parents[1]
+    used = json.loads((run / "job.json").read_text())["train_args"]
+    manifest = json.loads((run / "checkpoint.json").read_text())
+    assert used[used.index("--opd-type") + 1] == "sglang" and "--opd-teacher-load" not in used
+    assert manifest["teacher"] is None
+    assert result.snapshot.checkpoint.checksum != base.checkpoint.checksum
+
+
+@pytest.mark.unit
+def test_self_distillation_without_teacher_scores_is_refused_before_any_run(tmp_path: Path) -> None:
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+    with pytest.raises(CampaignRuleError, match="teacher_logprobs"):
+        fake_trainer(tmp_path).train(SELF_DISTILLATION, base, on_policy_batch())
+    assert not (tmp_path / "runs").exists()
 
 
 @pytest.mark.unit
@@ -489,12 +539,9 @@ def test_a_teacher_of_another_architecture_is_refused_before_any_run(tmp_path: P
 def test_a_teacher_slime_cannot_load_is_refused_before_any_run(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     trainer = fake_trainer(tmp_path)
-    served = TrainJobSpec(algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="parent"))
     unknown = TrainJobSpec(
         algorithm="opd", rollout="direct", teacher=TeacherRef(kind="release", ref="r0009", placement="in_process")
     )
-    with pytest.raises(ContractError, match="in_process"):
-        trainer.train(served, base, on_policy_batch())
     with pytest.raises(ContractError, match="r0009"):
         trainer.train(unknown, base, on_policy_batch())
     assert not (tmp_path / "runs").exists()

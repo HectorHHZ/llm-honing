@@ -127,6 +127,16 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
     ("a harness path given twice", lambda: HarnessSpec("a", (("x", HarnessFile("skill", "")),) * 2)),
     ("a loss mask of the wrong length", lambda: PolicySample(tokens=(1, 2), loss_mask=(1,))),
     (
+        "teacher log-probabilities of the wrong length",
+        lambda: PolicySample(tokens=(1, 2), loss_mask=(0, 1), teacher_logprobs=(-0.1,)),
+    ),
+    (
+        "a contract asking for teacher scores with unscored samples",
+        lambda: TrainingBatch(
+            "b", DataContract("token_sequences", requires_teacher_logprobs=True), token_batch().samples
+        ),
+    ),
+    (
         "a preference batch with samples",
         lambda: TrainingBatch("b", DataContract("preference_pairs"), token_batch().samples),
     ),

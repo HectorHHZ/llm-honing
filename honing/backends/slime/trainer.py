@@ -5,9 +5,10 @@ samples and the campaign checks them; :class:`SlimeTrainer` writes them in
 Slime's rollout layout (:mod:`honing.backends.slime.rollout_data`) and runs
 Slime train-only on them (``--load-debug-rollout-data --debug-train-only``), so
 Slime never generates, and never publishes, weights the gate has not judged.
-It runs ``grpo``, ``sft``, and ``opd`` (:mod:`honing.backends.slime.arguments`);
-on-policy self-distillation is ``opd`` with an earlier checkpoint of the same
-model as the teacher.
+It runs ``grpo``, ``sft``, and ``opd`` (:mod:`honing.backends.slime.arguments`).
+An ``opd`` teacher is either a checkpoint loaded beside the student, or an
+engine whose scores the samples already carry; on-policy self-distillation is
+the second, with the student itself scored under privileged context.
 
 Slime runs in its own image with its own torch, CUDA build, and Megatron. Each
 job is a subprocess in that environment (:class:`SlimeEnvironment`), and only
@@ -102,10 +103,10 @@ class SlimeTrainerSettings:
     process; without it they are passed through as ``CUDA_VISIBLE_DEVICES`` unchecked, for a machine whose GPUs a
     scheduler already isolates.
 
-    ``teachers`` maps a teacher's ``ref`` to a Hugging Face checkpoint for ``opd``, including the earlier checkpoint
-    of the same model that on-policy self-distillation learns from; the base checkpoint itself is refused as a
-    teacher, because the distillation gradient would be zero. Teachers are loaded in Megatron next to the student
-    (``placement="in_process"``) with the student's model arguments, so a teacher whose ``config.json`` derives
+    ``teachers`` maps the ``ref`` of an ``in_process`` teacher to a Hugging Face checkpoint for ``opd``; the base
+    checkpoint itself is refused as a teacher, because the distillation gradient would be zero. A teacher with
+    ``placement="engine"`` needs no entry: its scores arrive with the samples. ``in_process`` teachers are loaded
+    in Megatron next to the student with the student's model arguments, so a teacher whose ``config.json`` derives
     different arguments is refused before the job starts, and they must be visible inside the environment.
     """
 
@@ -286,18 +287,23 @@ class SlimeTrainer:
         (run / "checkpoint.json").write_text(json.dumps(manifest, indent=2) + "\n")
         return TrainResult(snapshot=snapshot, metrics=metrics)
 
-    def _teacher(self, teacher: TeacherRef, base: Path) -> Path:
-        """The checkpoint an ``opd`` teacher names; refuses a teacher Slime cannot load beside the student."""
-        if teacher.placement != "in_process":
-            raise ContractError(
-                "the Slime trainer loads the teacher in Megatron beside the student (placement 'in_process'); "
-                f"a teacher served by its own engine ({teacher.kind} {teacher.ref!r}) needs its scores in the rollout"
-            )
+    def _teacher(self, teacher: TeacherRef, base: Path) -> Path | None:
+        """The checkpoint an ``opd`` teacher names, or ``None`` when the samples carry its scores.
+
+        A teacher served by its own engine scored every sample when the rollout was collected
+        (``rules.batch_meets_contract`` has checked each carries ``teacher_logprobs``), so Slime loads no
+        teacher. A teacher loaded beside the student must be a checkpoint Slime can load with the student's
+        Megatron arguments, and must not be the base itself.
+        """
+        if teacher.placement == "engine":
+            return None
         if teacher.kind == "lineage" and teacher.ref == "parent":
             raise ContractError(
                 "a 'lineage' teacher named 'parent' is this job's own base checkpoint, and distilling a model "
-                "from itself has a zero gradient (only weight decay moves the weights); name an earlier "
-                "checkpoint of the same model in SlimeTrainerSettings.teachers instead"
+                "from itself has a zero gradient (only weight decay moves the weights); for on-policy "
+                "self-distillation score the samples under privileged context and use "
+                "TeacherRef(kind='lineage', ref='self', placement='engine'), or name an earlier checkpoint "
+                "in SlimeTrainerSettings.teachers"
             )
         if teacher.ref not in self._settings.teachers:
             raise ContractError(f"no checkpoint for teacher {teacher.ref!r}; add it to SlimeTrainerSettings.teachers")

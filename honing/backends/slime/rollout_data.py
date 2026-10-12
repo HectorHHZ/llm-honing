@@ -6,8 +6,8 @@ a ``torch.save`` file per rollout id holding ``{"rollout_id": i, "samples":
 :class:`~honing.core.PolicySample` maps onto one Slime ``Sample`` with two
 differences in layout:
 
-- Slime splits a sequence into a prompt and a response. Its ``loss_mask`` and
-  ``rollout_log_probs`` cover only the response, ``response_length`` tokens at
+- Slime splits a sequence into a prompt and a response. Its ``loss_mask``,
+  ``rollout_log_probs`` and ``teacher_log_probs`` cover only the response, ``response_length`` tokens at
   the end of ``tokens``. A ``PolicySample`` masks every token. The prompt here is
   everything before the first trained token, so the tokens of a multi-turn
   session that the model did not write (tool results, user turns) stay inside
@@ -105,6 +105,9 @@ def slime_samples(batch: TrainingBatch, *, rewarded: bool = True) -> tuple[list[
                     "loss_mask": list(sample.loss_mask[start:]),
                     "reward": sample.reward if rewarded and sample.reward is not None else 0.0,
                     "rollout_log_probs": None if sample.logprobs is None else list(sample.logprobs[start:]),
+                    "teacher_log_probs": (
+                        None if sample.teacher_logprobs is None else list(sample.teacher_logprobs[start:])
+                    ),
                     "status": COMPLETED,
                     "metadata": metadata,
                 }
@@ -124,12 +127,14 @@ def policy_sample(row: Mapping[str, Any]) -> PolicySample:
     mask = row.get("loss_mask")
     response_mask = [1] * response_length if mask is None else [int(value) for value in mask]
     logprobs = row.get("rollout_log_probs")
+    teacher = row.get("teacher_log_probs")
     metadata = row.get("metadata") or {}
     return PolicySample(
         tokens=tokens,
         loss_mask=(0,) * prompt + tuple(response_mask),
         reward=_reward(row, metadata),
         logprobs=None if logprobs is None else (0.0,) * prompt + tuple(float(value) for value in logprobs),
+        teacher_logprobs=None if teacher is None else (0.0,) * prompt + tuple(float(value) for value in teacher),
         group=metadata.get("group"),
         source_release=metadata.get("source_release"),
         source_harness=metadata.get("source_harness"),

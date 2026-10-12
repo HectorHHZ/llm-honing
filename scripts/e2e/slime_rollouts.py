@@ -8,6 +8,11 @@ when the boxed answer is right and 0 otherwise. The output is a JSON list of
 :class:`~honing.core.PolicySample` fields, which ``slime_train_step.py`` turns
 into a ``TrainingBatch``; the prompt tokens carry mask 0 and log-probability 0.0.
 
+With ``--teacher-hint`` every answer is also scored by the same model under
+privileged context, the question followed by its correct answer, which the
+sampling prompt left out. Those are the teacher log-probabilities on-policy
+self-distillation trains toward (``PolicySample.teacher_logprobs``).
+
     python3 scripts/e2e/slime_rollouts.py --model DIR --out rollouts.json --prompts 16 --samples-per-prompt 8
 """
 
@@ -33,6 +38,27 @@ def questions(count: int, seed: int) -> list[tuple[str, int]]:
     return items
 
 
+def hinted(question: str, answer: int) -> str:
+    """The question with privileged context: its correct answer, which the student never sees."""
+    return f"{question}\n(For reference, the correct final answer is {answer}.)"
+
+
+def score(engine: Any, prompt: list[int], response: list[int]) -> list[float]:
+    """The engine's log-probability of each response token after ``prompt``, without sampling anything new."""
+    # SGLang gives no log-probability for the first position of the window, so the window starts one token
+    # early, on the prompt's last token, and that entry is dropped.
+    output = engine.generate(
+        input_ids=prompt + response,
+        sampling_params={"temperature": 0.0, "max_new_tokens": 1},
+        return_logprob=True,
+        logprob_start_len=len(prompt) - 1,
+    )
+    pairs = output["meta_info"]["input_token_logprobs"][1:]  # (logprob, token_id, text) per response token
+    if [int(token) for _, token, _ in pairs] != response or any(value is None for value, _, _ in pairs):
+        raise RuntimeError(f"the engine scored {len(pairs)} positions for a {len(response)}-token response")
+    return [float(value) for value, _, _ in pairs]
+
+
 def reward(text: str, answer: int) -> float:
     found = BOXED.findall(text)
     return 1.0 if found and found[-1].strip().replace(",", "") == str(answer) else 0.0
@@ -48,6 +74,7 @@ def main() -> int:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--release", default=None)
+    parser.add_argument("--teacher-hint", action="store_true", help="also score each answer under privileged context")
     args = parser.parse_args()
 
     import sglang
@@ -71,7 +98,6 @@ def main() -> int:
         sampling_params={"temperature": args.temperature, "max_new_tokens": args.max_new_tokens},
         return_logprob=True,
     )
-    engine.shutdown()
 
     samples: list[dict[str, Any]] = []
     for index, output in enumerate(outputs):
@@ -93,6 +119,23 @@ def main() -> int:
                 "source_release": args.release,
             }
         )
+    if args.teacher_hint:
+        privileged = [
+            tokenizer.encode(
+                tokenizer.apply_chat_template(
+                    [{"role": "user", "content": hinted(q, answer)}], tokenize=False, add_generation_prompt=True
+                ),
+                add_special_tokens=False,
+            )
+            for q, answer in items
+        ]
+        for index, sample in enumerate(samples):
+            prompt_length = len(requests[index])
+            response = sample["tokens"][prompt_length:]
+            teacher = score(engine, privileged[index // args.samples_per_prompt], response)
+            sample["teacher_logprobs"] = [0.0] * prompt_length + teacher
+    engine.shutdown()
+
     rewards = [sample["reward"] for sample in samples]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({"reward_mean": statistics.fmean(rewards), "samples": samples}) + "\n")

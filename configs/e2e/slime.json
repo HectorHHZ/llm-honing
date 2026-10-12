@@ -1,5 +1,5 @@
 {
-  "description": "Slime's declared support in a full campaign on a CPU: SFT on a dataset, on-policy self-distillation and GRPO on harness rollouts, alternating with harness evolution, each judged by the gate, then a rollback. The trainer is a stand-in that declares honing.backends.slime.SUPPORT and writes every batch in Slime's rollout layout; scripts/e2e/slime_train_step.py runs the real SlimeTrainer on a GPU.",
+  "description": "Slime's declared support in a full campaign on a CPU: SFT on a dataset, on-policy self-distillation (the policy scored under privileged context, served by its engine) and GRPO on harness rollouts, alternating with harness evolution, each judged by the gate, then a rollback. The trainer is a stand-in that declares honing.backends.slime.SUPPORT and writes every batch in Slime's rollout layout; scripts/e2e/slime_train_step.py runs the real SlimeTrainer on a GPU.",
   "work_dir": "runs/e2e-slime",
   "requires": {
     "env": [],
@@ -29,7 +29,7 @@
       "factory": "tests.fakes.pipeline:data"
     },
     "rollout": {
-      "factory": "tests.fakes.pipeline:rollout"
+      "factory": "tests.fakes.slime:rollout"
     },
     "scorer": {
       "factory": "tests.fakes.pipeline:scorer"
@@ -74,8 +74,8 @@
         "rollout": "harness",
         "teacher": {
           "kind": "lineage",
-          "ref": "parent",
-          "placement": "in_process"
+          "ref": "self",
+          "placement": "engine"
         }
       },
       {
@@ -132,8 +132,8 @@
       "rollout": "harness",
       "teacher": {
         "kind": "lineage",
-        "ref": "parent",
-        "placement": "in_process"
+        "ref": "self",
+        "placement": "engine"
       }
     },
     {

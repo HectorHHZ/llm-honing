@@ -20,14 +20,19 @@ directory (``--save-hf``). The algorithm adds its own arguments:
     Slime's ``sft_loss``: the negative log-likelihood of the trained tokens,
     with no advantages (``--disable-compute-advantages-and-returns``).
 ``opd``
-    On-policy distillation with the teacher loaded in Megatron
-    (``--use-opd --opd-type megatron --opd-teacher-load``): the teacher scores
-    the tokens the student sampled, and ``opd_kl_coef`` times the per-token
-    reverse KL is subtracted from the advantage. Samples without a group or
-    reward have no task advantage, so the update is pure distillation; grouped,
-    rewarded samples add GRPO's advantage. On-policy self-distillation is the
-    same job with an earlier checkpoint of the same model as the teacher. The
-    teacher must share the student's architecture.
+    On-policy distillation: a teacher's log-probability of every token the
+    student sampled, and ``opd_kl_coef`` times the per-token reverse KL
+    subtracted from the advantage. Samples without a group or reward have no
+    task advantage, so the update is pure distillation; grouped, rewarded
+    samples add GRPO's advantage. The teacher's scores come one of two ways:
+
+    - a checkpoint loaded in Megatron beside the student (``--opd-type megatron
+      --opd-teacher-load``), which must share the student's architecture;
+    - with no teacher checkpoint, the scores written into the rollout
+      (``teacher_log_probs``) when it was collected (``--opd-type sglang``,
+      which in train-only mode reads them from the samples). On-policy
+      self-distillation takes this path: the teacher is the student itself,
+      scored under privileged context.
 """
 
 from __future__ import annotations
@@ -143,14 +148,16 @@ def _algorithm_args(algorithm: str, settings: SlimeSettings, base: Path, teacher
     if algorithm == "sft":
         return ("--loss-type", "sft_loss", "--disable-compute-advantages-and-returns")
     if algorithm == "opd":
-        if teacher is None:
-            raise ContractError("opd needs a teacher checkpoint")
         opd = settings.opd
+        source = (
+            ("--opd-type", "sglang")
+            if teacher is None
+            else ("--opd-type", "megatron", "--opd-teacher-load", str(teacher))
+        )
         return (
             "--advantage-estimator", "grpo",
             "--use-opd",
-            "--opd-type", "megatron",
-            "--opd-teacher-load", str(teacher),
+            *source,
             "--opd-kl-coef", repr(opd.opd_kl_coef),
             "--entropy-coef", "0.0",
             "--eps-clip", repr(opd.eps_clip),
@@ -176,9 +183,10 @@ def train_args(
 ) -> tuple[str, ...]:
     """Arguments to ``train.py`` for ``steps`` optimizer steps of ``algorithm`` over one rollout.
 
-    The rollout holds ``prompts`` groups of ``samples_per_prompt``. Slime saves only at a save interval, and
-    writes its Megatron checkpoint (``save``, without optimizer state) before the Hugging Face copy (``save_hf``)
-    the campaign reads.
+    The rollout holds ``prompts`` groups of ``samples_per_prompt``. For ``opd``, ``teacher`` is the checkpoint
+    loaded beside the student, or ``None`` when the samples carry the teacher's log-probabilities. Slime saves
+    only at a save interval, and writes its Megatron checkpoint (``save``, without optimizer state) before the
+    Hugging Face copy (``save_hf``) the campaign reads.
     """
     job: JobSettings = getattr(settings, algorithm, JobSettings())
     samples = prompts * samples_per_prompt

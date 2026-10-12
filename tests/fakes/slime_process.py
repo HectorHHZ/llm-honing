@@ -48,7 +48,13 @@ def train(argv: list[str]) -> int:
         print(f"no rollout at {rollout}", file=sys.stderr)
         return 1
     if "--use-opd" in argv:
-        if not (Path(_option(argv, "--opd-teacher-load")) / "config.json").is_file():
+        if _option(argv, "--opd-type") == "sglang":
+            # Slime raises when a sample reaches the loss without the teacher's scores.
+            samples = json.loads(rollout.read_text())["samples"]
+            if any(sample.get("teacher_log_probs") is None for sample in samples):
+                print("OPD with opd_type='sglang' requires teacher_log_probs, but it is missing.", file=sys.stderr)
+                return 1
+        elif not (Path(_option(argv, "--opd-teacher-load")) / "config.json").is_file():
             print("opd teacher is not a checkpoint", file=sys.stderr)
             return 1
         tensorboard = Path(os.environ["TENSORBOARD_DIR"])

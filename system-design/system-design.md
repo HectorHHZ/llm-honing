@@ -148,7 +148,7 @@ trainer.
 |---|---|:---:|:---:|---|---|
 | `sft` | token sequences | ✗ | ✗ | slime | native `--loss-type sft_loss` |
 | `distill` | token sequences | ✗ | ✓ | slime | custom-loss hook |
-| `opd` | on-policy samples | ✓ | ✓ | slime | native `--use-opd`; self-distillation when the teacher is a lineage release |
+| `opd` | on-policy samples | ✓ | ✓ | slime | native `--use-opd`: an `in_process` teacher loads beside the student (`--opd-type megatron`); an `engine` teacher's scores arrive with the samples (`teacher_logprobs`, `--opd-type sglang`). Self-distillation is the student itself scored under privileged context: `TeacherRef(kind="lineage", ref="self", placement="engine")` |
 | `gkd` | on-policy samples | ✓ | ✓ | slime | custom-loss hook |
 | `ppo` | on-policy samples with rewards | ✓ | ✗ | slime | native estimator |
 | `grpo` | grouped samples with rewards | ✓ | ✗ | slime | native estimator |

@@ -13,8 +13,10 @@ reaches it the way the trainer does, through a :class:`SlimeEnvironment`:
    ``sft``   the correct answers only, as demonstrations (``token_sequences``)
    ``opd``   the rollout without rewards (``on_policy_samples``), with ``--teacher``
              loaded beside the student
-   ``opsd``  the same, with ``--teacher`` an earlier checkpoint of the same model
-             (a ``lineage`` teacher), as on-policy self-distillation runs it
+   ``opsd``  on-policy self-distillation: the rollout without rewards, each
+             answer also scored by the base model itself under privileged context
+             (the question plus its correct answer), so the batch carries
+             ``teacher_logprobs`` and no teacher checkpoint is loaded
 
 3. :class:`SlimeTrainer` trains and returns a ``TrainResult``: new Hugging Face
    weights, a manifest, and Slime's metrics. The trained checkpoint answers the
@@ -82,12 +84,15 @@ def environment(args: argparse.Namespace) -> SlimeEnvironment:
     )
 
 
-def sample(env: SlimeEnvironment, model: Path, out: Path, seed: int, args: argparse.Namespace) -> dict[str, Any]:
+def sample(
+    env: SlimeEnvironment, model: Path, out: Path, seed: int, args: argparse.Namespace, teacher_hint: bool = False
+) -> dict[str, Any]:
     argv = [
         env.python, str(ROOT / "scripts" / "e2e" / "slime_rollouts.py"),
         "--model", str(model), "--out", str(out), "--seed", str(seed),
         "--prompts", str(args.prompts), "--samples-per-prompt", str(args.samples_per_prompt),
         "--max-new-tokens", str(args.max_new_tokens),
+        *(["--teacher-hint"] if teacher_hint else []),
     ]  # fmt: skip
     log = out.with_suffix(".log")
     with log.open("w") as handle:
@@ -127,11 +132,17 @@ def batch_for(algorithm: str, rows: list[dict[str, Any]], batch_id: str, steps: 
             PolicySample(tokens=tuple(row["tokens"]), loss_mask=tuple(row["loss_mask"])) for row in correct
         )
         return TrainingBatch(batch_id=batch_id, contract=DataContract("token_sequences"), samples=samples)
+    scored = algorithm == "opsd"
     samples = tuple(
-        PolicySample(tokens=tuple(row["tokens"]), loss_mask=tuple(row["loss_mask"]), logprobs=tuple(row["logprobs"]))
+        PolicySample(
+            tokens=tuple(row["tokens"]),
+            loss_mask=tuple(row["loss_mask"]),
+            logprobs=tuple(row["logprobs"]),
+            teacher_logprobs=tuple(row["teacher_logprobs"]) if scored else None,
+        )
         for row in rows
     )
-    contract = DataContract("on_policy_samples", requires_logprobs=True)
+    contract = DataContract("on_policy_samples", requires_logprobs=True, requires_teacher_logprobs=scored)
     return TrainingBatch(batch_id=batch_id, contract=contract, samples=samples)
 
 
@@ -140,7 +151,10 @@ def job_for(algorithm: str, steps: int) -> TrainJobSpec:
         return TrainJobSpec(algorithm="grpo", rollout="direct", steps=steps)
     if algorithm == "sft":
         return TrainJobSpec(algorithm="sft", steps=steps)
-    teacher = TeacherRef(kind="release" if algorithm == "opd" else "lineage", ref="teacher", placement="in_process")
+    if algorithm == "opsd":
+        teacher = TeacherRef(kind="lineage", ref="self", placement="engine")
+    else:
+        teacher = TeacherRef(kind="release", ref="teacher", placement="in_process")
     return TrainJobSpec(algorithm="opd", rollout="direct", teacher=teacher, steps=steps)
 
 
@@ -152,7 +166,7 @@ def main() -> int:
         "--teacher",
         type=Path,
         default=None,
-        help="teacher checkpoint for opd; an earlier checkpoint of --base for opsd",
+        help="teacher checkpoint for opd (opsd scores the base under privileged context instead)",
     )
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--enroot", default=None, help="enroot container with Slime's image")
@@ -167,8 +181,10 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-eval", action="store_true", help="skip the held-out reward before and after")
     args = parser.parse_args()
-    if args.algorithm in ("opd", "opsd") and args.teacher is None:
-        parser.error(f"--algorithm {args.algorithm} needs --teacher")
+    if args.algorithm == "opd" and args.teacher is None:
+        parser.error("--algorithm opd needs --teacher")
+    if args.algorithm != "opd" and args.teacher is not None:
+        parser.error("--teacher applies to --algorithm opd only")
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     run = args.work_dir / time.strftime(f"{args.algorithm}-step-%Y%m%d-%H%M%S")
@@ -179,7 +195,7 @@ def main() -> int:
     lr = DEFAULT_LR[args.algorithm] if args.lr is None else args.lr
 
     with gpu_locks(gpus):
-        rollout = sample(env, args.base, run / "rollout-train.json", args.seed, args)
+        rollout = sample(env, args.base, run / "rollout-train.json", args.seed, args, args.algorithm == "opsd")
         before = None if args.no_eval else sample(env, args.base, run / "eval-before.json", args.seed + 1, args)
     if args.algorithm == "grpo" and rollout["reward_mean"] in (0.0, 1.0):
         raise SystemExit(
@@ -206,7 +222,11 @@ def main() -> int:
     report = {
         "algorithm": args.algorithm,
         "base": {"location": str(args.base), "checksum": base.checkpoint.checksum},
-        "teacher": None if args.teacher is None else str(args.teacher),
+        "teacher": (
+            "base under privileged context"
+            if args.algorithm == "opsd"
+            else (None if args.teacher is None else str(args.teacher))
+        ),
         "trained": {"location": str(trained), "checksum": result.snapshot.checkpoint.checksum},
         "batch": {"kind": batch.contract.kind, "samples": len(batch.samples)},
         "train_rollout_reward": rollout["reward_mean"],

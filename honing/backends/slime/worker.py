@@ -45,6 +45,7 @@ def load_rollout(source: Path, target: Path) -> None:
             "loss_mask": None if sample.loss_mask is None else list(sample.loss_mask),
             "reward": sample.reward,
             "rollout_log_probs": None if sample.rollout_log_probs is None else list(sample.rollout_log_probs),
+            "teacher_log_probs": None if sample.teacher_log_probs is None else list(sample.teacher_log_probs),
             "metadata": sample.metadata,
         }
         for sample in samples
