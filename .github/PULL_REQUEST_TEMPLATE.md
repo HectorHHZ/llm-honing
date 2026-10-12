@@ -34,8 +34,9 @@ $ pytest
 
 <!--
 CI runs the end-to-end checks on every pull request (the `e2e` job: the
-all-planes pipeline, the harness runner contract, a dry-run RA2 campaign, and a
-decision server with the match's Node client). Name its result. A new harness
+all-planes pipeline, the harness runner contract, dry-run RA2 and tank
+campaigns, the tank runner contract, and a decision server with the match's
+Node client). Name its result. A new harness
 runner also needs scripts/e2e/check_runner.py on its own config, and a new
 trainer scripts/e2e/check_trainer.py.
 

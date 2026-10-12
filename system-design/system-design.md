@@ -722,3 +722,7 @@ every harness file kind, concurrent episodes, a second event loop, and the gate.
 `scripts/e2e/check_trainer.py` does the same for a trainer: declared support the rules
 accept, jobs trained on batches drawn as the campaign draws them, new weights in the
 release's format, no overwritten checkpoint, and refusal of what it does not declare.
+`scripts/e2e/tank_campaign.py` runs a campaign on real tank rounds
+(`honing/backends/tank`) with a stand-in decision model: a GEPA harness move, SFT on
+planner-teacher demonstrations, and GRPO on sampled rollouts, each gated on the
+validation rounds.

@@ -1,0 +1,9 @@
+{
+  "motion": "Choose joint driving and turning to survive and obtain a verified shot. Every shell is lethal. Prefer safe progress and small heading error. Do not fire yet.",
+  "drive": "Choose forward, reverse, or stop. The barrel is fixed to the hull; turn and weapon are separate choices. Avoid all shells.",
+  "turn": "Choose hull rotation. Use the verified firing direction or navigation waypoint in context. Left is negative angle, right is positive.",
+  "movement": "Choose movement now. Avoid every shell, including your own. Prefer no-hit routes, then approach the enemy. Shooting is independent.",
+  "weapon": "Decide whether to fire. Own ricochets are lethal. Use the selected motion forecast when present. Fire only with a safe valid shot; otherwise hold.",
+  "weapon.fire": "Fire after this selected motion turns. Only useful if its new shot is safe and hits the enemy.",
+  "weapon.hold": "Execute this motion without firing. Choose this if the selected shot is unavailable or unsafe."
+}

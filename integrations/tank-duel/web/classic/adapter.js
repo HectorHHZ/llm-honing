@@ -70,6 +70,7 @@ export const adapter = {
             rtt,
             contextVersion = "full",
             decisionVersion,
+            strategy,
         },
     ) {
         const controlDuration = Math.max(
@@ -77,7 +78,11 @@ export const adapter = {
                 interval / 1000 + 0.3,
             ),
             opts = {
-                strategy: strategyFor({ controllerMode, decisionVersion }),
+                strategy: strategyFor({
+                    controllerMode,
+                    decisionVersion,
+                    strategy,
+                }),
                 reactionDelay: responseDelay(rtt ?? 300),
                 controlDuration,
             };
@@ -87,6 +92,7 @@ export const adapter = {
             controllerMode,
             contextVersion,
             decisionVersion,
+            strategy,
         });
         const obs =
             controllerMode === "plans"
@@ -155,13 +161,18 @@ export const adapter = {
             validProbabilities(r.probabilities?.turn, Object.keys(TURNS))
         );
     },
-    apply(game, id, r, { controllerMode, interval, decisionVersion }) {
+    apply(
+        game,
+        id,
+        r,
+        { controllerMode, interval, decisionVersion, strategy },
+    ) {
         if (controllerMode === "plans")
             return applyPlanDecision(
                 game,
                 id,
                 r,
-                strategyFor({ controllerMode, decisionVersion }),
+                strategyFor({ controllerMode, decisionVersion, strategy }),
             );
         game.setControls(
             id,
