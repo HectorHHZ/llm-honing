@@ -10,12 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from gepa.core.adapter import EvaluationBatch
-from gepa.core.data_loader import ensure_loader
-from gepa.core.engine import GEPAEngine
-from gepa.core.result import GEPAResult
-from gepa.core.state import GEPAState, ValsetEvaluation, initialize_gepa_state
-from gepa.strategies.eval_policy import FullEvaluationPolicy
+
+pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+
 from gepa.utils.stop_condition import MaxMetricCallsStopper
 
 from honing.core import (
@@ -41,6 +38,7 @@ from honing.harness.methods.gepa import ARCHIVE_SCHEMA_VERSION, Archive, GEPACon
 from tests.fakes.builder import TASKS, build_campaign
 from tests.fakes.harness import INSTRUCTIONS_PATH, SEED_HARNESS, FakeChatModel, FakeEpisodeRunner, FakeTaskGrader
 from tests.fakes.model import FakeModelSource, FakeWorld
+from tests.gepa_upstream import upstream_replay
 
 TASK_IDS = tuple(task.task_id for task in TASKS)
 WORLD = FakeWorld()
@@ -444,58 +442,6 @@ def test_the_recorded_state_names_its_weights_and_round_trips_through_json() -> 
 # ------------------------------------------------------------ parity with upstream GEPA
 
 
-def _upstream_replay(
-    seed_scores: Sequence[float], children: Sequence[Sequence[float]]
-) -> list[tuple[int, int, dict[str, set[int]], int]]:
-    """Upstream's state after the seed and after each child: best, GEPAResult.best_idx, fronts, metric calls.
-
-    The seed goes through ``initialize_gepa_state`` and each child through
-    ``_evaluate_programs_on_valset`` plus the two calls ``_add_evaluated_program``
-    makes to charge and add it (engine.py:282, 291).
-    """
-    task_ids = TASK_IDS[: len(seed_scores)]
-    table = {("seed", task_id): score for task_id, score in zip(task_ids, seed_scores, strict=True)}
-    for index, scores in enumerate(children):
-        table.update({(f"child {index}", task_id): score for task_id, score in zip(task_ids, scores, strict=True)})
-
-    def batch_evaluate(items: list[tuple[dict[str, str], list[str]]]) -> list[EvaluationBatch]:
-        return [
-            EvaluationBatch(outputs=[None] * len(batch), scores=[table[(program["text"], t)] for t in batch])
-            for program, batch in items
-        ]
-
-    engine = SimpleNamespace(
-        valset=ensure_loader(list(task_ids)),
-        val_evaluation_policy=FullEvaluationPolicy(),
-        _batch_evaluate=batch_evaluate,
-    )
-    seed_evaluation = ValsetEvaluation(
-        outputs_by_val_id=dict.fromkeys(range(len(task_ids))),
-        scores_by_val_id={index: table[("seed", task_id)] for index, task_id in enumerate(task_ids)},
-    )
-    state: GEPAState = initialize_gepa_state(
-        run_dir=None,
-        logger=SimpleNamespace(log=lambda *_: None),
-        seed_candidate={"text": "seed"},
-        seed_valset_evaluation=seed_evaluation,
-    )
-    history = []
-
-    def snapshot() -> None:
-        fronts = {task_ids[key]: set(members) for key, members in state.get_pareto_front_mapping().items()}
-        best = FullEvaluationPolicy().get_best_program(state)
-        history.append((best, GEPAResult.from_state(state).best_idx, fronts, state.total_num_evals))
-
-    for index in range(len(children)):
-        program = {"text": f"child {index}"}
-        ((evaluation, calls),) = GEPAEngine._evaluate_programs_on_valset(engine, [program], state)
-        discovered_at = state.total_num_evals
-        state.increment_evals(calls)
-        state.update_state_with_new_program([0], program, evaluation, None, discovered_at)
-        snapshot()
-    return history
-
-
 def _honing_replay(
     seed_scores: Sequence[float], children: Sequence[Sequence[float]], rng: random.Random
 ) -> list[tuple[int, dict[str, set[int]], int]]:
@@ -535,7 +481,7 @@ def _histories() -> list[tuple[tuple[float, ...], list[tuple[float, ...]]]]:
 def test_served_fronts_and_metric_calls_match_upstream_after_every_validation(
     seed_scores: tuple[float, ...], children: list[tuple[float, ...]]
 ) -> None:
-    upstream = _upstream_replay(seed_scores, children)
+    upstream = upstream_replay(TASK_IDS[: len(seed_scores)], seed_scores, children)
     honing = _honing_replay(seed_scores, children, random.Random(0))
 
     for (best, result_best, upstream_fronts, total_evals), (served, fronts, metric_calls) in zip(

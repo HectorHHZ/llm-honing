@@ -12,6 +12,7 @@ import {
     STRATEGIES,
     rangeCost,
     publishedStrategies,
+    strategyFrom,
 } from "../web/classic/strategies.js";
 import { buildPlans } from "../web/classic/planner.js";
 test("cadence learns each seat separately, bounds history and recovers from busy", () => {
@@ -79,9 +80,45 @@ test("ammo forecast agrees with shortened lifetime, both spawns face inward", ()
         for (const t of h.tanks) assert.equal(t.angle, t.x < 450 ? 0 : Math.PI);
     }
 });
-test("experimental strategies remain explicit and spacing improves toward preferred range", () => {
-    assert.ok(!publishedStrategies().some((s) => s.status === "candidate"));
-    const s = STRATEGIES["standoff-v1"];
+const STANDOFF = {
+    id: "standoff-v1",
+    description:
+        "Compare firing angles while maintaining a 220-360 px engagement range.",
+    allAnglePrompt: true,
+    multiAim: true,
+    spacingWeight: 1.6,
+    minRange: 220,
+    maxRange: 360,
+};
+test("only the two baselines are published; a harness strategy is checked", () => {
+    assert.deepEqual(
+        publishedStrategies().map((s) => s.id),
+        ["baseline", "raw"],
+    );
+    assert.equal(strategyFrom("baseline"), STRATEGIES.baseline);
+    assert.throws(() => strategyFrom("raw"), /Unknown planned strategy/);
+    assert.throws(
+        () => strategyFrom({ ...STANDOFF, aimBot: true }),
+        /Unknown strategy parameter aimBot/,
+    );
+    assert.throws(
+        () => strategyFrom({ ...STANDOFF, spacingWeight: "1" }),
+        /must be a number/,
+    );
+    assert.throws(
+        () => strategyFrom({ ...STANDOFF, maxRange: 100 }),
+        /minRange <= maxRange/,
+    );
+    assert.throws(
+        () => strategyFrom({ multiAim: true }),
+        /id and a description/,
+    );
+    const s = strategyFrom(STANDOFF);
+    assert.equal(s.mode, "plans");
+    assert.equal(s.clearanceWeight, undefined);
+});
+test("a harness strategy's spacing improves toward its preferred range", () => {
+    const s = strategyFrom(STANDOFF);
     assert.ok(rangeCost(100, s) > rangeCost(200, s));
     assert.equal(rangeCost(300, s), 0);
     assert.ok(rangeCost(600, s) > 0);
@@ -101,7 +138,7 @@ test("experimental strategies remain explicit and spacing improves toward prefer
     assert.ok(plans.actions.every((x) => Number.isFinite(x.aimHeading)));
 });
 
-test("Steady Aim preserves a still-safe stationary shot without weakening the fresh shot veto", async () => {
+test("revalidateSlack preserves a still-safe stationary shot without weakening the fresh shot veto", async () => {
     const { applyPlanDecision } = await import("../web/classic/planner.js");
     const fixture = () => {
         const g = new Game();
@@ -130,7 +167,11 @@ test("Steady Aim preserves a still-safe stationary shot without weakening the fr
         steady,
         0,
         reply,
-        STRATEGIES["steady-aim-v1"],
+        strategyFrom({
+            id: "steady-aim-v1",
+            description: "Retain a still-safe selected motion.",
+            revalidateSlack: 60,
+        }),
     );
     assert.equal(applied.motion_id, "stop_none");
     assert.equal(applied.controls.fire, true);

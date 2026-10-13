@@ -2,12 +2,14 @@
 
 Usage: python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]
 
-Checks that hold for any run of scripts/e2e/ra2_campaign.py:
+Checks that hold for any run of scripts/e2e/ra2_campaign.py or scripts/e2e/tank_campaign.py:
 
 - summary.json names a result for every step (published, rolled back, or skipped);
 - the release chain has the initial release plus one record per gated step, and
   the head is the last published release (or r0000 when nothing was published);
-- every gated step's episodes are on disk: a run directory with result.json each.
+- every gated step's episodes are on disk: summary.json lists each one's run
+  directory, and each holds a result.json. A method's own minibatches, rollouts,
+  and demonstrations leave run directories too, and are not counted.
 
 ``--expect harness="rolled back"`` also requires that step's result, in order.
 """
@@ -45,10 +47,17 @@ def problems(work: Path, expected: list[tuple[str, str]]) -> list[str]:
     if summary["head"] != head:
         found.append(f"the head is {summary['head']}, but the last published release is {head}")
 
-    episodes = sum(s["episodes"] for s in gated)
-    finished = [p for p in (work / "runs").iterdir() if (p / "result.json").exists()]
-    if len(finished) != episodes:
-        found.append(f"{episodes} gated episodes, but {len(finished)} run directories with a result")
+    for index, step in enumerate(gated):
+        workspaces = step["workspaces"]
+        if len(workspaces) != step["episodes"]:
+            found.append(
+                f"step {index + 1} ({step['move']}) lists {len(workspaces)} of its {step['episodes']} episodes"
+            )
+        missing = [w for w in workspaces if not w or not (Path(w) / "result.json").exists()]
+        if missing:
+            found.append(
+                f"step {index + 1} ({step['move']}) has {len(missing)} episodes without a result: {missing[:3]}"
+            )
     return found
 
 

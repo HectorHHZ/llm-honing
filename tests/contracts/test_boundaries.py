@@ -4,6 +4,8 @@
   on it without pulling in a framework.
 - Only ``honing/backends/`` may import a training framework. Slime is the one
   dependency; Reef is a design reference and is never imported.
+- Only ``honing/harness/models.py`` imports litellm, an optional extra whose
+  pin is reviewed on its own.
 - Retired design terms stay out of code and the specification.
 """
 
@@ -65,6 +67,17 @@ def test_only_backend_packages_import_a_training_framework(repo_root: Path) -> N
         if path.relative_to(package).parts[0] != "backends" and imported_top_levels(path) & FRAMEWORKS
     }
     assert offenders == {}, f"framework imports outside honing/backends/: {offenders}"
+
+
+@pytest.mark.unit
+def test_only_the_chat_client_imports_litellm(repo_root: Path) -> None:
+    package = repo_root / "honing"
+    importers = [
+        str(path.relative_to(repo_root))
+        for path in sorted(package.rglob("*.py"))
+        if "litellm" in imported_top_levels(path)
+    ]
+    assert importers == ["honing/harness/models.py"]
 
 
 @pytest.mark.unit

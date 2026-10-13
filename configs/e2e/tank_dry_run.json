@@ -1,0 +1,33 @@
+{
+  "description": "Tank duel campaign with no GPU or model: real rounds (the Node match process against the planner opponent, Honing's DecisionServer) with a stand-in decision model, GEPA reflecting through a scripted chat model, planner-teacher demonstrations for sft and sampled rollouts for grpo, and a fake trainer.",
+  "integration_dir": "integrations/tank-duel",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-e2e-dry-run",
+  "gate_tasks": {"split": "val", "limit": 4},
+  "harness_tasks": {"split": "train", "limit": 4},
+  "episode_budget": 6,
+  "samples_per_task": 2,
+  "schedule": [
+    {"kind": "harness", "label": "gepa"},
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"},
+    {"kind": "train", "algorithm": "grpo", "steps": 1, "contract": "typed_decisions"}
+  ],
+  "requires": {"env": [], "commands": ["node"], "paths": []},
+  "components": {
+    "model_source": {"factory": "tests.fakes.tank:model_source"},
+    "endpoints": {"factory": "tests.fakes.tank:endpoints"},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner"},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"},
+    "trainer": {"factory": "tests.fakes.tank:trainer"},
+    "data": {"factory": "honing.backends.tank.e2e:demonstrations", "args": {"limit": 2}},
+    "rollout": {"factory": "honing.backends.tank.e2e:rollouts"},
+    "method": {
+      "factory": "honing.backends.tank.e2e:gepa_method",
+      "args": {
+        "chat": {"factory": "tests.fakes.tank:chat"},
+        "max_metric_calls": 100,
+        "minibatch_size": 3
+      }
+    }
+  }
+}

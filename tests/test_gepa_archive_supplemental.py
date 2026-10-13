@@ -64,6 +64,8 @@ def test_restored_archive_does_not_share_mutable_input_state():
 
 
 def test_worse_candidate_is_not_sampled_despite_sharing_a_front():
+    pytest.importorskip("gepa", reason="parent draws need the 'gepa' extra")
+
     archive = seed().validate(0, TASK_IDS, (1.0, 0.5))
     archive, child = archive.add({**COMPONENTS, "CLAUDE.md": "better"}, parent=0)
     archive = archive.validate(child, TASK_IDS, (1.0, 1.0))

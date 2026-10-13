@@ -134,7 +134,7 @@ plays matches and is gated and trained through Honing.
 | Post-training | Laya, Kev and NanoJev trainers: SFT and GRPO on typed decisions (`honing/backends/jev`); a Slime trainer for language models: SFT, on-policy (self-)distillation and GRPO (`honing/backends/slime`) | LoRA and parameter subsets through Slime; a local DPO trainer |
 | Harness self-evolve | contracts, and the RA2 runner, grader, and harness (`honing/backends/ra2`) | GEPA ([#77](https://github.com/HectorHHZ/llm-honing/pull/77), in review) |
 | Serving | an HTTP decision server for Laya, Kev, NanoJev and StartLux-Decision (0.8B, 4B, 27B), plus a [djev / DiffusionGemma bridge](integrations/djev/README.md) | managed SGLang and vLLM deployments |
-| Data plane | the batch contracts, and RA2 demonstration and rollout providers | dataset and feedback providers |
+| Data plane | the batch contracts, and RA2 and tank demonstration and rollout providers | dataset and feedback providers |
 
 [`integrations/ra2/README.md`](integrations/ra2/README.md) runs the RA2 loop
 end to end, and CI runs its dry run on every pull request.
@@ -144,7 +144,7 @@ from a config that names each component, and checks a harness runner
 from it, before it joins one. The implementation
 steps are in [`system-design/system-design.md`](system-design/system-design.md#7-implementation-steps).
 
-The [RICOCHET tank demo](integrations/tank-duel/README.md) offers two English sketch-style browser games: hull steering and automatic turret aiming. Both run locally without a model; set `HONING_URL` to enable model duels with live decision context and match exports.
+The [RICOCHET tank demo](integrations/tank-duel/README.md) offers two English sketch-style browser games: hull steering and automatic turret aiming. Both run locally without a model; set `HONING_URL` to enable model duels with live decision context and match exports. Classic is also a Honing task environment (`honing/backends/tank`): headless rounds against a planner opponent, a harness GEPA can rewrite, planner-teacher demonstrations for SFT and sampled rollouts for GRPO, and a CPU dry-run campaign CI runs on every pull request.
 
 ## System design
 
