@@ -333,7 +333,9 @@ class EvolveMethod(Protocol):
 
 Methods that reflect or propose call a model through `ChatModel`, and runners find the
 engine behind a policy through `PolicyEndpoints`; both are protocols in `honing/core`, and
-their implementations live outside it.
+their implementations live outside it. The `ChatModel` client is `LiteLLMChatModel`
+(`honing/harness/models.py`, the `litellm` extra), which reaches hosted APIs and local
+servers alike.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
