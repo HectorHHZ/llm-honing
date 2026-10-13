@@ -1,0 +1,16 @@
+{
+  "description": "The harness runner checks on the tank runner: real rounds (the Node match process against the planner opponent, Honing's DecisionServer) with the dry run's stand-in decision model.",
+  "requires": {"env": [], "commands": ["node"], "paths": []},
+  "tasks": {"factory": "honing.backends.tank.e2e:tasks", "args": {"split": "val", "limit": 2}},
+  "harness_seed": {"factory": "honing.backends.tank.e2e:harness_seed"},
+  "components": {
+    "model_source": {"factory": "tests.fakes.tank:model_source"},
+    "endpoints": {"factory": "tests.fakes.tank:endpoints"},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner"},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"}
+  },
+  "conformance": {
+    "probe": {"factory": "honing.backends.tank.e2e:delivery_probe"},
+    "concurrent": 4
+  }
+}

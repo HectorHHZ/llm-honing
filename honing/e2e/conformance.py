@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Protocol, get_args, runtime_checkable
 
 from honing.campaign import rules
@@ -144,7 +144,9 @@ def check_runner(
     case("delivery", delivery)
 
     def concurrently() -> tuple[bool, str]:
-        many = [replace(tasks[0], task_id=f"{tasks[0].task_id}-{index}") for index in range(concurrent)]
+        # The same task each time: a runner that finds its scenario by task id can run it, and a
+        # workspace named only after the task would collide.
+        many = [tasks[0]] * concurrent
         done = _episodes(runner, grader, probed, many, policy)
         places = {record.outcome.workspace_location for record in done}
         if None not in places and len(places) != len(done):
