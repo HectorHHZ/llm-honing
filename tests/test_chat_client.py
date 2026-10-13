@@ -92,7 +92,9 @@ def stub(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         server.server_close()
 
 
-def client(api_base: str, model: str = PRICED_MODEL, **settings: object) -> tuple[LiteLLMChatModel, list[float]]:
+def client(
+    api_base: str | None, model: str = PRICED_MODEL, **settings: object
+) -> tuple[LiteLLMChatModel, list[float]]:
     sleeps: list[float] = []
     chat = LiteLLMChatModel(model, api_base=api_base, api_key_env=KEY_ENV, sleep=sleeps.append, **settings)  # type: ignore[arg-type]
     return chat, sleeps
@@ -251,8 +253,11 @@ def test_cost_comes_from_the_bundled_price_map_without_a_remote_connection(
 
     monkeypatch.setattr(socket.socket, "connect", loopback_only)
     price = litellm.model_cost["gpt-4o-mini"]
+    # Without api_base, litellm takes the OpenAI server from the environment; a
+    # client given api_base reports no cost at all.
+    monkeypatch.setenv("OPENAI_BASE_URL", stub)
 
-    priced = complete(client(stub, PRICED_MODEL)[0])
+    priced = complete(client(None, PRICED_MODEL)[0])
     local = complete(client(stub, LOCAL_MODEL)[0])
 
     expected = 11 * price["input_cost_per_token"] + 3 * price["output_cost_per_token"]
@@ -262,6 +267,73 @@ def test_cost_comes_from_the_bundled_price_map_without_a_remote_connection(
     assert connected and all(isinstance(address, tuple) and address[0] == "127.0.0.1" for address in connected)
     source = litellm.litellm_core_utils.get_model_cost_map.get_model_cost_map_source_info()
     assert (source["source"], source["is_env_forced"]) == ("local", True)
+
+
+@pytest.mark.unit
+def test_a_server_named_by_api_base_has_no_known_cost(stub: str) -> None:
+    # A local server under a hosted model's name is not billed at the hosted price.
+    reply = complete(client(stub, PRICED_MODEL)[0])
+
+    assert reply.text == "hello"
+    assert reply.cost_usd is None
+
+
+@pytest.mark.unit
+def test_a_model_priced_at_zero_has_no_known_cost(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # litellm prices ollama/ models at zero. The stub speaks OpenAI's format, not
+    # Ollama's, so the zero price is substituted on an OpenAI-shaped call.
+    ollama = {name: entry for name, entry in litellm.model_cost.items() if name.startswith("ollama/")}
+    assert ollama and all(entry.get("input_cost_per_token") == 0 for entry in ollama.values())
+    monkeypatch.setenv("OPENAI_BASE_URL", stub)
+    monkeypatch.setattr(litellm, "completion_cost", lambda **_: 0.0)
+
+    reply = complete(client(None, PRICED_MODEL)[0])
+
+    assert reply.text == "hello"
+    assert reply.cost_usd is None
+
+
+@pytest.mark.unit
+def test_a_missing_provider_key_fails_on_the_first_attempt(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_BASE"):
+        monkeypatch.delenv(name, raising=False)
+    sleeps: list[float] = []
+    chat = LiteLLMChatModel(PRICED_MODEL, api_base=stub, sleep=sleeps.append)
+
+    with pytest.raises(ChatModelError) as raised:
+        complete(chat)
+
+    assert (raised.value.error_type, raised.value.attempts) == ("MissingAPIKey", 1)
+    assert "OPENAI_API_KEY is unset" in str(raised.value)
+    assert "hosted_vllm/" in str(raised.value)
+    assert sleeps == []
+    assert Stub.requests == []
+
+
+@pytest.mark.unit
+def test_a_keyless_local_server_is_reached_as_hosted_vllm(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_BASE", "HOSTED_VLLM_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    sleeps: list[float] = []
+    chat = LiteLLMChatModel(LOCAL_MODEL, api_base=stub, sleep=sleeps.append)
+
+    reply = complete(chat)
+
+    assert reply.text == "hello"
+    assert len(Stub.requests) == 1
+    assert sleeps == []
+
+
+@pytest.mark.unit
+def test_a_server_error_is_still_retried_when_the_key_is_set(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # With api_key_env set, litellm's default OPENAI_API_KEY is not needed, so a
+    # 500 is an ordinary server error.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    Stub.statuses[:] = [500, 200]
+    chat, sleeps = client(stub, retry_backoff_seconds=0.5)
+
+    assert complete(chat).text == "hello"
+    assert sleeps == [0.5]
 
 
 # Runs in a fresh interpreter, so litellm is imported by the client's first call.
@@ -292,7 +364,7 @@ from honing.core import ChatMessage
 from honing.harness.models import LiteLLMChatModel
 
 assert "litellm" not in sys.modules
-chat = LiteLLMChatModel(sys.argv[1], api_base=sys.argv[2], api_key_env=sys.argv[3])
+chat = LiteLLMChatModel(sys.argv[1], api_key_env=sys.argv[2])
 reply = chat.complete([ChatMessage(role="user", content="hi")], max_tokens=8, temperature=0.0)
 
 from litellm.litellm_core_utils.get_model_cost_map import get_model_cost_map_source_info
@@ -309,7 +381,8 @@ print(json.dumps({
 @pytest.mark.integration  # starts a subprocess
 def test_the_client_uses_the_bundled_price_map_when_the_variable_is_unset(stub: str) -> None:
     environment = {name: value for name, value in os.environ.items() if name != "LITELLM_LOCAL_MODEL_COST_MAP"}
-    command = [sys.executable, "-c", FRESH_PROCESS_CALL, PRICED_MODEL, stub, KEY_ENV]
+    environment["OPENAI_BASE_URL"] = stub
+    command = [sys.executable, "-c", FRESH_PROCESS_CALL, PRICED_MODEL, KEY_ENV]
 
     result = subprocess.run(command, env=environment, capture_output=True, text=True, check=False)
 

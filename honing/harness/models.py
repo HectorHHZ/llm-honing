@@ -14,7 +14,9 @@ and server errors.
 ``cost_usd`` uses the price map bundled with the pinned litellm: the client
 sets ``LITELLM_LOCAL_MODEL_COST_MAP=True`` before importing litellm, unless the
 variable is already set, so nothing is downloaded at import. A process that
-imports litellm before the first call decides for itself.
+imports litellm before the first call decides for itself. The map prices a
+hosted provider, so a reply from a server named by ``api_base`` has no known
+cost, and neither does a model the map prices at zero, as it does ``ollama/``.
 
 A litellm error carries the provider's response body in its message. Every
 failure is raised as :class:`ChatModelError`, whose message names only the
@@ -42,16 +44,17 @@ _RETRYABLE_STATUSES = frozenset({408, 429})
 class ChatModelError(HoningError):
     """A chat completion failed. The message never holds a request body, a response body, or a key."""
 
-    def __init__(self, model: str, error_type: str, status_code: int | None, attempts: int) -> None:
+    def __init__(
+        self, model: str, error_type: str, status_code: int | None, attempts: int, hint: str | None = None
+    ) -> None:
         self.model = model
         self.error_type = error_type
         self.status_code = status_code
         self.attempts = attempts
         status = "no status" if status_code is None else f"status {status_code}"
         plural = "" if attempts == 1 else "s"
-        super().__init__(
-            f"chat completion for {model!r} failed after {attempts} attempt{plural}: {error_type} ({status})"
-        )
+        message = f"chat completion for {model!r} failed after {attempts} attempt{plural}: {error_type} ({status})"
+        super().__init__(message if hint is None else f"{message}; {hint}")
 
 
 @dataclass(frozen=True)
@@ -62,11 +65,15 @@ class LiteLLMChatModel:
     is read on every call and passed to that call only, never to litellm's
     global settings. Without ``api_key_env`` no key is passed, and litellm
     applies its provider's default (for ``openai/`` models, ``OPENAI_API_KEY``).
+    An ``openai/`` model needs a key even with ``api_base`` set; a local server
+    that needs no key is reached as ``hosted_vllm/<name>`` without ``api_key_env``.
+    A call that fails while that default key is unset is not retried.
 
-    ``max_attempts`` counts the first attempt; a retry waits
-    ``retry_backoff_seconds`` times two to the number of attempts before it.
-    ``cost_usd`` is ``None`` when litellm has no price for ``model``, as for a
-    model served locally.
+    ``max_attempts`` counts the first attempt. Retry ``n`` waits
+    ``retry_backoff_seconds`` times ``2 ** (n - 1)``: once, then twice, then
+    four times that.
+    ``cost_usd`` is ``None`` when ``api_base`` is set, when litellm has no price
+    for ``model``, or when its price is zero.
     """
 
     model: str
@@ -135,6 +142,14 @@ class LiteLLMChatModel:
                 )
             except Exception as error:
                 status = _status_code(error)
+                missing = [] if api_key is not None else _missing_keys(litellm, self, error, status)
+                if missing:
+                    # litellm reports an unset provider key as a 500, which a retry cannot fix.
+                    hint = (
+                        f"{', '.join(missing)} is unset; set api_key_env, or use a hosted_vllm/ model"
+                        " for a local server that needs no key"
+                    )
+                    raise ChatModelError(self.model, "MissingAPIKey", status, attempt, hint) from None
                 if attempt < self.max_attempts and _retryable(litellm, error, status):
                     self.sleep(self.retry_backoff_seconds * 2 ** (attempt - 1))
                     continue
@@ -161,7 +176,7 @@ class LiteLLMChatModel:
             text=text,
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-            cost_usd=_cost_usd(litellm, response),
+            cost_usd=None if self.api_base is not None else _cost_usd(litellm, response),
         )
 
 
@@ -176,13 +191,30 @@ def _retryable(litellm: ModuleType, error: Exception, status: int | None) -> boo
     return status is not None and (status in _RETRYABLE_STATUSES or 500 <= status < 600)
 
 
+def _missing_keys(litellm: ModuleType, chat: LiteLLMChatModel, error: Exception, status: int | None) -> list[str]:
+    """The provider key variables litellm wants but cannot find, when they may explain ``error``.
+
+    Checked only after a failure, so a provider that authenticates another way
+    (an AWS profile, application default credentials) is never refused up front.
+    """
+    if isinstance(error, (litellm.Timeout, litellm.APIConnectionError)) or status not in (None, 401, 500):
+        return []
+    try:
+        report = litellm.validate_environment(model=chat.model, api_base=chat.api_base)
+    except Exception:
+        return []
+    missing = report.get("missing_keys") if isinstance(report, Mapping) else None
+    return [str(name) for name in missing] if isinstance(missing, list) else []
+
+
 def _cost_usd(litellm: ModuleType, response: object) -> float | None:
-    """litellm's price for the reply, or ``None`` when it has none for the model."""
+    """litellm's price for the reply, or ``None`` when it has none, or none above zero, for the model."""
     try:
         cost = litellm.completion_cost(completion_response=response)
     except Exception:
         # litellm raises for a model missing from its price map, which is every local model.
         return None
-    if not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0:
+    # A zero price is litellm's entry for a local provider such as ollama/, not a free call.
+    if not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost <= 0:
         return None
     return float(cost)
