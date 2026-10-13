@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import atexit
 import os
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from honing.backends.sglang.chat import SGLangChatModel
 from honing.backends.sglang.checkpoint import hf_snapshot
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
+from honing.backends.sglang.engine import SGLangEngine, SGLangSettings
 from honing.core import EpisodeOutcome, Grade, ModelSnapshot, Task
 
 
@@ -67,3 +70,26 @@ class ReplyGrader:
 
 def reply_grader(context: Any) -> ReplyGrader:
     return ReplyGrader()
+
+
+def chat(
+    context: Any,
+    checkpoint: str = "$HONING_SGLANG_CHAT_CHECKPOINT",
+    gpu: str = "$HONING_SGLANG_CHAT_GPU",
+    python: str = "$SGLANG_PYTHON",
+) -> SGLangChatModel:
+    """A chat model on its own SGLang engine, for an evolution method's reflection; it stops when the process
+    exits."""
+    stack = ExitStack()
+    log = Path(context.work_dir) / "serving" / "chat-engine.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    settings = SGLangSettings(
+        python=Path(os.path.expandvars(python)),
+        gpu=os.path.expandvars(gpu),
+        chat=True,
+        served_model="reflection",
+        log_path=log,
+    )
+    engine = stack.enter_context(SGLangEngine.launch(Path(os.path.expandvars(checkpoint)), settings))
+    atexit.register(stack.close)
+    return SGLangChatModel(engine.openai_url, "reflection")

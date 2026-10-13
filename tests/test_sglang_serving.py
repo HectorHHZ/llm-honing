@@ -1,7 +1,7 @@
 """Serving any checkpoint through SGLang (RFC #103): the lettered decision readout, the chat model, the policy
-endpoints a campaign's runners resolve, and checkpoint checksums. The engine is stood in for by scorers and servers
-with SGLang's shapes; the GPU checks are scripts/e2e/sglang_logprobs.py, scripts/e2e/sglang_lettered.py and the
-``*_sglang.json`` runner check configs.
+endpoints a campaign's runners resolve, checkpoint checksums, and the stand-in trainer whose checkpoints are real.
+The engine is stood in for by scorers and servers with SGLang's shapes; the GPU checks are
+scripts/e2e/sglang_logprobs.py, scripts/e2e/sglang_lettered.py and the ``*_sglang.json`` configs.
 """
 
 from __future__ import annotations
@@ -333,3 +333,38 @@ def test_a_checkpoint_is_named_by_its_hub_repository_or_its_directory(tmp_path: 
     snapshot.mkdir(parents=True)
     assert checkpoint_identity(snapshot, "f" * 64) == ("Qwen/Qwen3-1.7B", "70d244cc")
     assert checkpoint_identity(tmp_path / "iter4", "abc" * 22) == ("iter4", ("abc" * 22)[:12])
+
+
+def test_the_stand_in_trainer_writes_a_new_servable_checkpoint_with_its_norm_scaled(tmp_path: Path) -> None:
+    from honing.core import TrainJobSpec
+    from tests.fakes.serving import NormScaleTrainer
+
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "config.json").write_text(
+        json.dumps(
+            {"architectures": ["Qwen3ForCausalLM"], "hidden_size": 2, "num_hidden_layers": 1,
+             "num_attention_heads": 1, "intermediate_size": 4}
+        )
+    )  # fmt: skip
+    (base / "tokenizer.json").write_text("{}")
+    norm = struct.pack("<2H", 0x3F80, 0x4000)  # bf16 1.0 and 2.0
+    other = struct.pack("<2f", 0.5, -0.5)
+    header = json.dumps(
+        {
+            "model.norm.weight": {"dtype": "BF16", "shape": [2], "data_offsets": [0, 4]},
+            "model.embed_tokens.weight": {"dtype": "F32", "shape": [1, 2], "data_offsets": [4, 12]},
+        }
+    ).encode()
+    (base / "model.safetensors").write_bytes(struct.pack("<Q", len(header)) + header + norm + other)
+    snapshot = hf_snapshot(base)
+
+    result = NormScaleTrainer(tmp_path / "trained", factor=1.5).train(TrainJobSpec(algorithm="sft"), snapshot, None)
+
+    out = Path(result.snapshot.checkpoint.location)
+    assert result.snapshot.checkpoint.checksum != snapshot.checkpoint.checksum
+    assert (out / "config.json").is_symlink() and (out / "tokenizer.json").is_symlink()
+    data = (out / "model.safetensors").read_bytes()
+    start = 8 + len(header)
+    assert struct.unpack("<2H", data[start : start + 4]) == (0x3FC0, 0x4040)  # 1.5 and 3.0
+    assert data[start + 4 :] == other

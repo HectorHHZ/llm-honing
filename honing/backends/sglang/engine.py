@@ -26,6 +26,10 @@ The engine keeps its radix cache unless ``prefix_cache`` is off: prompts that
 begin with the same tokens, the questions of one request or consecutive
 decisions of one game, reuse the computed beginning.
 
+The engine's environment must hold the versions in :data:`PINNED`, those of
+``scripts/sglang.lock`` (built by ``scripts/setup-sglang.sh``); otherwise it is
+refused before anything loads.
+
 With ``chat`` the server also loads the checkpoint's tokenizer and answers
 SGLang's OpenAI-compatible routes under :attr:`SGLangEngine.openai_url`
 (``/v1/chat/completions``, ``/v1/completions``) as ``served_model``: the
@@ -51,6 +55,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# The packages whose versions decide what the engine computes, as scripts/sglang.lock pins them.
+PINNED = {
+    "sglang": "0.5.21",
+    "sglang-kernel": "0.4.7",
+    "torch": "2.13.0",
+    "transformers": "5.12.1",
+    "flashinfer-python": "0.6.18",
+    "triton": "3.7.1",
+}
+
 
 @dataclass(frozen=True)
 class SGLangSettings:
@@ -61,6 +75,7 @@ class SGLangSettings:
     ``mem_fraction`` is SGLang's ``--mem-fraction-static``. ``chat`` loads
     the tokenizer and serves the OpenAI-compatible routes as ``served_model``.
     ``extra_args`` are passed to ``sglang.launch_server`` unchanged.
+    ``check_versions`` refuses an environment whose versions differ from :data:`PINNED`.
     """
 
     python: Path
@@ -76,6 +91,7 @@ class SGLangSettings:
     start_timeout: float = 900.0
     log_path: Path | None = None
     env: dict[str, str] = field(default_factory=dict)
+    check_versions: bool = True
 
 
 def die_with_parent() -> None:
@@ -94,6 +110,21 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
             return
         except subprocess.TimeoutExpired:
             continue
+
+
+def installed_versions(python: Path, env: dict[str, str]) -> dict[str, str]:
+    """The versions of the :data:`PINNED` packages installed for ``python``, without a local build tag."""
+    probe = (
+        "import importlib.metadata as m, json, sys\n"
+        "out = {}\n"
+        "for name in sys.argv[1:]:\n"
+        "    try: out[name] = m.version(name).split('+')[0]\n"
+        "    except m.PackageNotFoundError: pass\n"
+        "print(json.dumps(out))"
+    )
+    output = subprocess.check_output([str(python), "-c", probe, *PINNED], text=True, env=env)
+    versions: dict[str, str] = json.loads(output)
+    return versions
 
 
 def _free_port() -> int:
@@ -139,6 +170,14 @@ class SGLangEngine:
         # The engine compiles kernels at start-up with tools its environment installs (ninja), so that
         # environment's bin directory goes first, as if it were activated.
         env["PATH"] = os.pathsep.join([str(settings.python.parent), env.get("PATH", "")])
+        installed = installed_versions(settings.python, env)
+        if settings.check_versions:
+            differ = {name: installed.get(name) for name, version in PINNED.items() if installed.get(name) != version}
+            if differ:
+                raise SGLangError(
+                    f"{settings.python} does not hold the pinned SGLang environment (scripts/sglang.lock): "
+                    + ", ".join(f"{name} {got or 'missing'}, not {PINNED[name]}" for name, got in differ.items())
+                )
         log = settings.log_path.open("ab") if settings.log_path else subprocess.DEVNULL
         # Its own process group, so stopping it stops SGLang's workers too; and it dies with this process, so a
         # server killed without running its cleanup does not leave an engine holding the GPU.
@@ -160,7 +199,7 @@ class SGLangEngine:
                 if time.monotonic() > deadline:
                     raise SGLangError(f"the SGLang server did not start within {settings.start_timeout:.0f} s")
                 time.sleep(2)
-            versions = cls._versions(settings.python, url, env)
+            versions = {**cls._versions(settings.python, url, env), "packages": installed}
             yield cls(url, process, versions)
         finally:
             _stop(process)

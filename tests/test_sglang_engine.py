@@ -20,6 +20,9 @@ import pytest
 from honing.backends.jev.server import DecisionServer
 from honing.backends.jev.server import main as server_main
 from honing.backends.sglang import SGLangEngine, SGLangError, SGLangSettings
+from honing.backends.sglang.engine import PINNED
+
+REPO = Path(__file__).resolve().parents[1]
 
 
 def logprobs_for(prompt: list[int], wanted: list[int]) -> list[list[Any]]:
@@ -68,6 +71,14 @@ ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 """
 
 
+def write_versions(site: Path, versions: dict[str, str]) -> None:
+    """Installed-package metadata for ``versions``, as importlib.metadata reads it."""
+    for name, version in versions.items():
+        info = site / f"{name.replace('-', '_')}-{version}.dist-info"
+        info.mkdir(exist_ok=True)
+        (info / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n")
+
+
 @pytest.fixture
 def stand_in_python(tmp_path: Path) -> SGLangSettings:
     """Settings whose interpreter finds a stand-in ``sglang`` package (and torch and transformers for the version
@@ -82,6 +93,7 @@ def stand_in_python(tmp_path: Path) -> SGLangSettings:
     )
     (site / "transformers").mkdir()
     (site / "transformers" / "__init__.py").write_text("__version__ = '8.8.test'\n")
+    write_versions(site, PINNED)
     return SGLangSettings(
         python=Path(sys.executable), gpu="GPU-test", env={"PYTHONPATH": str(site)}, start_timeout=60,
         log_path=tmp_path / "engine.log",
@@ -110,7 +122,9 @@ def test_turning_the_prefix_cache_off_reaches_the_server(stand_in_python: SGLang
 
 
 def test_a_server_that_exits_is_reported_with_its_log(tmp_path: Path) -> None:
-    settings = SGLangSettings(python=Path(sys.executable), env={"PYTHONPATH": str(tmp_path)}, log_path=tmp_path / "x")
+    settings = SGLangSettings(
+        python=Path(sys.executable), env={"PYTHONPATH": str(tmp_path)}, log_path=tmp_path / "x", check_versions=False
+    )
     with pytest.raises(SGLangError, match="exited"), SGLangEngine.launch(Path("/models/startlux"), settings):
         pass
 
@@ -223,3 +237,23 @@ def test_the_server_names_what_the_sglang_engine_needs(
     with pytest.raises(SystemExit):
         server_main(argv)
     assert message in capsys.readouterr().err
+
+
+def test_an_environment_other_than_the_pin_is_refused_before_the_server_starts(
+    stand_in_python: SGLangSettings, tmp_path: Path
+) -> None:
+    site = Path(stand_in_python.env["PYTHONPATH"])
+    for info in site.glob("torch-*.dist-info"):
+        (info / "METADATA").write_text("Metadata-Version: 2.1\nName: torch\nVersion: 2.12.0\n")
+    with pytest.raises(SGLangError, match=r"torch 2\.12\.0, not"), SGLangEngine.launch(Path("/m"), stand_in_python):
+        pass
+    assert not (tmp_path / "engine.log").exists() or (tmp_path / "engine.log").read_bytes() == b""
+
+
+def test_the_pinned_versions_are_those_of_the_lock_file() -> None:
+    locked = dict(
+        line.split("==", 1)
+        for line in (REPO / "scripts/sglang.lock").read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+    assert {name: locked[name] for name in PINNED} == PINNED
