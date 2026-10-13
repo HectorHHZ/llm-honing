@@ -33,7 +33,7 @@ refused before anything loads.
 With ``chat`` the server also loads the checkpoint's tokenizer and answers
 SGLang's OpenAI-compatible routes under :attr:`SGLangEngine.openai_url`
 (``/v1/chat/completions``, ``/v1/completions``) as ``served_model``: the
-endpoint a harness runner or a :class:`~honing.core.ChatModel` calls. Token-id
+endpoint a harness runner calls, or a :class:`~honing.core.ChatModel` through litellm. Token-id
 requests such as :meth:`~SGLangEngine.next_token_logprobs` work either way.
 """
 

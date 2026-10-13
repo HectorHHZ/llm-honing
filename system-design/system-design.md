@@ -470,7 +470,7 @@ campaign's runners call can be served by SGLang, pinned to one version.
   temperature first) with the output head in fp32. Any checkpoint answers `/v1/decide`
   through the lettered readout; a family with its own decision code (StartLux-Decision)
   keeps it and replaces only the forward pass. The same server answers OpenAI-compatible
-  chat for harness runners and `ChatModel` callers.
+  chat for harness runners, and for `ChatModel` callers through `LiteLLMChatModel`.
 - **Endpoints for the campaign.** `SGLangPolicyEndpoints` starts a server the first time a
   runner resolves a policy, after checking the checkpoint's weights against the policy's
   checksum, so a candidate a train move has just produced is served like a release. A

@@ -2,7 +2,7 @@
 demand, the least recently used one stopped when the GPU is needed, and the same checkpoint served as a chat model.
 
 Usage, from an environment with torch, safetensors and transformers, with SGLANG_PYTHON naming the SGLang
-environment's interpreter:
+environment's interpreter and the litellm extra installed:
 
     python scripts/e2e/sglang_endpoints.py <checkpoint> <work-dir> <decision-gpu> <chat-gpu>
 
@@ -23,9 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from honing.backends.sglang import SGLangChatModel, hf_snapshot  # noqa: E402
+from honing.backends.sglang import hf_snapshot  # noqa: E402
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints  # noqa: E402
 from honing.core import ChatMessage, CheckpointRef, ContractError, PolicyRef  # noqa: E402
+from honing.harness.models import LiteLLMChatModel  # noqa: E402
 
 REQUEST = {
     "parts": {"essential": ["Tick 120. Credits 3100. Army 4."], "details": ["Enemy tanks seen to the north."]},
@@ -146,7 +147,7 @@ def main() -> None:
     chat = ServingSettings(python=python, gpus=(chat_gpu,), runtime="sglang", log_dir=work / "logs")
     with SGLangPolicyEndpoints(chat) as endpoints:
         endpoint, seconds = timed(endpoints, trained)
-        model = SGLangChatModel(endpoint.base_url, endpoint.served_model)  # type: ignore[attr-defined]
+        model = LiteLLMChatModel(f"hosted_vllm/{endpoint.served_model}", api_base=endpoint.base_url)  # type: ignore[attr-defined]
         reply = model.complete(
             [ChatMessage("user", "Name one structure a base needs first. Answer in five words or fewer.")],
             max_tokens=32,

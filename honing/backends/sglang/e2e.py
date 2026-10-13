@@ -14,11 +14,11 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
-from honing.backends.sglang.chat import SGLangChatModel
 from honing.backends.sglang.checkpoint import hf_snapshot
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
 from honing.backends.sglang.engine import SGLangEngine, SGLangSettings
 from honing.core import EpisodeOutcome, Grade, ModelSnapshot, Task
+from honing.harness.models import LiteLLMChatModel
 
 
 class HFModelSource:
@@ -77,9 +77,9 @@ def chat(
     checkpoint: str = "$HONING_SGLANG_CHAT_CHECKPOINT",
     gpu: str = "$HONING_SGLANG_CHAT_GPU",
     python: str = "$SGLANG_PYTHON",
-) -> SGLangChatModel:
-    """A chat model on its own SGLang engine, for an evolution method's reflection; it stops when the process
-    exits."""
+) -> LiteLLMChatModel:
+    """A chat model on its own SGLang engine, for an evolution method's reflection, called through litellm as a
+    local server that needs no key; the engine stops when the process exits."""
     stack = ExitStack()
     log = Path(context.work_dir) / "serving" / "chat-engine.log"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -92,4 +92,4 @@ def chat(
     )
     engine = stack.enter_context(SGLangEngine.launch(Path(os.path.expandvars(checkpoint)), settings))
     atexit.register(stack.close)
-    return SGLangChatModel(engine.openai_url, "reflection")
+    return LiteLLMChatModel(model="hosted_vllm/reflection", api_base=engine.openai_url, timeout_seconds=600.0)

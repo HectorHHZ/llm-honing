@@ -1,7 +1,7 @@
-"""Serving any checkpoint through SGLang (RFC #103): the lettered decision readout, the chat model, the policy
-endpoints a campaign's runners resolve, checkpoint checksums, and the stand-in trainer whose checkpoints are real.
-The engine is stood in for by scorers and servers with SGLang's shapes; the GPU checks are
-scripts/e2e/sglang_logprobs.py, scripts/e2e/sglang_lettered.py and the ``*_sglang.json`` configs.
+"""Serving any checkpoint through SGLang (RFC #103): the lettered decision readout, the policy endpoints a
+campaign's runners resolve, checkpoint checksums, and the stand-in trainer whose checkpoints are real. The engine
+is stood in for by scorers with SGLang's shapes; the GPU checks are scripts/e2e/sglang_logprobs.py,
+scripts/e2e/sglang_lettered.py and the ``*_sglang.json`` configs.
 """
 
 from __future__ import annotations
@@ -10,20 +10,18 @@ import hashlib
 import json
 import math
 import struct
-import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from contextlib import ExitStack
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from honing.backends.jev.kev import STATE_OVERRUN
-from honing.backends.sglang import SGLangChatModel, checkpoint_checksum, hf_snapshot
+from honing.backends.sglang import checkpoint_checksum, hf_snapshot
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
 from honing.backends.sglang.lettered import LetteredDecisionModel, LetteredPrompts, LetteredSettings, options_of
-from honing.core import ChatMessage, ContractError, PolicyRef
+from honing.core import ContractError, PolicyRef
 
 # ---------------------------------------------------------------- the lettered readout
 
@@ -187,49 +185,6 @@ def test_a_tokenizer_that_splits_the_letters_is_refused() -> None:
 
     with pytest.raises(ValueError, match="one token"):
         LetteredPrompts(Splitting())
-
-
-# ---------------------------------------------------------------- the chat model
-
-
-class _Chat(BaseHTTPRequestHandler):
-    server: Any
-
-    def log_message(self, *args: Any) -> None:
-        return
-
-    def do_POST(self) -> None:
-        self.server.seen = (self.path, json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-        body = json.dumps(
-            {"choices": [{"message": {"content": "hello"}}], "usage": {"prompt_tokens": 7, "completion_tokens": 2}}
-        ).encode()
-        self.send_response(200)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-
-@pytest.fixture
-def chat_server() -> Iterator[Any]:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Chat)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield server
-    server.shutdown()
-
-
-def test_the_chat_model_posts_openai_messages_and_reports_tokens(chat_server: Any) -> None:
-    chat = SGLangChatModel(f"http://127.0.0.1:{chat_server.server_address[1]}/v1/", "abc")
-    reply = chat.complete([ChatMessage("system", "s"), ChatMessage("user", "u")], max_tokens=5, temperature=0.0)
-    assert (reply.text, reply.input_tokens, reply.output_tokens, reply.cost_usd) == ("hello", 7, 2, None)
-    assert chat_server.seen == (
-        "/v1/chat/completions",
-        {
-            "model": "abc",
-            "messages": [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
-            "max_tokens": 5,
-            "temperature": 0.0,
-        },
-    )
 
 
 # ---------------------------------------------------------------- checkpoints and policy endpoints

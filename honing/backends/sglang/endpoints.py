@@ -12,8 +12,8 @@ checksum reuse the running server. :meth:`close` stops them all.
 The ``runtime`` the runners speak decides what is started:
 
 - ``"sglang"``: the engine itself with its tokenizer, answering
-  OpenAI-compatible chat and completions (a workspace runner's agent, a
-  :class:`~honing.backends.sglang.chat.SGLangChatModel`).
+  OpenAI-compatible chat and completions (a workspace runner's agent, or a
+  :class:`~honing.harness.models.LiteLLMChatModel` with ``api_base`` set to it).
 - ``"jev_decision"``: Honing's decision server for the checkpoint
   (``honing.backends.jev.server --family lettered``), answering ``/v1/decide``
   for the RA2 and tank runners, with its engine started inside it.
