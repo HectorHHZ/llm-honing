@@ -210,7 +210,9 @@ class GEPAMethod:
         # an empty extraction, and a reply that repeats the current text. The
         # second child would be the parent itself, so running it spends a
         # minibatch to learn nothing, and a noisy runner could even accept it.
-        if not text or text == current:
+        # The extracted text is stripped, so a repeat is compared stripped too:
+        # otherwise a seed ending in a newline never matches its own repeat.
+        if not text or text.strip() == current.strip():
             return ProposeResult(proposal=None, state=archive.to_state(), episodes_spent=spent)
 
         child_components = {**dict(parent.components), path: text}

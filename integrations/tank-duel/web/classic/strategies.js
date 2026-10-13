@@ -1,4 +1,5 @@
-// IDs are immutable experiment versions. Promotion requires paired arena evidence.
+// Published controller strategies. A Honing harness can also supply its own
+// planner parameters (see strategyFrom); the browser offers only these two.
 export const STRATEGIES = Object.freeze({
     baseline: Object.freeze({
         id: "baseline",
@@ -19,74 +20,66 @@ export const STRATEGIES = Object.freeze({
         spacingWeight: 0,
         description: "The model independently chooses drive, turn and fire.",
     }),
-    "multi-angle-v1": Object.freeze({
-        id: "multi-angle-v1",
-        label: "Angle Hunter v1",
-        mode: "plans",
-        status: "candidate",
-        multiAim: true,
-        spacingWeight: 0,
-        description: "Compare direct and ricochet angles for each moving shot.",
-    }),
-    "steady-aim-v1": Object.freeze({
-        id: "steady-aim-v1",
-        label: "Steady Aim v1",
-        mode: "plans",
-        status: "candidate",
-        multiAim: false,
-        spacingWeight: 0,
-        revalidateSlack: 60,
-        description:
-            "Retain the model's selected motion when it remains safe and useful, reducing late shot cancellations.",
-    }),
-    "quick-shot-v1": Object.freeze({
-        id: "quick-shot-v1",
-        label: "Quick Shot v1",
-        mode: "plans",
-        status: "candidate",
-        multiAim: true,
-        allAnglePrompt: true,
-        spacingWeight: 0.25,
-        minRange: 180,
-        maxRange: 360,
-        shotSpeedWeight: 100,
-        description:
-            "Compare several firing angles, favor a short time-to-hit, and retain room to retreat.",
-    }),
-    "safe-lanes-v1": Object.freeze({
-        id: "safe-lanes-v1",
-        label: "Safe Lanes v1",
-        mode: "plans",
-        status: "candidate",
-        multiAim: false,
-        spacingWeight: 0.5,
-        minRange: 180,
-        maxRange: 360,
-        safetyHorizon: 1.15,
-        clearanceWeight: 4,
-        clearanceMargin: 45,
-        description:
-            "Keep a shell clearance margin and room to retreat; favor usable firing lanes over constant backing away.",
-    }),
-    "standoff-v1": Object.freeze({
-        id: "standoff-v1",
-        allAnglePrompt: true,
-        label: "Keep Distance v1",
-        mode: "plans",
-        status: "candidate",
-        multiAim: true,
-        spacingWeight: 1.6,
-        minRange: 220,
-        maxRange: 360,
-        description:
-            "Compare firing angles while maintaining a 220–360 px engagement range.",
-    }),
 });
+// Planner parameters a harness may set, with the type each must have.
+export const STRATEGY_PARAMETERS = Object.freeze({
+    id: "string",
+    description: "string",
+    multiAim: "boolean",
+    allAnglePrompt: "boolean",
+    adaptiveHold: "boolean",
+    spacingWeight: "number",
+    minRange: "number",
+    maxRange: "number",
+    shotSpeedWeight: "number",
+    safetyHorizon: "number",
+    clearanceWeight: "number",
+    clearanceMargin: "number",
+    revalidateSlack: "number",
+});
+// A planned-steering strategy from a published id or an object of planner
+// parameters. Unknown keys and wrong types throw, so a harness that names a
+// parameter the planner does not read is refused before a match starts.
+export function strategyFrom(value) {
+    if (typeof value === "string") {
+        const s = STRATEGIES[value];
+        if (!s || s.mode !== "plans")
+            throw Error(`Unknown planned strategy ${JSON.stringify(value)}`);
+        return s;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        throw Error("A strategy is a published id or an object");
+    for (const [key, v] of Object.entries(value)) {
+        const type = STRATEGY_PARAMETERS[key];
+        if (!type) throw Error(`Unknown strategy parameter ${key}`);
+        if (typeof v !== type || (type === "number" && !Number.isFinite(v)))
+            throw Error(`Strategy parameter ${key} must be a ${type}`);
+    }
+    if (!value.id || !value.description)
+        throw Error("A strategy needs an id and a description");
+    if (
+        value.spacingWeight &&
+        !(value.minRange >= 0 && value.maxRange >= value.minRange)
+    )
+        throw Error("spacingWeight needs 0 <= minRange <= maxRange");
+    if (value.clearanceWeight && !(value.clearanceMargin >= 0))
+        throw Error("clearanceWeight needs a clearanceMargin >= 0");
+    return Object.freeze({
+        multiAim: false,
+        spacingWeight: 0,
+        ...value,
+        label: value.id,
+        mode: "plans",
+        status: "harness",
+    });
+}
 export const strategyFor = (seat = {}) =>
-    STRATEGIES[seat.decisionVersion] ||
-    STRATEGIES[seat.controllerMode === "raw" ? "raw" : "baseline"];
+    seat.strategy && typeof seat.strategy === "object"
+        ? seat.strategy
+        : STRATEGIES[seat.decisionVersion] ||
+          STRATEGIES[seat.controllerMode === "raw" ? "raw" : "baseline"];
 export const publishedStrategies = () =>
-    Object.values(STRATEGIES).filter((s) => s.status !== "candidate");
+    Object.values(STRATEGIES).filter((s) => s.status === "baseline");
 export function rangeCost(distance, strategy) {
     if (!strategy.spacingWeight) return 0;
     return distance < strategy.minRange
