@@ -1,7 +1,8 @@
 """Sample grouped, rewarded rollouts from a checkpoint with SGLang; run inside Slime's image.
 
 Each prompt is a small arithmetic question that asks for the answer in
-``\\boxed{}``. SGLang samples ``--samples-per-prompt`` answers per question and
+``\\boxed{}``: the number alone (``--prompt-style boxed``) or after the steps
+(``--prompt-style work``). SGLang samples ``--samples-per-prompt`` answers per question and
 returns each answer's token ids and log-probabilities, the record an agent
 adapter (slime.agent's ``OpenAIAdapter``) keeps per session. The reward is 1
 when the boxed answer is right and 0 otherwise. The output is a JSON list of
@@ -16,6 +17,8 @@ toward (``PolicySample.teacher_logprobs``).
 ``--teacher same`` scores under the sampling prompt itself, a check of the
 scoring: the teacher's log-probabilities should then match the sampler's
 (``teacher_gap`` in the output), up to the engine's numerics.
+``--teacher-model DIR`` scores with another checkpoint instead of ``--model``,
+a fixed teacher that does not move with the student.
 
     python3 scripts/e2e/slime_rollouts.py --model DIR --out rollouts.json --prompts 16 --samples-per-prompt 8
 """
@@ -33,7 +36,13 @@ from typing import Any
 BOXED = re.compile(r"\\boxed\{([^{}]*)\}")
 
 
-def questions(count: int, seed: int) -> list[tuple[str, int, str]]:
+PROMPT_STYLES = {
+    "boxed": "Put only the final number in \\boxed{{}}.",
+    "work": "Show each step, then put the final number in \\boxed{{}}.",
+}
+
+
+def questions(count: int, seed: int, style: str = "boxed") -> list[tuple[str, int, str]]:
     """Questions, their answers, and a worked solution of each."""
     rng = random.Random(seed)
     items = []
@@ -41,15 +50,16 @@ def questions(count: int, seed: int) -> list[tuple[str, int, str]]:
         a, b, c = rng.randint(10, 99), rng.randint(10, 99), rng.randint(2, 9)
         total, answer = a + b, (a + b) * c
         solution = f"{a} + {b} = {total}, and {total} * {c} = {answer}."
-        items.append((f"Compute ({a} + {b}) * {c}. Put only the final number in \\boxed{{}}.", answer, solution))
+        items.append((f"Compute ({a} + {b}) * {c}. " + PROMPT_STYLES[style].format(), answer, solution))
     return items
 
 
 def hinted(question: str, answer: int, solution: str, context: str) -> str:
     """The question with privileged context the student never sees: its answer, or a worked solution.
 
-    With the answer alone, the teacher's likeliest reply is the boxed answer with no working, which the
-    student cannot reproduce without the answer; a worked solution makes the working itself likely.
+    Under the ``boxed`` prompt either context makes the boxed answer with no working the teacher's likeliest
+    reply, which the student cannot reproduce without the context, so self-distillation teaches it to skip
+    the working; the ``work`` prompt asks for the steps in both the student's and the teacher's prompt.
     """
     if context == "solution":
         return f"{question}\n(For reference, a worked solution: {solution} The final answer is {answer}.)"
@@ -90,6 +100,8 @@ def main() -> int:
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--release", default=None)
+    parser.add_argument("--prompt-style", choices=tuple(PROMPT_STYLES), default="boxed")
+    parser.add_argument("--teacher-model", default=None, help="score with this checkpoint instead of --model")
     parser.add_argument(
         "--teacher",
         choices=("none", "answer", "solution", "same"),
@@ -104,7 +116,7 @@ def main() -> int:
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     engine = sglang.Engine(model_path=args.model, mem_fraction_static=0.6, random_seed=args.seed)
-    items = questions(args.prompts, args.seed)
+    items = questions(args.prompts, args.seed, args.prompt_style)
     prompts = [
         tokenizer.encode(
             tokenizer.apply_chat_template(
@@ -153,6 +165,9 @@ def main() -> int:
             )
             for context in contexts
         ]
+        if args.teacher_model is not None:
+            engine.shutdown()
+            engine = sglang.Engine(model_path=args.teacher_model, mem_fraction_static=0.6, random_seed=args.seed)
         lengths = [len(request) for request in requests]
         responses = [sample["tokens"][length:] for sample, length in zip(samples, lengths, strict=True)]
         scores = score(engine, [teacher_prompts[i // args.samples_per_prompt] for i in range(len(samples))], responses)

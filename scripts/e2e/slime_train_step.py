@@ -15,8 +15,10 @@ reaches it the way the trainer does, through a :class:`SlimeEnvironment`:
              loaded beside the student
    ``opsd``  on-policy self-distillation: the rollout without rewards, each
              answer also scored by the base model itself under privileged context
-             (the question plus its correct answer), so the batch carries
-             ``teacher_logprobs`` and no teacher checkpoint is loaded
+             (the question plus its correct answer, or a worked solution with
+             ``--teacher-context solution``), so the batch carries
+             ``teacher_logprobs`` and no teacher checkpoint is loaded;
+             ``--teacher-model`` scores with a fixed checkpoint instead of the base
 
 3. :class:`SlimeTrainer` trains and returns a ``TrainResult``: new Hugging Face
    weights, a manifest, and Slime's metrics. The trained checkpoint answers the
@@ -66,8 +68,7 @@ DEFAULT_LR = {"grpo": 1e-6, "sft": 1e-5, "opd": 1e-6, "opsd": 1e-6}
 def environment(args: argparse.Namespace) -> SlimeEnvironment:
     prefix: tuple[str, ...] = ()
     paths = [str(ROOT), str(args.work_dir), str(args.base.parent), *args.mount]
-    if args.teacher is not None:
-        paths.append(str(args.teacher.parent))
+    paths.extend(str(teacher.parent) for teacher in (args.teacher, args.teacher_model) if teacher is not None)
     if args.slime_source:
         paths.append(str(args.slime_source))
     if args.enroot:
@@ -91,8 +92,9 @@ def sample(
         env.python, str(ROOT / "scripts" / "e2e" / "slime_rollouts.py"),
         "--model", str(model), "--out", str(out), "--seed", str(seed),
         "--prompts", str(args.prompts), "--samples-per-prompt", str(args.samples_per_prompt),
-        "--max-new-tokens", str(args.max_new_tokens),
+        "--max-new-tokens", str(args.max_new_tokens), "--prompt-style", args.prompt_style,
         *(["--teacher", args.teacher_context] if teacher_hint else []),
+        *(["--teacher-model", str(args.teacher_model)] if teacher_hint and args.teacher_model else []),
     ]  # fmt: skip
     log = out.with_suffix(".log")
     with log.open("w") as handle:
@@ -182,6 +184,18 @@ def main() -> int:
         default="answer",
         help="opsd: the privileged context the teacher sees, the answer alone or a worked solution",
     )
+    parser.add_argument(
+        "--teacher-model",
+        type=Path,
+        default=None,
+        help="opsd: score under privileged context with this fixed checkpoint instead of the base",
+    )
+    parser.add_argument(
+        "--prompt-style",
+        choices=("boxed", "work"),
+        default="boxed",
+        help="the question asks for the final number alone (boxed) or after the steps (work)",
+    )
     parser.add_argument("--steps", type=int, default=1)
     parser.add_argument("--lr", type=float, default=None, help="default: 1e-5 for sft, 1e-6 otherwise")
     parser.add_argument("--seed", type=int, default=0)
@@ -191,6 +205,8 @@ def main() -> int:
         parser.error("--algorithm opd needs --teacher")
     if args.algorithm != "opd" and args.teacher is not None:
         parser.error("--teacher applies to --algorithm opd only")
+    if args.algorithm != "opsd" and args.teacher_model is not None:
+        parser.error("--teacher-model applies to --algorithm opsd only")
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     run = args.work_dir / time.strftime(f"{args.algorithm}-step-%Y%m%d-%H%M%S")
@@ -229,7 +245,7 @@ def main() -> int:
         "algorithm": args.algorithm,
         "base": {"location": str(args.base), "checksum": base.checkpoint.checksum},
         "teacher": (
-            "base under privileged context"
+            f"{args.teacher_model or 'base'} under privileged context ({args.teacher_context})"
             if args.algorithm == "opsd"
             else (None if args.teacher is None else str(args.teacher))
         ),
