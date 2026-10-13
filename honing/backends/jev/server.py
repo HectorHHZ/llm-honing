@@ -23,6 +23,8 @@ Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the
 - NanoJev: ``--family nanojev --nanojev-source <checkout>``
 - StartLux-Decision: ``--family startlux --startlux-source <checkout> --model startlux-4b``
 - djev: ``--family djev --djev-url http://127.0.0.1:8011 --model dgemma`` (no local pins/GPU)
+- any Hugging Face checkpoint SGLang loads, answering lettered questions:
+  ``--family lettered --checkpoint <dir> --engine sglang --sglang-python <python>`` (no pins)
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import queue
+import signal
 import sys
 import threading
 from collections.abc import Mapping, Sequence
@@ -93,7 +96,13 @@ class DecisionServer(ThreadingHTTPServer):
         self._decisions: queue.Queue[_Decision | None] = queue.Queue()
 
     def decide(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> dict[str, object]:
-        """Hand one call to the model thread and wait for its answer; a model failure is raised here."""
+        """Hand one call to the model thread and wait for its answer; a model failure is raised here.
+
+        A model that batches concurrent calls itself (``concurrent``, an SGLang
+        engine) is called on the request's thread instead.
+        """
+        if getattr(self.model, "concurrent", False):
+            return dict(self.model.predict(parts, questions))
         decision = _Decision(parts, questions)
         self._decisions.put(decision)
         decision.done.wait()
@@ -175,7 +184,9 @@ class _Handler(BaseHTTPRequestHandler):
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve a local decision model or bridge a remote djev server.")
-    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "startlux", "djev"), default="laya")
+    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "startlux", "djev", "lettered"), default="laya")
+    parser.add_argument("--checkpoint", type=Path, help="lettered: a Hugging Face checkpoint directory")
+    parser.add_argument("--checksum", help="lettered: refuse the checkpoint unless its weights have this checksum")
     parser.add_argument("--pins", type=Path, help="local families: pins.json naming source and model revisions")
     parser.add_argument(
         "--model",
@@ -198,9 +209,17 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--max-len", type=int, help="laya, nanojev (default 2048), startlux (default 8192): input token limit"
     )
+    parser.add_argument(
+        "--engine", choices=("native", "sglang"), default="native", help="startlux: run the forward pass in SGLang"
+    )
+    parser.add_argument("--sglang-python", type=Path, help="engine sglang: the interpreter of the SGLang environment")
+    parser.add_argument("--no-prefix-cache", action="store_true", help="engine sglang: turn the radix cache off")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
+    # A launcher stops the server with SIGTERM; exit through the loading context so an engine it started stops too.
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     with _load(parser, args) as model:
         server = DecisionServer((args.host, args.port), model)
         # One line on stdout tells a launcher where the server is and what it loaded.
@@ -229,8 +248,14 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
                 steps=args.djev_steps,
             )
         )
+    if args.family == "lettered":
+        return _load_lettered(parser, args)
     if args.pins is None:
         parser.error("local model families need --pins")
+    if args.engine != "native" and args.family != "startlux":
+        parser.error("--engine sglang serves --family startlux and lettered only so far")
+    if args.engine == "sglang" and args.sglang_python is None:
+        parser.error("--engine sglang needs --sglang-python")
     if args.family == "startlux":
         from honing.backends.jev.startlux import StartLuxDecisionModel, StartLuxSettings
 
@@ -245,6 +270,9 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
                 model=args.model or "startlux-4b",
                 gpu=args.gpu,
                 max_length=args.max_len or 8192,
+                engine=args.engine,
+                sglang_python=args.sglang_python,
+                prefix_cache=not args.no_prefix_cache,
             )
         )
     if args.family == "nanojev":
@@ -292,6 +320,19 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
             max_len=args.max_len or 2048,
         )
     )
+
+
+def _load_lettered(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
+    from honing.backends.sglang import SGLangSettings, lettered
+
+    if args.checkpoint is None or args.engine != "sglang" or args.sglang_python is None:
+        parser.error("--family lettered needs --checkpoint, --engine sglang and --sglang-python")
+    max_length = args.max_len or 8192
+    engine = SGLangSettings(
+        python=args.sglang_python, gpu=args.gpu, prefix_cache=not args.no_prefix_cache, context_length=max_length + 8
+    )
+    settings = lettered.LetteredSettings(max_length=max_length)
+    return lettered.load(args.checkpoint, engine, settings, checksum=args.checksum)
 
 
 if __name__ == "__main__":
