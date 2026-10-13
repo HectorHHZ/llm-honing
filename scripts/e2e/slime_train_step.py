@@ -92,7 +92,7 @@ def sample(
         "--model", str(model), "--out", str(out), "--seed", str(seed),
         "--prompts", str(args.prompts), "--samples-per-prompt", str(args.samples_per_prompt),
         "--max-new-tokens", str(args.max_new_tokens),
-        *(["--teacher-hint"] if teacher_hint else []),
+        *(["--teacher", args.teacher_context] if teacher_hint else []),
     ]  # fmt: skip
     log = out.with_suffix(".log")
     with log.open("w") as handle:
@@ -176,6 +176,12 @@ def main() -> int:
     parser.add_argument("--prompts", type=int, default=16)
     parser.add_argument("--samples-per-prompt", type=int, default=8)
     parser.add_argument("--max-new-tokens", type=int, default=256, help="generation window; thinking models need more")
+    parser.add_argument(
+        "--teacher-context",
+        choices=("answer", "solution"),
+        default="answer",
+        help="opsd: the privileged context the teacher sees, the answer alone or a worked solution",
+    )
     parser.add_argument("--steps", type=int, default=1)
     parser.add_argument("--lr", type=float, default=None, help="default: 1e-5 for sft, 1e-6 otherwise")
     parser.add_argument("--seed", type=int, default=0)
