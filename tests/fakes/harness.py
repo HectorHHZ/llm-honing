@@ -164,3 +164,68 @@ class StaticPolicyEndpoints:
             return self._endpoints[policy.checkpoint.checksum]
         except KeyError:
             raise ContractError(f"no engine serves checkpoint {policy.checkpoint.checksum!r}") from None
+
+
+class RuleRunner(FakeEpisodeRunner):
+    """Scores each task from which instruction lines the harness holds, so candidates win different tasks.
+
+    A task's score is the weights' quality plus the weight each present line
+    carries for the task's family, clamped to [0, 1]. A line can help one family
+    and hurt another, which is what gives GEPA non-trivial Pareto fronts. A
+    training task ``train-<family>-<n>`` scores as its family does. Every weight
+    is a multiple of 1/8, so sums of scores are exact on every Python version
+    and a tie is a tie everywhere.
+    """
+
+    def __init__(self, world: FakeWorld, weights: Mapping[str, Mapping[str, float]]) -> None:
+        super().__init__(world)
+        self.weights = {line: dict(by_family) for line, by_family in weights.items()}
+
+    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        self.runs += 1
+        family = task.task_id.removeprefix("train-").split("-")[0]
+        lines = {
+            line.strip() for _, file in spec.files if file.kind == "instructions" for line in file.content.splitlines()
+        }
+        bonus = sum(by_family.get(family, 0.0) for line, by_family in self.weights.items() if line in lines)
+        quality = min(1.0, max(0.0, self.world.quality[policy.checkpoint.checksum] + bonus))
+        # "verified" is whether any present line helps this family; the grader's feedback reads it.
+        helped = any(by_family.get(family, 0.0) > 0 for line, by_family in self.weights.items() if line in lines)
+        return EpisodeOutcome(
+            task_id=task.task_id,
+            spec_id=spec.spec_id,
+            policy_checksum=policy.checkpoint.checksum,
+            exit_code=0,
+            final_output=f"quality={quality} verified={int(helped)}",
+        )
+
+
+class LineEditChatModel:
+    """A reflection model that applies scripted line edits, in a cycle, to the instruction it is shown.
+
+    The current instruction is read from the first fenced block of the prompt,
+    where upstream's default template puts it. An edit is ``("add", line)``,
+    ``("drop", line)``, or ``("keep", "")``; adding a line already present, or
+    keeping, returns the current text unchanged.
+    """
+
+    def __init__(self, edits: Sequence[tuple[str, str]]) -> None:
+        if not edits:
+            raise ContractError("the line-edit chat model needs at least one edit")
+        self._edits = tuple(edits)
+        self.conversations: list[tuple[ChatMessage, ...]] = []
+
+    def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int, temperature: float) -> ChatReply:
+        prompt = messages[-1].content
+        current = prompt.split("```\n", 1)[1].split("\n```", 1)[0]
+        action, line = self._edits[len(self.conversations) % len(self._edits)]
+        self.conversations.append(tuple(messages))
+        lines = [text for text in current.splitlines() if text.strip()]
+        if action == "add" and line not in lines:
+            lines.append(line)
+        elif action == "drop":
+            lines = [text for text in lines if text != line]
+        elif action not in ("add", "keep"):
+            raise ContractError(f"unknown edit {action!r}")
+        text = "```\n" + "\n".join(lines) + "\n```"
+        return ChatReply(text=text, input_tokens=len(prompt.split()), output_tokens=len(text.split()), cost_usd=None)

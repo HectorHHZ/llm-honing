@@ -9,7 +9,7 @@ import {
 } from "../integration/models/factory.mjs";
 import { LayaClient } from "../integration/laya/client.mjs";
 
-test("the laya, kev, and nanojev families are accepted, anything else is refused", () => {
+test("the laya, kev, nanojev, and startlux families are accepted, anything else is refused", () => {
     assert.deepEqual(decisionClientOptions({}, "intent"), {
         family: "laya",
         gpu: "0",
@@ -40,6 +40,17 @@ test("the laya, kev, and nanojev families are accepted, anything else is refused
     assert.equal(
         decisionClientOptions({ family: "nanojev", gpu: "1" }, "intent").model,
         "nanojev",
+    );
+    assert.equal(
+        decisionClientOptions({ family: "startlux", gpu: "2" }, "intent").model,
+        "startlux-4b",
+    );
+    assert.equal(
+        decisionClientOptions(
+            { family: "startlux", gpu: "2", model: "startlux-27b" },
+            "intent",
+        ).model,
+        "startlux-27b",
     );
     assert.throws(
         () => decisionClientOptions({ family: "jev-omni" }, "intent"),
@@ -127,6 +138,30 @@ test("a nanojev worker runs with NANOJEV_PYTHON and the nanojev settings", () =>
     assert.equal(env.NANOJEV_MODEL, "nanojev");
     assert.equal(env.LAYA_GPU, "4");
     assert.equal(env.NANOJEV_CHECKPOINT_MANIFEST, undefined);
+});
+
+test("a startlux worker runs with STARTLUX_PYTHON and the startlux settings", () => {
+    const calls = [];
+    const saved = process.env.STARTLUX_PYTHON;
+    process.env.STARTLUX_PYTHON = "/envs/startlux/bin/python";
+    try {
+        const client = new LayaClient({
+            family: "startlux",
+            gpu: "5",
+            model: "startlux-0.8b",
+            spawnProcess: fakeSpawn(calls),
+        });
+        client.ready.catch(() => {});
+        client.close();
+    } finally {
+        if (saved === undefined) delete process.env.STARTLUX_PYTHON;
+        else process.env.STARTLUX_PYTHON = saved;
+    }
+    const [{ command, env }] = calls;
+    assert.equal(command, "/envs/startlux/bin/python");
+    assert.equal(env.DECISION_FAMILY, "startlux");
+    assert.equal(env.STARTLUX_MODEL, "startlux-0.8b");
+    assert.equal(env.LAYA_GPU, "5");
 });
 
 test("djev uses a bridge and is counted as a structured request", () => {

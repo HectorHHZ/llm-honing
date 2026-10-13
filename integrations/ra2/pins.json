@@ -47,5 +47,23 @@
       "base": "Qwen/Qwen3-0.6B",
       "baseRevision": "c1899de289a04d12100db370d81485cdf75e47ca"
     }
+  },
+  "startluxSource": {
+    "url": "https://github.com/StartLuxLabs/Startlux-Decision.git",
+    "revision": "c61bfab3bb4fa3ae9d155d457247a7fd0a299a24"
+  },
+  "startluxModels": {
+    "startlux-0.8b": {
+      "repo": "startlux-models/StartLux-Decision-0.8B",
+      "revision": "bd4f76a600e23227547fee7bfc1825e12a32764c"
+    },
+    "startlux-4b": {
+      "repo": "startlux-models/StartLux-Decision-4B",
+      "revision": "9302aedb7f7bd889994336f2ae919dffbf5dbee1"
+    },
+    "startlux-27b": {
+      "repo": "startlux-models/StartLux-Decision-27B",
+      "revision": "95e31cda814fec2a7dc4ac4f8b9b832aa1c9c2e6"
+    }
   }
 }

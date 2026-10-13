@@ -1,6 +1,6 @@
 # End-to-end runs
 
-Every script here runs on a CPU with no model, GPU, or game, and CI's `e2e` job runs each on every pull request.
+Every script here runs on a CPU with no model or GPU, and CI's `e2e` job runs each on every pull request. The tank commands also need Node 22 and the `gepa` extra.
 
 | Command | What it runs |
 | --- | --- |
@@ -8,8 +8,11 @@ Every script here runs on a CPU with no model, GPU, or game, and CI's `e2e` job 
 | `python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json` | the checks a harness runner must pass before it joins a campaign |
 | `python scripts/e2e/check_trainer.py --config configs/e2e/all_planes.json` | the checks a trainer must pass before it joins a campaign |
 | `python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json` | the RA2 runner and grader in a campaign, with stand-in match processes |
-| `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack |
-| `node scripts/e2e/tank-duel.mjs` | a decision server, the tank games' HTTP bridge, and both engines |
+| `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json` | a tank campaign on real rounds (the Node match process against the planner opponent, Honing's `DecisionServer`) with a stand-in decision model: a GEPA harness move, sft on planner-teacher demonstrations, and grpo on sampled rollouts |
+| `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
+| `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, and every gated episode's run directory |
+| `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
+| `node scripts/e2e/tank-duel.mjs` | a decision server, the tank games' HTTP bridge, and both engines; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each engine plays |
 
 ## The all-planes pipeline
 
@@ -64,3 +67,15 @@ A training backend enters as a `Trainer` (`honing.core`) with its `BackendSuppor
 4. `python scripts/e2e/honing_pipeline.py --config <yours>` runs the full campaign with your trainer in it.
 
 The default config's model, policy server, and harness runner key on the fake model's checksums, so a real backend's checkpoints cannot pass through that gate. Check a real backend on CPU with a stand-in in its place, and report its GPU run separately, as the Jev trainer pull requests did. `tests/test_e2e_trainer.py` shows each check failing on a trainer that breaks it.
+
+## The tank campaign
+
+`configs/e2e/tank_dry_run.json` builds the campaign in `honing/backends/tank/e2e.py`. Every round is real: `TankEpisodeRunner` starts `integrations/tank-duel/scripts/match.mjs`, which plays one Classic round in lockstep against the planner opponent and asks Honing's `DecisionServer` for every decision. Only the decision model (`tests/fakes/tank.py`), the trainer, and the chat model GEPA reflects with are stand-ins. The stand-in model takes no permitted shot below quality 0.7, unless its weapon instructions tell it to fire whenever the shot is permitted. So:
+
+1. harness (GEPA): the scripted reflection rewrites `tank/questions.json` with such instructions; the child beats its parent on a train minibatch, and its validation mean (0.5) beats the seed's (0): published.
+2. train (sft on teacher demonstrations): quality 0.5 to 0.7 changes which motions the model drives (the published instructions already make it fire): 1 win, 3 ties on the gate: published.
+3. train (grpo on sampled rollouts): quality 0.7 to 0.9 ties on every gate task: rolled back.
+
+The rounds are deterministic (the game clock stops while a seat waits for its decision), so these results repeat. A change to the game, the planner, or the bridge can change them; if it does, check the new rounds and update the expectations in CI and `tests/test_tank_e2e.py`.
+
+To run a real model, replace `model_source`, `endpoints`, and `trainer` with the Jev ones (`honing/backends/jev`) and `method.args.chat` with a real chat model.

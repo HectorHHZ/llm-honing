@@ -121,16 +121,9 @@ test("both games and shared assets work without any model configuration", async 
         "/shared/style.css",
         "/shared/game-client.js",
         "/classic/adapter.js",
-        "/classic/lab.html",
-        "/classic/lab.js",
-        "/classic/lab-results.json",
         "/auto-aim/adapter.js",
     ])
         assert.equal((await fetch(url + route)).status, 200, route);
-    const report = await (
-        await fetch(url + "/classic/lab-results.json")
-    ).json();
-    assert.equal(report.experiments.length, 5);
     const config = await (await fetch(url + "/api/config")).json();
     assert.deepEqual(config, { editions: { classic: [], "auto-aim": [] } });
     assert.equal((await fetch(url + "/api/classic/health")).status, 503);

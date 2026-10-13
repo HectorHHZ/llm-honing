@@ -1,6 +1,6 @@
 """Pinned local decision-model inference over JSON lines; model failure stops the match.
 
-A thin stdio front end for honing.backends.jev (Laya or Kev), the same
+A thin stdio front end for honing.backends.jev (Laya, Kev, NanoJev or StartLux), the same
 implementations the HTTP decision server uses. DECISION_FAMILY picks the family
 (default laya). Settings come from the environment:
 
@@ -10,6 +10,7 @@ implementations the HTTP decision server uses. DECISION_FAMILY picks the family
   and KEV_DTYPE.
 - NanoJev: LAYA_GPU, NANOJEV_MODEL, NANOJEV_SOURCE_DIR, NANOJEV_CHECKPOINT_MANIFEST,
   LAYA_LOCK_DIR, and NANOJEV_MAX_LEN.
+- StartLux: LAYA_GPU, STARTLUX_MODEL, STARTLUX_SOURCE_DIR, LAYA_LOCK_DIR, and STARTLUX_MAX_LEN.
 """
 
 import json
@@ -26,6 +27,7 @@ sys.path.insert(0, str(ROOT.parents[1]))
 from honing.backends.jev.kev import KevDecisionModel, KevSettings  # noqa: E402
 from honing.backends.jev.laya import LayaDecisionModel, LayaSettings  # noqa: E402
 from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings  # noqa: E402
+from honing.backends.jev.startlux import StartLuxDecisionModel, StartLuxSettings  # noqa: E402
 
 
 def emit(value):
@@ -75,8 +77,24 @@ def nanojev_settings_from_environment():
     )
 
 
+def startlux_settings_from_environment():
+    if os.environ.get("STARTLUX_CHECKPOINT_MANIFEST"):
+        raise ValueError("StartLux serves the pinned releases only; it has no trained checkpoints yet")
+    lock_dir = os.environ.get("LAYA_LOCK_DIR")
+    return StartLuxSettings(
+        pins_path=ROOT / "pins.json",
+        source_dir=Path(os.environ.get("STARTLUX_SOURCE_DIR", ROOT / "deps/startlux")),
+        model=os.environ.get("STARTLUX_MODEL", "startlux-4b"),
+        gpu=os.environ.get("LAYA_GPU", "0"),
+        lock_dir=Path(lock_dir) if lock_dir else None,
+        max_length=int(os.environ.get("STARTLUX_MAX_LEN", "8192")),
+    )
+
+
 def load_model():
     family = os.environ.get("DECISION_FAMILY", "laya")
+    if family == "startlux":
+        return StartLuxDecisionModel.load(startlux_settings_from_environment())
     if family == "nanojev":
         return NanoJevDecisionModel.load(nanojev_settings_from_environment())
     if family == "kev":

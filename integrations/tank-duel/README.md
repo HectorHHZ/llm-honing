@@ -59,9 +59,10 @@ HONING_URL=http://127.0.0.1:8080 MODEL_LABEL=NanoJev npm start
 This enables **Model vs model** and **You vs model** in both editions. The game
 uses `GET /v1/health` and `POST /v1/decide`; the loaded backend must support
 choice questions and return complete native probability distributions. The
-bridge accepts the existing Laya, Kev and NanoJev decision contract. Additional
+bridge accepts the existing Laya, Kev, NanoJev and StartLux-Decision decision contract
+(see [Using StartLux-Decision](../ra2/README.md#using-startlux-decision) for the server). Additional
 families, including a djev/DiffusionGemma backend, can use the same interface
-when available in the configured Honing server. The game server does not load weights. The optional `scripts/serve-honing.py` launcher serves the pinned Laya / Laya Typed / Kev 0.8B / Kev 4B models using native Honing implementations; see [Arena lab](docs/arena-lab.md).
+when available in the configured Honing server. The game server does not load weights. The optional `scripts/serve-honing.py` launcher serves the pinned Laya / Laya Typed / Kev 0.8B / Kev 4B models using native Honing implementations; see [Serving pinned models](#serving-pinned-models).
 
 Use the model server's documented setup to prepare its checkpoint, pins and
 GPU. Allow enough context for the full maze, all ten shells and every offered
@@ -194,7 +195,7 @@ slot. Fire cooldown is **300 ms** (previously 480 ms). Five active shells per
 tank and lethal self-hits remain. Forecasts use the same lifetime as physics.
 Auto Aim retains its own maze and ammunition rules.
 
-## Adaptive cadence and strategy experiments
+## Adaptive cadence
 
 Auto cadence learns each seat independently from its last 40 successful requests.
 After four samples, the scheduling floor follows the 20th percentile of RTT;
@@ -203,11 +204,82 @@ One request per seat remains in flight; this measures attainable speed, not an
 inference acceleration. Model changes clear calibration. Model identity details
 show the floor, median, p95 and sample count. Manual scheduling remains available.
 
-Strategy IDs preserve old baselines. Candidates are evaluated with real model
-requests, paired seeds and swapped seats, then checked on unused seeds before
-promotion. Losing trials remain in the experiment history and are not labelled
-improvements. These are controller/context iterations, not model weight training.
-See [Arena lab and measured results](docs/arena-lab.md).
+## Train and evolve with Honing
+
+Classic is a Honing task environment (`honing/backends/tank`), the same way RA2
+is. A task is one round on a seeded maze against the **planner opponent**,
+which steers and fires from the planner's own geometry with no model. Honing's
+campaign gates every harness change and every training step on those rounds.
+
+`scripts/match.mjs` plays one round headless and in lockstep: the game clock
+stops while a seat waits for its decision, so a round's result depends on the
+model's answers and never on inference latency, and the same seed, harness and
+answers replay the same round. The policy is asked every 200 ms of game time
+and the opponent every 300 ms; both intervals belong to the task, so a harness
+cannot buy more decisions.
+
+```bash
+node scripts/match.mjs --seed=2001 --seat=blue --decision-server=http://127.0.0.1:8080 --out=runs/r1
+```
+
+The run directory holds `manifest.json` (scenario, model, every harness file's
+SHA-256, source hashes), `decisions.jsonl` (each question set the model was
+asked: the exact state, the questions, native probabilities, the executed
+choice and the admissible motions), `events.jsonl` and `result.json`.
+
+**The harness** is what an evolution method rewrites:
+
+| File                   | Kind         | What it sets                                                                                                                                                                                                                                          |
+| ---------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tank/controller.json` | settings     | controller mode, context profile, dodge assist level, shot guard, and the planned-steering strategy: `"baseline"` or an object of planner parameters (`multiAim`, `spacingWeight`, `minRange`, `maxRange`, `clearanceWeight`, `revalidateSlack`, ...) |
+| `tank/questions.json`  | instructions | the instruction text of every question and the two weapon option descriptions                                                                                                                                                                         |
+| any other file         | either       | shown to the model before the state on every decision, as an operating note                                                                                                                                                                           |
+
+The defaults are `config/controller.json` and `config/questions.json`; the
+browser game asks with the same text. A harness the match cannot read (unknown
+setting, unknown planner parameter, missing question) is refused before the
+round starts. GEPA rewrites `tank/questions.json` and notes; controller
+settings are settings, which GEPA leaves alone.
+
+**Post-training data** comes in two forms. `--teacher` plays the policy's seat
+with the planner teacher (`web/classic/teacher.js`) and records its answers to
+the same questions, which are SFT labels. `--sample-seed=N` draws every
+executed choice from the model's own probabilities, which makes a round an
+on-policy rollout for GRPO; each decision earns the round's score.
+
+`python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json`
+runs a campaign of all three moves on CPU with a stand-in model; see
+[`scripts/e2e/README.md`](../../scripts/e2e/README.md#the-tank-campaign). The
+task suite is `tasks/suite.jsonl` (`python -m honing.backends.tank.scenarios
+tasks/suite.jsonl` rebuilds it): 16 train, 8 validation and 8 held-out seeds,
+each played from both seats.
+
+## Serving pinned models
+
+`scripts/serve-honing.py` is an opt-in launcher for an already prepared pinned
+Honing checkout with `vendor/laya`, `vendor/kev` and model records in `models/`.
+It verifies source revisions against `integrations/ra2/pins.json`. Laya model
+records must match pins; Kev uses Honing's pinned checkpoint resolver. Install
+the pinned packages into an isolated virtual environment before starting it.
+
+```bash
+python scripts/serve-honing.py --root /path/to/prepared/honing --model english --gpu 3 --memory-gib 4 --port 28780 --allow-shared-gpu
+```
+
+Use `typed-decisions`, `kev-0.8b` or `kev-4b` for the other services. The
+allocator cap is not an exclusive reservation or a guarantee against all GPU
+memory pressure. The launcher checks free memory, respects Honing's GPU file
+lock and does not evict other processes. It does not download dependencies.
+
+Laya supports 48 tokens per option pointer: the bridge places complete option
+forecasts in essential state and sends short references. No forecast is removed.
+Kev serializes probabilities to four decimal places; validation allows only
+that accumulated rounding error and preserves native values and tied choices.
+
+`node scripts/dodge-benchmark.mjs [path/to/previous/engine.js]` measures the
+dodge levels on a fixed fixture of four incoming-shell gaps by eight hull
+headings, with stationary model commands and no walls. It measures those
+scenarios, not match win rates.
 
 ## Collision rules
 
@@ -262,5 +334,8 @@ quality benchmark.
 `web/shared/` owns the UI, renderer, model client and collision primitives.
 `web/classic/` and `web/auto-aim/` own their engines, context builders and thin UI
 adapters. `model-bridge.mjs` maps the game contracts to Honing's typed choice
-questions. `server.mjs` serves both editions and forwards configured model calls.
-Everything in this directory can be copied as a standalone demo package.
+questions, with the question text in `config/questions.json`. `server.mjs` serves
+both editions and forwards configured model calls. `scripts/match.mjs` plays
+headless rounds for Honing, with the opponent and teacher in
+`web/classic/teacher.js` and the task suite in `tasks/`. Everything in this
+directory can be copied as a standalone demo package.

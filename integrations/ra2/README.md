@@ -21,6 +21,8 @@ None of these are in the repository. Each is pinned or supplied separately.
 | Kev weights (`kev-0.8b`) and its Qwen3.5-0.8B-Base base | Hugging Face, revisions in `pins.json` (`kevModels`) | Apache-2.0 |
 | NanoJev source | cloned at the commit in `pins.json` (`nanojevSource`), the one #49 pinned | MIT |
 | NanoJev weights (`nanojev`, full Qwen3-0.6B) | Hugging Face, revision in `pins.json` (`nanojevModels`) | the card names no separate weight license: its source is MIT and the Qwen3-0.6B base keeps Apache-2.0 |
+| StartLux-Decision source | cloned at the commit in `pins.json` (`startluxSource`) | Apache-2.0 |
+| StartLux-Decision weights (`startlux-0.8b`, `startlux-4b`, `startlux-27b`) | Hugging Face, revisions in `pins.json` (`startluxModels`) | CC BY-NC 4.0: non-commercial use only, and commercial use needs a license from StartLux Labs; the tokenizer files they keep from Qwen3.5 stay Apache-2.0 |
 
 Supalosa's own dependencies currently report 11 advisories from `npm audit`, one of them critical. They run only at setup and inside the match process.
 
@@ -166,6 +168,22 @@ npm run match -- --family=nanojev --decision-server=http://127.0.0.1:8803 --seat
 ```
 
 As for Kev, everything Laya has works with `family=nanojev`: `NanoJevDecisionModel`, the server and the stdio worker (`DECISION_FAMILY=nanojev`, `NANOJEV_*` settings, started with `NANOJEV_PYTHON`), match, duel and audit, `NanoJevQuestionCheck` (`NANOJEV_LIMITS`), and `NanoJevTrainer` (`sft`, `grpo`; full weights, or `param_subset` for the heads). The model files are checked against the checksums the model repository publishes, and a candidate path is limited to 2,048 tokens, as #49 ran it; the state is trimmed by whole entries until every path fits. `parity/nanojev_serving.py` compares serving with #49's worker and `parity/nanojev_training.py` checks the trainer.
+
+## Using StartLux-Decision
+
+[StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision) is a fourth family: dense Qwen3.5 models that render each question as one prompt with lettered options and read the answer from the letters' next-token logits after one forward pass. Three sizes are pinned: `startlux-0.8b`, `startlux-4b` (the default) and `startlux-27b`. `honing.backends.jev.startlux` runs StartLux's own `StartLuxDecision` at the source commit in `pins.json`, with its prompts, temperatures and CUDA graphs. The environment follows what StartLux was tested with (torch 2.11, transformers 5.8.1, flash-linear-attention and causal-conv1d, which StartLux requires on a GPU and which `setup-startlux.sh` builds with `nvcc`):
+
+```bash
+HF_HOME=/disk/with/room scripts/setup-startlux.sh   # 3 GB for 0.8B and 4B, 54 GB more for 27B; prints the exports
+"$STARTLUX_PYTHON" -m honing.backends.jev.server --family startlux --pins pins.json --startlux-source "$STARTLUX_SOURCE_DIR" --model startlux-27b --gpu 0 --port 8804
+npm run match -- --family=startlux --decision-server=http://127.0.0.1:8804 --seat=red --seed=1 --out=runs/startlux-seed1-red
+```
+
+The server, the stdio worker (`DECISION_FAMILY=startlux`, `STARTLUX_MODEL`, `STARTLUX_MAX_LEN`, started with `STARTLUX_PYTHON`), match, duel, audit and `StartLuxQuestionCheck` (`STARTLUX_LIMITS`) work as they do for the other families. There is no StartLux trainer yet, so `--checkpoint-manifest` is refused. On an H100 in bf16 the servers held 3.9 GB (0.8B), 11.5 GB (4B) and 55.7 GB (27B).
+
+Each weight shard is checked against the SHA-256 the model repository published for it. The state is trimmed by whole entries until every question's prompt fits 8,192 tokens (`--max-len`, up to 65,536). StartLux's shared-prefix path is turned off: at the pinned commit it reads the option letters in bf16 when two or more questions share 4,096 or more prompt tokens, so its probabilities do not sum to one. Those requests run as one eager batch instead, which on the 27B takes 2 to 3 seconds for three questions of 6,500 to 9,500 tokens.
+
+The first request at each new prompt length compiles StartLux's linear-attention kernels. Triton caches them on disk, but on a new machine a 27B server's first requests can take several seconds, and the tank duel's 5-second limit failed once for that reason. Warm a fresh server with a few requests of the lengths it will see before a timed match. `parity/startlux_serving.py` compares serving with StartLux's own server.
 
 ## End to end
 

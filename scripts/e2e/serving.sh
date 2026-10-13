@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Serving end to end: Honing's decision server as its own process, and the RA2 match's Node client stack against it.
 # Usage: scripts/e2e/serving.sh [out-dir]    (Python with Honing installed, Node 22)
+# DECISION_SERVER=<url> checks a decision server that is already running, such as a real model on a GPU, instead of
+# starting the CPU fixture.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${1:-$(mktemp -d)}; mkdir -p "$OUT"
@@ -28,6 +30,10 @@ for i in range(24):
     requests.append({"parts": parts, "questions": questions})
 json.dump(requests, open(sys.argv[1], "w"))
 PY
+if [ -n "${DECISION_SERVER:-}" ]; then
+  node "$ROOT/scripts/e2e/serving_client.mjs" "$DECISION_SERVER" "$OUT/requests.json" --real
+  exit
+fi
 python "$ROOT/scripts/e2e/fake_decision_server.py" > "$OUT/server.out" 2> "$OUT/server.err" &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null || true' EXIT

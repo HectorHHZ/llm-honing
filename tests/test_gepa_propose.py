@@ -12,6 +12,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+
 from gepa.core.data_loader import ensure_loader
 from gepa.gepa_utils import select_program_candidate_from_pareto_front
 from gepa.proposer.base import CandidateProposal
@@ -173,6 +176,21 @@ def test_a_reply_repeating_the_current_text_proposes_nothing_and_runs_no_child()
 
     assert result.proposal is None
     assert len(fixture.chat.conversations) == 1
+    assert fixture.runner.runs == 3
+    assert (_archive(result).metric_calls, result.episodes_spent) == (3, 3)
+    assert len(_archive(result).candidates) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("current", ["Solve the task.\n", "  Solve the task.\n\n"])
+def test_a_reply_repeating_the_current_text_up_to_whitespace_runs_no_child(current: str) -> None:
+    # The extractor strips the reply, so "Solve the task.\n" comes back as "Solve the task.".
+    seed = SEED.with_file(INSTRUCTIONS, HarnessFile(kind="instructions", content=current))
+    fixture = Fixture(["```\nSolve the task.\n```"], minibatch_size=3)
+
+    result = fixture.method.propose(replace(fixture.context(fixture.method.initial_state(seed)), current=seed))
+
+    assert result.proposal is None
     assert fixture.runner.runs == 3
     assert (_archive(result).metric_calls, result.episodes_spent) == (3, 3)
     assert len(_archive(result).candidates) == 1

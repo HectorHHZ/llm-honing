@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { validProbabilities } from "./web/shared/model-client.js";
 const DRIVE = ["forward", "reverse", "stop"],
     TURN = ["left", "right", "none"],
@@ -151,24 +152,69 @@ export async function healthFor(backend, edition, signal) {
         },
     };
 }
-const instructions = {
-    motion: "Choose joint driving and turning to survive and obtain a verified shot. Every shell is lethal. Prefer safe progress and small heading error. Do not fire yet.",
-    drive: "Choose forward, reverse, or stop. The barrel is fixed to the hull; turn and weapon are separate choices. Avoid all shells.",
-    turn: "Choose hull rotation. Use the verified firing direction or navigation waypoint in context. Left is negative angle, right is positive.",
-    movement:
-        "Choose movement now. Avoid every shell, including your own. Prefer no-hit routes, then approach the enemy. Shooting is independent.",
-    weapon: "Decide whether to fire. Own ricochets are lethal. Use the selected motion forecast when present. Fire only with a safe valid shot; otherwise hold.",
-};
-const question = (head, options) => ({
+// The question text the model reads. config/questions.json is the default and
+// a Honing harness replaces it (tank/questions.json).
+export const DEFAULT_QUESTIONS = Object.freeze(
+    JSON.parse(
+        readFileSync(
+            new URL("./config/questions.json", import.meta.url),
+            "utf8",
+        ),
+    ),
+);
+export const QUESTION_KEYS = Object.freeze(Object.keys(DEFAULT_QUESTIONS));
+export function validateQuestions(questions) {
+    if (!questions || typeof questions !== "object" || Array.isArray(questions))
+        throw Error("Question text must be a JSON object");
+    const missing = QUESTION_KEYS.filter((k) => !text(questions[k])),
+        unknown = Object.keys(questions).filter(
+            (k) => !QUESTION_KEYS.includes(k),
+        );
+    if (missing.length)
+        throw Error(`Question text is missing ${missing.join(", ")}`);
+    if (unknown.length)
+        throw Error(`Question text has unknown keys ${unknown.join(", ")}`);
+    return questions;
+}
+const question = (instructions, options) => ({
     type: "choice",
-    instructions: instructions[head],
+    instructions,
     criteria: Object.fromEntries(options.map((o) => [o.id, o.description])),
 });
-export async function decideWithHoning(backend, edition, body, signal) {
-    const health = await healthFor(backend, edition, signal),
-        calls = [],
-        started = performance.now();
+export async function decideWithHoning(
+    backend,
+    edition,
+    body,
+    signal,
+    options = {},
+) {
+    const health = await healthFor(backend, edition, signal);
+    return decide(
+        {
+            model: health.metadata.model,
+            agentIds: health.metadata.instances,
+            contextLimit: health.metadata.context_limit,
+            ask: (request) => upstream(backend, "/v1/decide", request, signal),
+        },
+        body,
+        options,
+    );
+}
+// One decision through any model that answers Honing's /v1/decide requests.
+// `ask` sends one request. `questions` replaces the default question text,
+// `notes` is shown to the model before the state, and `choose(head,
+// probabilities, allowed)` picks the executed option (default: the most
+// probable allowed option, as the browser plays).
+export async function decide(
+    { model, agentIds, contextLimit, ask },
+    body,
+    { questions: text = DEFAULT_QUESTIONS, notes = "", choose } = {},
+) {
+    const calls = [],
+        started = performance.now(),
+        pick = choose ?? ((head, p, allowed) => argmax(p, allowed));
     async function predict(state, questions, suffix) {
+        if (notes) state = notes + "\n\n" + state;
         // Laya's native option pointers allow 48 tokens each. Preserve every
         // forecast in the state and use concise pointers, never truncate it.
         state +=
@@ -198,21 +244,16 @@ export async function decideWithHoning(backend, edition, body, signal) {
             ]),
         );
         const id = body.id + ":" + suffix,
-            reply = await upstream(
-                backend,
-                "/v1/decide",
-                {
-                    id,
-                    parts: {
-                        essential: [state],
-                        details: [],
-                        memory: [],
-                        logs: [],
-                    },
-                    questions,
+            reply = await ask({
+                id,
+                parts: {
+                    essential: [state],
+                    details: [],
+                    memory: [],
+                    logs: [],
                 },
-                signal,
-            );
+                questions,
+            });
         if (
             reply?.id !== id ||
             reply.stateText !== state ||
@@ -245,7 +286,7 @@ export async function decideWithHoning(backend, edition, body, signal) {
                     "Model returned invalid native probabilities or choice",
                 );
         }
-        calls.push(reply);
+        calls.push({ ...reply, questions });
         return reply.answers;
     }
     let controls,
@@ -254,15 +295,18 @@ export async function decideWithHoning(backend, edition, body, signal) {
     if (body.protocol === "plans-v1") {
         const a = await predict(
             body.state,
-            { motion: question("motion", body.motions) },
+            { motion: question(text.motion, body.motions) },
             "motion",
         );
         const raw = a.motion.choice,
-            motionId = argmax(
+            motionId = pick(
+                "motion",
                 a.motion.probabilities,
                 body.admissible_motion_ids,
             ),
             motion = body.motions.find((m) => m.id === motionId);
+        if (!motion || !body.admissible_motion_ids.includes(motionId))
+            throw new HttpError(502, "Chosen motion is not admissible");
         const permitted =
             motion.shot.can_fire &&
             motion.shot.self_hit_ms === null &&
@@ -273,25 +317,20 @@ export async function decideWithHoning(backend, edition, body, signal) {
         const w = await predict(
             weaponState,
             {
-                weapon: question("weapon", [
-                    {
-                        id: "fire",
-                        description:
-                            "Fire after this selected motion turns. Only useful if its new shot is safe and hits the enemy.",
-                    },
-                    {
-                        id: "hold",
-                        description:
-                            "Execute this motion without firing. Choose this if the selected shot is unavailable or unsafe.",
-                    },
+                weapon: question(text.weapon, [
+                    { id: "fire", description: text["weapon.fire"] },
+                    { id: "hold", description: text["weapon.hold"] },
                 ]),
             },
             "weapon",
         );
+        const weapon = choose
+            ? pick("weapon", w.weapon.probabilities, ["fire", "hold"])
+            : w.weapon.choice;
         controls = {
             drive: motion.drive,
             turn: motion.turn,
-            fire: permitted && w.weapon.choice === "fire",
+            fire: permitted && weapon === "fire",
         };
         probabilities = {
             motion: a.motion.probabilities,
@@ -317,12 +356,13 @@ export async function decideWithHoning(backend, edition, body, signal) {
             motion_id: motionId,
             raw_motion_id: raw,
             raw_weapon: w.weapon.choice,
+            weapon_choice: weapon,
             weapon_context: weaponState,
             constraints: {
                 admissible_motion_ids: body.admissible_motion_ids,
                 motion_changed: raw !== motionId,
                 fire_permitted: permitted,
-                fire_vetoed: w.weapon.choice === "fire" && !permitted,
+                fire_vetoed: weapon === "fire" && !permitted,
             },
         };
     } else {
@@ -331,25 +371,34 @@ export async function decideWithHoning(backend, edition, body, signal) {
             Object.fromEntries(
                 Object.entries(body.candidates).map(([head, opts]) => [
                     head,
-                    question(head, opts),
+                    question(text[head], opts),
                 ]),
             ),
             "controls",
         );
+        const chosen = Object.fromEntries(
+            Object.entries(answers).map(([head, a]) => [
+                head,
+                choose
+                    ? pick(head, a.probabilities, Object.keys(a.probabilities))
+                    : a.choice,
+            ]),
+        );
         controls =
             body.protocol === "controls-v2"
                 ? {
-                      move: answers.movement.choice,
-                      fire: answers.weapon.choice === "fire",
+                      move: chosen.movement,
+                      fire: chosen.weapon === "fire",
                   }
                 : {
-                      drive: answers.drive.choice,
-                      turn: answers.turn.choice,
-                      fire: answers.weapon.choice === "fire",
+                      drive: chosen.drive,
+                      turn: chosen.turn,
+                      fire: chosen.weapon === "fire",
                   };
         probabilities = Object.fromEntries(
             Object.entries(answers).map(([head, a]) => [head, a.probabilities]),
         );
+        extra = { chosen };
     }
     const audits = calls.flatMap((c) => Object.values(c.tokenAudit || {}));
     const counted =
@@ -361,8 +410,8 @@ export async function decideWithHoning(backend, edition, body, signal) {
         id: body.id,
         round_id: body.round_id,
         protocol: body.protocol,
-        model: health.metadata.model,
-        agent_id: health.metadata.instances[body.player],
+        model,
+        agent_id: agentIds[body.player],
         controls,
         probabilities,
         ...extra,
@@ -373,7 +422,7 @@ export async function decideWithHoning(backend, edition, body, signal) {
         total_input_tokens: counted
             ? audits.reduce((s, a) => s + a.inputTokens, 0)
             : null,
-        context_limit: health.metadata.context_limit,
+        context_limit: contextLimit,
         state_truncated: false,
         structured_requests: calls.length,
         honing_results: calls,

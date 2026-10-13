@@ -1,14 +1,19 @@
 // The serving end-to-end check's client: the RA2 match's own client stack
 // (decisionClientOptions -> createDecisionClient -> PermutationClient -> HttpDecisionClient)
-// against a decision server process. Usage: node serving_client.mjs <url> <requests.json>
+// against a decision server process. Usage: node serving_client.mjs <url> <requests.json> [--real]
+// The CPU fixture answers with the longest option, and the check expects exactly that. With --real the server
+// runs a real model, so the check keeps every contract (state text, distributions, argmax, token audits,
+// permutation averaging) and drops the fixture's own answers.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
     createDecisionClient,
     decisionClientOptions,
 } from "../../integrations/ra2/integration/models/factory.mjs";
+import { verifyTokenAudit } from "../../integrations/ra2/integration/laya/token-audit.mjs";
 
-const [url, requestsPath] = process.argv.slice(2);
+const [url, requestsPath, mode] = process.argv.slice(2);
+const real = mode === "--real";
 const SECTIONS = ["essential", "details", "memory", "logs"];
 const requests = JSON.parse(readFileSync(requestsPath, "utf8"));
 // A binary target question: the permutation client asks twice, with options B and C swapped.
@@ -31,7 +36,7 @@ requests.push({
 const options = decisionClientOptions({ "decision-server": url }, "intent");
 const client = createDecisionClient(options);
 const metadata = await client.ready;
-assert.equal(metadata.model, "longest-option");
+if (!real) assert.equal(metadata.model, "longest-option");
 assert.equal(metadata.decisionServer, url);
 
 let checked = 0;
@@ -62,16 +67,26 @@ for (const request of requests) {
             (a, b) => a + b,
             0,
         );
-        assert(Math.abs(sum - 1) < 1e-9, "probabilities do not sum to one");
-        // The permutation client averages two forwards, which leaves a length-proportional
-        // distribution unchanged, so the longest description wins either way.
-        const expected = keys.reduce((best, key) =>
-            question.criteria[key].length > question.criteria[best].length
-                ? key
-                : best,
+        // A real model's probabilities are float32 values; the server checks them to 1e-5.
+        assert(
+            Math.abs(sum - 1) < (real ? 1e-5 : 1e-9),
+            "probabilities do not sum to one",
         );
-        assert.equal(answer.choice, expected, `question ${id}`);
-        assert.equal(body.tokenAudit[id].options, keys.length);
+        if (real) {
+            const best = Math.max(...Object.values(answer.probabilities));
+            assert.equal(answer.probabilities[answer.choice], best, id);
+            verifyTokenAudit(body.tokenAudit[id], keys.length);
+        } else {
+            // The permutation client averages two forwards, which leaves a length-proportional
+            // distribution unchanged, so the longest description wins either way.
+            const expected = keys.reduce((best, key) =>
+                question.criteria[key].length > question.criteria[best].length
+                    ? key
+                    : best,
+            );
+            assert.equal(answer.choice, expected, `question ${id}`);
+            assert.equal(body.tokenAudit[id].options, keys.length);
+        }
     }
     if (request.dimensions) {
         assert.equal(body.forwardCalls, 2);

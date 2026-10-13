@@ -1,0 +1,8 @@
+{
+  "controllerMode": "plans",
+  "contextVersion": "full",
+  "assistEnabled": true,
+  "assistProfile": "light",
+  "fireGuardEnabled": false,
+  "strategy": "baseline"
+}

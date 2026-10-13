@@ -262,6 +262,7 @@ def summarize(outcomes: Sequence[StepOutcome], run: E2ERun) -> dict[str, object]
                 "candidate_mean": statistics.fmean(evaluation.candidate_scores) if evaluation else None,
                 "incumbent_mean": statistics.fmean(evaluation.incumbent_scores) if evaluation else None,
                 "episodes": len(evaluation.records) if evaluation else 0,
+                "workspaces": [r.outcome.workspace_location for r in evaluation.records] if evaluation else [],
             }
         )
     work = run.context.work_dir
