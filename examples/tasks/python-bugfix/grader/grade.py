@@ -119,13 +119,17 @@ def run_case(
 
 
 def main(cases_path: str) -> None:
+    # Checked before anything else: run by hand on the source tree, this script
+    # would otherwise delete the suite's own cases below.
+    workspace = os.environ.get("HONING_WORKSPACE")
+    if not workspace:
+        sys.exit("grade.py: HONING_WORKSPACE is not set. It deletes its cases directory, so run it on a copy.")
     with open(cases_path, encoding="utf-8") as file:
         spec = json.load(file)
     # The expected values live only in this process from here on: the agent's code,
     # run next, could otherwise find the files by searching the disk.
     shutil.rmtree(os.path.dirname(os.path.abspath(cases_path)))
     timeout_seconds = case_timeout_seconds()
-    workspace = os.environ["HONING_WORKSPACE"]
     passed = 0
     failures = []
     for case in spec["cases"]:

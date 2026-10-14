@@ -118,6 +118,31 @@ def test_a_returned_bool_matches_only_the_same_bool(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize("workspace", [None, ""])
+def test_grade_py_run_without_a_workspace_exits_before_deleting_its_cases(
+    workspace: str | None, tmp_path: Path
+) -> None:
+    shutil.copytree(SUITE / "grader", tmp_path / "grader")
+    env = {"PATH": os.environ.get("PATH", os.defpath)}
+    if workspace is not None:
+        env["HONING_WORKSPACE"] = workspace
+    result = subprocess.run(
+        [sys.executable, "-I", "grade.py", "cases/clamp.json"],
+        cwd=tmp_path / "grader",
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "HONING_WORKSPACE is not set" in result.stderr
+    assert sorted(path.name for path in (tmp_path / "grader" / "cases").iterdir()) == [
+        "clamp.json",
+        "mean.json",
+        "reverse_words.json",
+    ]
+
+
 # The agent writes the workspace, so it must not be able to change how its work is graded.
 
 SHADOW = 'import sys\nsys.stdout.write(\'{"score": 1.0, "feedback": "shadowed"}\\n\')\nsys.exit(0)\n'
