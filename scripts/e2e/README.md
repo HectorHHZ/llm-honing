@@ -107,7 +107,7 @@ The live schedule has its own step kinds: `{"kind": "harness", "repeat": n}`, `{
 
 **Failures.** A reflection call that fails after the client's retries (bad key, rate limit, timeout) logs one line and proposes nothing. If the policy cannot be reached after the agent's retries, the agent exits 75 and the move is abandoned: GEPA's state is unchanged, and the move's episodes and tokens go to `faults.jsonl`. After 3 abandoned moves in a row the run stops with exit code 3.
 
-**Cost.** About 200 agent episodes with one policy call each, and about 10 reflection calls. At the prices in litellm's bundled map for `gpt-4.1-mini-2025-04-14` ($0.40 per million input tokens, $1.60 per million output tokens), that is roughly $0.10 to $0.30. `summary.json` reports the actual calls, tokens and cost.
+**Cost.** About 200 agent episodes with one policy call each, and about 10 reflection calls. At the prices in litellm's bundled map for `gpt-4.1-mini-2025-04-14` ($0.40 per million input tokens, $1.60 per million output tokens), that is roughly $0.10 to $0.30. `summary.json` reports the actual calls, tokens and cost. A cost litellm's map cannot give (a policy or reflection model served anywhere but its provider's own API, or a model it prices at zero) is reported as unknown, and so is the total.
 
 **Tests.** `tests/test_gepa_live_offline.py` runs this script against a loopback stub for both models, including rate limits, bad keys, timeouts and an outage inside a move; CI's `test-litellm` job runs it. `tests/test_gepa_live.py` (marker `live`) runs it on the real provider and is skipped unless the key is set.
 

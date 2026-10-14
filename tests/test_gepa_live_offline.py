@@ -148,7 +148,82 @@ def test_the_run_passes_every_check_against_the_stub(stub: OpenAIStub, tmp_path:
     assert run.summary["model"] == STUB_MODEL
     # Both models used the one pin: the agent sent its name, litellm sent the same name.
     assert {model for _, model in stub.calls} == {"stub-model"}
+    # Both models are on the stub, so neither cost is known, and neither is the total.
+    assert usage["policy"]["cost_usd"] is None and usage["reflection"]["cost_usd"] is None
+    assert usage["total_cost_usd"] is None
+    assert "total cost (USD): unknown" in run.stdout
     assert_no_key(run)
+
+
+# ---------------------------------------------------------------- cost
+
+
+PRICED_MODEL = "openai/gpt-4.1-mini"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("model", "base_url", "priced"),
+    [
+        (PRICED_MODEL, "https://api.openai.com/v1", True),
+        (PRICED_MODEL, "https://api.openai.com/v1/", True),
+        (PRICED_MODEL, "HTTPS://API.OpenAI.com/v1", True),
+        (PRICED_MODEL, "http://api.openai.com/v1", False),
+        (PRICED_MODEL, "https://api.openai.com/v2", False),
+        (PRICED_MODEL, "https://api.openai.com/v1?x=1", False),
+        (PRICED_MODEL, "http://127.0.0.1:8000/v1", False),
+        ("anthropic/some-model", "https://api.openai.com/v1", False),
+        ("hosted_vllm/some-model", "http://127.0.0.1:8000/v1", False),
+    ],
+)
+def test_only_the_providers_own_api_is_priced(model: str, base_url: str, priced: bool) -> None:
+    from honing.e2e.gepa_live import pricing_api_base
+
+    assert (pricing_api_base(model, base_url) is None) is priced
+
+
+@pytest.mark.unit
+def test_the_options_price_the_policy_only_behind_its_providers_own_api() -> None:
+    from honing.e2e.gepa_live import OpenAIEndpoints, live_options
+
+    config = {"model": {"provider": "openai", "name": "gpt-4.1-mini"}}
+    hosted = live_options(config, OpenAIEndpoints("https://api.openai.com/v1", "gpt-4.1-mini"))
+    assert (hosted.policy_price_model, hosted.policy_api_base) == (PRICED_MODEL, None)
+    local = live_options(config, OpenAIEndpoints("http://127.0.0.1:8000/v1", "gpt-4.1-mini"))
+    assert local.policy_api_base == "http://127.0.0.1:8000/v1"
+    assert live_options(config, object()).policy_price_model is None
+
+
+@pytest.mark.unit
+def test_one_unknown_cost_makes_the_total_unknown(tmp_path: Path) -> None:
+    from honing.e2e.gepa_live import RunLog, move_usage, usage_report
+
+    run_log = RunLog(tmp_path)
+    run_log.episodes.append(
+        {"move": 1, "usage": {"calls": 1, "failed_calls": 0, "prompt_tokens": 1000, "completion_tokens": 10}}
+    )
+    reflection = {"move": 1, "ok": True, "input_tokens": 50, "output_tokens": 5}
+    run_log.reflections += [{**reflection, "cost_usd": 0.001}, {**reflection, "cost_usd": None}]
+
+    # One reflection's cost unknown: the reflection cost and the total are unknown, not summed as 0.
+    report = usage_report(run_log, PRICED_MODEL)
+    assert report["policy"]["cost_usd"] > 0
+    assert report["reflection"]["cost_usd"] is None
+    assert report["total_cost_usd"] is None
+    assert move_usage(run_log, 1, PRICED_MODEL)["reflection_cost_usd"] is None
+
+    # Every reflection priced, the policy on a server of its own: the total is still unknown.
+    run_log.reflections.pop()
+    local = "http://127.0.0.1:8000/v1"
+    report = usage_report(run_log, PRICED_MODEL, local)
+    assert report["reflection"]["cost_usd"] == pytest.approx(0.001)
+    assert report["policy"]["cost_usd"] is None
+    assert report["total_cost_usd"] is None
+    assert move_usage(run_log, 1, PRICED_MODEL, local)["policy_cost_usd"] is None
+
+    # Both known: the total is their sum.
+    report = usage_report(run_log, PRICED_MODEL)
+    assert report["total_cost_usd"] == pytest.approx(0.001 + report["policy"]["cost_usd"])
 
 
 # ---------------------------------------------------------------- a failed reflection call

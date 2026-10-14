@@ -37,6 +37,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from honing.core import (
     ChatMessage,
@@ -319,8 +320,35 @@ class OpenAIEndpoints:
     def __init__(self, base_url: str, model: str) -> None:
         self._endpoint = PolicyEndpoint(base_url=base_url, tokenizer_location="remote", served_model=model)
 
+    @property
+    def base_url(self) -> str:
+        return self._endpoint.base_url
+
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
         return self._endpoint
+
+
+# Each provider's own API, for the providers the e2e configs use. litellm's price map prices
+# these; a policy served anywhere else (a local server, a stub) has no known cost.
+_PROVIDER_API_BASES = {"openai": "https://api.openai.com/v1"}
+
+
+def _url_key(url: str) -> tuple[str, str, str, str, str]:
+    parts = urlsplit(url.strip())
+    return parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), parts.query, parts.fragment
+
+
+def pricing_api_base(model: str, base_url: str) -> str | None:
+    """``base_url`` as :func:`~honing.harness.models.completion_cost_usd` should see it.
+
+    ``None`` when it is ``model``'s provider's own API, which the price map prices;
+    the URL itself otherwise, so the cost is reported as unknown, as the chat
+    client does for an ``api_base``. A provider not listed is never its default.
+    """
+    default = _PROVIDER_API_BASES.get(model.split("/", 1)[0])
+    if default is not None and _url_key(base_url) == _url_key(default):
+        return None
+    return base_url
 
 
 # ---------------------------------------------------------------- factories named in the config
@@ -424,6 +452,21 @@ def gepa_method(
 class LiveOptions:
     max_consecutive_faults: int = 3
     policy_price_model: str | None = None  # litellm's name for the policy, to price its tokens
+    policy_api_base: str | None = None  # from pricing_api_base; set means the policy's cost is unknown
+
+
+def live_options(config: Mapping[str, Any], endpoints: object) -> LiveOptions:
+    """The run's options from its config, with the policy priced only behind its provider's own API."""
+    live = config.get("live", {})
+    price_model = litellm_model(config["model"]) if "model" in config else None
+    # Only a policy behind OpenAIEndpoints has a URL to check; any other is not priced.
+    if price_model is None or not isinstance(endpoints, OpenAIEndpoints):
+        return LiveOptions(max_consecutive_faults=int(live.get("max_consecutive_faults", 3)))
+    return LiveOptions(
+        max_consecutive_faults=int(live.get("max_consecutive_faults", 3)),
+        policy_price_model=price_model,
+        policy_api_base=pricing_api_base(price_model, endpoints.base_url),
+    )
 
 
 FIRST_PUBLISH = "first_publish"
@@ -471,7 +514,7 @@ def run_live(
     first_publish: str | None = None
 
     def log_step(index: int) -> None:
-        usage = move_usage(run_log, index, options.policy_price_model)
+        usage = move_usage(run_log, index, options.policy_price_model, options.policy_api_base)
         tracker.log_step(index, step_values(steps[-1], records.new(), usage))
 
     def harness_move(index: int, entry: Mapping[str, Any]) -> dict[str, Any]:
@@ -584,7 +627,9 @@ def _sum_usage(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     return total
 
 
-def move_usage(run_log: RunLog, index: int, policy_price_model: str | None) -> dict[str, Any]:
+def move_usage(
+    run_log: RunLog, index: int, policy_price_model: str | None, policy_api_base: str | None = None
+) -> dict[str, Any]:
     """One move's agent processes, policy calls and reflection calls, with their tokens and cost."""
     episodes = [row for row in run_log.episodes if row["move"] == index]
     reflections = [row for row in run_log.reflections if row["move"] == index]
@@ -598,7 +643,9 @@ def move_usage(run_log: RunLog, index: int, policy_price_model: str | None) -> d
         "policy_prompt_tokens": policy["prompt_tokens"],
         "policy_completion_tokens": policy["completion_tokens"],
         "policy_cost_usd": (
-            completion_cost_usd(policy_price_model, policy["prompt_tokens"], policy["completion_tokens"])
+            completion_cost_usd(
+                policy_price_model, policy["prompt_tokens"], policy["completion_tokens"], api_base=policy_api_base
+            )
             if policy_price_model
             else None
         ),
@@ -610,7 +657,9 @@ def move_usage(run_log: RunLog, index: int, policy_price_model: str | None) -> d
     }
 
 
-def usage_report(run_log: RunLog, policy_price_model: str | None) -> dict[str, Any]:
+def usage_report(
+    run_log: RunLog, policy_price_model: str | None, policy_api_base: str | None = None
+) -> dict[str, Any]:
     """API calls, tokens and cost for the reflection model and the policy, abandoned moves included."""
     ok = [row for row in run_log.reflections if row.get("ok")]
     priced = [row["cost_usd"] for row in ok if row.get("cost_usd") is not None]
@@ -624,7 +673,9 @@ def usage_report(run_log: RunLog, policy_price_model: str | None) -> dict[str, A
     }
     policy: dict[str, Any] = {"episodes": len(run_log.episodes), **_sum_usage(run_log.episodes)}
     policy["cost_usd"] = (
-        completion_cost_usd(policy_price_model, policy["prompt_tokens"], policy["completion_tokens"])
+        completion_cost_usd(
+            policy_price_model, policy["prompt_tokens"], policy["completion_tokens"], api_base=policy_api_base
+        )
         if policy_price_model
         else None
     )
@@ -1075,11 +1126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if tracker.url:
         print(f"wandb: {tracker.url}")
-    live = config.get("live", {})
-    options = LiveOptions(
-        max_consecutive_faults=int(live.get("max_consecutive_faults", 3)),
-        policy_price_model=litellm_model(config["model"]) if "model" in config else None,
-    )
+    options = live_options(config, pipeline.context.components.get("endpoints"))
     code = 1
     try:
         summary = _run_and_check(pipeline, schedule, options, tracker, config, args.config, args.root)
@@ -1099,7 +1146,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     usage = summary["usage"]
     print(f"reflection: {json.dumps(usage['reflection'])}")
     print(f"policy: {json.dumps(usage['policy'])}")
-    print(f"total cost (USD): {usage['total_cost_usd']}")
+    total = usage["total_cost_usd"]
+    print(f"total cost (USD): {'unknown' if total is None else total}")
     for check in summary["checks"]:
         verdict = "pass" if check["passed"] else "NOT EXERCISED" if check["not_exercised"] else "FAIL"
         print(f"[{verdict}] {check['name']}: {check['detail']}")
@@ -1138,7 +1186,7 @@ def _run_and_check(
         "model": config.get("model"),
         "head": pipeline.campaign.chain.head().release_id,
         **result,
-        "usage": usage_report(run_log, options.policy_price_model),
+        "usage": usage_report(run_log, options.policy_price_model, options.policy_api_base),
         "work_dir": str(work_dir),
     }
     checks = check_run(summary, run_log, work_dir, validation_ids, max_metric_calls)
@@ -1167,11 +1215,13 @@ __all__ = [
     "gepa_method",
     "harness_seed",
     "key_scan",
+    "live_options",
     "main",
     "manifest_runner",
     "move_usage",
     "only_not_exercised",
     "openai_endpoints",
+    "pricing_api_base",
     "run_live",
     "suite_tasks",
     "usage_report",
