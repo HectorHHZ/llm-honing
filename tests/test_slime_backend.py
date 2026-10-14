@@ -399,6 +399,7 @@ def test_opd_arguments_load_the_teacher_in_megatron(tmp_path: Path) -> None:
     assert "--use-opd" in args
     assert args[args.index("--opd-type") + 1] == "megatron"
     assert args[args.index("--opd-teacher-load") + 1] == str(tmp_path / "teacher")
+    assert "--use-rollout-logprobs" not in args
     assert args[args.index("--opd-kl-coef") + 1] == "1.0"
 
 
@@ -409,6 +410,7 @@ def test_opd_without_a_teacher_checkpoint_reads_the_scores_from_the_rollout(tmp_
     assert "--use-opd" in args
     assert args[args.index("--opd-type") + 1] == "sglang"
     assert "--opd-teacher-load" not in args
+    assert "--use-rollout-logprobs" in args
 
 
 @pytest.mark.unit

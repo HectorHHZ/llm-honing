@@ -193,8 +193,9 @@ def main() -> int:
     parser.add_argument(
         "--prompt-style",
         choices=("boxed", "work"),
-        default="boxed",
-        help="the question asks for the final number alone (boxed) or after the steps (work)",
+        default=None,
+        help="the question asks for the final number alone (boxed) or after the steps (work); "
+        "default boxed, and work for opsd, whose teacher under boxed prefers a bare boxed answer",
     )
     parser.add_argument("--steps", type=int, default=1)
     parser.add_argument("--lr", type=float, default=None, help="default: 1e-5 for sft, 1e-6 otherwise")
@@ -207,6 +208,8 @@ def main() -> int:
         parser.error("--teacher applies to --algorithm opd only")
     if args.algorithm != "opsd" and args.teacher_model is not None:
         parser.error("--teacher-model applies to --algorithm opsd only")
+    if args.prompt_style is None:
+        args.prompt_style = "work" if args.algorithm == "opsd" else "boxed"
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     run = args.work_dir / time.strftime(f"{args.algorithm}-step-%Y%m%d-%H%M%S")

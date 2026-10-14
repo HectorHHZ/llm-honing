@@ -30,9 +30,11 @@ directory (``--save-hf``). The algorithm adds its own arguments:
       --opd-teacher-load``), which must share the student's architecture;
     - with no teacher checkpoint, the scores written into the rollout
       (``teacher_log_probs``) when it was collected (``--opd-type sglang``,
-      which in train-only mode reads them from the samples). On-policy
-      self-distillation takes this path: the teacher is the student itself,
-      scored under privileged context.
+      which in train-only mode reads them from the samples), with the
+      student's log-probabilities taken from the same engine
+      (``--use-rollout-logprobs``) so the KL does not carry the two engines'
+      numerical difference. On-policy self-distillation takes this path: the
+      teacher is the student itself, scored under privileged context.
 """
 
 from __future__ import annotations
@@ -149,8 +151,12 @@ def _algorithm_args(algorithm: str, settings: SlimeSettings, base: Path, teacher
         return ("--loss-type", "sft_loss", "--disable-compute-advantages-and-returns")
     if algorithm == "opd":
         opd = settings.opd
+        # When the teacher's scores come from the rollout engine, the student's side of the reverse KL must come
+        # from the same engine: the trainer's recomputed log-probabilities differ from the engine's by about
+        # 0.008 nats per token on the same tokens, the size of the whole signal when teacher and student
+        # agree on the reasoning, so a KL across the two engines is mostly their numerical difference.
         source = (
-            ("--opd-type", "sglang")
+            ("--opd-type", "sglang", "--use-rollout-logprobs")
             if teacher is None
             else ("--opd-type", "megatron", "--opd-teacher-load", str(teacher))
         )
