@@ -131,8 +131,8 @@ plays matches and is gated and trained through Honing.
 | --- | --- | --- |
 | Gate and release chain | `honing/release`, `honing/campaign` | chain recovery after a crash |
 | Compression | contracts, rules, and CPU fakes | an expert-drop editor on a small MoE |
-| Post-training | Laya, Kev and NanoJev trainers: SFT and GRPO on typed decisions (`honing/backends/jev`) | a Slime backend for language models |
-| Harness self-evolve | contracts, and the RA2 and tank runners, graders, and harnesses (`honing/backends/ra2`, `honing/backends/tank`) | GEPA ([#77](https://github.com/HectorHHZ/llm-honing/pull/77), in review) |
+| Post-training | Laya, Kev and NanoJev trainers: SFT and GRPO on typed decisions (`honing/backends/jev`); a Slime trainer for language models: SFT, on-policy (self-)distillation and GRPO (`honing/backends/slime`) | LoRA and parameter subsets through Slime; a local DPO trainer |
+| Harness self-evolve | contracts, and the RA2 runner, grader, and harness (`honing/backends/ra2`) | GEPA ([#77](https://github.com/HectorHHZ/llm-honing/pull/77), in review) |
 | Serving | an HTTP decision server for Laya, Kev, NanoJev and StartLux-Decision (0.8B, 4B, 27B), plus a [djev / DiffusionGemma bridge](integrations/djev/README.md) | managed SGLang and vLLM deployments |
 | Data plane | the batch contracts, and RA2 and tank demonstration and rollout providers | dataset and feedback providers |
 

@@ -38,12 +38,16 @@ class DataContract:
     For a ``typed_decisions`` batch, ``requires_logprobs`` asks for each
     decision's behavior probabilities, the decision model's analogue of the
     log-probabilities a language model's rollout carries.
+    ``requires_teacher_logprobs`` asks for a teacher's log-probabilities of
+    every sampled token, scored when the rollout was collected, for on-policy
+    distillation whose teacher is not loaded beside the student.
     """
 
     kind: ContractKind
     requires_reward: bool = False
     requires_logprobs: bool = False
     requires_group: bool = False
+    requires_teacher_logprobs: bool = False
 
     def __post_init__(self) -> None:
         require_choice(self.kind, get_args(ContractKind), "DataContract.kind")
@@ -51,7 +55,14 @@ class DataContract:
 
 @dataclass(frozen=True)
 class PolicySample:
-    """One token sequence with its loss mask, and whatever the algorithm scores it by."""
+    """One token sequence with its loss mask, and whatever the algorithm scores it by.
+
+    ``logprobs`` are the sampling policy's log-probabilities of each token.
+    ``teacher_logprobs`` are a teacher's log-probabilities of the same tokens,
+    for on-policy distillation; in on-policy self-distillation the teacher is
+    the same model shown privileged context (the answer, or a hint) that the
+    student's prompt leaves out. Positions the loss mask excludes carry 0.0 in both.
+    """
 
     tokens: tuple[int, ...]
     loss_mask: tuple[int, ...]
@@ -60,6 +71,7 @@ class PolicySample:
     group: str | None = None
     source_release: str | None = None
     source_harness: str | None = None
+    teacher_logprobs: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         require(len(self.tokens) > 0, "a sample needs at least one token")
@@ -67,6 +79,8 @@ class PolicySample:
         require(set(self.loss_mask) <= {0, 1}, "loss_mask entries must be 0 or 1")
         if self.logprobs is not None:
             require(len(self.logprobs) == len(self.tokens), "logprobs must have one entry per token")
+        if self.teacher_logprobs is not None:
+            require(len(self.teacher_logprobs) == len(self.tokens), "teacher_logprobs must have one entry per token")
         if self.reward is not None:
             require(math.isfinite(self.reward), "reward must be finite")
 
@@ -205,6 +219,11 @@ class TrainingBatch:
             require(all(sample.reward is not None for sample in self.samples), "every sample needs a reward")
         if self.contract.requires_logprobs:
             require(all(sample.logprobs is not None for sample in self.samples), "every sample needs logprobs")
+        if self.contract.requires_teacher_logprobs:
+            require(
+                all(sample.teacher_logprobs is not None for sample in self.samples),
+                "every sample needs teacher_logprobs",
+            )
         if kind == "grouped_on_policy_samples" or self.contract.requires_group:
             require(all(sample.group is not None for sample in self.samples), "every grouped sample needs a group")
 

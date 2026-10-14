@@ -28,6 +28,23 @@ Every script here runs on a CPU with no model or GPU, and CI's `e2e` job runs ea
 
 `schedule` lists the steps and `expect` their results; a run whose results differ exits 1. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
 
+## The Slime trainer
+
+`honing.backends.slime.SlimeTrainer` runs `sft`, `opd` (on-policy distillation, and self-distillation with a `lineage` teacher), and `grpo` as Slime train-only jobs on the batch the campaign hands it.
+
+`configs/e2e/slime.json` is the all-planes campaign with Slime's declared support (`honing.backends.slime.SUPPORT`) in the `trainer` slot: SFT on a dataset, then self-distillation and GRPO on harness rollouts, alternating with harness evolution, then a rollback. Its trainer is a stand-in that writes every batch in Slime's rollout layout, because the fake model's checkpoints are not Hugging Face directories. `check_trainer.py` and `honing_pipeline.py` both take it, and CI runs both.
+
+The real trainer needs a GPU and Slime's image. On a cluster without Docker:
+
+```bash
+scripts/e2e/setup-slime-enroot.sh                     # once per node; creates the enroot container "slime"
+git clone https://github.com/THUDM/slime.git /path/to/slime && git -C /path/to/slime checkout 41014d1f
+python scripts/e2e/slime_train_step.py --algorithm sft --base /path/to/Qwen2.5-1.5B-Instruct \
+    --work-dir /tmp/honing-slime --enroot slime --slime-source /path/to/slime --gpus 0
+```
+
+`--algorithm` is `grpo`, `sft`, `opd` (with `--teacher`, a checkpoint of the same architecture), or `opsd` (on-policy self-distillation: the base model scores each sampled answer again with the correct answer added to the question, privileged context the student never sees, and the batch carries those scores as `teacher_logprobs`; no teacher checkpoint is loaded, and Slime reads the scores with `--opd-type sglang` and takes the student's log-probabilities from the same engine with `--use-rollout-logprobs`). `opsd` defaults to `--prompt-style work`, because under the `boxed` prompt, which asks for the final number alone, a teacher that already sees the answer prefers a bare boxed number, per-token distillation rewards skipping the working, and over eight iterations of this script Qwen2.5-1.5B-Instruct fell from 0.50 to 0.07-0.11 held-out reward on two seeds. `work` holds the base's reward (0.80) without improving on it, while GRPO under either prompt reaches 0.96-0.98. The collapse stays reproducible with `--prompt-style boxed`. The script samples grouped arithmetic answers from the base model with SGLang, turns them into the batch the algorithm consumes (the rollout for GRPO, the correct answers for SFT, the unrewarded rollout for OPD), runs one job through `SlimeTrainer`, and samples the trained checkpoint on held-out questions. `--steps N` splits that one rollout into N optimizer steps, so steps after the first train on samples the base policy generated; `--max-new-tokens` sets the generation window (thinking models need far more than the default 256, otherwise every answer is truncated, every reward is 0, and the run stops). `report.json` has the reward before and after and Slime's metrics. One H100 is enough for a 1.5B model, and a run takes four to ten minutes, most of it starting SGLang and Megatron. Mount the filesystem that holds the checkpoints and the work directory as a whole (`--mount /data`, say), because on some clusters enroot creates the parents of a deeper mount point without read permission.
+
 ## Plugging in a harness runner (OpenHands, Reef, ...)
 
 A harness framework enters as an `EpisodeRunner` (`honing.core`) with its `RunnerSupport`, graded by a `TaskGrader`. `honing.e2e.WorkspaceEpisodeRunner` is the reference: it writes the harness files into a fresh workspace, starts the agent with the policy's OpenAI-compatible endpoint in `HONING_POLICY_URL` and `HONING_POLICY_MODEL`, and collects `result.json` and `transcript.jsonl`.
