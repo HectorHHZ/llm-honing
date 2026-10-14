@@ -279,6 +279,8 @@ def test_a_server_that_fails_to_start_leaves_its_gpu_free(tmp_path: Path) -> Non
     with pytest.raises(RuntimeError, match="no engine"):
         endpoints.resolve(p)
     assert endpoints.serving == {}
+    with pytest.raises(ContractError, match="failed to start earlier: RuntimeError: no engine"):
+        endpoints.resolve(p)  # not started again
 
 
 def test_a_checkpoint_is_named_by_its_hub_repository_or_its_directory(tmp_path: Path) -> None:
@@ -323,3 +325,42 @@ def test_the_stand_in_trainer_writes_a_new_servable_checkpoint_with_its_norm_sca
     start = 8 + len(header)
     assert struct.unpack("<2H", data[start : start + 4]) == (0x3FC0, 0x4040)  # 1.5 and 3.0
     assert data[start + 4 :] == other
+
+
+def test_a_checkpoint_s_context_length_comes_from_its_config(tmp_path: Path) -> None:
+    from honing.backends.sglang.checkpoint import context_length
+
+    checkpoint = write_checkpoint(tmp_path / "m")
+    assert context_length(checkpoint) is None
+    config = json.loads((checkpoint / "config.json").read_text())
+    (checkpoint / "config.json").write_text(json.dumps({**config, "max_position_embeddings": 4096}))
+    assert context_length(checkpoint) == 4096
+    (checkpoint / "config.json").write_text(json.dumps({**config, "text_config": {"max_position_embeddings": 262144}}))
+    assert context_length(checkpoint) == 262144
+
+
+def test_a_longrope_checkpoint_is_served_no_further_than_its_original_length(tmp_path: Path) -> None:
+    from honing.backends.sglang.checkpoint import context_length
+
+    checkpoint = write_checkpoint(tmp_path / "m")
+    config = json.loads((checkpoint / "config.json").read_text())
+    longrope = {
+        "max_position_embeddings": 131072,
+        "original_max_position_embeddings": 4096,
+        "rope_scaling": {"type": "longrope", "short_factor": [1.0], "long_factor": [2.0]},
+    }
+    (checkpoint / "config.json").write_text(json.dumps({**config, **longrope}))
+    assert context_length(checkpoint) == 4096
+
+
+def test_a_template_without_a_system_turn_gets_the_line_in_the_user_turn() -> None:
+    class NoSystem(CharTokenizer):
+        def apply_chat_template(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+            if any(m["role"] == "system" for m in messages):
+                raise ValueError("System role not supported")
+            return super().apply_chat_template(messages, **kwargs)
+
+    prompts = LetteredPrompts(NoSystem(template=True))
+    assert not prompts.system
+    text = "".join(chr(t) for t in prompts.render("s", "q?", ["a", "b"]))
+    assert text.startswith("<user>Read the state") and "<system>" not in text

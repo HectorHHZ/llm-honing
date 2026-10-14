@@ -52,6 +52,29 @@ def checkpoint_identity(checkpoint: Path, checksum: str) -> tuple[str, str]:
     return checkpoint.name, checksum[:12]
 
 
+def context_length(checkpoint: Path) -> int | None:
+    """The longest sequence to serve the checkpoint for, from its config, or None when the config does not say.
+
+    For LongRoPE (Phi-3.5) it is the original length, not the extended one. Past
+    it, transformers switches the sequence to the long scaling factors, while
+    SGLang 0.5.21 switches every request in a batch whenever any position in the
+    batch passes it (``rope_variant.py``), and its radix cache can join keys
+    computed under both. Serving no further than the original length keeps the
+    short factors, and every answer, independent of what else is batched.
+    """
+    config = json.loads((checkpoint / "config.json").read_text())
+    for section in (config.get("text_config") or {}, config):
+        scaling = section.get("rope_scaling") or {}
+        original = section.get("original_max_position_embeddings")
+        if (scaling.get("rope_type") or scaling.get("type")) == "longrope" and isinstance(original, int):
+            return original
+    for section in (config.get("text_config") or {}, config):
+        for key in ("max_position_embeddings", "seq_length", "max_sequence_length"):
+            if isinstance(section.get(key), int) and section[key] > 0:
+                return int(section[key])
+    return None
+
+
 def hf_snapshot(checkpoint: Path) -> ModelSnapshot:
     """The checkpoint as a ModelSnapshot: its text decoder's shape, parameter count and checksum."""
     config = json.loads((checkpoint / "config.json").read_text())

@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 import honing
-from honing.backends.sglang.checkpoint import checkpoint_checksum
+from honing.backends.sglang.checkpoint import checkpoint_checksum, context_length
 from honing.backends.sglang.engine import SGLangEngine, SGLangError, SGLangSettings, die_with_parent
 from honing.core import ContractError, EndpointRuntime, PolicyEndpoint, PolicyRef
 
@@ -82,6 +82,9 @@ class SGLangPolicyEndpoints:
         self._start = start or self._start_server
         self._served: OrderedDict[str, _Served] = OrderedDict()
         self._lock = threading.Lock()
+        # A checkpoint whose server failed to start fails again at once, with the first error: a campaign's
+        # runner resolves once per episode, and every retry would load the model again before failing.
+        self._failed: dict[str, str] = {}
 
     def __enter__(self) -> SGLangPolicyEndpoints:
         return self
@@ -100,6 +103,8 @@ class SGLangPolicyEndpoints:
             if key in self._served:
                 self._served.move_to_end(key)
                 return self._served[key].endpoint
+            if key in self._failed:
+                raise ContractError(f"the server for {key[:12]} failed to start earlier: {self._failed[key]}")
             checkpoint = Path(policy.checkpoint.location)
             if policy.checkpoint.weight_format != "hf_safetensors" or not (checkpoint / "config.json").exists():
                 raise ContractError(f"{checkpoint} is not a Hugging Face checkpoint an SGLang engine can load")
@@ -114,6 +119,10 @@ class SGLangPolicyEndpoints:
             stack = ExitStack()
             try:
                 url = self._start(checkpoint, key, free[0], stack)
+            except Exception as error:
+                stack.close()
+                self._failed[key] = f"{type(error).__name__}: {error}"
+                raise
             except BaseException:
                 stack.close()
                 raise
@@ -144,6 +153,7 @@ class SGLangPolicyEndpoints:
                 gpu=gpu,
                 chat=True,
                 served_model=key[:16],
+                context_length=context_length(checkpoint),
                 prefix_cache=settings.prefix_cache,
                 start_timeout=settings.start_timeout,
                 log_path=self._log(key, "engine"),

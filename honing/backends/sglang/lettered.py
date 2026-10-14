@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from honing.backends.jev.startlux import checked_answer, pack_request, validate_questions
-from honing.backends.sglang.checkpoint import checkpoint_checksum, checkpoint_identity
+from honing.backends.sglang.checkpoint import checkpoint_checksum, checkpoint_identity, context_length
 
 SYSTEM = "Read the state, then answer the question with the letter of exactly one listed option."
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -117,6 +117,12 @@ class LetteredPrompts:
     def __init__(self, tokenizer: Any) -> None:
         self.tokenizer = tokenizer
         self.chat = bool(getattr(tokenizer, "chat_template", None))
+        self.system = True
+        if self.chat:
+            try:
+                self._text("(none)", "Which?", ["yes", "no"])
+            except Exception:  # a template that raises on the system role; a second failure is a real one
+                self.system = False
         probe = self.render("(none)", "Which?", ["yes", "no"])
         text = self._text("(none)", "Which?", ["yes", "no"])
         self.letters = self._letter_ids(probe, text)
@@ -127,6 +133,8 @@ class LetteredPrompts:
         if not self.chat:
             return f"{SYSTEM}\n\n{user}\nAnswer:"
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+        if not self.system:  # the template refuses a system turn (Gemma): the line opens the user turn instead
+            messages = [{"role": "user", "content": f"{SYSTEM}\n\n{user}"}]
         text: str = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
@@ -317,9 +325,13 @@ def load(checkpoint: Path, engine_settings: Any, settings: LetteredSettings, che
     """A context manager: the checkpoint on an SGLang engine, answering lettered decisions.
 
     Honing computes the weights' checksum itself, and refuses the checkpoint
-    when ``checksum`` names another one.
+    when ``checksum`` names another one. A checkpoint that reads fewer tokens
+    than ``settings.max_length`` (OLMoE reads 4,096) gets its own limit, so the
+    state is trimmed until every prompt fits the model, and the engine is
+    started with room for that limit.
     """
     import contextlib
+    import dataclasses
 
     from honing.backends.sglang.engine import SGLangEngine
 
@@ -330,8 +342,13 @@ def load(checkpoint: Path, engine_settings: Any, settings: LetteredSettings, che
             raise ValueError(f"{checkpoint} has weights {actual[:12]}, not the {checksum[:12]} asked for")
         tokenizer = load_tokenizer(checkpoint)
         config = json.loads((checkpoint / "config.json").read_text())
+        limit = context_length(checkpoint)
+        fitted = settings
+        if limit is not None and settings.max_length > limit - 8:
+            fitted = dataclasses.replace(settings, max_length=limit - 8)
+        engine = dataclasses.replace(engine_settings, context_length=fitted.max_length + 8)
         model, revision = checkpoint_identity(checkpoint, actual)
-        with SGLangEngine.launch(checkpoint, engine_settings) as engine:
+        with SGLangEngine.launch(checkpoint, engine) as served:
             # model, family, revision and maxLen are what the game bridges read from the health route.
             metadata = {
                 "family": "lettered",
@@ -341,10 +358,10 @@ def load(checkpoint: Path, engine_settings: Any, settings: LetteredSettings, che
                 "architecture": (config.get("architectures") or ["?"])[0],
                 "weightsSha256": actual,
                 "engine": "sglang",
-                "engineVersions": engine.versions,
-                "prefixCache": engine_settings.prefix_cache,
-                "maxLen": settings.max_length,
+                "engineVersions": served.versions,
+                "prefixCache": engine.prefix_cache,
+                "maxLen": fitted.max_length,
             }
-            yield LetteredDecisionModel(engine, tokenizer, settings, metadata)
+            yield LetteredDecisionModel(served, tokenizer, fitted, metadata)
 
     return loading()
