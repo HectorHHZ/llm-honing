@@ -1,13 +1,18 @@
 """Grade one python-bugfix task: call the agent's function on hidden cases and print the fraction it gets right.
 
-Usage: ``python3 -I grade.py <cases.json>``, from the workspace root. stdout holds
-only the grade, one JSON line; the children's stderr is the log.
+Usage: ``python3 -I grade.py <cases.json>``, from this directory, with the agent's
+workspace in ``HONING_WORKSPACE``. stdout holds only the grade, one JSON line; the
+children's stderr is the log. It deletes the directory holding ``<cases.json>``
+before any agent code runs, so run it only on a copy, as ``CommandGrader`` does.
 
 This process never imports the agent's code. Anything imported here could print
 a grade of its own, exit before the real one is printed, or replace the
 functions that compute it. Each case instead runs in a child: the child gets the
 module, the function, and the arguments on stdin, and nothing else (the expected
-values stay here, and its environment has no ``HONING_*`` variables). It imports
+values stay here, and its environment has no ``HONING_*`` variables). It runs in
+the workspace, not here, and by then the cases are read into memory and deleted
+from disk, so the agent's code cannot open them, by a relative path or by
+searching. It imports
 the agent's module with the workspace appended to ``sys.path`` after the
 standard library, calls the function, and writes one JSON line to a copy of its
 stdout that it takes before the agent's code runs; anything the agent's code
@@ -15,8 +20,9 @@ prints goes to stderr. A child that crashes, exits early, writes anything but
 one result line, returns something JSON cannot encode, or runs past the case
 time limit fails that case.
 
-The agent's code still runs as the same user as this script, so it can read
-files on disk, these cases included; only a sandbox (#16) closes that.
+The agent's code still runs as the same user as this script, so it could still
+read them from this process (``/proc/<pid>/mem``, or a debugger where the system
+allows one); only a sandbox (#16) closes that.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -72,10 +79,13 @@ def same(value: object, expected: object) -> bool:
     return type(value) is type(expected) and value == expected
 
 
-def run_case(module: str, function: str, args: list, timeout_seconds: float) -> tuple[object, str | None]:
-    """Run one call in a child. Returns ``(value, None)``, or ``(None, why it failed)``."""
+def run_case(
+    module: str, function: str, args: list, workspace: str, timeout_seconds: float
+) -> tuple[object, str | None]:
+    """Run one call in a child, in ``workspace``. Returns ``(value, None)``, or ``(None, why it failed)``."""
     child = subprocess.Popen(
         [sys.executable, "-I", "-c", CHILD],
+        cwd=workspace,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         env={"PATH": os.environ.get("PATH", os.defpath), "LANG": "C.UTF-8"},
@@ -111,12 +121,16 @@ def run_case(module: str, function: str, args: list, timeout_seconds: float) -> 
 def main(cases_path: str) -> None:
     with open(cases_path, encoding="utf-8") as file:
         spec = json.load(file)
+    # The expected values live only in this process from here on: the agent's code,
+    # run next, could otherwise find the files by searching the disk.
+    shutil.rmtree(os.path.dirname(os.path.abspath(cases_path)))
     timeout_seconds = case_timeout_seconds()
+    workspace = os.environ["HONING_WORKSPACE"]
     passed = 0
     failures = []
     for case in spec["cases"]:
         call = f"{spec['function']}({', '.join(map(short, case['args']))})"
-        value, problem = run_case(spec["module"], spec["function"], case["args"], timeout_seconds)
+        value, problem = run_case(spec["module"], spec["function"], case["args"], workspace, timeout_seconds)
         if problem is None and same(value, case["expected"]):
             passed += 1
         elif problem is None:

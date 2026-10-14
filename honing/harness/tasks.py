@@ -8,12 +8,9 @@ Each line is one JSON object with exactly these keys:
 - ``grader``: the grader command, as an argv list, run in the sandbox after the episode;
 - ``split``: ``train`` (a method's minibatches), ``val`` (the gate), or ``heldout``
   (reported only, never used to select);
-- ``grader_files`` (optional): a directory copied over the agent's workspace after the
-  episode and before the grader runs, so hidden tests and the grading script are the
-  suite's own copies, not whatever the agent left in their place. Each top-level entry
-  replaces the workspace's entry of the same name whole: a directory is not merged, so
-  anything the agent put in it is deleted. It must therefore hold only files and
-  directories the grader owns, never a directory the agent is meant to work in;
+- ``grader_files`` (optional): a directory of hidden tests and grading scripts. The
+  grader gets its own copy, outside the agent's workspace, and runs there; it finds the
+  agent's files through ``HONING_WORKSPACE``. Without it, the grader runs in the workspace;
 - ``metadata`` (optional): a JSON object handed to the grader, for task arguments that do
   not belong in the prompt.
 

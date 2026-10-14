@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -95,10 +97,16 @@ def test_a_returned_bool_matches_only_the_same_bool(tmp_path: Path) -> None:
     (tmp_path / "echo.py").write_text("def echo(value):\n    return value\n")
     cases = [([True], True), ([False], False), ([True], 1), ([1], True), ([1], 1), ([0], False)]
     spec = {"module": "echo", "function": "echo", "cases": [{"args": a, "expected": e} for a, e in cases]}
-    (tmp_path / "cases.json").write_text(json.dumps(spec))
+    (tmp_path / "cases").mkdir()
+    (tmp_path / "cases" / "echo.json").write_text(json.dumps(spec))
 
     result = subprocess.run(
-        [sys.executable, "-I", "grade.py", "cases.json"], cwd=tmp_path, capture_output=True, text=True, check=True
+        [sys.executable, "-I", "grade.py", "cases/echo.json"],
+        cwd=tmp_path,
+        env={"PATH": os.environ.get("PATH", os.defpath), "HONING_WORKSPACE": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=True,
     )
     grade = json.loads(result.stdout)
 
@@ -164,6 +172,35 @@ def test_agent_code_cannot_forge_a_grade(task_id: str, forgery: str, tmp_path: P
     grade = _grade(task_id, workspace)
     assert grade.score == 0.0
     assert grade.feedback is not None and grade.feedback.startswith("0 of 3 tests pass.")
+
+
+# Agent code that answers from the hidden cases instead of computing: the clamp.py from
+# the #99 review, one that looks where a sibling directory would be, and one that
+# searches the temporary directory. The search is given this process's temporary
+# directory, since the child's environment has no TMPDIR and an agent could find it.
+ANSWER_FROM = (
+    "import glob, json\n"
+    "def clamp(*a):\n"
+    "    s = json.load(open(sorted(glob.glob({pattern!r}, recursive=True))[0]))\n"
+    "    return next(c['expected'] for c in s['cases'] if c['args'] == list(a))\n"
+)
+HIDDEN_CASE_PATTERNS = {
+    "in the working directory": "cases/clamp.json",
+    "in a sibling directory": "../grader/cases/clamp.json",
+    "anywhere under the temporary directory": str(
+        Path(tempfile.gettempdir()) / "honing-grader-*" / "**" / "clamp.json"
+    ),
+}
+
+
+@pytest.mark.parametrize("where", list(HIDDEN_CASE_PATTERNS))
+def test_agent_code_cannot_read_the_hidden_cases(where: str, tmp_path: Path) -> None:
+    workspace = _agent_copy("clamp", tmp_path)
+    (workspace / "clamp.py").write_text(ANSWER_FROM.format(pattern=HIDDEN_CASE_PATTERNS[where]))
+    grade = _grade("clamp", workspace)
+    assert grade.score == 0.0
+    assert grade.feedback is not None and grade.feedback.startswith("0 of 3 tests pass.")
+    assert grade.feedback.count("raised IndexError") == 3
 
 
 def _fixed(task_id: str, tmp_path: Path, prefix: str) -> Path:

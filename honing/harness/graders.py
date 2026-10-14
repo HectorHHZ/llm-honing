@@ -2,8 +2,9 @@
 
 :class:`CommandGrader` looks the task up in its :class:`~honing.harness.tasks.TaskSuite`,
 opens a sandbox over the episode's ``workspace_location``, copies the suite's
-``grader_files`` over the agent's copies, and runs the task's grader argv there. The
-command's last non-empty stdout line must be one JSON object,
+``grader_files`` into a directory of their own outside the workspace, and runs the task's
+grader argv there (in the workspace when there are none). The command finds the agent's
+files through ``HONING_WORKSPACE``. The command's last non-empty stdout line must be one JSON object,
 ``{"score": <number in [0, 1]>, "feedback": <string>}``.
 
 The episode runner's sandbox is gone by the time a grader runs (``run_graded`` grades
@@ -11,8 +12,8 @@ after ``run`` returns), so the grader opens its own over the workspace the runne
 recorded. Two kinds of failure are told apart:
 
 - the agent's work failed: the workspace holds a file that cannot be copied safely
-  (a FIFO, socket, or device) or that the grader may not read, or it cannot take the
-  grader's files (a read-only directory), or the grader exits nonzero, prints something that is not a grade,
+  (a FIFO, socket, or device) or that the grader may not read, or the grader exits
+  nonzero, prints something that is not a grade,
   reports a score outside ``[0, 1]``, times out, or cannot be started. That is a score
   of 0 with the reason as feedback, so one bad episode never aborts a gate.
 - the infrastructure failed: the outcome names no workspace, or the sandbox cannot be
@@ -44,6 +45,7 @@ from honing.harness.tasks import ManifestTask, TaskSuite
 FINAL_OUTPUT_ENV = "HONING_FINAL_OUTPUT_FILE"
 METADATA_ENV = "HONING_TASK_METADATA"
 TASK_ID_ENV = "HONING_TASK_ID"
+WORKSPACE_ENV = "HONING_WORKSPACE"
 
 # The exit code a shell reports for a command it cannot find.
 _NOT_RUNNABLE = 127
@@ -57,7 +59,7 @@ _STDERR_IN_FEEDBACK_CHARS = 500
 class UngradableWorkspaceError(HoningError):
     """The agent left its workspace in a state the grader cannot work in; it scores 0, it does not abort.
 
-    A sandbox raises it from opening or from ``copy_in``, and the message becomes the feedback.
+    A sandbox raises it from opening, and the message becomes the feedback.
     """
 
 
@@ -76,15 +78,18 @@ class CommandSandbox(Protocol):
     """A working copy of an episode's workspace that a grader command runs in.
 
     The part of slime's ``Sandbox`` a grader needs, declared here because only
-    ``honing/backends`` may import slime. The sandbox supplies ``PATH``, ``HOME``
-    and the locale; the caller's ``env`` is added to those and nothing else is
-    inherited, so the host's secrets stay out of the grader.
+    ``honing/backends`` may import slime. The sandbox supplies ``PATH``, ``HOME``,
+    the locale, and ``HONING_WORKSPACE`` (the workspace as the command sees it); the
+    caller's ``env`` is added to those and nothing else is inherited, so the host's
+    secrets stay out of the grader.
     """
 
-    async def copy_in(self, source: Path) -> None:
-        """Copy the host directory ``source`` over the workspace, replacing what is there.
+    async def add_grader_files(self, source: Path) -> str:
+        """Copy the host directory ``source`` into a new directory and return its path as the command sees it.
 
-        Raises :class:`UngradableWorkspaceError` when the agent's files are in the way.
+        The directory is outside the workspace and not at any fixed path relative to
+        it, so the agent's code, which a grader runs from the workspace, cannot open
+        the hidden tests by a relative path.
         """
         ...
 
@@ -93,35 +98,19 @@ class CommandSandbox(Protocol):
         ...
 
     async def exec(
-        self, argv: Sequence[str], *, env: Mapping[str, str], timeout_seconds: float, max_output_bytes: int
+        self,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str],
+        timeout_seconds: float,
+        max_output_bytes: int,
+        cwd: str | None = None,
     ) -> CommandResult:
-        """Run ``argv`` in the workspace. A command that cannot start exits 127; a timeout kills it."""
+        """Run ``argv`` in ``cwd``, or in the workspace. A command that cannot start exits 127; a timeout kills it."""
         ...
 
 
 SandboxOpener = Callable[[Path], AbstractAsyncContextManager[CommandSandbox]]
-
-
-def _overlay(source: Path, destination: Path) -> None:
-    """Put each top-level entry of ``source`` into ``destination``, replacing what is there whole.
-
-    A directory is replaced, not merged: merging would keep test files the agent
-    added beside the grader's and let them count. Whatever is in the way is
-    removed first, a link as a link, so nothing is written where an agent's link
-    points.
-    """
-    for entry in sorted(source.iterdir()):
-        target = destination / entry.name
-        if target.is_symlink() or target.is_file():
-            target.unlink()
-        elif target.is_dir():
-            shutil.rmtree(target)
-        elif target.exists():
-            target.unlink()
-        if entry.is_dir() and not entry.is_symlink():
-            shutil.copytree(entry, target, symlinks=True)
-        else:
-            shutil.copy2(entry, target, follow_symlinks=False)
 
 
 def _kill_group(pid: int) -> None:
@@ -166,13 +155,15 @@ class LocalWorkspace:
         self.workspace = root / "workspace"
         self._scratch = root / "scratch"
         self._home = root / "home"
+        self.grader_directories: list[Path] = []
 
-    async def copy_in(self, source: Path) -> None:
-        try:
-            await asyncio.to_thread(_overlay, source, self.workspace)
-        except PermissionError as error:
-            message = f"the grader's files could not be copied into the workspace: {error}"
-            raise UngradableWorkspaceError(message) from None
+    async def add_grader_files(self, source: Path) -> str:
+        # A directory of its own, not one beside the workspace: agent code run from the
+        # workspace could open a sibling as ``../<name>``.
+        directory = Path(tempfile.mkdtemp(prefix="honing-grader-"))
+        self.grader_directories.append(directory)
+        await asyncio.to_thread(shutil.copytree, source, directory / "files", symlinks=True)
+        return str(directory / "files")
 
     async def write_file(self, name: str, content: bytes) -> str:
         path = self._scratch / name
@@ -180,19 +171,26 @@ class LocalWorkspace:
         return str(path)
 
     async def exec(
-        self, argv: Sequence[str], *, env: Mapping[str, str], timeout_seconds: float, max_output_bytes: int
+        self,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str],
+        timeout_seconds: float,
+        max_output_bytes: int,
+        cwd: str | None = None,
     ) -> CommandResult:
         environment = {
             "PATH": os.environ.get("PATH", os.defpath),
             "HOME": str(self._home),
             "TMPDIR": str(self._scratch),
             "LANG": "C.UTF-8",
+            WORKSPACE_ENV: str(self.workspace),
             **env,
         }
         try:
             process = await asyncio.create_subprocess_exec(
                 *argv,
-                cwd=self.workspace,
+                cwd=self.workspace if cwd is None else cwd,
                 env=environment,
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
@@ -306,6 +304,7 @@ async def local_workspace(workspace: Path) -> AsyncGenerator[LocalWorkspace, Non
     any other copy failure raises.
     """
     root = Path(tempfile.mkdtemp(prefix="honing-grade-"))
+    sandbox = LocalWorkspace(root)
     try:
         copy = partial(_copy_regular_file, workspace)
         try:
@@ -324,8 +323,10 @@ async def local_workspace(workspace: Path) -> AsyncGenerator[LocalWorkspace, Non
             raise refusal from None
         (root / "scratch").mkdir()
         (root / "home").mkdir()
-        yield LocalWorkspace(root)
+        yield sandbox
     finally:
+        for directory in sandbox.grader_directories:
+            await asyncio.to_thread(_remove, directory)
         await asyncio.to_thread(_remove, root)
 
 
@@ -381,7 +382,9 @@ def _truncate(feedback: str | None, limit: int) -> str | None:
 class CommandGrader:
     """Grades an episode by running its task's grader command over a copy of the agent's workspace.
 
-    The command sees three variables besides what the sandbox supplies:
+    The command runs in its own copy of the task's ``grader_files``, outside the
+    workspace, or in the workspace when the task has none. It sees three variables
+    besides what the sandbox supplies:
     ``HONING_TASK_ID``; ``HONING_FINAL_OUTPUT_FILE``, a file holding the agent's
     final text, for tasks graded on the reply rather than on files; and
     ``HONING_TASK_METADATA``, a file holding the manifest line's ``metadata`` as
@@ -392,9 +395,14 @@ class CommandGrader:
     code can print a grade, exit before the real one is printed, or replace what
     computes it. The example suite (``examples/tasks/python-bugfix``) shows the
     safe shape: a parent that holds the expected values and never imports the
-    agent's code, and a child per case that runs it. The agent's code still runs
-    as the same user, so it can read files on disk, the grader's included; only
-    a sandbox that isolates it (#16) closes that.
+    agent's code, and a child per case that runs it from the workspace.
+
+    A grader that runs the agent's code should first load its hidden data and
+    remove it from disk: that code runs as the same user, so it can search the
+    disk for anything left there, this grader's own directory included. What
+    stays in the grader's memory is still in reach (``/proc/<pid>/mem``, or a
+    debugger where the system allows one); only a sandbox that isolates the
+    agent's code (#16) closes that.
     """
 
     def __init__(
@@ -428,8 +436,7 @@ class CommandGrader:
 
     async def _run(self, entry: ManifestTask, outcome: EpisodeOutcome, workspace: Path) -> CommandResult:
         async with self._open_sandbox(workspace) as sandbox:
-            if entry.grader_files is not None:
-                await sandbox.copy_in(entry.grader_files)
+            cwd = None if entry.grader_files is None else await sandbox.add_grader_files(entry.grader_files)
             env = {
                 TASK_ID_ENV: entry.task_id,
                 FINAL_OUTPUT_ENV: await sandbox.write_file("final_output.txt", outcome.final_output.encode("utf-8")),
@@ -442,4 +449,5 @@ class CommandGrader:
                 env=env,
                 timeout_seconds=self._timeout_seconds,
                 max_output_bytes=self._max_output_bytes,
+                cwd=cwd,
             )

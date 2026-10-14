@@ -43,19 +43,26 @@ class FakeCommandSandbox:
         self.opened: list[Path] = []
         self.copied: list[Path] = []
         self.files: dict[str, bytes] = {}
-        self.calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
+        self.calls: list[tuple[tuple[str, ...], dict[str, str], str | None]] = []
 
-    async def copy_in(self, source: Path) -> None:
+    async def add_grader_files(self, source: Path) -> str:
         self.copied.append(source)
+        return "/sandbox/grader"
 
     async def write_file(self, name: str, content: bytes) -> str:
         self.files[name] = content
         return f"/sandbox/scratch/{name}"
 
     async def exec(
-        self, argv: Sequence[str], *, env: Mapping[str, str], timeout_seconds: float, max_output_bytes: int
+        self,
+        argv: Sequence[str],
+        *,
+        env: Mapping[str, str],
+        timeout_seconds: float,
+        max_output_bytes: int,
+        cwd: str | None = None,
     ) -> CommandResult:
-        self.calls.append((tuple(argv), dict(env)))
+        self.calls.append((tuple(argv), dict(env), cwd))
         return self.result
 
     def opener(self) -> Callable[[Path], AbstractAsyncContextManager[FakeCommandSandbox]]:

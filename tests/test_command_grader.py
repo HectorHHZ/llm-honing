@@ -26,6 +26,7 @@ from honing.harness.graders import (
     FINAL_OUTPUT_ENV,
     METADATA_ENV,
     TASK_ID_ENV,
+    WORKSPACE_ENV,
     CommandGrader,
     CommandResult,
     CommandSandbox,
@@ -78,8 +79,9 @@ def test_valid_output_becomes_the_grade(tmp_path: Path) -> None:
     grade, sandbox = _fake_grade(tmp_path, _ok(stdout), metadata={"k": 1})
     assert grade == Grade(score=0.75, feedback="3 of 4 pass")
     assert sandbox.opened == [tmp_path / "agent"]
-    [(argv, env)] = sandbox.calls
+    [(argv, env, cwd)] = sandbox.calls
     assert argv == ("python3", "grade.py")
+    assert cwd is None
     assert env == {
         TASK_ID_ENV: "t1",
         FINAL_OUTPUT_ENV: "/sandbox/scratch/final_output.txt",
@@ -132,10 +134,12 @@ def test_a_timeout_reported_by_the_sandbox_scores_zero(tmp_path: Path) -> None:
     assert grade == Grade(score=0.0, feedback="the grader timed out after 30 s")
 
 
-def test_grader_files_are_copied_in_before_the_command_runs(tmp_path: Path) -> None:
+def test_the_command_runs_in_the_grader_files_directory(tmp_path: Path) -> None:
     (tmp_path / "hidden").mkdir()
     _, sandbox = _fake_grade(tmp_path, _ok('{"score": 1, "feedback": ""}'), grader_files="hidden")
     assert sandbox.copied == [tmp_path / "hidden"]
+    [(_, _, cwd)] = sandbox.calls
+    assert cwd == "/sandbox/grader"
 
 
 def test_long_feedback_is_cut(tmp_path: Path) -> None:
@@ -260,33 +264,62 @@ def test_the_command_sees_no_host_environment_beyond_path(
     grade = _local_grade(tmp_path, agent, _python(LIST_ENV))
     assert grade.feedback is not None
     names = set(json.loads(grade.feedback)) - {"LC_CTYPE", "__CF_USER_TEXT_ENCODING"}  # set by the OS on macOS
-    assert names == {"PATH", "HOME", "TMPDIR", "LANG", TASK_ID_ENV, FINAL_OUTPUT_ENV, METADATA_ENV}
+    assert names == {"PATH", "HOME", "TMPDIR", "LANG", WORKSPACE_ENV, TASK_ID_ENV, FINAL_OUTPUT_ENV, METADATA_ENV}
 
 
-def test_grader_files_replace_the_agents_copies(tmp_path: Path, agent: Path) -> None:
+SHOW_PLACES = (
+    "import json, os; workspace = os.environ['WORKSPACE_ENV']; "
+    "listed = [sorted(os.listdir('.')), sorted(os.listdir(workspace)), open('answer.txt').read(), "
+    "open(os.path.join(workspace, 'answer.txt')).read(), os.path.samefile(os.getcwd(), workspace)]; "
+    "print(json.dumps({'score': 1, 'feedback': json.dumps(listed)}))"
+).replace("WORKSPACE_ENV", WORKSPACE_ENV)
+
+
+def test_grader_files_stay_out_of_the_workspace(tmp_path: Path, agent: Path) -> None:
     hidden = tmp_path / "suite" / "hidden"
-    hidden.mkdir()
+    (hidden / "cases").mkdir(parents=True)
+    (hidden / "cases" / "t1.json").write_text("{}")
     (hidden / "answer.txt").write_text("expected\n")
-    (agent / "answer.txt").write_text("tampered\n")
-    show = "import json, pathlib; print(json.dumps({'score': 1, 'feedback': pathlib.Path('answer.txt').read_text()}))"
-    grade = _local_grade(tmp_path, agent, _python(show), line={"grader_files": "hidden"})
-    assert grade.feedback == "expected\n"
+    (agent / "cases").mkdir()
+    (agent / "cases" / "extra.json").write_text("the agent's\n")
+    grade = _local_grade(tmp_path, agent, _python(SHOW_PLACES), line={"grader_files": "hidden"})
+    assert grade.feedback is not None
+    grader_listing, workspace_listing, grader_answer, agent_answer, same = json.loads(grade.feedback)
+    # The command runs among the grader's files only; the workspace holds the agent's files only.
+    assert grader_listing == ["answer.txt", "cases"]
+    assert workspace_listing == ["answer.txt", "cases"]
+    assert (grader_answer, agent_answer, same) == ("expected\n", "42\n", False)
 
 
-def test_grader_files_do_not_follow_a_link_the_agent_left(tmp_path: Path, agent: Path) -> None:
-    hidden = tmp_path / "suite" / "hidden"
-    (hidden / "tests").mkdir(parents=True)
-    (hidden / "tests" / "test_x.py").write_text("hidden test\n")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (agent / "tests").symlink_to(outside, target_is_directory=True)
+def test_grader_files_are_not_a_sibling_of_the_workspace(tmp_path: Path, agent: Path) -> None:
+    # Agent code runs from the workspace, so whatever ``..`` holds is in its reach.
+    (tmp_path / "suite" / "hidden").mkdir()
     show = (
-        "import json, pathlib; p = pathlib.Path('tests'); "
-        "print(json.dumps({'score': 1, 'feedback': str(p.is_symlink()) + (p / 'test_x.py').read_text()}))"
-    )
+        "import json, os; parent = os.path.dirname(os.environ['WORKSPACE_ENV']); "
+        "print(json.dumps({'score': 1, 'feedback': json.dumps([os.getcwd(), parent])}))"
+    ).replace("WORKSPACE_ENV", WORKSPACE_ENV)
     grade = _local_grade(tmp_path, agent, _python(show), line={"grader_files": "hidden"})
-    assert grade.feedback == "Falsehidden test\n"
-    assert list(outside.iterdir()) == []
+    assert grade.feedback is not None
+    cwd, parent = map(Path, json.loads(grade.feedback))
+    assert not cwd.resolve().is_relative_to(Path(parent).resolve())
+
+
+def test_the_grader_files_directory_is_removed_after_grading(tmp_path: Path, agent: Path) -> None:
+    (tmp_path / "suite" / "hidden").mkdir()
+    places: list[Path] = []
+
+    @asynccontextmanager
+    async def recording(workspace: Path) -> AsyncGenerator[LocalWorkspace, None]:
+        async with local_workspace(workspace) as sandbox:
+            yield sandbox
+            places.extend(sandbox.grader_directories)
+
+    show_cwd = "import json, os; print(json.dumps({'score': 1, 'feedback': os.getcwd()}))"
+    grade = _local_grade(tmp_path, agent, _python(show_cwd), line={"grader_files": "hidden"}, open_sandbox=recording)
+    assert grade.feedback is not None
+    [place] = places
+    assert Path(grade.feedback).resolve().is_relative_to(place.resolve())
+    assert not place.exists()
 
 
 def test_a_command_that_cannot_start_scores_zero(tmp_path: Path, agent: Path) -> None:
@@ -368,35 +401,6 @@ def test_a_fifo_in_the_workspace_scores_zero_without_being_opened(tmp_path: Path
     assert grades == [Grade(score=0.0, feedback=refusal)]
 
 
-@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, reason="root ignores directory permissions")
-def test_a_read_only_directory_in_the_way_of_grader_files_scores_zero(tmp_path: Path, agent: Path) -> None:
-    hidden = tmp_path / "suite" / "hidden"
-    (hidden / "tests").mkdir(parents=True)
-    (hidden / "tests" / "test_x.py").write_text("hidden test\n")
-    locked = agent / "tests"
-    locked.mkdir()
-    (locked / "notes.txt").write_text("the agent's\n")
-    locked.chmod(0o555)
-    roots: list[Path] = []
-
-    @asynccontextmanager
-    async def recording(workspace: Path) -> AsyncGenerator[LocalWorkspace, None]:
-        async with local_workspace(workspace) as sandbox:
-            roots.append(sandbox.workspace.parent)
-            yield sandbox
-
-    try:
-        grade = _local_grade(tmp_path, agent, _python(PASS), line={"grader_files": "hidden"}, open_sandbox=recording)
-    finally:
-        locked.chmod(0o755)
-    assert grade.score == 0.0
-    assert grade.feedback is not None
-    assert grade.feedback.startswith("the grader's files could not be copied into the workspace: [Errno 13]")
-    # The copy kept the agent's read-only mode; cleanup must still remove it.
-    [root] = roots
-    assert not root.exists()
-
-
 NOT_ROOT = pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, reason="root ignores permissions")
 
 
@@ -440,22 +444,6 @@ def test_any_other_copy_failure_still_raises(
     monkeypatch.setattr(shutil, "copytree", failing_copytree)
     with pytest.raises(shutil.Error):
         _local_grade(tmp_path, agent, _python(PASS))
-
-
-def test_a_grader_files_directory_replaces_the_agents_whole(tmp_path: Path, agent: Path) -> None:
-    hidden = tmp_path / "suite" / "hidden"
-    (hidden / "tests").mkdir(parents=True)
-    (hidden / "tests" / "test_hidden.py").write_text("hidden\n")
-    (agent / "tests").mkdir()
-    (agent / "tests" / "test_extra.py").write_text("the agent's\n")
-    (agent / "kept.txt").write_text("the agent's\n")
-    show = (
-        "import json, os; listed = [sorted(os.listdir('tests')), sorted(os.listdir('.'))]; "
-        "print(json.dumps({'score': 1, 'feedback': json.dumps(listed)}))"
-    )
-    grade = _local_grade(tmp_path, agent, _python(show), line={"grader_files": "hidden"})
-    assert grade.feedback is not None
-    assert json.loads(grade.feedback) == [["test_hidden.py"], ["answer.txt", "kept.txt", "tests"]]
 
 
 def _gone(pid: int, seconds: float) -> bool:
