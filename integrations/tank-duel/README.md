@@ -1,16 +1,123 @@
-# RICOCHET
+# Tank Duel (RICOCHET)
 
-Two tanks. One last shot. Two browser games in one English sketchbook UI,
-with local keyboard play and an optional Honing model connection.
+Decision models need iteration.
 
-| Edition      | Movement                                    | Aiming and firing                                                                                                     |
-| ------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Classic**  | Forward/reverse; left/right rotate the hull | Barrel follows the hull. Planned steering chooses a joint motion, then asks the model whether to fire after turning.  |
-| **Auto Aim** | Up/down/left/right in screen coordinates    | Independent turret turns toward a verified direct or ricochet shot. The model chooses movement and firing separately. |
+https://github.com/user-attachments/assets/REPLACE-WITH-THE-UPLOADED-TANK-DUEL-VIDEO
+
+Two tanks in a maze fire shells that bounce off the walls, and a tank's own shells can kill it. We
+put NanoJev in the driver's seat. Version 1 spun in circles. Version 2 found the fire button and shot
+itself. Version 3 moves, aims, and fights, and version 4 dodges incoming shells and wins.
+
+All four versions run the same NanoJev weights. What changed is the controller around the model:
+what it is told about the game, which moves it may pick from, and the checks that run its choice.
+Each version had to beat the one before it in matches before it replaced it.
+
+Then six models fight in one arena: NanoJev, Laya, Laya Typed, Kev 0.8B, Kev 4B, and DiffusionGemma
+through djev. The side panels show every probability a model returns as it plays. You can take a seat
+against any of them from the keyboard, with no GPU on your side.
+
+|                   |                                                                                                                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Editions          | Classic, where the barrel follows the hull and the model plans a motion before deciding to fire, and Auto Aim, where the turret aims a verified direct or ricochet shot by itself |
+| What a model gets | positions, headings, walls, every shell on the board including its own, ammo, cooldowns, and a forecast for each move; it returns a probability for every option                  |
+| What improves it  | the controller and the question text, tested in matches; Classic rounds can also train the weights through Honing                                                                 |
+| What is recorded  | every request, every returned probability, every dodge-assist takeover, and every shot, kill, and response time                                                                   |
+
+## Contents
+
+1. [How the controller improves](#1-how-the-controller-improves): what changed from version 1 to 4, and the loop that tested it
+2. [Quick start](#2-quick-start): play, connect a model, run a round headless
+3. [Reference](#3-reference): editions, model connections, what the model sees, arenas, cadence, Honing training, serving, collisions, tests, files
+
+## 1. How the controller improves
+
+The tank in the video trains nothing and keeps its released weights. What improved is the
+controller around it, built by auto research: an engineer proposes a change, and matches decide
+whether it stays. The changes that passed and are in the controller today:
+
+- The model's context lists every shell on the board, including the tank's own. The context format
+  went through seven revisions this way.
+- All nine drive and turn combinations are scored on geometry, and the model chooses only among the
+  admissible ones. A second request then decides whether to fire, given that exact motion
+  ([`web/classic/planner.js`](web/classic/planner.js)).
+- A shot is checked again just before it fires and cancelled if it is no longer safe.
+- A dodge assist takes over for at most 400 ms when a shell is about to hit, then hands control back
+  to the model's command.
+
+Each change went through the same loop:
+
+1. The change is written as its own strategy with a fixed name, so it can be tested and is never
+   changed quietly afterwards.
+2. The new strategy plays the current baseline in six quick matches: three maps (seeds), each played
+   from both starting sides, because the two sides of a map are not equally good. Both tanks use the
+   same model, so a difference in results comes from the strategy.
+3. Six matches can go well by luck, so a strategy that does well plays at least twelve more on maps
+   it has not seen. It replaces the baseline only if it still wins more, causes no errors, and does
+   not make the tank shoot itself more often.
+4. Every match saves what was sent to the model, the probabilities it returned, when the dodge assist
+   took over, and every shot, kill, and response time. The records are for judging strategies and
+   working out why one won or lost, and none of them trains the model.
+
+Narrow parts are measured on their own. On a fixed set of 32 incoming-shell situations, the dodge
+assist went from surviving 8 to surviving 24, and its two stronger levels survive 30
+(`scripts/dodge-benchmark.mjs`).
+
+Classic is also a Honing task environment, like RA2, so the same loop now runs inside a campaign
+with its gate and release chain. GEPA can rewrite the question text, and the weights can be trained
+with SFT on the planner teacher's answers and GRPO on rounds sampled from the model
+([Train and evolve with Honing](#train-and-evolve-with-honing)).
+
+## 2. Quick start
+
+Node.js 22 or newer is enough to play from the keyboard. No build, Python, GPU, or game assets are
+needed.
+
+```bash
+cd integrations/tank-duel
+npm start
+```
+
+Open <http://127.0.0.1:4177/> and choose an edition. Blue uses WASD and Space, Red uses the arrow keys
+and Enter, and P pauses.
+
+To play against a model, start a [Honing decision server](../../honing/backends/jev/server.py) (the
+[RA2 page](../ra2/README.md#using-a-decision-server) has one command per family) and give the game
+server its base URL:
+
+```bash
+HONING_URL=http://127.0.0.1:8080 MODEL_LABEL=NanoJev npm start
+```
+
+That turns on Model vs model and You vs model in both editions. Several models at once go in
+`MODELS_JSON` ([Multiple models and checkpoints](#multiple-models-and-checkpoints)).
+
+Play one Classic round headless against the planner opponent, as a Honing campaign does:
+
+```bash
+node scripts/match.mjs --seed=2001 --seat=blue --decision-server=http://127.0.0.1:8080 --out=runs/r1
+```
+
+A full campaign (a GEPA move, SFT, and GRPO) runs on CPU with a stand-in model:
+
+```bash
+python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json
+```
+
+## 3. Reference
+
+### Editions
+
+Two browser games in one sketchbook UI, with local keyboard play and an optional Honing model
+connection.
+
+| Edition  | Movement                                    | Aiming and firing                                                                                                     |
+| -------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Classic  | Forward/reverse; left/right rotate the hull | Barrel follows the hull. Planned steering chooses a joint motion, then asks the model whether to fire after turning.  |
+| Auto Aim | Up/down/left/right in screen coordinates    | Independent turret turns toward a verified direct or ricochet shot. The model chooses movement and firing separately. |
 
 Both have bouncing shells, five active shells per tank, one-hit rounds, a
 first-to-five match, seeded arenas, model probabilities, full context inspection,
-and downloadable match records. **Your own shells are lethal.**
+and downloadable match records. A tank's own shells are lethal.
 
 Screenshots from connected model matches; model labels come from the configured service.
 
@@ -18,7 +125,7 @@ Screenshots from connected model matches; model labels come from the configured 
 | ---------------------------- | ------------------------------ |
 | ![Classic](docs/classic.png) | ![Auto Aim](docs/auto-aim.png) |
 
-## Play now
+### Playing in the browser
 
 Requires Node.js 22 or newer. No build, Python, GPU, game assets or runtime npm
 dependencies are needed for local play.
@@ -38,25 +145,25 @@ A/D turn. In Auto Aim, WASD move in screen coordinates. P pauses; backgrounding
 the tab also pauses the game. A keyboard is required; the layout scales to
 small screens for viewing, but there are no touch controls.
 
-Classic's **Match setup** has independent Blue and Red settings: model/checkpoint,
+Classic's Match setup has independent Blue and Red settings: model/checkpoint,
 decision version, context, measured Auto or 50–1,000 ms scheduling, dodge toggle/strength and raw
 shot guard. Collapse it for recordings. Settings persist in this browser/origin.
 Model, decision, context or interval changes restart the match and invalidate
 in-flight responses; assistance changes apply to that seat immediately. The
-**Settings & model decisions** panel shows probabilities, actual context,
+Settings & model decisions panel shows probabilities, actual context,
 latency, trajectory previews, fullscreen and match export. Auto Aim keeps its
 shared model and assist controls.
 
-## Connect a model
+### Connect a model
 
 Start a [Honing decision server](../../honing/backends/jev/server.py), then set
-its **base URL** when launching the game server:
+its base URL when launching the game server:
 
 ```bash
 HONING_URL=http://127.0.0.1:8080 MODEL_LABEL=NanoJev npm start
 ```
 
-This enables **Model vs model** and **You vs model** in both editions. The game
+This enables Model vs model and You vs model in both editions. The game
 uses `GET /v1/health` and `POST /v1/decide`; the loaded backend must support
 choice questions and return complete native probability distributions. The
 bridge accepts the existing Laya, Kev, NanoJev and StartLux-Decision decision contract
@@ -94,7 +201,7 @@ one Classic decision version; selecting an unsupported version blocks play.
 Responses must echo the request ID, round, seat, model and protocol, include
 native probabilities and report `state_truncated: false`.
 
-## Multiple models and checkpoints
+### Multiple models and checkpoints
 
 Register additional Honing-compatible or tank-compatible endpoints using
 `MODELS_JSON`. Each ID represents one running model/checkpoint endpoint. The
@@ -109,18 +216,18 @@ MODELS_JSON='[
 
 Use `transport: "tank"` for the legacy `/health` + `/decision` services. Optional
 `token` is kept server-side. Registration labels do not load, pin or verify a
-checkpoint: configure each actual model service first. **Model & context
-identity** shows its reported model revision and adapter identity separately
+checkpoint: configure each actual model service first. Model & context
+identity shows its reported model revision and adapter identity separately
 from the context revision; an unreported checkpoint is explicitly labelled.
 The browser only selects server-registered IDs and never submits upstream URLs.
 Each seat validates responses against its own selected endpoint and seat ID.
 
-The **Gemma planned vs NanoJev independent** preset selects the two named
+The Gemma planned vs NanoJev independent preset selects the two named
 families when available. Blue uses planned steering, Red uses independent
 controls, both use Full tactical context, Auto scheduling and Reactive dodge.
 Either dodge can then be turned off independently. This is a control-policy
-comparison using the configured checkpoints, **not an assertion that an
-archived first-generation prompt or older weights were restored**.
+comparison using the configured checkpoints. It does not restore an
+archived first-generation prompt or older weights.
 
 | Decision version | Context                                     | Behavior                                                                                                                                               |
 | ---------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -134,9 +241,9 @@ that tank; it does not remove observations or planned steering's geometry and
 shot checks. The optional raw shot guard is also independent per tank. Keyboard
 players always use manual controls. Settings survive round changes and restarts.
 
-## What the model sees and controls
+### What the model sees and controls
 
-- Both editions include **every active shell from both players**: position,
+- Both editions include every active shell from both players: position,
   velocity, owner, ricochet count and remaining lifetime. Ownership never makes
   a shell safe. State also includes tank positions, ammo, cooldowns and time.
 - Classic Full tactical adds hull heading, wall geometry, verified hit directions, required
@@ -148,25 +255,25 @@ players always use manual controls. Settings survive round changes and restarts.
   It does not invent probabilities or substitute a scripted player on errors.
 - Each seat has its own request/context and at most one request in flight.
   A shared endpoint may serialize both seats on the same model weights;
-  independent seats do **not** imply separate model instances or GPUs.
-- **50 ms is a scheduling floor, not an inference latency promise.** The UI
+  independent seats do not imply separate model instances or GPUs.
+- 50 ms is a scheduling floor; inference can take longer. The UI
   reports request cadence and round-trip latency. Late decisions over 1.6 s
   are discarded; disconnects pause the match. Movement continues during
   inference until the current command expires.
 
-Classic's default **Planned steering** is explicitly model + geometry assistance:
+Classic's default Planned steering is explicitly model + geometry assistance:
 all nine native motion probabilities are retained, selection is restricted to
 the geometrically admissible plans, then a second model request evaluates the
 weapon conditioned on that exact motion. The hull turns at its physical speed.
 If fresh geometry changes the motion or invalidates the shot, firing is
 cancelled. Displayed drive/turn probabilities are marginals of the joint motion
-distribution. **Raw controls** exposes independent drive/turn/fire choices for
+distribution. Raw controls exposes independent drive/turn/fire choices for
 experiments and can cause self-hits.
 
-Classic's **Reactive** dodge (the persisted `light` ID) checks every 60 ms,
+Classic's Reactive dodge (the persisted `light` ID) checks every 60 ms,
 reacts to a predicted hit within 480 ms, takes control for at most 400 ms, then
-cools down for 280 ms. **Balanced** uses a 620 ms trigger / 500 ms burst /
-200 ms cooldown. **Protective** uses 780 / 650 / 120 ms. All three are bounded;
+cools down for 280 ms. Balanced uses a 620 ms trigger / 500 ms burst /
+200 ms cooldown. Protective uses 780 / 650 / 120 ms. All three are bounded;
 none changes bullet speed, collision size or damage. The model's original
 command resumes after a burst if still valid. Auto Aim's separate optional
 dodge checks 700 ms ahead every 50 ms and defaults off. Keyboard players are
@@ -181,21 +288,21 @@ It is an audit record, not a deterministic replay format. Treat probability
 bars as model outputs; geometry restrictions and execution changes are shown
 separately in the details and export.
 
-## Classic arenas
+### Classic arenas
 
-Classic uses seeded, rotationally symmetric **Loop Mazes**, with 28–37 interior
+Classic uses seeded, rotationally symmetric Loop Mazes, with 28–37 interior
 wall segments on a 10 × 7 grid. Every cell has at least two exits, every cell is
 reachable, and no single intermediate cell cuts the route between spawns.
 Spawn exits have clear inward lanes. Corridors retain enough clearance for the
 44 px tank footprint. Rounds change maps deterministically; New arena changes
 the seed and Restart keeps it. Map revision: `loop-mazes-v3`.
 
-Classic shells expire after **4.5 seconds** (previously 8), releasing their ammo
-slot. Fire cooldown is **300 ms** (previously 480 ms). Five active shells per
+Classic shells expire after 4.5 seconds, releasing their ammo
+slot. Fire cooldown is 300 ms. Five active shells per
 tank and lethal self-hits remain. Forecasts use the same lifetime as physics.
 Auto Aim retains its own maze and ammunition rules.
 
-## Adaptive cadence
+### Adaptive cadence
 
 Auto cadence learns each seat independently from its last 40 successful requests.
 After four samples, the scheduling floor follows the 20th percentile of RTT;
@@ -204,10 +311,10 @@ One request per seat remains in flight; this measures attainable speed, not an
 inference acceleration. Model changes clear calibration. Model identity details
 show the floor, median, p95 and sample count. Manual scheduling remains available.
 
-## Train and evolve with Honing
+### Train and evolve with Honing
 
 Classic is a Honing task environment (`honing/backends/tank`), the same way RA2
-is. A task is one round on a seeded maze against the **planner opponent**,
+is. A task is one round on a seeded maze against the planner opponent,
 which steers and fires from the planner's own geometry with no model. Honing's
 campaign gates every harness change and every training step on those rounds.
 
@@ -227,7 +334,7 @@ SHA-256, source hashes), `decisions.jsonl` (each question set the model was
 asked: the exact state, the questions, native probabilities, the executed
 choice and the admissible motions), `events.jsonl` and `result.json`.
 
-**The harness** is what an evolution method rewrites:
+The harness is what an evolution method rewrites:
 
 | File                   | Kind         | What it sets                                                                                                                                                                                                                                          |
 | ---------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -241,7 +348,7 @@ setting, unknown planner parameter, missing question) is refused before the
 round starts. GEPA rewrites `tank/questions.json` and notes; controller
 settings are settings, which GEPA leaves alone.
 
-**Post-training data** comes in two forms. `--teacher` plays the policy's seat
+Post-training data comes in two forms. `--teacher` plays the policy's seat
 with the planner teacher (`web/classic/teacher.js`) and records its answers to
 the same questions, which are SFT labels. `--sample-seed=N` draws every
 executed choice from the model's own probabilities, which makes a round an
@@ -254,7 +361,7 @@ task suite is `tasks/suite.jsonl` (`python -m honing.backends.tank.scenarios
 tasks/suite.jsonl` rebuilds it): 16 train, 8 validation and 8 held-out seeds,
 each played from both seats.
 
-## Serving pinned models
+### Serving pinned models
 
 `scripts/serve-honing.py` is an opt-in launcher for an already prepared pinned
 Honing checkout with `vendor/laya`, `vendor/kev` and model records in `models/`.
@@ -281,10 +388,10 @@ dodge levels on a fixed fixture of four incoming-shell gaps by eight hull
 headings, with stationary model commands and no walls. It measures those
 scenarios, not match win rates.
 
-## Collision rules
+### Collision rules
 
-The complete tank silhouette, tracks and barrel fit inside a shared **22 px
-radius** collision disk. Hull and turret rotations cannot extend into walls.
+The complete tank silhouette, tracks and barrel fit inside a shared 22 px
+radius collision disk. Hull and turret rotations cannot extend into walls.
 Wall ink fills the actual wall rectangle. Tanks and shells advance in spatial
 steps of at most 2 px, so a delayed frame cannot jump over thin walls or another
 live tank. Diagonal movement slides along walls while keeping full clearance.
@@ -293,9 +400,9 @@ Forecasts, live physics and displayed geometry use the same dimensions. The
 22 px footprint is larger than the earlier experiment's 15 px center-only
 collider; old match records are not byte-for-byte comparable. The existing
 150 ms owner grace applies only to an unbounced shell leaving its muzzle;
-**a bounced own shell is immediately lethal**.
+a bounced own shell is immediately lethal.
 
-## Verify
+### Verify
 
 ```bash
 npm ci
@@ -329,7 +436,7 @@ seats. The smoke check sends real requests and reports model identity, decision
 counts, shots, hits and latency; it is a connectivity/gameplay check, not a model
 quality benchmark.
 
-## Files
+### Files
 
 `web/shared/` owns the UI, renderer, model client and collision primitives.
 `web/classic/` and `web/auto-aim/` own their engines, context builders and thin UI
