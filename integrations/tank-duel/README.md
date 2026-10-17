@@ -70,7 +70,8 @@ with SFT on the planner teacher's answers and GRPO on rounds sampled from the mo
 ## 2. Quick start
 
 Node.js 22 or newer is enough to play from the keyboard. No build, Python, GPU, or game assets are
-needed.
+needed, which makes this the quickest of the two games to try ([Red Alert 2](../ra2/README.md) needs
+a privately supplied engine SDK and a retail copy of the game).
 
 ```bash
 cd integrations/tank-duel

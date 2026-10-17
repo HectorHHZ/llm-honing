@@ -102,9 +102,11 @@ rollback restores both. The gate never plays the 132 held-out tasks.
 
 ## 2. Quick start
 
-You need Linux, Node.js 22 or newer, Python 3.10 or newer, and an NVIDIA GPU for inference. The
-engine SDK and the game files are not in the repository; [External inputs](#external-inputs) says
-where each comes from.
+You need Linux, Node.js 22 or newer, Python 3.10 or newer, and an NVIDIA GPU for inference. You
+also need the `ra2-game-env` engine SDK, which is supplied privately, and the files of a retail Red
+Alert 2 installation. Neither is in the repository; [External inputs](#external-inputs) says where
+each comes from. Without them, [Tank Duel](../tank-duel/README.md) is the quickest way to try a
+decision model: it needs only Node.js.
 
 ```bash
 cd integrations/ra2
