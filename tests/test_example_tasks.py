@@ -219,13 +219,47 @@ HIDDEN_CASE_PATTERNS = {
 
 
 @pytest.mark.parametrize("where", list(HIDDEN_CASE_PATTERNS))
-def test_agent_code_cannot_read_the_hidden_cases(where: str, tmp_path: Path) -> None:
+def test_relative_and_temp_dir_reads_of_the_hidden_cases_score_zero(where: str, tmp_path: Path) -> None:
     workspace = _agent_copy("clamp", tmp_path)
     (workspace / "clamp.py").write_text(ANSWER_FROM.format(pattern=HIDDEN_CASE_PATTERNS[where]))
     grade = _grade("clamp", workspace)
     assert grade.score == 0.0
     assert grade.feedback is not None and grade.feedback.startswith("0 of 3 tests pass.")
     assert grade.feedback.count("raised IndexError") == 3
+
+
+# The bypass from the #99 review: walk up the parent processes and read the suite's own
+# cases through each one's working directory. The harness process that runs the grade
+# (here, pytest) works in the checkout, so its cwd holds the source copy grade.py never
+# deletes.
+ANSWER_FROM_A_PARENTS_CWD = (
+    "import json, os\n"
+    "def clamp(*a):\n"
+    "    pid = os.getppid()\n"
+    "    while pid > 1:\n"
+    "        try:\n"
+    "            s = json.load(open(f'/proc/{pid}/cwd/examples/tasks/python-bugfix/grader/cases/clamp.json'))\n"
+    "            return next(c['expected'] for c in s['cases'] if c['args'] == list(a))\n"
+    "        except OSError:\n"
+    "            pid = int(open(f'/proc/{pid}/stat').read().rsplit(')', 1)[1].split()[1])\n"
+)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="follows /proc/<pid>/cwd, which only Linux has")
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="#16: LocalWorkspace does not isolate files, so agent code reads the hidden cases through a parent's cwd",
+)
+def test_agent_code_cannot_read_the_hidden_cases_through_a_parents_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The harness runs from the checkout, as in CI, wherever pytest was started.
+    monkeypatch.chdir(SUITE.parents[2])
+    workspace = _agent_copy("clamp", tmp_path)
+    (workspace / "clamp.py").write_text(ANSWER_FROM_A_PARENTS_CWD)
+    grade = _grade("clamp", workspace)
+    assert grade.score == 0.0
 
 
 def _fixed(task_id: str, tmp_path: Path, prefix: str) -> Path:

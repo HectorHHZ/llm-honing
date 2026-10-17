@@ -146,9 +146,13 @@ async def _tail(stream: asyncio.StreamReader, limit: int, kept: bytearray) -> No
 class LocalWorkspace:
     """A grading sandbox on this machine: a temporary copy of the workspace and a subprocess.
 
-    It isolates the agent's files, not the command. The command runs as the
-    current user with this machine's ``PATH``, so it is for graders checked in
-    with the suite. Open one with :func:`local_workspace`.
+    It does not prevent reward hacking: do not optimize against a grader run in it
+    (GEPA, RL) until #16 lands. It keeps grading from changing the agent's files,
+    but neither the command nor the agent's code it runs is isolated from the
+    machine. Both run as the current user with this machine's ``PATH`` and can read
+    any file that user can, the suite's hidden cases included (through a parent
+    process's working directory, for one). It is for graders checked in with the
+    suite. Open one with :func:`local_workspace`.
     """
 
     def __init__(self, root: Path) -> None:

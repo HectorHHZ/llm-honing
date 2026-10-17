@@ -11,8 +11,8 @@ functions that compute it. Each case instead runs in a child: the child gets the
 module, the function, and the arguments on stdin, and nothing else (the expected
 values stay here, and its environment has no ``HONING_*`` variables). It runs in
 the workspace, not here, and by then the cases are read into memory and deleted
-from disk, so the agent's code cannot open them, by a relative path or by
-searching. It imports
+from this copy, so the agent's code cannot open them by a relative path or by
+searching the temporary directory. It imports
 the agent's module with the workspace appended to ``sys.path`` after the
 standard library, calls the function, and writes one JSON line to a copy of its
 stdout that it takes before the agent's code runs; anything the agent's code
@@ -20,9 +20,11 @@ prints goes to stderr. A child that crashes, exits early, writes anything but
 one result line, returns something JSON cannot encode, or runs past the case
 time limit fails that case.
 
-The agent's code still runs as the same user as this script, so it could still
-read them from this process (``/proc/<pid>/mem``, or a debugger where the system
-allows one); only a sandbox (#16) closes that.
+This is not a security boundary. The agent's code still runs as the same user
+as this script, so it can still read the suite's own copy of the cases (through
+a parent process's ``/proc/<pid>/cwd``, for one) or this process's memory
+(``/proc/<pid>/mem``, or a debugger where the system allows one); only a sandbox
+(#16) closes that.
 """
 
 from __future__ import annotations
