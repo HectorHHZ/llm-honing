@@ -6,6 +6,8 @@
   dependency; Reef is a design reference and is never imported.
 - Only ``honing/harness/models.py`` imports litellm, an optional extra whose
   pin is reviewed on its own.
+- ``honing/backends/slime/sandbox.py`` imports only the standard library, so it
+  also runs inside Slime's image, where Honing's own dependencies may be absent.
 - Retired design terms stay out of code and the specification.
 """
 
@@ -78,6 +80,12 @@ def test_only_the_chat_client_imports_litellm(repo_root: Path) -> None:
         if "litellm" in imported_top_levels(path)
     ]
     assert importers == ["honing/harness/models.py"]
+
+
+@pytest.mark.unit
+def test_the_slime_sandbox_imports_only_the_standard_library(repo_root: Path) -> None:
+    path = repo_root / "honing" / "backends" / "slime" / "sandbox.py"
+    assert imported_top_levels(path) - set(sys.stdlib_module_names) == set()
 
 
 @pytest.mark.unit
