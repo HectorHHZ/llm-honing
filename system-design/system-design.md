@@ -308,7 +308,9 @@ class TaskGrader(Protocol):
 A runner only runs the agent; a grader judges the outcome, because grading depends on the
 task and the same grader serves the gate, a method's own minibatches, and training
 rollouts. An `EpisodeRecord` is an outcome plus its grade, and `run_graded` is the one
-place that pairs them.
+place that pairs them. A task suite is a JSON Lines manifest (`honing/harness/tasks.py`)
+whose lines name a workspace, a grader command, and a split; `CommandGrader` runs that
+command over a copy of the episode's workspace and reads its score and feedback.
 
 A harness is a set of files for one agent.
 
