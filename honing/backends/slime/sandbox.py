@@ -56,11 +56,14 @@ _REAP_SECONDS = 5.0
 _TIMED_OUT_CODES = frozenset({124, 137})
 # Docker's own failures, as opposed to the command's: the daemon refused the exec (no
 # such container or user), the CLI could not reach the daemon, or the runtime could not
-# start the program.
+# start the program. The wording varies by version: Docker 29 reports a missing exec user
+# as exit 1 with "Error response from daemon: unable to find user ..." on stderr, Docker 28
+# as exit 126 with a bare "unable to find user ..." on stdout.
 _DOCKER_FAILURE = re.compile(
     r"^(Error response from daemon:|Cannot connect to the Docker daemon|failed to connect to the docker API"
     r"|OCI runtime exec failed)"
 )
+_DOCKER_28_MISSING_USER = re.compile(r"^unable to find user ")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _WRITE_SCRIPT = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"'
 
@@ -152,6 +155,13 @@ async def _kill(process: asyncio.subprocess.Process) -> None:
         process.kill()
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(process.wait(), _REAP_SECONDS)
+
+
+def _docker_failed(code: int, out: str, err: str) -> bool:
+    """Whether a ``docker exec`` exit came from Docker rather than from the command, judged by Docker's wording."""
+    if code in (1, 126, 127) and (_DOCKER_FAILURE.match(err) or _DOCKER_FAILURE.match(out)):
+        return True
+    return code == 126 and bool(_DOCKER_28_MISSING_USER.match(err) or _DOCKER_28_MISSING_USER.match(out))
 
 
 def _decode(data: bytes) -> str:
@@ -356,7 +366,7 @@ class LocalContainerSandbox:
             return None
         code, stdout, stderr = result
         out, err = _decode(stdout), _decode(stderr)
-        if code in (1, 126, 127) and (_DOCKER_FAILURE.match(err) or _DOCKER_FAILURE.match(out)):
+        if _docker_failed(code, out, err):
             raise SandboxError(f"docker exec failed in {self.sandbox_id} (exit={code}): {(err or out)[-1000:]}")
         return code, out, err
 

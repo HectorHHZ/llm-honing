@@ -792,6 +792,34 @@ def test_a_daemon_error_is_the_sandboxs_failure(fake_docker: Callable[[dict[str,
         asyncio.run(scenario())
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "behaviour",
+    [
+        # Docker 28.0.4 (CI): exit 126, the bare message on stdout.
+        {"exit": 126, "stdout": "unable to find user nosuchuser: no matching entries in passwd file\n"},
+        # Docker 29.5.2: exit 1, the daemon's prefix on stderr.
+        {
+            "exit": 1,
+            "stderr": "Error response from daemon: unable to find user nosuchuser:"
+            " no matching entries in passwd file\n",
+        },
+    ],
+    ids=["docker-28", "docker-29"],
+)
+def test_a_missing_exec_user_is_the_sandboxs_failure_in_either_wording(
+    fake_docker: Callable[[dict[str, object]], Path], behaviour: dict[str, object]
+) -> None:
+    cli = fake_docker({"exec": behaviour})
+
+    async def scenario() -> None:
+        async with LocalContainerSandbox("image", docker=str(cli)) as sandbox:
+            await sandbox.exec("true", user="nosuchuser")
+
+    with pytest.raises(SandboxError, match="unable to find user nosuchuser"):
+        asyncio.run(scenario())
+
+
 # --- arguments --------------------------------------------------------------------------------------------------
 
 
