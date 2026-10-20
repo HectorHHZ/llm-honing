@@ -8,9 +8,11 @@ import errno
 import gc
 import json
 import os
+import re
 import shutil
 import signal
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import AsyncGenerator
@@ -30,8 +32,10 @@ from honing.harness.graders import (
     CommandGrader,
     CommandResult,
     CommandSandbox,
+    GraderStartError,
     LocalWorkspace,
     UngradableWorkspaceError,
+    _passes_through,
     local_workspace,
 )
 from honing.harness.tasks import TaskSuite, load_task_suite
@@ -322,10 +326,127 @@ def test_the_grader_files_directory_is_removed_after_grading(tmp_path: Path, age
     assert not place.exists()
 
 
-def test_a_command_that_cannot_start_scores_zero(tmp_path: Path, agent: Path) -> None:
-    grade = _local_grade(tmp_path, agent, ["honing-no-such-grader"])
+CANNOT_RUN = "the grader exited 127; stderr ends: cannot run"
+
+
+@pytest.mark.parametrize("line", [{}, {"grader_files": "hidden"}], ids=["in-workspace", "in-grader-files"])
+def test_a_grader_whose_interpreter_is_missing_raises_and_leaves_nothing_behind(
+    tmp_path: Path, agent: Path, line: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "suite" / "hidden").mkdir()
+    temporary = tmp_path / "tmp"
+    temporary.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temporary))
+    # A relative entry is looked up from the workspace, but the agent left nothing there.
+    monkeypatch.setenv("PATH", os.pathsep.join(["bin", os.environ["PATH"]]))
+    with pytest.raises(GraderStartError, match="'honing-no-such-python3' cannot start") as raised:
+        _local_grade(tmp_path, agent, ["honing-no-such-python3", "grade.py"], line=line)
+    assert isinstance(raised.value.__cause__, FileNotFoundError)
+    assert list(temporary.iterdir()) == []
+
+
+def _broken_script(path: Path, how: str) -> None:
+    """Leave a script at ``path`` that ``exec`` refuses, in one of the ways a file can be refused."""
+    if how == "not-executable":
+        path.write_text("#!/bin/sh\necho '{\"score\": 1}'\n")
+    elif how == "bad-shebang":
+        path.write_text("#!/honing/no/such/interpreter\n")
+        path.chmod(0o755)
+    elif how == "not-a-program":
+        path.write_bytes(b"\x00\x01 not a program")
+        path.chmod(0o755)
+
+
+BREAKAGES = ["not-executable", "bad-shebang", "not-a-program"]
+
+
+@pytest.mark.parametrize("how", BREAKAGES)
+def test_a_grader_script_the_suite_ships_broken_raises(tmp_path: Path, agent: Path, how: str) -> None:
+    (tmp_path / "suite" / "hidden").mkdir()
+    _broken_script(tmp_path / "suite" / "hidden" / "grade.sh", how)
+    with pytest.raises(GraderStartError, match=re.escape("'./grade.sh' cannot start")):
+        _local_grade(tmp_path, agent, ["./grade.sh"], line={"grader_files": "hidden"})
+
+
+@pytest.mark.parametrize("how", ["deleted", *BREAKAGES])
+def test_a_grader_script_in_the_workspace_the_agent_broke_scores_zero(tmp_path: Path, agent: Path, how: str) -> None:
+    if how != "deleted":
+        _broken_script(agent / "run_tests.sh", how)
+    grade = _local_grade(tmp_path, agent, ["./run_tests.sh"])
     assert grade.score == 0.0
-    assert grade.feedback is not None and grade.feedback.startswith("the grader exited 127; stderr ends: cannot run")
+    assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
+
+
+def _failing_start(code: int) -> Any:
+    async def create_subprocess_exec(*args: object, **kwargs: object) -> None:
+        raise OSError(code, os.strerror(code))
+
+    return create_subprocess_exec
+
+
+@pytest.mark.parametrize("code", [errno.EMFILE, errno.EAGAIN], ids=["EMFILE", "EAGAIN"])
+def test_a_machine_fault_starting_a_grader_in_the_workspace_raises(
+    tmp_path: Path, agent: Path, code: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Out of file descriptors or a failed fork is not the agent's doing, even
+    # though the file that was to start is the agent's.
+    _broken_script(agent / "run_tests.sh", "bad-shebang")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _failing_start(code))
+    with pytest.raises(GraderStartError, match=re.escape("'./run_tests.sh' cannot start")) as raised:
+        _local_grade(tmp_path, agent, ["./run_tests.sh"])
+    assert isinstance(raised.value.__cause__, OSError) and raised.value.__cause__.errno == code
+
+
+def test_an_exec_error_injected_for_a_workspace_grader_scores_zero(
+    tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The control for the test above: the same injection with an error about the file scores 0.
+    _broken_script(agent / "run_tests.sh", "bad-shebang")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _failing_start(errno.ENOEXEC))
+    grade = _local_grade(tmp_path, agent, ["./run_tests.sh"])
+    assert grade.score == 0.0
+    assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
+
+
+def test_a_grader_script_the_agent_made_a_dangling_link_out_of_the_workspace_scores_zero(
+    tmp_path: Path, agent: Path
+) -> None:
+    (agent / "run_tests.sh").symlink_to(tmp_path / "outside" / "missing.sh")
+    grade = _local_grade(tmp_path, agent, ["./run_tests.sh"])
+    assert grade.score == 0.0
+    assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
+
+
+def test_a_grader_script_under_a_directory_the_agent_linked_out_of_the_workspace_scores_zero(
+    tmp_path: Path, agent: Path
+) -> None:
+    (agent / "bin").symlink_to(tmp_path / "outside" / "missing", target_is_directory=True)
+    grade = _local_grade(tmp_path, agent, ["./bin/run_tests.sh"])
+    assert grade.score == 0.0
+    assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
+
+
+def test_a_bare_command_the_agent_planted_on_a_relative_path_entry_scores_zero(
+    tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A relative ``PATH`` entry is looked up from the command's directory, the
+    # workspace here, so the agent can leave a file there that will not start.
+    monkeypatch.setenv("PATH", os.pathsep.join(["bin", os.environ["PATH"]]))
+    (agent / "bin").mkdir()
+    _broken_script(agent / "bin" / "honing-planted-grader", "bad-shebang")
+    grade = _local_grade(tmp_path, agent, ["honing-planted-grader"])
+    assert grade.score == 0.0
+    assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
+
+
+def test_the_workspace_matches_whichever_way_its_own_location_is_spelled(tmp_path: Path) -> None:
+    # On macOS the sandbox's workspace is under /var, which is a link to /private/var.
+    (tmp_path / "real" / "workspace").mkdir(parents=True)
+    (tmp_path / "alias").symlink_to(tmp_path / "real", target_is_directory=True)
+    spelled_through_alias = tmp_path / "alias" / "workspace"
+    assert _passes_through(str(tmp_path / "real" / "workspace" / "run.sh"), spelled_through_alias)
+    assert _passes_through(str(spelled_through_alias / "run.sh"), spelled_through_alias)
+    assert not _passes_through(str(tmp_path / "real" / "elsewhere" / "run.sh"), spelled_through_alias)
 
 
 def test_a_command_that_runs_too_long_is_killed_and_scores_zero(tmp_path: Path, agent: Path) -> None:
