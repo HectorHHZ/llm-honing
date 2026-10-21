@@ -337,7 +337,9 @@ Methods that reflect or propose call a model through `ChatModel`, and runners fi
 engine behind a policy through `PolicyEndpoints`; both are protocols in `honing/core`, and
 their implementations live outside it. The `ChatModel` client is `LiteLLMChatModel`
 (`honing/harness/models.py`, the `litellm` extra), which reaches hosted APIs and local
-servers alike.
+servers alike. For an engine Honing did not start, such as an SGLang server already running or
+a remote API, `StaticPolicyEndpoints` (`honing/harness/endpoints.py`) maps checkpoint checksums
+to endpoints declared up front.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
