@@ -6,8 +6,18 @@ in Slime's image and passes files: rollouts in Slime's layout
 metrics Slime logged. :mod:`~honing.backends.slime.worker` is the part that runs
 inside the image. :class:`LocalContainerSandbox` is slime's agent ``Sandbox`` as a
 local Docker container; it satisfies slime's protocol without importing slime.
+:class:`SlimeEpisodeRunner` runs Claude Code episodes on slime's agent layer, each
+in a worker in Slime's environment (:mod:`~honing.backends.slime.agent_worker`).
 """
 
+from honing.backends.slime.agent_runner import (
+    AgentEpisodeSettings,
+    AgentWorkerError,
+    Placement,
+    SlimeAgentDeliveryProbe,
+    SlimeEpisodeRunner,
+    place_harness,
+)
 from honing.backends.slime.arguments import (
     GrpoSettings,
     JobSettings,
@@ -31,23 +41,29 @@ from honing.backends.slime.trainer import (
 
 __all__ = [
     "SUPPORT",
+    "AgentEpisodeSettings",
+    "AgentWorkerError",
     "ContainerLimits",
     "GrpoSettings",
     "HFModelSource",
     "JobSettings",
     "LocalContainerSandbox",
     "OpdSettings",
+    "Placement",
     "RolloutLayout",
     "SandboxError",
     "SandboxTimeoutError",
     "SftSettings",
+    "SlimeAgentDeliveryProbe",
     "SlimeEnvironment",
+    "SlimeEpisodeRunner",
     "SlimeRunError",
     "SlimeSettings",
     "SlimeTrainer",
     "SlimeTrainerSettings",
     "hf_snapshot",
     "megatron_model_args",
+    "place_harness",
     "policy_sample",
     "read_samples",
     "slime_samples",

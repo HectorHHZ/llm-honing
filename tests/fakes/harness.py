@@ -71,6 +71,8 @@ class FakeTaskGrader:
 
     async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
         self.grades += 1
+        if outcome.failure is not None:
+            return Grade(score=0.0, feedback=outcome.failure)
         fields = dict(part.split("=", 1) for part in outcome.final_output.split())
         verified = fields["verified"] == "1"
         return Grade(

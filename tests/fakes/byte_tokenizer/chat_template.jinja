@@ -1,0 +1,5 @@
+{% if tools %}<|tools|>{% for t in tools %} {{ t['function']['name'] }}{% endfor %}
+{% endif %}{% for m in messages %}<|{{ m['role'] }}|>
+{{ m['content'] }}{% if m.get('tool_calls') %}{% for c in m['tool_calls'] %}<call {{ c['function']['name'] }}>{% endfor %}{% endif %}
+{% endfor %}{% if add_generation_prompt %}<|assistant|>
+{% endif %}

@@ -168,6 +168,23 @@ def test_an_outcome_for_a_different_episode_is_refused() -> None:
         )
 
 
+@pytest.mark.unit
+def test_an_outcome_carries_no_failure_unless_the_runner_names_one() -> None:
+    outcome = EpisodeOutcome(task_id="t", spec_id="h", policy_checksum="x", exit_code=0)
+    assert outcome.failure is None
+    failed = EpisodeOutcome(task_id="t", spec_id="h", policy_checksum="x", exit_code=0, failure="too big")
+    assert (failed.failure, failed.workspace_location) == ("too big", None)
+    with pytest.raises(ContractError, match="failure must be None or a reason"):
+        EpisodeOutcome(task_id="t", spec_id="h", policy_checksum="x", exit_code=0, failure="")
+
+
+@pytest.mark.unit
+def test_the_fake_grader_scores_a_failed_outcome_zero_with_its_reason() -> None:
+    failed = EpisodeOutcome(task_id="t", spec_id="h", policy_checksum="x", exit_code=0, failure="no workspace")
+    grade = asyncio.run(FakeTaskGrader().grade(TASKS[0], failed))
+    assert (grade.score, grade.feedback) == (0.0, "no workspace")
+
+
 def build_policy(world: FakeWorld):  # type: ignore[no-untyped-def]
     from tests.fakes.model import FakeModelSource
 
