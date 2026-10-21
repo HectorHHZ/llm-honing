@@ -44,6 +44,7 @@ from honing.core import (
     UpdatePolicy,
     protocols,
 )
+from honing.harness import endpoints
 from honing.release import AcceptAll, EpisodeEvaluator, NoRegressionSelector, WinLossSelector
 from tests.fakes.builder import INT4_G128, TASKS
 from tests.fakes.compression import (
@@ -84,6 +85,7 @@ def implementations() -> list[tuple[object, type]]:
         (grader, protocols.TaskGrader),
         (FakeChatModel(["reply"]), protocols.ChatModel),
         (StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
+        (endpoints.StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (FakeProposerAgent(), protocols.ProposerAgent),
         (AppendInstructionMethod(), protocols.EvolveMethod),
         (WinLossSelector(), protocols.CandidateSelector),
