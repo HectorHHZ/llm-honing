@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Stands in for the Claude Code CLI in the slime agent worker's tests (tests/test_slime_agent_worker.py).
+
+It is launched the way slime's ClaudeCodeHarness launches the real one: ``claude -p PROMPT``
+plus its flags, with ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN and ANTHROPIC_MODEL set. It
+speaks the Anthropic Messages API to the adapter, non-streaming: CLAUDE.md is the system
+prompt, the names of the project's skills and commands and its settings' keys are appended
+to it, and it offers one tool, ``Write``. It runs each tool call the model makes and stops
+at the first reply without one. A final text ``EXIT <n>`` makes it exit with ``n``, and
+``BACKGROUND`` makes it leave a process behind, in its own session, that keeps growing
+``background.bin`` in the working directory (up to 16 MiB, then over again), so a tar that
+reads the directory while it runs sees the file change.
+
+Like the real CLI it prints stream-json events on stdout, ending with a ``result`` event
+(with a ``total_cost_usd`` that must not be recorded), and one line on stderr, which
+slime sends to the same file.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+TOOLS = [
+    {
+        "name": "Write",
+        "description": "Write a file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}},
+            "required": ["file_path", "content"],
+        },
+    }
+]
+
+
+def emit(event):
+    print(json.dumps(event), flush=True)
+
+
+def listing(directory):
+    return sorted(os.listdir(directory)) if os.path.isdir(directory) else []
+
+
+def system_prompt():
+    parts = []
+    if os.path.isfile("CLAUDE.md"):
+        with open("CLAUDE.md", encoding="utf-8") as handle:
+            parts.append(handle.read())
+    parts.append("[skills] " + " ".join(listing(".claude/skills")))
+    parts.append("[commands] " + " ".join(listing(".claude/commands")))
+    settings = {}
+    if os.path.isfile(".claude/settings.json"):
+        with open(".claude/settings.json", encoding="utf-8") as handle:
+            settings = json.load(handle)
+    parts.append("[settings] " + " ".join(sorted(settings)))
+    return "\n".join(parts)
+
+
+def main(argv):
+    if argv == ["--version"]:
+        print("0.0.1-fake (Claude Code)")
+        return 0
+    prompt = argv[argv.index("-p") + 1]
+    base = os.environ["ANTHROPIC_BASE_URL"].rstrip("/")
+    token = os.environ["ANTHROPIC_AUTH_TOKEN"]
+    model = os.environ["ANTHROPIC_MODEL"]
+    emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "argv": argv, "model": model})
+    print(f"[fake-claude:unrecognized_model] {json.dumps({'model': model})}", file=sys.stderr, flush=True)
+    system = system_prompt()
+    messages = [{"role": "user", "content": prompt}]
+    for turn in range(1, 21):
+        body = {"model": model, "max_tokens": 32000, "system": system, "messages": messages, "tools": TOOLS}
+        request = urllib.request.Request(
+            f"{base}/v1/messages",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                reply = json.load(response)
+        except urllib.error.HTTPError as error:
+            emit(
+                {
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "is_error": True,
+                    "result": f"API {error.code}",
+                }
+            )
+            return 1
+        emit({"type": "assistant", "message": reply})
+        uses = [block for block in reply["content"] if block.get("type") == "tool_use"]
+        if not uses:
+            text = "".join(block.get("text", "") for block in reply["content"] if block.get("type") == "text")
+            code = int(text.split()[1]) if text.startswith("EXIT ") else 0
+            if text.startswith("BACKGROUND"):
+                # Appends a MiB at a time and starts over past 16 MiB, so the file is large enough that
+                # tar is still reading it when the next append lands.
+                churn = (
+                    "while :; do head -c 1048576 /dev/zero >> background.bin;"
+                    " [ $(stat -c %s background.bin) -gt 16777216 ] && : > background.bin; done"
+                )
+                subprocess.Popen(
+                    ["sh", "-c", churn],
+                    start_new_session=True,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            emit(
+                {
+                    "type": "result",
+                    "subtype": "success" if code == 0 else "error",
+                    "is_error": code != 0,
+                    "result": text,
+                    "num_turns": turn,
+                    "total_cost_usd": 1.5,
+                }
+            )
+            return code
+        messages.append({"role": "assistant", "content": reply["content"]})
+        results = []
+        for use in uses:
+            if use["name"] == "Write":
+                path = use["input"]["file_path"]
+                directory = os.path.dirname(path)
+                if directory:
+                    os.makedirs(directory, exist_ok=True)
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(use["input"]["content"])
+                output = f"File created successfully at: {path}"
+            else:
+                output = f"no such tool: {use['name']}"
+            results.append({"type": "tool_result", "tool_use_id": use["id"], "content": output})
+        messages.append({"role": "user", "content": results})
+    emit({"type": "result", "subtype": "error_max_turns", "is_error": True, "result": ""})
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

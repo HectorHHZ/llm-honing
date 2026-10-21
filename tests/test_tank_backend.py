@@ -36,6 +36,7 @@ from honing.core import (
     CampaignRuleError,
     ContractError,
     DataContract,
+    EpisodeOutcome,
     HarnessFile,
     HarnessSpec,
     HoneRelease,
@@ -245,6 +246,14 @@ def test_the_grader_refuses_a_round_of_another_scenario_or_a_teacher_round(tmp_p
     manifest.write_text(json.dumps({**json.loads(manifest.read_text()), "kind": "teacher-demonstration"}))
     with pytest.raises(ContractError, match="'teacher-demonstration'"):
         asyncio.run(_grader().grade(task, outcome))
+
+
+@pytest.mark.unit
+def test_a_failed_outcome_scores_zero_with_its_reason_without_reading_a_run() -> None:
+    task = load_suite(SUITE_PATH).tasks("val")[0]
+    failed = EpisodeOutcome(task_id=task.task_id, spec_id="h", policy_checksum="x", exit_code=0, failure="no run")
+    grade = asyncio.run(_grader().grade(task, failed))
+    assert (grade.score, grade.feedback) == (0.0, "no run")
 
 
 @pytest.mark.unit

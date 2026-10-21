@@ -15,6 +15,7 @@ from honing.backends.ra2 import RA2EpisodeRunner, RA2Grader, build_suite, load_s
 from honing.backends.ra2.runner import AGENT
 from honing.core import (
     ContractError,
+    EpisodeOutcome,
     HarnessFile,
     HarnessSpec,
     HoneRelease,
@@ -198,6 +199,14 @@ def test_a_failed_match_is_not_graded(tmp_path: Path, monkeypatch: pytest.Monkey
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"))
     with pytest.raises(ContractError, match="exited 3"):
         asyncio.run(run_graded(runner, _grader(), SPEC, load_suite(SUITE_PATH).tasks("val")[0], _policy("a")))
+
+
+@pytest.mark.unit
+def test_a_failed_outcome_scores_zero_with_its_reason_without_reading_a_run() -> None:
+    task = load_suite(SUITE_PATH).tasks("val")[0]
+    failed = EpisodeOutcome(task_id=task.task_id, spec_id="h", policy_checksum="x", exit_code=0, failure="no run")
+    grade = asyncio.run(_grader().grade(task, failed))
+    assert (grade.score, grade.feedback) == (0.0, "no run")
 
 
 @pytest.mark.unit

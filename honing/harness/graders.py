@@ -16,11 +16,12 @@ recorded. Two kinds of failure are told apart:
   nonzero, prints something that is not a grade,
   reports a score outside ``[0, 1]``, or times out, or the command cannot start
   because of a file in the workspace. That is a score of 0 with the reason as
-  feedback, so one bad episode never aborts a gate.
-- the infrastructure failed: the outcome names no workspace, the sandbox cannot be
-  opened, or the grader command cannot start for any other reason (``python3`` is
-  not on ``PATH``, say). That raises, because scoring it 0 would charge a broken
-  runner or machine to the harness.
+  feedback, so one bad episode never aborts a gate. So is an outcome whose runner
+  set ``failure``: the agent left nothing to grade, and no command runs.
+- the infrastructure failed: the outcome names no workspace and no failure, the
+  sandbox cannot be opened, or the grader command cannot start for any other reason
+  (``python3`` is not on ``PATH``, say). That raises, because scoring it 0 would
+  charge a broken runner or machine to the harness.
 """
 
 from __future__ import annotations
@@ -518,6 +519,8 @@ class CommandGrader:
 
     async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
         entry = self._suite.entry(task.task_id)
+        if outcome.failure is not None:
+            return Grade(score=0.0, feedback=_truncate(outcome.failure, self._max_feedback_chars))
         if outcome.workspace_location is None:
             raise ContractError(f"the outcome for task {task.task_id!r} names no workspace to grade")
         try:
