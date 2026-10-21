@@ -397,7 +397,7 @@ class CommandGrader:
 
     A grader that imports the agent's code in its own process can be forged: that
     code can print a grade, exit before the real one is printed, or replace what
-    computes it. The example suite (``examples/tasks/python-bugfix``) shows the
+    computes it. The python-bugfix suite (``integrations/python-bugfix``) shows the
     safe shape: a parent that holds the expected values and never imports the
     agent's code, and a child per case that runs it from the workspace.
 
