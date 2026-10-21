@@ -52,6 +52,10 @@ _START_SECONDS = 60.0
 _REMOVE_SECONDS = 30.0
 _FILE_SECONDS = 600.0
 _REAP_SECONDS = 5.0
+# The longest a caller waits: ``exec(timeout=T)`` takes at most ``T + EXEC_GRACE_SECONDS``, and
+# ``read_file`` or ``write_file`` at most ``FILE_SECONDS``, before it raises.
+EXEC_GRACE_SECONDS = _KILL_AFTER_SECONDS + _CLIENT_GRACE_SECONDS
+FILE_SECONDS = _FILE_SECONDS
 # coreutils ``timeout`` exits 124 when it stopped the command, 137 when it had to KILL it.
 _TIMED_OUT_CODES = frozenset({124, 137})
 # Docker's own failures, as opposed to the command's: the daemon refused the exec (no
@@ -193,7 +197,8 @@ class LocalContainerSandbox:
     exception, and on cancellation, a second cancellation during removal included.
     The container's main process is ``sleep lifetime_seconds`` and it runs with
     ``--rm``, so one whose owner was killed outright removes itself when that ends;
-    all carry the label ``honing.sandbox=1``.
+    all carry the label ``honing.sandbox=1``. A missing image is pulled first, unless
+    ``pull_missing`` is off; then it raises :class:`SandboxError`.
 
     ``exec`` runs ``cmd`` under ``bash -c`` as ``user``, in ``/`` with that user's
     ``HOME``, inside coreutils ``timeout``: the limit is enforced in the container,
@@ -215,6 +220,7 @@ class LocalContainerSandbox:
         lifetime_seconds: int = 3600,
         docker: str = "docker",
         name_prefix: str = "honing-sandbox",
+        pull_missing: bool = True,
     ) -> None:
         if lifetime_seconds <= 0:
             raise ValueError(f"lifetime_seconds must be positive, not {lifetime_seconds}")
@@ -225,6 +231,7 @@ class LocalContainerSandbox:
         self.host_address = host_address
         self.lifetime_seconds = lifetime_seconds
         self.docker = docker
+        self.pull_missing = pull_missing
         # Named before it exists, so it can be removed by name whatever point creation reached.
         self.sandbox_id = f"{name_prefix}-{uuid.uuid4().hex}"
         self._entered = False
@@ -279,9 +286,15 @@ class LocalContainerSandbox:
         return self
 
     async def _pull(self) -> None:
-        """Pull the image if it is missing. Cancelling a pull is safe: no container exists yet."""
+        """Pull the image if it is missing, or raise without ``pull_missing``.
+
+        Cancelling a pull is safe: no container exists yet.
+        """
         present = await _run([self.docker, "image", "inspect", self.image], timeout_seconds=_START_SECONDS)
         if present is None or present[0] != 0:
+            if not self.pull_missing:
+                detail = _decode(present[2])[-500:] if present is not None else "docker image inspect did not finish"
+                raise SandboxError(f"the image {self.image} is not present; build or pull it first: {detail}")
             self._check(
                 "pull", await _run([self.docker, "pull", "--quiet", self.image], timeout_seconds=_CREATE_SECONDS)
             )

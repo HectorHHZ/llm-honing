@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -156,6 +157,16 @@ def test_an_outcome_without_a_workspace_raises(tmp_path: Path) -> None:
     grader = CommandGrader(_suite(tmp_path))
     with pytest.raises(ContractError, match="names no workspace"):
         asyncio.run(grader.grade(Task("t1", "Fix t1."), _outcome(None)))
+
+
+@pytest.mark.parametrize("has_workspace", [False, True])
+def test_a_failed_outcome_scores_zero_with_its_reason_and_runs_no_grader(tmp_path: Path, has_workspace: bool) -> None:
+    sandbox = FakeCommandSandbox(_ok('{"score": 1.0, "feedback": "solved"}'))
+    grader = CommandGrader(_suite(tmp_path), open_sandbox=sandbox.opener(), max_feedback_chars=20)
+    outcome = replace(_outcome(tmp_path / "agent" if has_workspace else None), failure="the workspace is " + "x" * 40)
+    grade = asyncio.run(grader.grade(Task("t1", "Fix t1."), outcome))
+    assert (grade.score, grade.feedback) == (0.0, "the workspace is xxx [truncated]")
+    assert sandbox.opened == []
 
 
 def test_a_sandbox_that_cannot_open_raises(tmp_path: Path) -> None:

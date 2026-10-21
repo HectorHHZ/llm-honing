@@ -132,6 +132,35 @@ jobs:
           PYTHONPATH="$RUNNER_TEMP/slime" python -m pytest -m "not gpu" -rs tests/test_slime_sandbox.py tests/contracts
           test -z "$(docker ps --all --quiet --filter label=honing.sandbox=1)"
 
+  test-agent-worker:
+    # The slime agent worker end to end: slime's real adapter and harness, in the environment
+    # scripts/setup-slime-agent-env.sh builds (CPU torch and a full slime checkout at the pin), against a
+    # fake model and a fake CLI in a real container. HONING_REQUIRE_* turns any skip into a failure.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" uv==0.11.24
+      - name: Build the slime agent environment
+        run: scripts/setup-slime-agent-env.sh "$RUNNER_TEMP/slime-agent"
+      - name: Test
+        env:
+          HONING_REQUIRE_DOCKER: "1"
+          HONING_REQUIRE_SLIME_AGENT: "1"
+        run: |
+          HONING_SLIME_AGENT_ENV="$RUNNER_TEMP/slime-agent" python -m pytest -m "not gpu" -rs tests/test_slime_agent_worker.py
+          test -z "$(docker ps --all --quiet --filter label=honing.sandbox=1)"
+
   ra2-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 5

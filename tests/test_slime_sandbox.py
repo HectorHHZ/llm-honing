@@ -673,6 +673,23 @@ def test_a_cancel_during_create_waits_for_it_then_removes(fake_docker: Callable[
 
 
 @pytest.mark.integration
+def test_without_pull_missing_a_missing_image_raises_and_nothing_is_pulled(
+    fake_docker: Callable[[dict[str, object]], Path],
+) -> None:
+    cli = fake_docker({"image": {"exit": 1, "stderr": "No such image: image"}})
+    sandbox = LocalContainerSandbox("image", docker=str(cli), pull_missing=False)
+
+    async def scenario() -> None:
+        async with sandbox:
+            pass
+
+    with pytest.raises(SandboxError, match="the image image is not present; build or pull it first"):
+        asyncio.run(scenario())
+    assert _calls(cli, "pull") == []
+    assert _calls(cli, "create") == []
+
+
+@pytest.mark.integration
 def test_a_cancel_during_start_removes_by_name(fake_docker: Callable[[dict[str, object]], Path]) -> None:
     cli = fake_docker({"start": {"seconds": 30}})
     sandbox = LocalContainerSandbox("image", docker=str(cli))

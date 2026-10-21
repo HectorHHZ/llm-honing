@@ -103,6 +103,8 @@ class RA2Grader:
 
     async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
         scenario = self._suite.scenario(task.task_id)
+        if outcome.failure is not None:
+            return Grade(score=0.0, feedback=outcome.failure)
         if outcome.workspace_location is None:
             raise ContractError(f"the RA2 outcome for {task.task_id} names no run directory")
         run = Path(outcome.workspace_location)
