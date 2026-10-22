@@ -9,11 +9,11 @@ A harness for agent ``ra2_decision`` has two files, which the match reads as
   recommendation text, with ``{name}`` placeholders filled during the match.
 
 :func:`seed_harness` is the integration's current behavior. :class:`LayaQuestionCheck`,
-:class:`KevQuestionCheck`, :class:`NanoJevQuestionCheck`, and :class:`StartLuxQuestionCheck`
-refuse, before any match starts, a harness the model cannot read: every option,
-instruction, and state entry must fit the family's limits (:data:`LAYA_LIMITS`,
-:data:`KEV_LIMITS`, :data:`NANOJEV_LIMITS`, :data:`STARTLUX_LIMITS`). Placeholders are filled with the
-longest values the match produces, so the check is conservative. Text built
+:class:`KevQuestionCheck`, :class:`NanoJevQuestionCheck`, :class:`StartLuxQuestionCheck`, and
+:class:`NimbleQuestionCheck` refuse, before any match starts, a harness the model cannot read: every
+option, instruction, and state entry must fit the family's limits (:data:`LAYA_LIMITS`,
+:data:`KEV_LIMITS`, :data:`NANOJEV_LIMITS`, :data:`STARTLUX_LIMITS`, :data:`NIMBLE_LIMITS`).
+Placeholders are filled with the longest values the match produces, so the check is conservative. Text built
 from game content can still overrun during a match; the grader then scores that
 match 0 and names the question.
 """
@@ -57,6 +57,9 @@ NANOJEV_LIMITS = QuestionLimits(option=256, instruction=512, state_entry=512)
 # StartLux-Decision reads every option of a question in one prompt, up to the server's 8,192-token default; these keep
 # an option within a thirty-second of it, instructions within a sixteenth, and one state entry within a quarter.
 STARTLUX_LIMITS = QuestionLimits(option=256, instruction=512, state_entry=2048)
+# Nimble-v4-max reads the whole request, every question and option, in one prompt, up to the server's 8,192-token
+# default; these keep the same shares as StartLux's.
+NIMBLE_LIMITS = QuestionLimits(option=256, instruction=512, state_entry=2048)
 OPTION_LIMIT, INSTRUCTION_LIMIT, STATE_ENTRY_LIMIT = (
     LAYA_LIMITS.option,
     LAYA_LIMITS.instruction,
@@ -248,3 +251,20 @@ class StartLuxQuestionCheck(TokenQuestionCheck):
 
     def _option_tokens(self, text: str) -> int:
         return self._tokens(f"B) {text}\n")
+
+
+class NimbleQuestionCheck(TokenQuestionCheck):
+    """The check for Nimble-v4-max, whose option is one coded line of the prompt, such as ``B: text``."""
+
+    limits = NIMBLE_LIMITS
+
+    @classmethod
+    def for_checkpoint(cls, checkpoint: Path, integration_dir: Path) -> NimbleQuestionCheck:
+        """``checkpoint`` is the Nimble checkpoint directory, which carries its base's tokenizer."""
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint, local_files_only=True)
+        return cls(tokenizer, _required_keys(integration_dir))
+
+    def _option_tokens(self, text: str) -> int:
+        return self._tokens(f"B: {text}\n")

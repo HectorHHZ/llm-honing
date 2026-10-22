@@ -47,6 +47,18 @@ The Kev family has no counterpart in #49, so these compare Honing with Kev's own
 
 The 15 differing questions come from requests with two or more questions over 4,096 tokens, where the reference reads the letters in bf16 and Honing, with that path off, reads them in fp32. The three 27B questions that choose differently are near-ties in the reference's bf16 values; one is an exact tie (0.3535 and 0.3535). All three servers passed StartLux's own graph self-test with a difference of 0.0 over 40 graphs. The long requests trimmed 2,873 entries in all, and the longest prompt was 8,179 tokens.
 
+## Nimble-v4-max against Bespoke's engine
+
+`nimble_serving.py <our-gpu> <reference-gpu> <out>` loads Honing's `NimbleDecisionModel` on one GPU and, in a second process on another, Bespoke's `NimbleEngine` from the pinned source snapshot with its Decision Index run's settings, called as the Decision Index kit calls it. Bespoke ships no server for the model, so the engine itself is the reference. It sends both the 24 serving requests, 3 with long logs that make Honing trim the state, and 3 that add a yes/no and a five-level score question; the reference gets the state text Honing sent the model. It needs the environment from `scripts/setup-nimble.sh` (`NIMBLE_PYTHON`, `NIMBLE_SOURCE_DIR`, `NIMBLE_KIT_DIR`). Results on H100s:
+
+| Questions | Same choice | Largest probability difference |
+|---|---|---|
+| choice (62) | 62 of 62 | 0.000000 |
+| yes/no (3) | 3 of 3 | 0.000000 |
+| score (3) | 3 of 3 | 0.000000 |
+
+The probabilities are identical, including after Honing converts a score answer from the engine's choice over level indices. The long requests trimmed 2,880 entries in all, the longest prompt was 8,165 tokens, and the median latency of the untrimmed requests was 102.9 ms.
+
 ## Real game controller parity on CPU
 
 `game_parity.py` compares the original #49 controller with the extracted
