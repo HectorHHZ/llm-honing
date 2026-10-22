@@ -120,6 +120,10 @@ jobs:
           npm ci
           npm test
           npm run format:check
+          bash -n experiments/laya-v33-harness-v1/run.sh
+          bash -n experiments/laya-v33-harness-v1/env.sh
+          bash -n experiments/laya-v33-harness-v1/setup-linux.sh
+          python3 -m unittest discover -s experiments/laya-v33-harness-v1/tests -p 'test_*.py'
 
   tank-duel:
     runs-on: ubuntu-latest

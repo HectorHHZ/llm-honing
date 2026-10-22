@@ -8,10 +8,11 @@
   "scripts": {
     "match": "node integration/laya/run.mjs",
     "audit": "node integration/laya/audit.mjs",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/*.test.mjs experiments/laya-v33-harness-v1/tests/*.test.mjs",
+    "test:harness-v1": "node --test experiments/laya-v33-harness-v1/tests/*.test.mjs",
     "test:engine": "node integration/laya/validate.mjs && node integration/laya/validate-staged.mjs && node integration/laya/validate-catalog.mjs && node integration/laya/validate-intent.mjs",
-    "format": "prettier --write 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs'",
-    "format:check": "prettier --check 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs'"
+    "format": "prettier --write 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs' 'experiments/laya-v33-harness-v1/**/*.mjs'",
+    "format:check": "prettier --check 'integration/**/*.mjs' 'tests/**/*.mjs' 'scripts/**/*.mjs' 'experiments/laya-v33-harness-v1/**/*.mjs'"
   },
   "devDependencies": {
     "prettier": "3.0.3"

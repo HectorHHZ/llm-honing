@@ -114,6 +114,12 @@ A seat can use a running decision server (`--red-decision-server=URL`, `--blue-d
 
 The matches must be played with sampled choices. Argmax play repeats exactly, gives no reward spread within a group, and so teaches nothing. The controller cannot sample yet.
 
+## Pinned v33 CPU harness experiment
+
+[`experiments/laya-v33-harness-v1`](experiments/laya-v33-harness-v1/README.md) is a standalone, CPU-only comparison of a frozen Laya RA2 v33 policy against the same weights with adaptive wait scheduling (H1) and grounded context advice (H2). It uses separate per-seat policy state and one shared model worker, with a default 30-tick base decision interval. It does not update the main runner or integrate these code-level changes into `HarnessSpec` or `DuelEvaluator`.
+
+The experiment has its own pinned external dependencies, environment example, opt-in setup and match commands, offline tests (`npm run test:harness-v1`), and result report. See its README for setup, paired-seat comparisons, and ablations. Keep its run directories and source snapshots local: they can include privately supplied SDK code. No experiment result is claimed by adding this code to the repository.
+
 ## Tests
 
 ```bash
