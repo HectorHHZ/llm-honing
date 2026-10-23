@@ -68,12 +68,20 @@ def test_the_readme_embeds_the_rendered_diagram(repo_root: Path) -> None:
     assert (repo_root / "system-design/honing_architecture.png").is_file()
 
 
+#: Each scope diagram and the document that embeds it, with the path that document uses.
+EMBEDS = (
+    ("README.md", "system-design/honing_scope.png"),
+    ("system-design/README.md", "honing_scope.png"),
+    ("system-design/README.md", "honing_compositions.png"),
+)
+
+
 @pytest.mark.unit
-@pytest.mark.parametrize("image", ["honing_scope.png", "honing_compositions.png"])
-def test_the_top_level_readme_embeds_the_scope_diagrams(repo_root: Path, image: str) -> None:
-    readme = (repo_root / "README.md").read_text(encoding="utf-8")
-    assert f"](system-design/{image})" in readme
-    assert (repo_root / "system-design" / image).is_file()
+@pytest.mark.parametrize(("document", "image"), EMBEDS)
+def test_the_readmes_embed_the_scope_diagrams(repo_root: Path, document: str, image: str) -> None:
+    text = (repo_root / document).read_text(encoding="utf-8")
+    assert f"]({image})" in text
+    assert ((repo_root / document).parent / image).is_file()
 
 
 @pytest.mark.unit
