@@ -12,7 +12,7 @@ Every script here runs on a CPU with no model or GPU, and CI's `e2e` job runs ea
 | `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
 | `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, and every gated episode's run directory |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
-| `node scripts/e2e/tank-duel.mjs` | a decision server, the tank games' HTTP bridge, and both engines; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each engine plays |
+| `node scripts/e2e/tank-war.mjs` | a decision server, Tank War's HTTP bridge, and both decision interfaces; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each interface plays |
 
 ## The all-planes pipeline
 
@@ -87,7 +87,7 @@ The default config's model, policy server, and harness runner key on the fake mo
 
 ## The tank campaign
 
-`configs/e2e/tank_dry_run.json` builds the campaign in `honing/backends/tank/e2e.py`. Every round is real: `TankEpisodeRunner` starts `integrations/tank-duel/scripts/match.mjs`, which plays one Classic round in lockstep against the planner opponent and asks Honing's `DecisionServer` for every decision. Only the decision model (`tests/fakes/tank.py`), the trainer, and the chat model GEPA reflects with are stand-ins. The stand-in model takes no permitted shot below quality 0.7, unless its weapon instructions tell it to fire whenever the shot is permitted. So:
+`configs/e2e/tank_dry_run.json` builds the campaign in `honing/backends/tank/e2e.py`. Every round is real: `TankEpisodeRunner` starts `integrations/tank-war/scripts/match.mjs`, which plays one Tank War round in lockstep against the planner opponent and asks Honing's `DecisionServer` for every decision. Only the decision model (`tests/fakes/tank.py`), the trainer, and the chat model GEPA reflects with are stand-ins. The stand-in model takes no permitted shot below quality 0.7, unless its weapon instructions tell it to fire whenever the shot is permitted. So:
 
 1. harness (GEPA): the scripted reflection rewrites `tank/questions.json` with such instructions; the child beats its parent on a train minibatch, and its validation mean (0.5) beats the seed's (0): published.
 2. train (sft on teacher demonstrations): quality 0.5 to 0.7 changes which motions the model drives (the published instructions already make it fire): 1 win, 3 ties on the gate: published.

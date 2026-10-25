@@ -12,17 +12,17 @@ that match-up. Laya, another family trained the same way, fields Kirov airships 
 enemy base. The game and the opponent are the same in both halves of the video; the model's weights
 are what changed.
 
-This directory runs those matches. It has a headless Red Alert 2 engine, the Supalosa bot as the
-opponent, four decision-model families behind one HTTP decision server, a match runner that records
+This directory runs those matches. It has a headless Red Alert 2 engine adapter, the Supalosa bot as the
+opponent, supported decision-model families behind one HTTP decision server, a match runner that records
 every request and command, and an audit that rebuilds each decision from the records. Honing's
 gate, trainers, and harness methods run on top of it.
 
 | | |
 | --- | --- |
-| Models that play | [NanoJev](https://huggingface.co/C-Tianyu/NanoJev), Laya, [Kev](https://github.com/jaredpalmer/kev), [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision), and DiffusionGemma through [djev](../djev/README.md) |
+| Models that play | [NanoJev](https://huggingface.co/C-Tianyu/NanoJev), Laya, [Kev](https://github.com/jaredpalmer/kev), [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision), [Nimble-v4-max](#using-nimble-v4-max), and DiffusionGemma through [djev](../djev/README.md) |
 | What a model gets | the game state as text, a question, and a short list of options; it returns a probability for every option |
 | What improves it | SFT on a teacher's matches, GRPO on its own matches, and GEPA on the question text |
-| What decides a release | the candidate plays the validation tasks next to the current release and must win more than it loses |
+| What decides a release | training uses paired wins versus losses; GEPA uses a strictly higher validation mean |
 
 ## Contents
 
@@ -95,17 +95,20 @@ instruction, and state entry has to fit the family's token limits.
 
 ### Check before releasing
 
-New weights and new question text go through the same gate. The candidate plays the 24 validation
-tasks (two maps, six seeds, both seats) next to the current release and is released only if it wins
-more of them than it loses. A release records the weights and the question text together, so a
-rollback restores both. The gate never plays the 132 held-out tasks.
+New weights and new question text go through the gate on the 24 validation
+tasks (two maps, six seeds, both seats). Training uses the default selector:
+the candidate must win more paired task comparisons than it loses. GEPA supplies
+its own selector: its validation mean must strictly exceed the served candidate's
+stored mean. A tie is rejected in both cases. A release records weights and
+question text together, so a rollback restores both. The gate never plays the
+132 held-out tasks.
 
 ## 2. Quick start
 
 You need Linux, Node.js 22 or newer, Python 3.10 or newer, and an NVIDIA GPU for inference. You
 also need the `ra2-game-env` engine SDK, which is supplied privately, and the files of a retail Red
 Alert 2 installation. Neither is in the repository; [External inputs](#external-inputs) says where
-each comes from. Without them, [Tank Duel](../tank-duel/README.md) is the quickest way to try a
+each comes from. Without them, [Tank War](../tank-war/README.md) is the quickest way to try a
 decision model: it needs only Node.js.
 
 ```bash
@@ -325,7 +328,7 @@ The inference code comes from a dataset snapshot rather than a git checkout, so 
 
 Nimble completes representative prefill and shared-prefix/tail warmup before the server or stdio worker reports ready. The warmup uses one, two and three questions at prompt budgets of 512, 2,048 and 4,608 tokens, capped by `--max-len`. Startup can take longer with an empty compiler cache. Keep the Triton cache on persistent storage. Other input shapes can still need compilation, so measure the workloads you deploy.
 
-To check a cold start on an allocated, unused GPU, run this from the repository root in the Nimble environment with Node 22 on `PATH`. The output directory must not exist. It uses new compiler caches, waits for the production server to report ready, then runs all three tank modes twice with the normal 5-second client and 10-second bridge limits:
+To check a cold start on an allocated, unused GPU, run this from the repository root in the Nimble environment with Node 22 on `PATH`. The output directory must not exist. It uses new compiler caches, waits for the production server to report ready, then runs both Tank War decision interfaces twice with the normal 5-second client and 10-second bridge limits:
 
 ```bash
 "$NIMBLE_PYTHON" scripts/e2e/nimble_cold_start.py --gpu 0 --nimble-source "$NIMBLE_SOURCE_DIR" --nimble-kit "$NIMBLE_KIT_DIR" --out runs/nimble-cold-start

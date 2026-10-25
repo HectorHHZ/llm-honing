@@ -48,7 +48,7 @@ from honing.release import EpisodeEvaluator
 from tests.fakes.model import FakeModelSource, FakeWorld
 
 REPO = Path(__file__).resolve().parents[1]
-INTEGRATION = REPO / "integrations/tank-duel"
+INTEGRATION = REPO / "integrations/tank-war"
 SUITE_PATH = INTEGRATION / "tasks/suite.jsonl"
 FAKE_MATCH = Path(__file__).parent / "fakes/tank_match.py"
 SEED = seed_harness(INTEGRATION)

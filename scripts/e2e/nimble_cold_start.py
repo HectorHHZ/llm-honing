@@ -71,7 +71,7 @@ def main() -> None:
                 log_path = out / f"tank-{run}.jsonl"
                 with log_path.open("w") as log:
                     subprocess.run(
-                        ["node", "scripts/e2e/tank-duel.mjs"],
+                        ["node", "scripts/e2e/tank-war.mjs"],
                         cwd=REPO,
                         env=env,
                         stdout=log,
@@ -80,7 +80,7 @@ def main() -> None:
                         timeout=240,
                     )
                 modes = [json.loads(line) for line in log_path.read_text().splitlines()]
-                assert len(modes) == 3 and all(row["errors"] == 0 for row in modes)
+                assert len(modes) == 2 and all(row["errors"] == 0 for row in modes)
                 rows.append(modes)
             summary = {"passed": True, "ready_seconds": ready_seconds, "runs": rows}
             (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

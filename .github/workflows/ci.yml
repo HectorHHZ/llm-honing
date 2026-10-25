@@ -121,7 +121,7 @@ jobs:
           npm test
           npm run format:check
 
-  tank-duel:
+  tank-war:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -132,9 +132,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: integrations/tank-duel/package-lock.json
-      - name: Check both tank games and the model bridge
-        working-directory: integrations/tank-duel
+          cache-dependency-path: integrations/tank-war/package-lock.json
+      - name: Check Tank War and the model bridge
+        working-directory: integrations/tank-war
         run: |
           npm ci
           npm test
@@ -186,8 +186,8 @@ jobs:
         run: python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json --work-dir "$RUNNER_TEMP/tank-runner-check"
       - name: Serving end to end (decision server process, the match's Node client stack)
         run: scripts/e2e/serving.sh "$RUNNER_TEMP/serving"
-      - name: Tank games end to end (decision server, HTTP bridge, both engines)
-        run: node scripts/e2e/tank-duel.mjs
+      - name: Tank War end to end (decision server, HTTP bridge, both decision interfaces)
+        run: node scripts/e2e/tank-war.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
