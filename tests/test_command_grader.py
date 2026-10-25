@@ -439,6 +439,35 @@ def test_a_bare_command_the_agent_planted_on_a_relative_path_entry_scores_zero(
     assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
 
 
+@pytest.mark.parametrize("how", ["file", "loop", "dangling"])
+def test_a_broken_workspace_path_parent_scores_zero(
+    tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    parent = agent / "bin"
+    if how == "file":
+        parent.write_text("not a directory")
+    else:
+        parent.symlink_to("bin" if how == "loop" else "missing", target_is_directory=True)
+    monkeypatch.setenv("PATH", "bin")
+    grade = _local_grade(tmp_path, agent, ["honing-grader"])
+    assert grade.score == 0.0
+    assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
+
+
+@pytest.mark.parametrize("how", ["file", "loop"])
+def test_a_broken_path_parent_outside_the_workspace_still_raises(
+    tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    parent = tmp_path / "host-bin"
+    if how == "file":
+        parent.write_text("not a directory")
+    else:
+        parent.symlink_to("host-bin", target_is_directory=True)
+    monkeypatch.setenv("PATH", str(parent))
+    with pytest.raises(GraderStartError, match="cannot start"):
+        _local_grade(tmp_path, agent, ["honing-grader"])
+
+
 def test_the_workspace_matches_whichever_way_its_own_location_is_spelled(tmp_path: Path) -> None:
     # On macOS the sandbox's workspace is under /var, which is a link to /private/var.
     (tmp_path / "real" / "workspace").mkdir(parents=True)

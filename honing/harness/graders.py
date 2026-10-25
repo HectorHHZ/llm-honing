@@ -194,18 +194,35 @@ def _passes_through(path: str, directory: Path) -> bool:
     return False
 
 
+def _broken_parent_in_workspace(path: str, workspace: Path) -> bool:
+    """Find the first parent that cannot be traversed, without blaming an ordinary missing PATH directory."""
+    prefix = ""
+    for part in Path(path).parts[:-1]:
+        prefix = os.path.join(prefix, part)
+        try:
+            mode = os.stat(prefix).st_mode
+        except OSError as error:
+            broken = error.errno in _EXEC_FILE_ERRNOS and (error.errno != errno.ENOENT or os.path.islink(prefix))
+            return broken and _passes_through(prefix, workspace)
+        if not stat.S_ISDIR(mode):
+            return _passes_through(prefix, workspace)
+    return False
+
+
 def _started_from(workspace: Path, argv0: str, cwd: str, search_path: str) -> bool:
     """Whether the executable that ``argv0`` names, looked up as ``exec`` would, is the agent's to break.
 
     A name with a slash is a path from ``cwd``. A bare name is looked up on
     ``search_path``, whose relative entries are also from ``cwd``; it is the
-    agent's only where the agent left a file under that name.
+    agent's where the agent left a file under that name or broke a parent directory.
     """
     if os.sep in argv0:
         return _passes_through(os.path.join(cwd, argv0), workspace)
     for entry in search_path.split(os.pathsep):
         candidate = os.path.join(cwd, entry or os.curdir, argv0)
         if os.path.lexists(candidate) and _passes_through(candidate, workspace):
+            return True
+        if _broken_parent_in_workspace(candidate, workspace):
             return True
     return False
 
