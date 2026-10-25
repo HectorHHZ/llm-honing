@@ -2,7 +2,7 @@
 
 Decision models need iteration.
 
-https://github.com/user-attachments/assets/REPLACE-WITH-THE-UPLOADED-TANK-DUEL-VIDEO
+https://github.com/user-attachments/assets/9dca9289-bb7d-4b51-bd0b-8b896fabd42d
 
 Two tanks in a maze fire shells that bounce off the walls, and a tank's own shells can kill it. We
 put NanoJev in the driver's seat. Version 1 spun in circles. Version 2 found the fire button and shot
