@@ -323,6 +323,14 @@ The server, the stdio worker (`DECISION_FAMILY=nimble`, `NIMBLE_MODEL`, `NIMBLE_
 
 The inference code comes from a dataset snapshot rather than a git checkout, so each of its Python files must match the SHA-256 pinned for it, and the kit must be the pinned, unmodified checkout. Each weight shard is checked against the SHA-256 the hub published for it and against the model's own `weights_sha256.json`, and the checkpoint's `schema_config.json` must name the pinned base tokenizer. The state is trimmed by whole entries until every question's prompt fits 8,192 tokens (`--max-len`, up to the model's 32,768). The engine answers a score question as a choice over the level indices; Honing returns it as a score with the expected level and the levels' text, as the djev bridge does. `parity/nimble_serving.py` compares serving with the engine called directly.
 
+Nimble completes representative prefill and shared-prefix/tail warmup before the server or stdio worker reports ready. The warmup uses one, two and three questions at prompt budgets of 512, 2,048 and 4,608 tokens, capped by `--max-len`. Startup can take longer with an empty compiler cache. Keep the Triton cache on persistent storage. Other input shapes can still need compilation, so measure the workloads you deploy.
+
+To check a cold start on an allocated, unused GPU, run this from the repository root in the Nimble environment with Node 22 on `PATH`. The output directory must not exist. It uses new compiler caches, waits for the production server to report ready, then runs all three tank modes twice with the normal 5-second client and 10-second bridge limits:
+
+```bash
+"$NIMBLE_PYTHON" scripts/e2e/nimble_cold_start.py --gpu 0 --nimble-source "$NIMBLE_SOURCE_DIR" --nimble-kit "$NIMBLE_KIT_DIR" --out runs/nimble-cold-start
+```
+
 ### End to end
 
 

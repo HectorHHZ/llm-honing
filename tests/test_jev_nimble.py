@@ -402,3 +402,55 @@ def test_the_nimble_check_accepts_the_seed_harness_and_refuses_an_option_over_it
     spec = seed_harness(INTEGRATION).with_file("ra2/questions.json", HarnessFile("instructions", json.dumps(long)))
     with pytest.raises(CampaignRuleError, match=r"intent.group.recruit \(option\) is 257 tokens; the limit is 256"):
         check.check(spec)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("limit", [256, 8192])
+def test_warmup_covers_single_and_shared_prefix_paths_within_the_context(limit: int) -> None:
+    class WarmEngine(FakeEngine):
+        def __call__(self, state: str, questions: dict[str, Any]) -> tuple[dict[str, Any], None]:
+            self.calls.append((state, questions))
+            answers = {}
+            for name, question in questions.items():
+                keys = list(question["criteria"])
+                answers[name] = {
+                    "type": "choice",
+                    "choice": keys[0],
+                    "probabilities": {key: float(key == keys[0]) for key in keys},
+                }
+            return {"answers": answers}, None
+
+    engine = WarmEngine({})
+    model = _model(engine, max_length=limit)
+    model.warmup()
+    assert {len(questions) for _, questions in engine.calls} == {1, 2, 3}
+    lengths = [(len(questions), max(model._measure(state, questions).values())) for state, questions in engine.calls]
+    assert all(length <= limit for _, length in lengths)
+    if limit > 4096:
+        assert any(count == 1 and length > 4096 for count, length in lengths)
+        assert any(count > 1 and length > 256 for count, length in lengths)
+
+
+@pytest.mark.unit
+def test_a_warmup_failure_propagates_before_load_yields(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from contextlib import nullcontext
+
+    engine = types.SimpleNamespace(warmup=lambda: None, shared_prefix=True)
+    module = types.SimpleNamespace(NimbleEngine=lambda **kwargs: engine)
+    monkeypatch.setattr(nimble, "import_nimble", lambda *args: (module, UnsupportedError, "source", "kit"))
+    monkeypatch.setattr(nimble, "gpu_lock", lambda *args: nullcontext("gpu-uuid"))
+    monkeypatch.setattr(nimble, "resolve_checkpoint", lambda *args: {"path": str(tmp_path)})
+    monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace(__version__="test"))
+    monkeypatch.setitem(sys.modules, "transformers", types.SimpleNamespace(__version__="test"))
+
+    def fail(self: NimbleDecisionModel) -> None:
+        raise RuntimeError("warmup failed")
+
+    monkeypatch.setattr(NimbleDecisionModel, "warmup", fail)
+    pins = tmp_path / "pins.json"
+    pins.write_text("{}")
+    with (
+        pytest.raises(RuntimeError, match="warmup failed"),
+        NimbleDecisionModel.load(NimbleSettings(pins_path=pins, source_dir=tmp_path, kit_dir=tmp_path)),
+    ):
+        pytest.fail("The caller must not see a ready model after failed warmup")

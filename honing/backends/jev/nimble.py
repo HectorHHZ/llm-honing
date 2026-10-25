@@ -317,7 +317,41 @@ class NimbleDecisionModel:
                 "license": "cc-by-nc-4.0",
                 "python": sys.version.split()[0],
             }
-            yield cls(engine, module, unsupported, metadata, settings.max_length)
+            model = cls(engine, module, unsupported, metadata, settings.max_length)
+            with contextlib.redirect_stdout(sys.stderr):
+                model.warmup()
+            yield model
+
+    def warmup(self) -> None:
+        """Compile representative serving paths before the caller can report readiness.
+
+        The kit's short color question leaves the longer prefill and shared-prefix
+        cache/tail kernels cold. Their first compilation can exceed the game
+        clients' deadlines. Exercise single questions and batches of two and three,
+        including the long single-question path above 4096 tokens. Use the actual
+        prompt builder to keep every request within the configured context limit.
+        This covers common serving shapes, not every possible dynamic batch.
+        """
+        for count in (1, 2, 3):
+            questions = {
+                f"action{index}": {
+                    "type": "choice",
+                    "instructions": "Choose the action supported by the state.",
+                    "criteria": {f"option{option}": f"Action {option}" for option in range(options)},
+                }
+                for index, options in enumerate((9, 3, 2)[:count])
+            }
+            for target in sorted({min(self._max_length, size) for size in (512, 2048, 4608)}):
+                if max(self._measure("", questions).values()) > target:
+                    continue  # A deliberately tiny context may not fit this question batch.
+                low, high = 0, target
+                while low < high:
+                    middle = (low + high + 1) // 2
+                    if max(self._measure("The current action is safe. " * middle, questions).values()) <= target:
+                        low = middle
+                    else:
+                        high = middle - 1
+                self.predict({"essential": ["The current action is safe. " * low]}, questions)
 
     def _measure(self, state: str, questions: Mapping[str, Any]) -> dict[str, int]:
         """Each question's prompt length, from the engine's own prompt builder."""
