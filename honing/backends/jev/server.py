@@ -22,6 +22,7 @@ Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the
 - Kev: ``--family kev --kev-source <checkout>``
 - NanoJev: ``--family nanojev --nanojev-source <checkout>``
 - StartLux-Decision: ``--family startlux --startlux-source <checkout> --model startlux-4b``
+- Nimble-v4-max: ``--family nimble --nimble-source <source snapshot> --nimble-kit <checkout>``
 - djev: ``--family djev --djev-url http://127.0.0.1:8011 --model dgemma`` (no local pins/GPU)
 """
 
@@ -175,7 +176,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve a local decision model or bridge a remote djev server.")
-    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "startlux", "djev"), default="laya")
+    parser.add_argument("--family", choices=("laya", "kev", "nanojev", "startlux", "nimble", "djev"), default="laya")
     parser.add_argument("--pins", type=Path, help="local families: pins.json naming source and model revisions")
     parser.add_argument(
         "--model",
@@ -188,6 +189,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--startlux-source", type=Path, help="startlux: StartLux-Decision checkout at the pinned revision"
     )
+    parser.add_argument(
+        "--nimble-source", type=Path, help="nimble: snapshot of the pinned source dataset, holding code/nimble"
+    )
+    parser.add_argument("--nimble-kit", type=Path, help="nimble: Decision Index kit checkout at the pinned revision")
     parser.add_argument("--djev-url", help="djev: upstream base URL, optionally ending in /v1")
     parser.add_argument("--djev-timeout", type=float, default=60.0)
     parser.add_argument("--djev-samples", type=int, default=1)
@@ -196,7 +201,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
     parser.add_argument(
-        "--max-len", type=int, help="laya, nanojev (default 2048), startlux (default 8192): input token limit"
+        "--max-len",
+        type=int,
+        help="laya, nanojev (default 2048), startlux, nimble (default 8192): input token limit",
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
@@ -243,6 +250,23 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
                 pins_path=args.pins,
                 source_dir=args.startlux_source,
                 model=args.model or "startlux-4b",
+                gpu=args.gpu,
+                max_length=args.max_len or 8192,
+            )
+        )
+    if args.family == "nimble":
+        from honing.backends.jev.nimble import NimbleDecisionModel, NimbleSettings
+
+        if args.nimble_source is None or args.nimble_kit is None:
+            parser.error("--family nimble needs --nimble-source and --nimble-kit")
+        if args.checkpoint_manifest is not None:
+            parser.error("nimble serves the pinned release only; it has no trained checkpoints yet")
+        return NimbleDecisionModel.load(
+            NimbleSettings(
+                pins_path=args.pins,
+                source_dir=args.nimble_source,
+                kit_dir=args.nimble_kit,
+                model=args.model or "nimble-v4-max",
                 gpu=args.gpu,
                 max_length=args.max_len or 8192,
             )

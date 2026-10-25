@@ -167,6 +167,9 @@ None of these are in the repository. Each is pinned or supplied separately.
 | NanoJev weights (`nanojev`, full Qwen3-0.6B) | Hugging Face, revision in `pins.json` (`nanojevModels`) | the card names no separate weight license: its source is MIT and the Qwen3-0.6B base keeps Apache-2.0 |
 | StartLux-Decision source | cloned at the commit in `pins.json` (`startluxSource`) | Apache-2.0 |
 | StartLux-Decision weights (`startlux-0.8b`, `startlux-4b`, `startlux-27b`) | Hugging Face, revisions in `pins.json` (`startluxModels`) | CC BY-NC 4.0: non-commercial use only, and commercial use needs a license from StartLux Labs; the tokenizer files they keep from Qwen3.5 stay Apache-2.0 |
+| Nimble-v4-max inference code | the Hugging Face dataset `bespokelabs/nimble-v4-max-decision-index`, revision and per-file SHA-256 in `pins.json` (`nimbleSource`) | CC BY-NC 4.0 |
+| Decision Index kit | cloned at the commit in `pins.json` (`decisionIndexKit`) | MIT |
+| Nimble-v4-max weights (`nimble-v4-max`) and its Qwen3.8-27B tokenizer | Hugging Face, revisions in `pins.json` (`nimbleModels`) | weights CC BY-NC 4.0: non-commercial use only; the Qwen3.8-27B base is Apache-2.0 |
 
 Supalosa's own dependencies currently report 11 advisories from `npm audit`, one of them critical. They run only at setup and inside the match process.
 
@@ -305,6 +308,28 @@ The server, the stdio worker (`DECISION_FAMILY=startlux`, `STARTLUX_MODEL`, `STA
 Each weight shard is checked against the SHA-256 the model repository published for it. The state is trimmed by whole entries until every question's prompt fits 8,192 tokens (`--max-len`, up to 65,536). StartLux's shared-prefix path is turned off: at the pinned commit it reads the option letters in bf16 when two or more questions share 4,096 or more prompt tokens, so its probabilities do not sum to one. Those requests run as one eager batch instead, which on the 27B takes 2 to 3 seconds for three questions of 6,500 to 9,500 tokens.
 
 The first request at each new prompt length compiles StartLux's linear-attention kernels. Triton caches them on disk, but on a new machine a 27B server's first requests can take several seconds, and the tank duel's 5-second limit failed once for that reason. Warm a fresh server with a few requests of the lengths it will see before a timed match. `parity/startlux_serving.py` compares serving with StartLux's own server.
+
+### Using Nimble-v4-max
+
+[Nimble-v4-max](https://huggingface.co/bespokelabs/Nimble-v4-max) is a fifth family: Bespoke Labs' 27B fine-tune of Qwen3.8-27B. One prompt holds the whole request, the state and every question, read both ways in the full-attention layers; each question's short tail runs on a copy of the request's cache, and each option is one token whose logit is read at the answer position. `honing.backends.jev.nimble` runs Bespoke's own `NimbleEngine` from the inference code its model card points to, with the settings of its published Decision Index run (shared prefix on, at most 48 question tails per copied cache). The engine subclasses the Decision Index kit's `Engine`, so the kit is pinned as well. The environment follows that run (torch 2.8, transformers 5.17.0, flash-linear-attention 0.5.2 and causal-conv1d 1.7.0, built with `nvcc`):
+
+```bash
+HF_HOME=/disk/with/room scripts/setup-nimble.sh   # about 55 GB; prints the exports
+"$NIMBLE_PYTHON" -m honing.backends.jev.server --family nimble --pins pins.json --nimble-source "$NIMBLE_SOURCE_DIR" --nimble-kit "$NIMBLE_KIT_DIR" --gpu 0 --port 8805
+npm run match -- --family=nimble --decision-server=http://127.0.0.1:8805 --seat=red --seed=1 --out=runs/nimble-seed1-red
+```
+
+The server, the stdio worker (`DECISION_FAMILY=nimble`, `NIMBLE_MODEL`, `NIMBLE_SOURCE_DIR`, `NIMBLE_KIT_DIR`, `NIMBLE_MAX_LEN`, started with `NIMBLE_PYTHON`), match, duel, audit and `NimbleQuestionCheck` (`NIMBLE_LIMITS`) work as they do for the other families. There is no Nimble trainer, so `--checkpoint-manifest` is refused. On an H100 in bf16 the server held 53.2 GB, so the model needs one GPU with at least 80 GB.
+
+The inference code comes from a dataset snapshot rather than a git checkout, so each of its Python files must match the SHA-256 pinned for it, and the kit must be the pinned, unmodified checkout. Each weight shard is checked against the SHA-256 the hub published for it and against the model's own `weights_sha256.json`, and the checkpoint's `schema_config.json` must name the pinned base tokenizer. The state is trimmed by whole entries until every question's prompt fits 8,192 tokens (`--max-len`, up to the model's 32,768). The engine answers a score question as a choice over the level indices; Honing returns it as a score with the expected level and the levels' text, as the djev bridge does. `parity/nimble_serving.py` compares serving with the engine called directly.
+
+Nimble completes representative prefill and shared-prefix/tail warmup before the server or stdio worker reports ready. The warmup uses one, two and three questions at prompt budgets of 512, 2,048 and 4,608 tokens, capped by `--max-len`. Startup can take longer with an empty compiler cache. Keep the Triton cache on persistent storage. Other input shapes can still need compilation, so measure the workloads you deploy.
+
+To check a cold start on an allocated, unused GPU, run this from the repository root in the Nimble environment with Node 22 on `PATH`. The output directory must not exist. It uses new compiler caches, waits for the production server to report ready, then runs all three tank modes twice with the normal 5-second client and 10-second bridge limits:
+
+```bash
+"$NIMBLE_PYTHON" scripts/e2e/nimble_cold_start.py --gpu 0 --nimble-source "$NIMBLE_SOURCE_DIR" --nimble-kit "$NIMBLE_KIT_DIR" --out runs/nimble-cold-start
+```
 
 ### End to end
 

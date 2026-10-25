@@ -167,8 +167,9 @@ HONING_URL=http://127.0.0.1:8080 MODEL_LABEL=NanoJev npm start
 This enables Model vs model and You vs model in both editions. The game
 uses `GET /v1/health` and `POST /v1/decide`; the loaded backend must support
 choice questions and return complete native probability distributions. The
-bridge accepts the existing Laya, Kev, NanoJev and StartLux-Decision decision contract
-(see [Using StartLux-Decision](../ra2/README.md#using-startlux-decision) for the server). Additional
+bridge accepts the existing Laya, Kev, NanoJev, StartLux-Decision and Nimble-v4-max decision contract
+(see [Using StartLux-Decision](../ra2/README.md#using-startlux-decision) and
+[Using Nimble-v4-max](../ra2/README.md#using-nimble-v4-max) for the servers). Additional
 families, including a djev/DiffusionGemma backend, can use the same interface
 when available in the configured Honing server. The game server does not load weights. The optional `scripts/serve-honing.py` launcher serves the pinned Laya / Laya Typed / Kev 0.8B / Kev 4B models using native Honing implementations; see [Serving pinned models](#serving-pinned-models).
 

@@ -148,6 +148,8 @@ The planes behind the modules, the contracts they meet through, the rules every
 move passes before it touches weights, and the implementation steps are in
 [`system-design/`](system-design/README.md).
 
+The local decision server also supports [Nimble-v4-max](integrations/ra2/README.md#using-nimble-v4-max), with pinned source and checkpoint verification.
+
 ## Development
 
 ```bash
