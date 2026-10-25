@@ -14,10 +14,13 @@ recorded. Two kinds of failure are told apart:
 - the agent's work failed: the workspace holds a file that cannot be copied safely
   (a FIFO, socket, or device) or that the grader may not read, or the grader exits
   nonzero, prints something that is not a grade,
-  reports a score outside ``[0, 1]``, times out, or cannot be started. That is a score
-  of 0 with the reason as feedback, so one bad episode never aborts a gate.
-- the infrastructure failed: the outcome names no workspace, or the sandbox cannot be
-  opened. That raises, because scoring it 0 would charge a broken runner to the harness.
+  reports a score outside ``[0, 1]``, or times out, or the command cannot start
+  because of a file in the workspace. That is a score of 0 with the reason as
+  feedback, so one bad episode never aborts a gate.
+- the infrastructure failed: the outcome names no workspace, the sandbox cannot be
+  opened, or the grader command cannot start for any other reason (``python3`` is
+  not on ``PATH``, say). That raises, because scoring it 0 would charge a broken
+  runner or machine to the harness.
 """
 
 from __future__ import annotations
@@ -49,6 +52,21 @@ WORKSPACE_ENV = "HONING_WORKSPACE"
 
 # The exit code a shell reports for a command it cannot find.
 _NOT_RUNNABLE = 127
+# The errors ``exec`` reports about the file it was asked to run. Only these can be
+# the agent's doing; any other error (out of file descriptors, a failed ``fork``) is
+# the machine's, even when the file is in the workspace.
+_EXEC_FILE_ERRNOS = frozenset(
+    {
+        errno.ENOENT,
+        errno.ENOTDIR,
+        errno.EACCES,
+        errno.ENOEXEC,
+        errno.ELOOP,
+        errno.ENAMETOOLONG,
+        errno.EPERM,
+        errno.ETXTBSY,
+    }
+)
 # How long to keep reading output after the command's process group is gone. Only
 # a process that left the group can still hold the pipes open that long.
 _DRAIN_SECONDS = 5.0
@@ -60,6 +78,15 @@ class UngradableWorkspaceError(HoningError):
     """The agent left its workspace in a state the grader cannot work in; it scores 0, it does not abort.
 
     A sandbox raises it from opening, and the message becomes the feedback.
+    """
+
+
+class GraderStartError(HoningError):
+    """The grader command could not start, and nothing in the agent's workspace caused it.
+
+    It is raised rather than scored 0: a missing interpreter or a grader script that
+    is not executable is a fault in the suite or the machine, and would otherwise
+    score every candidate 0 alike.
     """
 
 
@@ -106,7 +133,14 @@ class CommandSandbox(Protocol):
         max_output_bytes: int,
         cwd: str | None = None,
     ) -> CommandResult:
-        """Run ``argv`` in ``cwd``, or in the workspace. A command that cannot start exits 127; a timeout kills it."""
+        """Run ``argv`` in ``cwd``, or in the workspace. A timeout kills it.
+
+        A command that cannot start raises :class:`GraderStartError`, unless the
+        file that failed to start is in the workspace and ``exec`` refused that
+        file (an errno in ``_EXEC_FILE_ERRNOS``), in which case it exits 127: the
+        agent can delete or break what is there, and must not abort the gate. Any
+        other error, such as running out of file descriptors, raises even then.
+        """
         ...
 
 
@@ -141,6 +175,56 @@ async def _tail(stream: asyncio.StreamReader, limit: int, kept: bytearray) -> No
         kept += chunk
         if len(kept) > limit:
             del kept[:-limit]
+
+
+def _passes_through(path: str, directory: Path) -> bool:
+    """Whether looking ``path`` up walks through ``directory``, judged by how it is spelled.
+
+    Links are not followed: the agent can make any part of a path inside its
+    workspace a link to a missing place outside it, and the failure is still its
+    doing. Only ``directory`` itself is resolved, since it is the sandbox's own,
+    so ``/var/...`` and ``/private/var/...`` on macOS both match it.
+    """
+    forms = {os.path.normpath(directory), os.path.realpath(directory)}
+    prefix = ""
+    for part in Path(path).parts:
+        prefix = os.path.join(prefix, part)
+        if os.path.normpath(prefix) in forms:
+            return True
+    return False
+
+
+def _broken_parent_in_workspace(path: str, workspace: Path) -> bool:
+    """Find the first parent that cannot be traversed, without blaming an ordinary missing PATH directory."""
+    prefix = ""
+    for part in Path(path).parts[:-1]:
+        prefix = os.path.join(prefix, part)
+        try:
+            mode = os.stat(prefix).st_mode
+        except OSError as error:
+            broken = error.errno in _EXEC_FILE_ERRNOS and (error.errno != errno.ENOENT or os.path.islink(prefix))
+            return broken and _passes_through(prefix, workspace)
+        if not stat.S_ISDIR(mode):
+            return _passes_through(prefix, workspace)
+    return False
+
+
+def _started_from(workspace: Path, argv0: str, cwd: str, search_path: str) -> bool:
+    """Whether the executable that ``argv0`` names, looked up as ``exec`` would, is the agent's to break.
+
+    A name with a slash is a path from ``cwd``. A bare name is looked up on
+    ``search_path``, whose relative entries are also from ``cwd``; it is the
+    agent's where the agent left a file under that name or broke a parent directory.
+    """
+    if os.sep in argv0:
+        return _passes_through(os.path.join(cwd, argv0), workspace)
+    for entry in search_path.split(os.pathsep):
+        candidate = os.path.join(cwd, entry or os.curdir, argv0)
+        if os.path.lexists(candidate) and _passes_through(candidate, workspace):
+            return True
+        if _broken_parent_in_workspace(candidate, workspace):
+            return True
+    return False
 
 
 class LocalWorkspace:
@@ -191,10 +275,11 @@ class LocalWorkspace:
             WORKSPACE_ENV: str(self.workspace),
             **env,
         }
+        directory = str(self.workspace) if cwd is None else cwd
         try:
             process = await asyncio.create_subprocess_exec(
                 *argv,
-                cwd=self.workspace if cwd is None else cwd,
+                cwd=directory,
                 env=environment,
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
@@ -202,6 +287,10 @@ class LocalWorkspace:
                 start_new_session=True,
             )
         except OSError as error:
+            if error.errno not in _EXEC_FILE_ERRNOS or not _started_from(
+                self.workspace, argv[0], directory, environment["PATH"]
+            ):
+                raise GraderStartError(f"the grader command {argv[0]!r} cannot start: {error}") from error
             return CommandResult(exit_code=_NOT_RUNNABLE, stdout="", stderr=f"cannot run {argv[0]!r}: {error}")
         if process.stdout is None or process.stderr is None:
             raise ContractError("a grader command's stdout and stderr must be pipes")
