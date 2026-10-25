@@ -333,7 +333,6 @@ To check a cold start on an allocated, unused GPU, run this from the repository 
 
 ### End to end
 
-
 This is the whole loop on RA2 today: serve a model, play and grade tasks, gate a candidate, train, and duel.
 
 `scripts/e2e/ra2_campaign.py` runs the loop as one campaign from a JSON config that names every component by import path. The dry-run config needs no game, Node, or GPU:
