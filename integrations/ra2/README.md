@@ -2,7 +2,7 @@
 
 Decision models need training.
 
-https://github.com/user-attachments/assets/REPLACE-WITH-THE-UPLOADED-RA2-VIDEO
+https://github.com/user-attachments/assets/b092c09b-2bfc-461c-8721-ad8f8c7aaec4
 
 We gave NanoJev, an open-source decision model, a game of Red Alert 2 against the Supalosa bot.
 Early on it sold its own construction yard, and it lost at tick 140.

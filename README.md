@@ -8,7 +8,7 @@ infra it runs on is being built here.
 
 ### Red Alert 2
 
-https://github.com/user-attachments/assets/REPLACE-WITH-THE-UPLOADED-RA2-VIDEO
+https://github.com/user-attachments/assets/b092c09b-2bfc-461c-8721-ad8f8c7aaec4
 
 We gave [NanoJev](https://huggingface.co/C-Tianyu/NanoJev), an open decision
 model, a match of Red Alert 2 against the Supalosa bot. It sold its own
@@ -25,7 +25,7 @@ them.
 
 ### Tank Duel
 
-https://github.com/user-attachments/assets/REPLACE-WITH-THE-UPLOADED-TANK-DUEL-VIDEO
+https://github.com/user-attachments/assets/a8a13513-a4eb-450b-8a95-1ab5fbb60283
 
 Two tanks in a maze fire shells that bounce off the walls, and a tank's own
 shell can kill it. NanoJev drove all four versions in the video with the same
