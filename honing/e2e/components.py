@@ -1,6 +1,9 @@
 """Build a component named in a config by import path, and check what the config needs from the machine.
 
 A component entry is ``{"factory": "package.module:function", "args": {...}}``.
+Any value in a config may be ``{"ref": "dotted.path"}``, which
+:func:`resolve_references` replaces with the value at that path in the same
+config, so a setting several entries share (a model pin) is written once.
 The factory is called as ``function(context, **args)`` and must return an
 object satisfying the slot's protocol. ``context`` is whatever the caller
 passes: it carries paths, the components built so far, and a ``shared`` map
@@ -63,3 +66,30 @@ def missing_requirements(requires: Mapping[str, Sequence[str]]) -> list[str]:
     missing += [f"command {name}" for name in requires.get("commands", ()) if shutil.which(name) is None]
     missing += [f"path {path}" for path in requires.get("paths", ()) if not Path(os.path.expandvars(path)).exists()]
     return missing
+
+
+def resolve_references(config: Mapping[str, Any]) -> dict[str, Any]:
+    """The config with each ``{"ref": "a.b"}`` replaced by the value at ``a.b``; refuses an unknown path or a cycle."""
+
+    def lookup(path: str, seen: tuple[str, ...]) -> Any:
+        if path in seen:
+            raise ContractError(f"config references form a cycle: {' -> '.join((*seen, path))}")
+        value: Any = config
+        for key in path.split("."):
+            if not isinstance(value, Mapping) or key not in value:
+                raise ContractError(f"the config has no {path!r} for a reference to name")
+            value = value[key]
+        return resolve(value, (*seen, path))
+
+    def resolve(value: Any, seen: tuple[str, ...]) -> Any:
+        if isinstance(value, Mapping):
+            if set(value) == {"ref"} and isinstance(value["ref"], str):
+                return lookup(value["ref"], seen)
+            return {key: resolve(item, seen) for key, item in value.items()}
+        if isinstance(value, list):
+            return [resolve(item, seen) for item in value]
+        return value
+
+    resolved = resolve(config, ())
+    assert isinstance(resolved, dict)
+    return resolved

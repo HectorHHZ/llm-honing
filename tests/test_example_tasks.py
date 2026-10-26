@@ -136,11 +136,10 @@ def test_grade_py_run_without_a_workspace_exits_before_deleting_its_cases(
     assert result.returncode != 0
     assert result.stdout == ""
     assert "HONING_WORKSPACE is not set" in result.stderr
-    assert sorted(path.name for path in (tmp_path / "grader" / "cases").iterdir()) == [
-        "clamp.json",
-        "mean.json",
-        "reverse_words.json",
-    ]
+    # Every case the suite holds is still there, however many manifests share the grader.
+    expected = sorted(path.name for path in (SUITE / "grader" / "cases").iterdir())
+    assert "clamp.json" in expected
+    assert sorted(path.name for path in (tmp_path / "grader" / "cases").iterdir()) == expected
 
 
 # The agent writes the workspace, so it must not be able to change how its work is graded.

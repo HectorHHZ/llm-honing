@@ -11,20 +11,36 @@ Load it with `honing.harness.tasks.load_task_suite("integrations/python-bugfix/t
 ```text
 tasks/
   suite.jsonl            one line per task: prompt, workspace, grader command, split
+  gepa-live.jsonl        the 11 tasks the live GEPA run uses (scripts/e2e/gepa_live.py)
   <task_id>/workspace/   what the agent starts from: the function with its bug
   <task_id>/reference/   a correct fix, used only by tests/test_example_tasks.py
   grader/grade.py        runs each hidden case in a child process inside the workspace
   grader/cases/          the hidden cases, one file per task
+config/
+  gepa-live-seed/        the seed harness for the live GEPA run
 ```
 
-Paths in `suite.jsonl` are relative to `tasks/`, and the manifest loader refuses a path that
-leaves that directory, so the grader sits next to the tasks.
+Paths in `suite.jsonl` and `gepa-live.jsonl` are relative to `tasks/`, and the manifest
+loader refuses a path that leaves that directory, so the grader sits next to the tasks.
 
-| Task | Split |
-| --- | --- |
-| `clamp` | train |
-| `mean` | val |
-| `reverse_words` | heldout |
+| Task | Manifest | Split |
+| --- | --- | --- |
+| `clamp` | `suite.jsonl` | train |
+| `mean` | `suite.jsonl` | val |
+| `reverse_words` | `suite.jsonl` | heldout |
+| `word_count` | `gepa-live.jsonl` | train |
+| `max_index` | `gepa-live.jsonl` | train |
+| `in_range` | `gepa-live.jsonl` | train |
+| `average` | `gepa-live.jsonl` | train |
+| `find_user` | `gepa-live.jsonl` | train |
+| `count_between` | `gepa-live.jsonl` | train |
+| `last_word` | `gepa-live.jsonl` | val |
+| `clamp_index` | `gepa-live.jsonl` | val |
+| `median` | `gepa-live.jsonl` | val |
+| `count_tag` | `gepa-live.jsonl` | val |
+| `overlap` | `gepa-live.jsonl` | val |
+
+`gepa-live.jsonl` is a separate manifest so the live run keeps its own 6 train / 5 val split.
 
 ## How grading works
 
