@@ -18,12 +18,12 @@ match-up. Laya, another family trained the same way, fields Kirov airships and
 bombs the enemy base. The game and the opponent are the same in both halves of
 the video; the weights are what changed.
 
-[`integrations/ra2/`](integrations/ra2/README.md) has the headless engine, the
-match runner that records every request and command, four model families
-behind one decision server, and the SFT, GRPO, and GEPA steps that trained
-them.
+[`integrations/ra2/`](integrations/ra2/README.md) has the headless engine adapter, the
+match runner that records every request and command, supported model families
+behind one decision server, and the SFT, GRPO, and GEPA integration. The video shows SFT; the RA2
+controller does not yet sample actions for GRPO.
 
-### Tank Duel
+### Tank War
 
 https://github.com/user-attachments/assets/9dca9289-bb7d-4b51-bd0b-8b896fabd42d
 
@@ -33,13 +33,14 @@ weights. Version 1 spun in circles. Version 2 found the fire button and shot
 itself. Version 3 moves, aims, and fights. Version 4 dodges incoming shells and
 wins. What changed between versions is the controller around the model: what
 it is told about the game, which moves it may pick from, and the checks that
-run its choice. Each version had to beat the one before it in matches to
-replace it.
+run its choice. The selected clips show controller changes; they are not
+a release-gate result or a measured win-rate comparison.
 
-Six models then fight in one arena, and you can take a seat against any of
-them from the keyboard, with no GPU on your side.
+The video then compares several models in one arena. In the local game, you
+can take a seat against a configured model from the keyboard. Inference runs
+on the model server; the browser needs no GPU.
 
-[`integrations/tank-duel/`](integrations/tank-duel/README.md) has the browser
+[`integrations/tank-war/`](integrations/tank-war/README.md) has the browser
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
@@ -47,16 +48,21 @@ version 4.
 
 Both games talk to a model through the same two HTTP routes the decision server
 exposes, `GET /v1/health` and `POST /v1/decide`. Serve a model behind them and
-it can play. [Connect a model](integrations/tank-duel/README.md#connect-a-model)
-in the Tank Duel README shows the request a seat sends, and
+it can play. [Connect a model](integrations/tank-war/README.md#connect-a-model)
+in the Tank War README shows the request a seat sends, and
 [Using a decision server](integrations/ra2/README.md#using-a-decision-server)
 in the RA2 README runs a match against one.
+
+Try the hosted human-versus-model game at **[play.honinglab.com](https://play.honinglab.com/play/)**.
+We plan to open **Tank War Arena** for bring-your-own-model matches. Public
+model submission is not open yet. The current hosted game uses a configured
+opponent and an admission queue; local model integration is available now.
 
 ## Decision models supported
 
 A decision model takes a state and a typed question with its options, and
 returns a probability for every option in one forward pass, with no text
-generated. Five families answer that request in Honing today, all behind one
+generated. Six families answer that request in Honing today, all behind one
 HTTP decision server
 ([`honing/backends/jev/server.py`](honing/backends/jev/server.py)), so a game
 or a trainer does not care which one it is talking to.
@@ -68,6 +74,7 @@ or a trainer does not care which one it is talking to.
 | [Kev](https://github.com/jaredpalmer/kev) | Qwen3.5-0.8B-Base and Qwen3.5-4B-Base, with a LoRA adapter and a pointer head | `kev-0.8b`, `kev-4b` | SFT, GRPO |
 | [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision) | Qwen3.5, dense; the answer is read from the next-token logits of the option letters | `startlux-0.8b`, `startlux-4b`, `startlux-27b` | serving only |
 | DiffusionGemma through [djev](integrations/djev/README.md) | `google/diffusiongemma-26B-A4B-it` on a remote djev server | the operator's deployment | serving only |
+| [Nimble-v4-max](integrations/ra2/README.md#using-nimble-v4-max) | Bespoke decision model | `nimble-v4-max` | serving only |
 
 What runs each part today, what each method edits, and what it learns from:
 
@@ -76,7 +83,7 @@ What runs each part today, what each method edits, and what it learns from:
 | Training | SFT, in the local trainers for Laya, Kev, and NanoJev, and in [Slime](https://github.com/THUDM/slime) for language models | the weights | a teacher's pick at each decision point |
 | | GRPO, in the same trainers | the weights | the result of the model's own sampled matches |
 | | On-policy distillation, in Slime for language models | the weights | a teacher's log-probabilities on the student's own samples |
-| Inference | The decision server: one request format for the five families above | | |
+| Inference | The decision server: one request format for the six families above | | |
 | | [djev](integrations/djev/README.md): DiffusionGemma on a remote server | | |
 | | SGLang: any Hugging Face checkpoint, in review ([#109](https://github.com/HectorHHZ/llm-honing/pull/109)) | | |
 | Harness self-evolve | GEPA, with its proposer reaching any chat model through litellm | the question text, instructions, and skills | the match result and the grader's notes |
@@ -88,9 +95,10 @@ What runs each part today, what each method edits, and what it learns from:
 A released model plays, and the records of its play feed the training and
 harness changes in the table above.
 
-Every change is one candidate. The candidate plays the validation tasks next to
-the current release and replaces it only if it wins more than it loses. An
-accepted candidate becomes a versioned release that records the weights and the
+Every change is one candidate. Training candidates must win more paired
+validation comparisons than they lose under the default selector. GEPA uses
+its own selector: a strictly higher validation mean than its served candidate.
+An accepted candidate becomes a versioned release that records the weights and the
 harness together, so a rollback restores both. The loop then starts again from
 the new release.
 

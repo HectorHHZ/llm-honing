@@ -33,7 +33,7 @@ class TankEpisodeRunner:
     ``command`` starts the match process and defaults to the integration's
     ``node scripts/match.mjs``; tests pass a stand-in. ``concurrency`` caps how
     many matches run at once, since a gate starts every task together. With
-    ``sample`` set, every executed choice is drawn from the model's
+    ``sample`` set, every policy choice is drawn from the model's
     probabilities under a fresh seed, which the run's manifest records; that is
     how :class:`~honing.backends.tank.rollouts.TankRolloutProvider` plays. Each
     match gets a fresh directory under ``runs_dir``, which the outcome points
