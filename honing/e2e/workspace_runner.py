@@ -49,7 +49,9 @@ class WorkspaceEpisodeRunner:
     ``forward_environment`` (where set), then ``environment``, then the
     ``HONING_`` variables: not the runner's whole environment, which may hold
     keys the agent has no use for. ``seed_workspace`` gives a task's starting
-    files (a directory copied in before the harness files), or ``None``.
+    files (a directory copied in before the harness files), or ``None``. A
+    symbolic link in it is copied as a link, and must be relative and resolve
+    inside that directory.
     """
 
     def __init__(
@@ -89,9 +91,13 @@ class WorkspaceEpisodeRunner:
             workspace.mkdir(parents=True)
         else:
             workspace.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source, workspace)
+            _refuse_links_that_leave(task, source)
+            # A link stays a link: following it would copy in whatever it points at, hidden cases included.
+            shutil.copytree(source, workspace, symlinks=True)
             clashes = sorted(
-                name for name in (*RUNNER_FILES, *(path for path, _ in spec.files)) if (workspace / name).exists()
+                name
+                for name in (*RUNNER_FILES, *(path for path, _ in spec.files))
+                if os.path.lexists(workspace / name)
             )
             if clashes:
                 raise ContractError(
@@ -167,3 +173,22 @@ class WorkspaceDeliveryProbe:
 def workspace_probe(context: object) -> WorkspaceDeliveryProbe:
     """Factory for a config's ``conformance.probe`` entry."""
     return WorkspaceDeliveryProbe()
+
+
+def _refuse_links_that_leave(task: Task, source: Path) -> None:
+    """Refuse a link the copy would keep that points outside the task's starting files.
+
+    The copied link would resolve from the agent's workspace, so an absolute one, or one
+    that climbs out, would let the agent read or write files outside its workspace.
+    """
+    root = source.resolve()
+    for directory, dirnames, filenames in os.walk(source):
+        for name in (*dirnames, *filenames):
+            path = Path(directory) / name
+            if not path.is_symlink():
+                continue
+            if os.path.isabs(os.readlink(path)) or not path.resolve().is_relative_to(root):
+                raise ContractError(
+                    f"task {task.task_id!r}'s starting files hold a link that is absolute or leaves them: "
+                    f"{path.relative_to(source).as_posix()} -> {os.readlink(path)}"
+                )

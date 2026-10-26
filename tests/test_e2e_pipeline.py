@@ -483,6 +483,54 @@ def test_a_tasks_starting_files_are_copied_in_under_the_harness(tmp_path: Path) 
 
 
 @pytest.mark.unit
+def test_a_link_inside_the_starting_files_is_copied_as_a_link(tmp_path: Path) -> None:
+    context, snapshot = _setup(tmp_path)
+    start = tmp_path / "start"
+    (start / "pkg").mkdir(parents=True)
+    (start / "buggy.py").write_text("x = 1\n")
+    (start / "alias.py").symlink_to("buggy.py")
+    (start / "pkg" / "up.py").symlink_to("../buggy.py")
+    runner = _python_agent(tmp_path, context, "pass", seed_workspace=lambda task: start)
+
+    seeded = Path(str(asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot))).workspace_location))
+
+    assert (seeded / "alias.py").is_symlink()
+    assert os.readlink(seeded / "alias.py") == "buggy.py"
+    assert (seeded / "pkg" / "up.py").is_symlink()
+    assert (seeded / "pkg" / "up.py").resolve() == (seeded / "buggy.py").resolve()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("kind", ["absolute", "climbs_out"])
+def test_a_link_that_is_absolute_or_leaves_the_starting_files_is_refused(tmp_path: Path, kind: str) -> None:
+    context, snapshot = _setup(tmp_path)
+    start = tmp_path / "start"
+    (start / "pkg").mkdir(parents=True)
+    (start / "buggy.py").write_text("x = 1\n")
+    (tmp_path / "secret.json").write_text("{}")
+    # The absolute link points inside the starting files, so only its being absolute refuses it.
+    target = str((start / "buggy.py").resolve()) if kind == "absolute" else "../../secret.json"
+    (start / "pkg" / "link.py").symlink_to(target)
+    runner = _python_agent(tmp_path, context, "pass", seed_workspace=lambda task: start)
+
+    with pytest.raises(ContractError, match=r"link that is absolute or leaves them: pkg/link\.py ->"):
+        asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
+
+
+@pytest.mark.unit
+def test_a_dangling_link_that_clashes_with_a_runner_file_is_refused(tmp_path: Path) -> None:
+    context, snapshot = _setup(tmp_path)
+    start = tmp_path / "start"
+    start.mkdir()
+    # Nothing exists behind the link, but the runner would still write task.json through it.
+    (start / "task.json").symlink_to("missing.json")
+    runner = _python_agent(tmp_path, context, "pass", seed_workspace=lambda task: start)
+
+    with pytest.raises(ContractError, match=r"starting files use names .*task\.json"):
+        asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("clash", ["task.json", "result.json", "harness"])
 def test_starting_files_that_clash_with_runner_or_harness_files_are_refused(tmp_path: Path, clash: str) -> None:
     context, snapshot = _setup(tmp_path)
