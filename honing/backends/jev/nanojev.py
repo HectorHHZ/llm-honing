@@ -21,7 +21,9 @@ and an overrun is refused with the wording ``RA2Grader`` scores as 0.
 
 ``NanoJevSettings.inference`` can instead score a request's candidate paths as
 one token tree (``honing.backends.jev.nanojev_tree``): the same model, inputs
-and answer checks, with the shared prefixes computed once.
+and answer checks, with the shared prefixes computed once. That model
+(:class:`NanoJevTreeDecisionModel`) also answers several requests in one forward
+and splits a call into CPU and GPU work for the decision server.
 """
 
 from __future__ import annotations
@@ -35,8 +37,9 @@ import math
 import os
 import subprocess
 import sys
+import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -44,7 +47,13 @@ from typing import Any
 
 from honing.backends.jev.kev import STATE_OVERRUN
 from honing.backends.jev.laya import gpu_lock
-from honing.backends.jev.nanojev_tree import INFERENCE_MODES, TreeScorer
+from honing.backends.jev.nanojev_tree import (
+    INFERENCE_MODES,
+    PrefetchedTokenizer,
+    TreeCall,
+    TreeScorer,
+    nanojev_segments,
+)
 from honing.backends.jev.token_budget import SECTIONS
 from honing.core import ArchitectureSpec, CheckpointRef, LayerShape, ModelSnapshot
 
@@ -214,10 +223,21 @@ def payload(state: str, questions: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def measure(
-    prepare_examples: Callable[..., list[dict[str, Any]]], tokenizer: Any, state: str, questions: Mapping[str, Any]
+    prepare_examples: Callable[..., list[dict[str, Any]]],
+    tokenizer: Any,
+    state: str,
+    questions: Mapping[str, Any],
+    keep: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Each question's candidate paths as NanoJev encodes them, without a length limit: a tokenizer-only measure."""
+    """Each question's candidate paths as NanoJev encodes them, without a length limit: a tokenizer-only measure.
+
+    ``keep``, when given, holds only this state's examples afterwards; ``prepare_examples`` checks the length
+    limit and nothing else, so once every path fits they are the examples the model scores.
+    """
     examples = prepare_examples(payload(state, questions), tokenizer, 2**30)
+    if keep is not None:
+        keep.clear()
+        keep[state] = examples
     if len(examples) != len(questions) or {e["qid"] for e in examples} != set(questions):
         raise ValueError("NanoJev encoding changed the question set")
     tokens = len(tokenizer.encode(state, add_special_tokens=False))
@@ -342,7 +362,10 @@ class NanoJevDecisionModel:
                 "inference": settings.inference,
                 "python": sys.version.split()[0],
             }
-            yield cls(predictor, upstream.prepare_examples, metadata, scorer)
+            if scorer is None:
+                yield cls(predictor, upstream.prepare_examples, metadata)
+            else:
+                yield NanoJevTreeDecisionModel(predictor, upstream, metadata, scorer)
 
     def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
         started = time.perf_counter()
@@ -358,6 +381,18 @@ class NanoJevDecisionModel:
                 response = self._predictor.predict(payload(state, questions), batch_questions=1, temperature=1.0)
             else:
                 response = self._scorer.predict(payload(state, questions))
+        return self._reply(questions, response, state, audit, trimmed, (time.perf_counter() - started) * 1000)
+
+    @staticmethod
+    def _reply(
+        questions: Mapping[str, Any],
+        response: Mapping[str, Any],
+        state: str,
+        audit: Mapping[str, Any],
+        trimmed: list[dict[str, str]],
+        latency_ms: float,
+    ) -> dict[str, object]:
+        """The server's answer from NanoJev's response, after checking it answered every question once."""
         states = response.get("states")
         if not isinstance(states, list) or len(states) != 1 or states[0].get("id") != "decision":
             raise ValueError("NanoJev returned a different state batch")
@@ -367,7 +402,7 @@ class NanoJevDecisionModel:
         if any(answer.get("type") != "choice" or "choice" not in answer for answer in raw.values()):
             raise ValueError("NanoJev returned an incomplete choice answer")
         answers = {
-            key: checked_answer(question["criteria"], raw[key].get("probabilities"), raw[key].get("choice"))  # type: ignore[index]
+            key: checked_answer(question["criteria"], raw[key].get("probabilities"), raw[key].get("choice"))
             for key, question in questions.items()
         }
         return {
@@ -376,8 +411,97 @@ class NanoJevDecisionModel:
             "trimmed": trimmed,
             "tokenAudit": audit,
             "modelResult": response,
-            "latencyMs": (time.perf_counter() - started) * 1000,
+            "latencyMs": latency_ms,
         }
+
+
+@dataclass
+class _Encoded:
+    """One request as the tree model encodes it: its packed state, token audit and trim record, NanoJev's
+    payload and validated states for it, and its examples."""
+
+    questions: Mapping[str, Any]
+    state: str
+    audit: dict[str, dict[str, Any]]
+    trimmed: list[dict[str, str]]
+    states: list[dict[str, Any]]
+    examples: list[dict[str, Any]]
+
+
+@dataclass
+class _Prepared:
+    """A call's CPU work: its requests, their merged forward, and how long the encoding took."""
+
+    requests: list[_Encoded]
+    call: TreeCall
+    prepare_ms: float
+
+
+class NanoJevTreeDecisionModel(NanoJevDecisionModel):
+    """NanoJev with a token-tree inference mode, as :meth:`NanoJevDecisionModel.load` returns it for one.
+
+    Besides ``predict`` it answers several requests in one forward
+    (``predict_many``), each as ``predict`` would, and splits a call in two:
+    ``prepare`` packs and encodes the requests and builds their tree, CPU work
+    that may run on any thread, and ``run`` scores them on the GPU. Each request
+    is encoded once, with one tokenizer call for every string NanoJev encodes,
+    and the packing's measurement gives the paths the model scores.
+    """
+
+    def __init__(
+        self, predictor: Any, upstream: ModuleType, metadata: Mapping[str, object], scorer: TreeScorer
+    ) -> None:
+        super().__init__(predictor, upstream.prepare_examples, metadata, scorer)
+        self._upstream, self._tree = upstream, scorer
+        self._encoding = threading.Lock()  # the tokenizer is shared; prepare may run on several request threads
+
+    def _encode(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> _Encoded:
+        tokenizer = self._predictor.tokenizer
+        kept: dict[str, list[dict[str, Any]]] = {}
+
+        def count(text: str) -> dict[str, dict[str, Any]]:
+            prefetched = PrefetchedTokenizer(tokenizer, [text, *nanojev_segments(text, questions)])
+            return measure(self._prepare_examples, prefetched, text, questions, kept)
+
+        state, audit, trimmed = pack_request(parts, questions, count, self._predictor.limit)
+        states = self._upstream.validate_request(payload(state, questions))
+        return _Encoded(questions, state, audit, trimmed, states, kept[state])
+
+    def prepare(self, requests: Sequence[tuple[Mapping[str, object], Mapping[str, object]]]) -> _Prepared:
+        started = time.perf_counter()
+        with self._encoding:
+            encoded = [self._encode(parts, questions) for parts, questions in requests]
+        call = self._tree.prepare([example for request in encoded for example in request.examples])
+        return _Prepared(encoded, call, (time.perf_counter() - started) * 1000)
+
+    def run(self, prepared: _Prepared) -> list[dict[str, object]]:
+        started = time.perf_counter()
+        with contextlib.redirect_stdout(sys.stderr):
+            probabilities = self._tree.score(prepared.call)
+        replies, offset = [], 0
+        for request in prepared.requests:
+            count = len(request.examples)
+            response = self._tree.answer(
+                request.states,
+                request.examples,
+                probabilities[offset : offset + count],
+                prepared.call,
+                len(prepared.requests),
+            )
+            offset += count
+            latency_ms = prepared.prepare_ms + (time.perf_counter() - started) * 1000
+            replies.append(
+                self._reply(request.questions, response, request.state, request.audit, request.trimmed, latency_ms)
+            )
+        return replies
+
+    def predict_many(
+        self, requests: Sequence[tuple[Mapping[str, object], Mapping[str, object]]]
+    ) -> list[dict[str, object]]:
+        return self.run(self.prepare(requests))
+
+    def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
+        return self.predict_many([(parts, questions)])[0]
 
 
 def nanojev_snapshot(checkpoint: Path) -> ModelSnapshot:

@@ -18,7 +18,18 @@ import pytest
 
 from honing.backends.jev import nanojev
 from honing.backends.jev.nanojev import NanoJevSettings, checked_answer
-from honing.backends.jev.nanojev_tree import TokenTree, TreeScorer, common_prefix_length, padded_size
+from honing.backends.jev.nanojev_tree import (
+    HEAD_ROWS,
+    HEAD_SLOTS,
+    GraphForward,
+    PrefetchedTokenizer,
+    TokenTree,
+    TreeScorer,
+    common_prefix_length,
+    nanojev_segments,
+    padded_size,
+    slot_layout,
+)
 from honing.backends.jev.server import main as server_main
 from tests.test_ra2_backend import REPO
 
@@ -188,7 +199,7 @@ def test_the_tree_scorer_answers_with_the_reference_s_fields() -> None:
         inference_calls=0, disable_native_triton=False,
     )  # fmt: skip
     scorer = TreeScorer.__new__(TreeScorer)
-    scorer._predictor, scorer._upstream, scorer.mode = predictor, stand_in_upstream(), "tree"
+    scorer._predictor, scorer._upstream, scorer.mode, scorer._graphs = predictor, stand_in_upstream(), "tree", None
     leaves = torch.randn(5, hidden)
     scorer._leaf_states = lambda tree: leaves
     payload = nanojev.payload("tick 90 credits 1200", QUESTIONS)
@@ -197,6 +208,7 @@ def test_the_tree_scorer_answers_with_the_reference_s_fields() -> None:
     execution = response["execution"]
     assert (execution["questions"], execution["candidate_paths"], execution["forward_passes"]) == (2, 5, 1)
     assert execution["prefix_sharing"] is True and execution["inference"] == "tree"
+    assert execution["requests_in_forward"] == 1 and execution["heads_in_graph"] is False
     answers = response["states"][0]["answers"]
     with torch.inference_mode():
         expected = model.scalar(model.norm(leaves)).squeeze(-1)
@@ -231,6 +243,208 @@ def test_the_tree_forward_gives_each_path_the_state_it_has_when_run_alone() -> N
             [backbone(input_ids=torch.tensor([p]), use_cache=False).last_hidden_state[0, -1] for p in paths]
         )
     torch.testing.assert_close(merged, alone, atol=1e-5, rtol=1e-4)
+
+
+# ---------------------------------------------------------------- the graph's heads and input (torch)
+
+
+def stand_in_heads(torch: Any, hidden: int, set_head: str = "attention") -> Any:
+    """A model with DecisionModel's head modules (NanoJev's scripts/train_toy_decisions.py), randomly set."""
+    torch.manual_seed(5)
+    model = torch.nn.Module()
+    model.norm, model.scalar, model.set_head = torch.nn.LayerNorm(hidden), torch.nn.Linear(hidden, 1), set_head
+    model.set_project = torch.nn.Linear(hidden + 1, 16)
+    model.set_attention = torch.nn.MultiheadAttention(16, 2, batch_first=True)
+    model.set_output = torch.nn.Linear(16, 1)
+    return model.eval()
+
+
+MIXED = [
+    {"type": "choice", "candidate_ids": ["a", "b", "c"], "leaf_tokens": [[1], [2], [3]]},
+    {"type": "score", "candidate_ids": ["0", "1", "2", "3"], "leaf_tokens": [[4], [5], [6], [7]]},
+    {"type": "boolean", "candidate_ids": ["false", "true"], "leaf_tokens": [[8]]},
+    {"type": "choice", "candidate_ids": ["x", "y"], "leaf_tokens": [[9], [10]]},
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("set_head", ["attention", "none"])
+def test_the_graph_s_heads_score_a_whole_call_as_head_logits_scores_each_question(set_head: str) -> None:
+    torch = pytest.importorskip("torch")
+    from honing.backends.jev.nanojev_tree import _row_probabilities, graph_heads, head_logits
+
+    model = stand_in_heads(torch, 8, set_head)
+    nodes = torch.randn(20, 8)  # every tree node's final state; the call's paths end on nodes 10..19
+    leaf = list(range(10, 20))
+    rows = slot_layout(MIXED)
+    assert rows is not None
+    shape = (HEAD_ROWS, HEAD_SLOTS)
+    slots, valid = torch.zeros(shape, dtype=torch.long), torch.zeros(shape, dtype=torch.bool)
+    for row, paths in enumerate(rows):
+        for slot, path in enumerate(paths):
+            slots[row, slot], valid[row, slot] = leaf[path], True
+    valid[len(rows) :, 0] = True
+    choice = torch.tensor([e["type"] == "choice" for e in MIXED] + [False] * (HEAD_ROWS - len(MIXED)))
+    with torch.inference_mode():
+        logits = graph_heads(model, nodes, slots, valid, choice)
+        probabilities = logits.softmax(-1)
+        offset = 0
+        for row, example in enumerate(MIXED):
+            count = len(example["leaf_tokens"])
+            alone = head_logits(model, [example], nodes[leaf[offset : offset + count]])[0]
+            offset += count
+            k = len(example["candidate_ids"])
+            want = alone[:k].softmax(-1).tolist()
+            assert _row_probabilities(example, logits[row], probabilities[row]) == pytest.approx(want, abs=1e-6)
+
+
+@pytest.mark.unit
+def test_the_graph_layout_has_room_for_sixteen_questions_of_sixteen_options() -> None:
+    assert slot_layout(MIXED) == [[0, 1, 2], [3, 4, 5, 6], [7], [8, 9]]
+    many = [{"leaf_tokens": [[1], [2]]}] * (HEAD_ROWS + 1)
+    wide = [{"leaf_tokens": [[i] for i in range(HEAD_SLOTS + 1)]}]
+    assert slot_layout(many) is None and slot_layout(wide) is None
+
+
+@pytest.mark.unit
+def test_the_packed_input_holds_the_padded_tree_then_the_heads_layout() -> None:
+    tree = TokenTree([[5, 6], [5, 7]])  # nodes: 5, 6, 7; leaves 1 and 2
+    values = GraphForward.pack(tree, [[0, 1]], [True], 4)
+    cells = HEAD_ROWS * HEAD_SLOTS
+    tokens, positions, end = values[:4], values[4:8], values[8:12]
+    slots, valid, choice = values[12 : 12 + cells], values[12 + cells : 12 + 2 * cells], values[12 + 2 * cells :]
+    assert (tokens, positions, end) == ([5, 6, 7, 0], [0, 1, 1, 0], tree.subtree_end(4))
+    assert slots[:2] == [1, 2] and valid[:2] == [1, 1] and sum(valid) == 2 + (HEAD_ROWS - 1)
+    assert choice == [1] + [0] * (HEAD_ROWS - 1)
+
+
+# ---------------------------------------------------------------- encoding
+
+
+class LetterTokenizer:
+    """One id per character, plus a count of encode calls, as a stand-in for a Hugging Face tokenizer."""
+
+    eos_token_id = 0
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def encode(self, text: str, add_special_tokens: bool = True) -> list[int]:
+        self.calls += 1
+        return ([1] if add_special_tokens else []) + [ord(c) % 89 + 2 for c in text]
+
+    def __call__(self, texts: list[str], add_special_tokens: bool = True) -> dict[str, list[list[int]]]:
+        self.calls += 1
+        return {"input_ids": [[ord(c) % 89 + 2 for c in text] for text in texts]}
+
+
+@pytest.mark.unit
+def test_a_prefetched_tokenizer_encodes_as_the_tokenizer_does_in_one_call() -> None:
+    tokenizer = LetterTokenizer()
+    prefetched = PrefetchedTokenizer(tokenizer, ["State:\nx\n", "Candidate:\na: b\nDecision:", "State:\nx\n"])
+    assert tokenizer.calls == 1
+    plain = LetterTokenizer()
+    for text in ["State:\nx\n", "Candidate:\na: b\nDecision:"]:
+        assert prefetched.encode(text, add_special_tokens=False) == plain.encode(text, add_special_tokens=False)
+    assert tokenizer.calls == 1
+    assert prefetched.encode("other", add_special_tokens=False) == plain.encode("other", add_special_tokens=False)
+    assert prefetched.encode("State:\nx\n") == plain.encode("State:\nx\n")  # with special tokens: the original
+    assert tokenizer.calls == 3 and prefetched.eos_token_id == 0
+
+
+@pytest.mark.unit
+def test_the_segments_are_the_strings_nanojev_encodes() -> None:
+    questions = {
+        "g1": {"type": "choice", "instructions": "Which?", "criteria": {"A": "wait", "B": "build"}},
+        "g2": {"type": "boolean", "instructions": "Safe?", "criteria": {"true": "no enemy near"}},
+        "g3": {"type": "score", "instructions": "How far?", "criteria": ["near", "far"]},
+    }
+    assert nanojev_segments("tick 9", questions) == [
+        "State:\ntick 9\n",
+        "Question type: choice\nQuestion:\nWhich?\n",
+        "Candidate:\nA: wait\nDecision:",
+        "Candidate:\nB: build\nDecision:",
+        "Question type: boolean\nQuestion:\nSafe?\nTrue criterion: no enemy near\n",
+        "Candidate:\nThe proposition is true.\nDecision:",
+        "Question type: score\nQuestion:\nHow far?\n",
+        "Candidate:\nnear\nDecision:",
+        "Candidate:\nfar\nDecision:",
+    ]
+
+
+# ---------------------------------------------------------------- the tree model (torch)
+
+
+def nanojev_like_upstream(calls: list[int]) -> types.ModuleType:
+    """NanoJev's prepare_examples for choice questions, reduced to its encoding, with a call count."""
+    module = stand_in_upstream()
+
+    def prepare_examples(payload: dict[str, Any], tokenizer: Any, max_length: int) -> list[dict[str, Any]]:
+        calls.append(1)
+        (row,) = payload["states"]
+        examples = []
+        for qid, q in row["questions"].items():
+            prefix = tokenizer.encode(f"State:\n{row['state']}\n", add_special_tokens=False) + tokenizer.encode(
+                f"Question type: choice\nQuestion:\n{q['instructions']}\n", add_special_tokens=False
+            )
+            leaves = [
+                prefix
+                + tokenizer.encode(f"Candidate:\n{k}: {v}\nDecision:", add_special_tokens=False)
+                + [tokenizer.eos_token_id]
+                for k, v in q["criteria"].items()
+            ]
+            if max(map(len, leaves)) > max_length:
+                raise ValueError("over max_length")
+            examples.append(
+                {"qid": qid, "state_id": row["id"], "type": "choice", "candidate_ids": list(q["criteria"]),
+                 "leaf_tokens": leaves}
+            )  # fmt: skip
+        return examples
+
+    module.__dict__["prepare_examples"] = prepare_examples
+    return module
+
+
+@pytest.mark.unit
+def test_the_tree_model_answers_several_requests_in_one_call_as_it_answers_each() -> None:
+    torch = pytest.importorskip("torch")
+    from honing.backends.jev.nanojev import NanoJevTreeDecisionModel
+
+    hidden = 8
+    model = stand_in_heads(torch, hidden)
+    calls: list[int] = []
+    upstream = nanojev_like_upstream(calls)
+    predictor = types.SimpleNamespace(
+        model=model, tokenizer=LetterTokenizer(), limit=512, device=torch.device("cpu"), precision="fp32",
+        root=Path("ckpt"), run_config={"model": "m", "resolved_model_revision": "r", "set_head": "attention"},
+        inference_calls=0, disable_native_triton=False,
+    )  # fmt: skip
+    scorer = TreeScorer.__new__(TreeScorer)
+    scorer._predictor, scorer._upstream, scorer.mode, scorer._graphs = predictor, upstream, "tree", None
+
+    def leaf_states(tree: TokenTree) -> Any:
+        # A leaf's state depends only on its path, as the tree forward guarantees.
+        paths = [[tree.tokens[n] for n in path_from_root(tree, leaf)] for leaf in tree.leaf]
+        return torch.stack([torch.sin(torch.arange(hidden) * (1 + sum(p) % 97) + len(p)) for p in paths])
+
+    scorer._leaf_states = leaf_states
+    tree_model = NanoJevTreeDecisionModel(predictor, upstream, {"family": "nanojev"}, scorer)
+    requests = [
+        ({"essential": ["tick 90 credits 1200"]}, QUESTIONS),
+        ({"essential": ["tick 90 credits 1200", "fire after x"]}, {"g1": QUESTIONS["g1"]}),
+        ({"essential": ["tick 90 credits 1200", "fire after y"]}, {"g1": QUESTIONS["g1"]}),
+    ]
+    together = tree_model.predict_many(requests)
+    assert len(calls) == 3  # one encoding per request: the packing's measurement is what the model scores
+    alone = [tree_model.predict(parts, questions) for parts, questions in requests]
+    for one, other in zip(together, alone, strict=True):
+        assert one["stateText"] == other["stateText"] and one["tokenAudit"] == other["tokenAudit"]
+        for qid, answer in one["answers"].items():
+            assert answer["choice"] == other["answers"][qid]["choice"]
+            assert answer["probabilities"] == pytest.approx(other["answers"][qid]["probabilities"], abs=1e-6)
+    executions = [r["modelResult"]["execution"] for r in together]
+    assert {e["requests_in_forward"] for e in executions} == {3}
+    assert len({e["token_tree_tokens"] for e in executions}) == 1
 
 
 # ---------------------------------------------------------------- against DecisionPredictor (GPU)

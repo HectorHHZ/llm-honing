@@ -149,6 +149,7 @@ export async function healthFor(backend, edition, signal) {
             family: m.family,
             revision: m.revision,
             context_limit: m.maxLen ?? null,
+            branches: Number.isInteger(h.maxBranches) ? h.maxBranches : 0,
             transport: "honing",
         },
     };
@@ -195,6 +196,7 @@ export async function decideWithHoning(
             model: health.metadata.model,
             agentIds: health.metadata.instances,
             contextLimit: health.metadata.context_limit,
+            branches: health.metadata.branches,
             ask: (request) => upstream(backend, "/v1/decide", request, signal),
         },
         body,
@@ -206,15 +208,22 @@ export async function decideWithHoning(
 // `notes` is shown to the model before the state, and `choose(head,
 // probabilities, options)` samples the native policy before safety projection.
 // Without a sampler, select the most probable admissible motion for play.
+// `branches` is the server's maxBranches. When it covers every admissible
+// motion, a plans-v1 decision sends the weapon question of each admissible
+// motion as a branch of the motion request, one request in all, and keeps the
+// selected motion's answer; the recorded calls are the two a decision of two
+// requests records.
 export async function decide(
-    { model, agentIds, contextLimit, ask },
+    { model, agentIds, contextLimit, ask, branches = 0 },
     body,
     { questions: text = DEFAULT_QUESTIONS, notes = "", choose } = {},
 ) {
     const calls = [],
         started = performance.now(),
         pick = choose ?? ((head, p, allowed) => argmax(p, allowed));
-    async function predict(state, questions, suffix) {
+    let asked = 0;
+    // The request for `questions` about `state`, as the model reads it.
+    function request(state, questions, suffix) {
         if (notes) state = notes + "\n\n" + state;
         // Laya's native option pointers allow 48 tokens each. Preserve every
         // forecast in the state and use concise pointers, never truncate it.
@@ -244,19 +253,23 @@ export async function decide(
                 },
             ]),
         );
-        const id = body.id + ":" + suffix,
-            reply = await ask({
-                id,
-                parts: {
-                    essential: [state],
-                    details: [],
-                    memory: [],
-                    logs: [],
-                },
-                questions,
-            });
+        return {
+            id: body.id + ":" + suffix,
+            parts: {
+                essential: [state],
+                details: [],
+                memory: [],
+                logs: [],
+            },
+            questions,
+        };
+    }
+    // The answers `reply` gives to `sent`, checked, and recorded as one call.
+    function accept(sent, reply) {
+        const state = sent.parts.essential[0],
+            questions = sent.questions;
         if (
-            reply?.id !== id ||
+            reply?.id !== sent.id ||
             reply.stateText !== state ||
             !Array.isArray(reply.trimmed) ||
             reply.trimmed.length ||
@@ -287,23 +300,66 @@ export async function decide(
                     "Model returned invalid native probabilities or choice",
                 );
         }
+        const { branches: _, ...call } = reply;
         calls.push({
-            ...reply,
+            ...call,
             questions,
         });
         return reply.answers;
+    }
+    async function predict(state, questions, suffix) {
+        const sent = request(state, questions, suffix);
+        asked++;
+        return accept(sent, await ask(sent));
     }
     let controls,
         probabilities,
         extra = {};
     if (body.protocol === "plans-v1") {
-        const a = await predict(
-            body.state,
-            {
+        const motionQuestions = {
                 motion: question(text.motion, body.motions),
             },
-            "motion",
-        );
+            weaponQuestions = {
+                weapon: question(text.weapon, [
+                    {
+                        id: "fire",
+                        description: text["weapon.fire"],
+                    },
+                    {
+                        id: "hold",
+                        description: text["weapon.hold"],
+                    },
+                ]),
+            };
+        // The weapon question's state after one motion: its shot forecast and whether firing is permitted.
+        const weaponFor = (motionId) => {
+            const motion = body.motions.find((m) => m.id === motionId),
+                permitted =
+                    motion.shot.can_fire &&
+                    motion.shot.self_hit_ms === null &&
+                    motion.shot.enemy_hit_ms !== null;
+            return {
+                permitted,
+                state:
+                    body.weapon_state +
+                    `\nSELECTED MOTION ${motionId}: ${motion.description}\nShot forecast ${JSON.stringify(motion.shot)}. Fire permitted=${permitted}. Assess ONLY this selected motion.`,
+            };
+        };
+        const together = branches >= body.admissible_motion_ids.length;
+        let a, weaponSent, weaponReplies;
+        if (together) {
+            const sent = request(body.state, motionQuestions, "motion");
+            weaponSent = Object.fromEntries(
+                body.admissible_motion_ids.map((id) => [
+                    id,
+                    request(weaponFor(id).state, weaponQuestions, "weapon"),
+                ]),
+            );
+            asked++;
+            const reply = await ask({ ...sent, branches: weaponSent });
+            a = accept(sent, reply);
+            weaponReplies = reply.branches ?? {};
+        } else a = await predict(body.state, motionQuestions, "motion");
         const raw = a.motion.choice;
         // Sample the policy's full distribution. Safety is an environment action
         // projection, not a second policy with unrecorded conditional probabilities.
@@ -322,29 +378,10 @@ export async function decide(
             motion = body.motions.find((m) => m.id === motionId);
         if (!motion || !body.admissible_motion_ids.includes(motionId))
             throw new HttpError(502, "Chosen motion is not admissible");
-        const permitted =
-            motion.shot.can_fire &&
-            motion.shot.self_hit_ms === null &&
-            motion.shot.enemy_hit_ms !== null;
-        const weaponState =
-            body.weapon_state +
-            `\nSELECTED MOTION ${motionId}: ${motion.description}\nShot forecast ${JSON.stringify(motion.shot)}. Fire permitted=${permitted}. Assess ONLY this selected motion.`;
-        const w = await predict(
-            weaponState,
-            {
-                weapon: question(text.weapon, [
-                    {
-                        id: "fire",
-                        description: text["weapon.fire"],
-                    },
-                    {
-                        id: "hold",
-                        description: text["weapon.hold"],
-                    },
-                ]),
-            },
-            "weapon",
-        );
+        const { permitted, state: weaponState } = weaponFor(motionId);
+        const w = together
+            ? accept(weaponSent[motionId], weaponReplies[motionId])
+            : await predict(weaponState, weaponQuestions, "weapon");
         const weapon = choose
             ? pick("weapon", w.weapon.probabilities, ["fire", "hold"])
             : w.weapon.choice;
@@ -443,7 +480,7 @@ export async function decide(
             : null,
         context_limit: contextLimit,
         state_truncated: false,
-        structured_requests: calls.length,
+        structured_requests: asked,
         honing_results: calls,
     };
 }

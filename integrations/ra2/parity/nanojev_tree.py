@@ -49,6 +49,9 @@ def worker(inference, precision, gpu, count, out):
             answers.append(model.predict(r["parts"], r["questions"])["answers"])
             latency_ms.append((time.perf_counter() - begun) * 1000)
         metadata = dict(model.metadata)
+        checks = {}
+        if inference != "reference":
+            checks = tree_checks(model, batch, answers)
         import torch
 
         reserved_gib = torch.cuda.max_memory_reserved() / 2**30
@@ -58,8 +61,55 @@ def worker(inference, precision, gpu, count, out):
         "reserved_gib": reserved_gib,
         "answers": answers,
         "metadata": metadata,
+        **checks,
     }
     Path(out).write_text(json.dumps(record, default=str))
+
+
+def tree_checks(model, batch, answers):
+    """For a tree mode: requests answered three to a call (predict_many, as the server answers branches) against
+    each answered alone, and the one-call encoding against NanoJev's own prepare_examples with the tokenizer."""
+    from honing.backends.jev.nanojev import payload
+    from honing.backends.jev.nanojev_tree import PrefetchedTokenizer, nanojev_segments
+
+    together = []
+    for start in range(0, len(batch), 3):
+        group = batch[start : start + 3]
+        together += [r["answers"] for r in model.predict_many([(x["parts"], x["questions"]) for x in group])]
+    largest, _, _ = compare(answers, together)
+    tokenizer, upstream = Counting(model._predictor.tokenizer), model._upstream
+    different = 0
+    for request in batch:
+        reply = model.predict(request["parts"], request["questions"])
+        state, questions = reply["stateText"], request["questions"]
+        plain = upstream.prepare_examples(payload(state, questions), tokenizer.tokenizer, 2**30)
+        prefetched = PrefetchedTokenizer(tokenizer, [state, *nanojev_segments(state, questions)])
+        batched = upstream.prepare_examples(payload(state, questions), prefetched, 2**30)
+        different += sum(a["leaf_tokens"] != b["leaf_tokens"] for a, b in zip(plain, batched, strict=True))
+        heads = reply["modelResult"]["execution"]["heads_in_graph"]
+    return {
+        "predict_many_largest_abs_difference": largest,
+        "encoding_paths_differing": different,
+        "encoding_tokenizer_fallbacks": tokenizer.encodes,
+        "heads_in_graph": heads,
+    }
+
+
+class Counting:
+    """A tokenizer that counts its single-string encode calls; batch calls pass through uncounted."""
+
+    def __init__(self, tokenizer):
+        self.tokenizer, self.encodes = tokenizer, 0
+
+    def encode(self, *args, **kwargs):
+        self.encodes += 1
+        return self.tokenizer.encode(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        return self.tokenizer(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.tokenizer, name)
 
 
 def compare(yardstick, answers):
@@ -98,12 +148,20 @@ def main():
             "median_latency_ms": statistics.median(run["latency_ms"]),
             "load_seconds": run["load_seconds"],
             "peak_reserved_gib": run["reserved_gib"],
+            **{k: run[k] for k in run if k.startswith(("predict_many", "encoding", "heads"))},
         }
         print(
             f"{inference} {precision}: {questions} questions, largest |dp| from fp32 {largest:.2e}, "
             f"{len(differing)} choices differ, median {statistics.median(run['latency_ms']):.1f} ms per request, "
             f"loaded in {run['load_seconds']:.0f} s, peak {run['reserved_gib']:.1f} GiB reserved"
         )
+        if "predict_many_largest_abs_difference" in run:
+            print(
+                f"  three requests per call vs alone: largest |dp| {run['predict_many_largest_abs_difference']:.2e}; "
+                f"one-call encoding: {run['encoding_paths_differing']} paths differ, "
+                f"{run['encoding_tokenizer_fallbacks']} strings encoded outside the batch; "
+                f"heads in graph: {run['heads_in_graph']}"
+            )
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
 
 

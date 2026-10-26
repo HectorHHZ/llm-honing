@@ -1,4 +1,4 @@
-"""Score NanoJev's candidate paths as one token tree, in one forward pass per request.
+"""Score NanoJev's candidate paths as one token tree, in one forward pass per model call.
 
 NanoJev scores each option of a question on its own path: the state, the
 question, then that candidate and an end token. ``DecisionPredictor`` pads the
@@ -7,25 +7,32 @@ paths of a question share, pass through the backbone once per option. A request
 with nine options of about 1,250 tokens each runs about 11,000 tokens to score
 about 1,700 distinct ones.
 
-``TokenTree`` merges the paths of a request into a trie instead. Each node is
-one token; it attends to itself and its ancestors only, and its position id is
-its depth. A path's last node therefore sees the same tokens at the same
-positions in the same causal order as when its path runs alone, so its hidden
-state is the same function of the weights; only the order of floating-point
-sums differs. Paths of different questions about one state share the state's
-nodes too. The scoring heads then run per question as ``DecisionModel.forward``
-runs them.
+``TokenTree`` merges the paths of a call into a trie instead. Each node is one
+token; it attends to itself and its ancestors only, and its position id is its
+depth. A path's last node therefore sees the same tokens at the same positions
+in the same causal order as when its path runs alone, so its hidden state is the
+same function of the weights; only the order of floating-point sums differs.
+Paths of different questions about one state share the state's nodes too, and
+one call may carry several requests (the decision server's branches), whose
+states share whatever prefix they have. The scoring heads then run per question
+as ``DecisionModel.forward`` runs them.
 
 ``NanoJevSettings.inference`` picks the forward over the tree:
 
 - ``tree``: the checkpoint's own Hugging Face backbone, given the tree as a 4D
-  attention mask and depth position ids.
+  attention mask and depth position ids, then the heads per question.
 - ``tree-compiled``: a Qwen3 forward written out with the dtypes the Hugging
   Face model uses under bf16 autocast, the q/k/v and gate/up projections each as
   one matmul, block-sparse FlexAttention over the tree mask, ``torch.compile``,
-  and one CUDA graph per tree size rounded up to ``BUCKET_TOKENS``. Loading
-  compiles the forward and captures the graphs, which takes minutes the first
-  time a compile cache is empty.
+  and one CUDA graph per tree size rounded up to ``BUCKET_TOKENS``. The graph
+  also runs the scoring heads, for every question of the call at once
+  (``graph_heads``). Loading compiles the forward and captures the graphs, which
+  takes minutes the first time a compile cache is empty.
+
+A call's CPU work (the tree, the graph's packed input) is ``TreeScorer.prepare``
+and its GPU work ``TreeScorer.score``, so a server can prepare one call while
+the GPU runs another. ``PrefetchedTokenizer`` lets NanoJev's own
+``prepare_examples`` encode every string of a request with one tokenizer call.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ from __future__ import annotations
 import functools
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
@@ -46,8 +54,9 @@ BUCKET_TOKENS = 128
 # These fit, and read the tree mask faster; they read out of bounds on strided q/k/v, so the forward hands
 # FlexAttention contiguous tensors.
 FLEX_KERNEL = {"BLOCK_M": 128, "BLOCK_N": 32, "num_stages": 2, "num_warps": 4}
-# Graph leaf slots; a request scoring more paths than this runs the compiled forward without a graph.
-GRAPH_LEAVES = 256
+# The compiled graph scores up to HEAD_ROWS questions of up to HEAD_SLOTS options each; a call with more runs
+# the compiled forward without a graph and the heads per question.
+HEAD_ROWS, HEAD_SLOTS = 16, 16
 
 
 def common_prefix_length(a: list[int], b: list[int]) -> int:
@@ -289,47 +298,149 @@ class FusedQwen3:
         return _rms_norm(hidden, self.norm, self.eps)
 
 
-class GraphForward:
-    """Leaf hidden states of a token tree, replayed from a CUDA graph captured for the tree's padded size.
+def nanojev_segments(state: str, questions: Mapping[str, Any]) -> list[str]:
+    """The strings NanoJev's ``prepare_examples`` encodes for ``questions`` about ``state``, one call each
+    (``scripts/predict_toy_decisions.py``): the state segment, each question's segment, each candidate's text."""
+    strings = [f"State:\n{state}\n"]
+    for question in questions.values():
+        kind, criteria = question.get("type"), question.get("criteria")
+        segment = f"Question type: {kind}\nQuestion:\n{question.get('instructions')}\n"
+        if kind == "boolean":
+            texts = ["The proposition is true."]
+            for key, label in (("false", "False"), ("true", "True")):
+                if isinstance(criteria, Mapping) and key in criteria:
+                    segment += f"{label} criterion: {criteria[key]}\n"
+        elif kind == "choice" and isinstance(criteria, Mapping):
+            texts = [f"{key}: {value}" for key, value in criteria.items()]
+        else:
+            texts = list(criteria) if isinstance(criteria, list) else []
+        strings += [segment, *(f"Candidate:\n{text}\nDecision:" for text in texts)]
+    return strings
 
-    Each call sends one packed int64 buffer (token ids, positions, subtree ends,
-    leaf indices) to the GPU in one copy, and the graph rebuilds the mask from
-    the subtree ends. Graphs are captured on first use of a size, or ahead of
-    time by :meth:`precapture`; trees larger than ``largest`` run the compiled
-    forward without a graph. Calls must come from one thread at a time.
+
+class PrefetchedTokenizer:
+    """A tokenizer whose ``encode(text, add_special_tokens=False)`` answers from one batch call over ``texts``.
+
+    Encoding strings as one batch gives each the ids it gets alone, so NanoJev's
+    ``prepare_examples`` builds the same paths with this tokenizer as with the
+    original; a string outside ``texts``, or with special tokens, goes to the
+    original. Everything else is the original's.
     """
 
-    def __init__(self, forward: Callable[..., Any], device: Any, largest: int) -> None:
-        self.forward, self.device, self.largest = forward, device, largest
+    def __init__(self, tokenizer: Any, texts: Sequence[str]) -> None:
+        unique = list(dict.fromkeys(texts))
+        self._tokenizer = tokenizer
+        self._ids = dict(zip(unique, tokenizer(unique, add_special_tokens=False)["input_ids"], strict=True))
+
+    def encode(self, text: str, add_special_tokens: bool = True, **kwargs: Any) -> list[int]:
+        if not add_special_tokens and not kwargs and text in self._ids:
+            return list(self._ids[text])
+        return list(self._tokenizer.encode(text, add_special_tokens=add_special_tokens, **kwargs))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._tokenizer, name)
+
+
+def slot_layout(examples: Sequence[Mapping[str, Any]]) -> list[list[int]] | None:
+    """Each example's paths, by index in the call's path order, as one row of the graph's heads; None when the
+    call has more than HEAD_ROWS questions or a question has more than HEAD_SLOTS paths."""
+    if len(examples) > HEAD_ROWS:
+        return None
+    rows, offset = [], 0
+    for example in examples:
+        count = len(example["leaf_tokens"])
+        if count > HEAD_SLOTS:
+            return None
+        rows.append(list(range(offset, offset + count)))
+        offset += count
+    return rows
+
+
+def graph_heads(
+    model: Any, hidden: torch.Tensor, slots: torch.Tensor, valid: torch.Tensor, choice: torch.Tensor
+) -> torch.Tensor:
+    """``head_logits`` for a whole call on a fixed (HEAD_ROWS, HEAD_SLOTS) batch, as the graph runs it.
+
+    ``hidden`` holds every tree node's final state and ``slots`` the node each
+    option's path ends on; ``valid`` marks the slots that hold an option and
+    ``choice`` the rows that are choice questions, the only ones the set head
+    adjusts. Returns fp32 logits with -1e9 where no option is. A boolean row's
+    logit is its first slot's; :meth:`TreeScorer.score` pairs it with 0 as
+    ``head_logits`` does.
+    """
+    import torch
+
+    h = model.norm(hidden[slots])
+    z = model.scalar(h).squeeze(-1).float()
+    if model.set_head == "attention":
+        log_k = valid.sum(-1).float().log()[:, None, None].expand(-1, slots.shape[1], 1)
+        u = model.set_project(torch.cat([h, log_k.to(h.dtype)], dim=-1))
+        mixed, _ = model.set_attention(u, u, u, key_padding_mask=~valid, need_weights=False)
+        delta = model.set_output(torch.tanh(u + mixed)).squeeze(-1).float()
+        z = torch.where(choice[:, None], z + delta, z)
+    return z.masked_fill(~valid, -1e9)
+
+
+class GraphForward:
+    """Option logits of a token tree, replayed from a CUDA graph captured for the tree's padded size.
+
+    The input is one int64 buffer, built by :meth:`pack` on any thread: the
+    padded tree's token ids, positions and subtree ends, then the heads' layout
+    (the node each option's path ends on, which slots hold an option, which rows
+    are choice questions). A call copies it to the GPU in one copy; the graph
+    rebuilds the mask from the subtree ends, runs the forward, scores every
+    question with ``heads`` (:func:`graph_heads`) and takes the softmax over each
+    row. Graphs are captured only by :meth:`precapture`, before any is
+    replayed: a graph captured after others had been replayed broke them (the
+    next replay of an older graph read illegal memory, torch 2.7 on an RTX
+    A6000, with or without a shared memory pool). A tree of a size without a
+    graph takes the same steps without one. Calls must come from one thread at
+    a time.
+    """
+
+    def __init__(self, forward: Callable[..., Any], heads: Callable[..., Any], device: Any) -> None:
+        self.forward, self.heads, self.device = forward, heads, device
         self.graphs: dict[int, tuple[Any, Any, Any, Any]] = {}
         self.pool: Any = None
 
-    def _run(self, packed: torch.Tensor, size: int, leaves: int) -> torch.Tensor:
-        tokens, positions, end, leaf = packed.split((size, size, size, leaves))
-        # A fresh tensor rather than a view into ``packed``, as the mask_mod reading it was measured with.
-        return self.forward(tokens[None], positions[None], end.clone())[0, leaf]
+    @staticmethod
+    def pack(tree: TokenTree, rows: Sequence[Sequence[int]], choice: Sequence[bool], size: int) -> list[int]:
+        """The input for ``tree`` padded to ``size`` nodes, with ``rows`` from :func:`slot_layout`."""
+        slots, valid = [0] * (HEAD_ROWS * HEAD_SLOTS), [0] * (HEAD_ROWS * HEAD_SLOTS)
+        for row, paths in enumerate(rows):
+            for slot, path in enumerate(paths):
+                slots[row * HEAD_SLOTS + slot], valid[row * HEAD_SLOTS + slot] = tree.leaf[path], 1
+        for row in range(len(rows), HEAD_ROWS):
+            valid[row * HEAD_SLOTS] = 1  # an unused row scores node 0, so its set attention has a key
+        flags = [int(flag) for flag in choice] + [0] * (HEAD_ROWS - len(choice))
+        pad = [0] * (size - tree.size)
+        return tree.tokens + pad + tree.depth + pad + tree.subtree_end(size) + slots + valid + flags
 
-    def _pack(self, tree: TokenTree, size: int, leaves: int, host: torch.Tensor) -> torch.Tensor:
-        pad = size - tree.size
-        values = tree.tokens + [0] * pad + tree.depth + [0] * pad + tree.subtree_end(size)
-        values += tree.leaf + [0] * (leaves - len(tree.leaf))
-        host.copy_(host.new_tensor(values))
-        return host
+    def _run(self, packed: torch.Tensor, size: int) -> torch.Tensor:
+        import torch
+
+        cells = HEAD_ROWS * HEAD_SLOTS
+        tokens, positions, end, slots, valid, choice = packed.split((size, size, size, cells, cells, HEAD_ROWS))
+        # A fresh tensor rather than a view into ``packed``, as the mask_mod reading it was measured with.
+        hidden = self.forward(tokens[None], positions[None], end.clone())[0]
+        shape = (HEAD_ROWS, HEAD_SLOTS)
+        logits = self.heads(hidden, slots.view(shape), valid.view(shape).bool(), choice.bool())
+        return torch.stack([logits, logits.softmax(-1)])
 
     def capture(self, size: int) -> None:
         import torch
 
-        host = torch.zeros(3 * size + GRAPH_LEAVES, dtype=torch.long).pin_memory()
-        packed = self._pack(TokenTree([[0]]), size, GRAPH_LEAVES, host.clone()).to(self.device)
+        host = torch.tensor(self.pack(TokenTree([[0]]), [[0]], [False], size), dtype=torch.long).pin_memory()
+        packed = host.to(self.device)
         side = torch.cuda.Stream()
         side.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(side):
             for _ in range(3):
-                self._run(packed, size, GRAPH_LEAVES)
+                self._run(packed, size)
         torch.cuda.current_stream().wait_stream(side)
         graph = torch.cuda.CUDAGraph()
         with torch.cuda.graph(graph, pool=self.pool):
-            out = self._run(packed, size, GRAPH_LEAVES)
+            out = self._run(packed, size)
         self.pool = graph.pool()
         self.graphs[size] = (graph, host, packed, out)
 
@@ -340,81 +451,131 @@ class GraphForward:
             for size in sizes:
                 self.capture(size)
 
-    def __call__(self, tree: TokenTree) -> torch.Tensor:
-        import torch
-
-        size = padded_size(tree.size)
-        if size > self.largest or len(tree.leaf) > GRAPH_LEAVES:
-            leaves = len(tree.leaf)
-            host = torch.zeros(3 * size + leaves, dtype=torch.long)
-            return self._run(self._pack(tree, size, leaves, host).to(self.device), size, leaves)
+    def __call__(self, values: torch.Tensor, size: int) -> torch.Tensor:
+        """Logits and probabilities, shape (2, HEAD_ROWS, HEAD_SLOTS), for the input :meth:`pack` built for a tree
+        padded to ``size`` (``values``, a CPU tensor)."""
         if size not in self.graphs:
-            self.capture(size)
+            return self._run(values.to(self.device), size)
         graph, host, packed, out = self.graphs[size]
-        packed.copy_(self._pack(tree, size, GRAPH_LEAVES, host), non_blocking=True)
+        host.copy_(values)
+        packed.copy_(host, non_blocking=True)
         graph.replay()
-        return out[: len(tree.leaf)].clone()
+        return out.clone()
 
 
-# ---------------------------------------------------------------- scoring requests
+# ---------------------------------------------------------------- scoring calls
+
+
+@dataclass
+class TreeCall:
+    """One model call's CPU work, from :meth:`TreeScorer.prepare`: its examples in order, their merged tree, and
+    for the compiled graph the tree's padded size and packed input (None when the heads do not fit the graph)."""
+
+    examples: list[Mapping[str, Any]]
+    tree: TokenTree
+    size: int = 0
+    packed: Any = None
 
 
 class TreeScorer:
-    """Answers a NanoJev payload as ``DecisionPredictor.predict`` does, from one forward over its paths' tree.
+    """Answers NanoJev payloads as ``DecisionPredictor.predict`` does, from one forward over their paths' tree.
 
     ``predictor`` is the loaded ``DecisionPredictor`` (its tokenizer, model and
     settings are used as they are) and ``upstream`` its module, whose
     ``validate_request``, ``prepare_examples`` and ``answer_from_probabilities``
-    encode the request and check the answers. The response has the reference's
-    fields; its ``execution`` record names the tree forward.
+    encode the request and check the answers. A response has the reference's
+    fields; its ``execution`` record names the tree forward. :meth:`prepare` is
+    CPU work and may run on any thread; :meth:`score` uses the GPU, one call at a
+    time.
     """
 
     def __init__(self, predictor: Any, upstream: ModuleType, mode: str) -> None:
         import torch
 
         self._predictor, self._upstream, self.mode = predictor, upstream, mode
+        self._graphs: GraphForward | None = None
         self._leaf_states: Callable[[TokenTree], Any]
         if mode == "tree":
             self._leaf_states = functools.partial(hf_leaf_states, predictor.model.backbone, predictor.device)
         elif mode == "tree-compiled":
             if predictor.precision != "bf16":
                 raise ValueError("tree-compiled runs under bf16 autocast; use precision bf16, or inference tree")
-            forward = torch.compile(FusedQwen3(predictor.model.backbone), dynamic=True)
-            # Graphs for trees up to four times the path limit are captured on first use; most requests fit the
-            # sizes captured here, a path limit plus room for the other paths' tails.
-            graphs = GraphForward(forward, predictor.device, largest=padded_size(4 * predictor.limit))
-            graphs.precapture(range(BUCKET_TOKENS, padded_size(predictor.limit + 1024) + 1, BUCKET_TOKENS))
-            self._leaf_states = graphs
+            self._forward = torch.compile(FusedQwen3(predictor.model.backbone), dynamic=True)
+            heads = functools.partial(graph_heads, predictor.model)
+            # Most calls fit the sizes captured here, a path limit plus room for the other paths' tails; a larger
+            # tree runs the compiled forward without a graph.
+            self._graphs = GraphForward(self._forward, heads, predictor.device)
+            self._graphs.precapture(range(BUCKET_TOKENS, padded_size(predictor.limit + 1024) + 1, BUCKET_TOKENS))
+            self._leaf_states = self._compiled_leaf_states
         else:
             raise ValueError(f"Unknown tree inference mode {mode!r}")
 
-    def predict(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def _compiled_leaf_states(self, tree: TokenTree) -> torch.Tensor:
+        """The compiled forward without a graph, for a call whose heads do not fit the graph's layout."""
         import torch
 
-        predictor, upstream = self._predictor, self._upstream
-        states = upstream.validate_request(payload)
-        examples = upstream.prepare_examples(payload, predictor.tokenizer, predictor.limit)
-        paths = [path for example in examples for path in example["leaf_tokens"]]
-        tree = TokenTree(paths)
-        predictor.inference_calls += 1
-        outputs = {state["id"]: {"id": state["id"], "answers": {}} for state in states}
-        with (
-            torch.inference_mode(),
-            torch.autocast("cuda", dtype=torch.bfloat16, enabled=predictor.precision == "bf16"),
-        ):
-            leaves = self._leaf_states(tree)
-            offset = 0
-            for example in examples:
+        size, device = padded_size(tree.size), self._predictor.device
+        pad = [0] * (size - tree.size)
+        tokens = torch.tensor([tree.tokens + pad], device=device)
+        positions = torch.tensor([tree.depth + pad], device=device)
+        hidden = self._forward(tokens, positions, torch.tensor(tree.subtree_end(size), device=device))
+        return hidden[0, torch.tensor(tree.leaf, device=device)]
+
+    def prepare(self, examples: Sequence[Mapping[str, Any]]) -> TreeCall:
+        """The CPU work of scoring ``examples``, the questions of one or more requests, in one forward."""
+        import torch
+
+        tree = TokenTree([path for example in examples for path in example["leaf_tokens"]])
+        call = TreeCall(list(examples), tree)
+        rows = slot_layout(examples) if self._graphs is not None else None
+        if rows is not None:
+            call.size = padded_size(tree.size)
+            choice = [example["type"] == "choice" for example in examples]
+            call.packed = torch.tensor(GraphForward.pack(tree, rows, choice, call.size), dtype=torch.long)
+        return call
+
+    def score(self, call: TreeCall) -> list[list[float]]:
+        """Each example's option probabilities, from one forward over the call's tree."""
+        import torch
+
+        precision = self._predictor.precision
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=precision == "bf16"):
+            if call.packed is not None and self._graphs is not None:
+                logits, probabilities = self._graphs(call.packed, call.size).cpu()
+                return [
+                    _row_probabilities(example, logits[row], probabilities[row])
+                    for row, example in enumerate(call.examples)
+                ]
+            leaves = self._leaf_states(call.tree)
+            out, offset = [], 0
+            for example in call.examples:
                 count = len(example["leaf_tokens"])
-                logits = head_logits(predictor.model, [example], leaves[offset : offset + count])
+                logits = head_logits(self._predictor.model, [example], leaves[offset : offset + count])
                 offset += count
                 scores = logits[0, : len(example["candidate_ids"])].float()
                 if not torch.isfinite(scores).all():
                     raise ValueError("NanoJev produced non-finite logits")
-                probabilities = scores.softmax(-1).cpu().tolist()
-                outputs[example["state_id"]]["answers"][example["qid"]] = upstream.answer_from_probabilities(
-                    example, probabilities
-                )
+                out.append(scores.softmax(-1).cpu().tolist())
+            return out
+
+    def answer(
+        self,
+        states: Sequence[Mapping[str, Any]],
+        examples: Sequence[Mapping[str, Any]],
+        probabilities: Sequence[Sequence[float]],
+        call: TreeCall,
+        requests: int,
+    ) -> dict[str, Any]:
+        """The response ``DecisionPredictor.predict`` gives for a payload, from its validated ``states``, its
+        ``examples`` and their ``probabilities``; ``call`` was the forward it shared with ``requests`` requests."""
+        predictor, upstream = self._predictor, self._upstream
+        predictor.inference_calls += 1
+        outputs = {state["id"]: {"id": state["id"], "answers": {}} for state in states}
+        for example, row in zip(examples, probabilities, strict=True):
+            outputs[example["state_id"]]["answers"][example["qid"]] = upstream.answer_from_probabilities(
+                example, list(row)
+            )
+        paths = [path for example in examples for path in example["leaf_tokens"]]
         run_config = predictor.run_config
         return {
             "schema_version": "openjev-toy-inference-v1",
@@ -442,8 +603,10 @@ class TreeScorer:
                 "autoregressive_decode_steps": 0,
                 "prefix_sharing": True,
                 "inference": self.mode,
+                "heads_in_graph": call.packed is not None,
+                "requests_in_forward": requests,
                 "candidate_path_tokens": sum(map(len, paths)),
-                "token_tree_tokens": tree.size,
+                "token_tree_tokens": call.tree.size,
                 "max_length": predictor.limit,
                 "disable_native_triton": predictor.disable_native_triton,
                 "network_model_calls": 0,
@@ -452,3 +615,26 @@ class TreeScorer:
             },
             "states": list(outputs.values()),
         }
+
+    def predict(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """One payload, encoded by NanoJev's ``prepare_examples`` and answered from its own forward."""
+        predictor, upstream = self._predictor, self._upstream
+        states = upstream.validate_request(payload)
+        examples = upstream.prepare_examples(payload, predictor.tokenizer, predictor.limit)
+        call = self.prepare(examples)
+        return self.answer(states, examples, self.score(call), call, 1)
+
+
+def _row_probabilities(example: Mapping[str, Any], logits: torch.Tensor, probabilities: torch.Tensor) -> list[float]:
+    """One example's probabilities from its row of the graph's output, as ``head_logits`` and a softmax give them."""
+    import torch
+
+    count = len(example["candidate_ids"])
+    if example["type"] == "boolean":
+        scores = torch.stack([logits[0] * 0, logits[0]])
+        if not torch.isfinite(scores).all():
+            raise ValueError("NanoJev produced non-finite logits")
+        return scores.softmax(-1).tolist()
+    if not torch.isfinite(logits[:count]).all():
+        raise ValueError("NanoJev produced non-finite logits")
+    return probabilities[:count].tolist()
