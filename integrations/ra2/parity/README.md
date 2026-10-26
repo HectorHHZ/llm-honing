@@ -19,6 +19,17 @@ These scripts compare the code in Honing with the original RA2 experiment in #49
 - The first HTTP server ran each call on the request's thread, which changed request 4 by 0.0015 against the loading thread. The server now runs every call on the thread that loaded the model, and matches.
 - Training: sft validation loss 1.60 to 1.30 (584 train, 118 validation); the trained checkpoint serves from its manifest; grpo raises the favored option from 0.44 to 0.997, on 16 of 16 states; 1 minute 40 seconds for all three steps.
 
+`nanojev_tree.py <out> <gpu> [requests]` compares the token-tree inference modes (`NanoJevSettings.inference`) with the reference on one GPU. It loads each mode in its own process, answers the serving requests twice and times the second pass, and measures every bf16 mode against the reference in fp32. It needs `NANOJEV_SOURCE_DIR` and a Python with NanoJev's requirements that can import Honing. Results on an RTX A6000, 24 requests (50 questions):
+
+| Mode | Largest probability difference from fp32 | Choices that differ from fp32 (fp32's top-two gap) | Median per request | Load | Peak reserved |
+|---|---|---|---|---|---|
+| reference, fp32 | (the yardstick) | | 91.2 ms | 18 s | 7.0 GiB |
+| reference, bf16 | 0.0076 | 1 (0.0012) | 99.7 ms | 18 s | 4.3 GiB |
+| `tree` | 0.0054 | 1 (0.00007) | 36.8 ms | 18 s | 3.3 GiB |
+| `tree-compiled` | 0.0057 | 2 (0.00007, 0.0012) | 9.7 ms | 121 s on empty caches, 70 s with them filled | 4.0 GiB |
+
+The choices that differ are near ties, which bf16 rounding moves either way. `tree-compiled`'s numbers depend on the kernels Inductor picked when it compiled: a second run on the filled caches reproduced the row above exactly, while an earlier compile with other cache contents measured a largest difference of 0.0064 and no differing choice.
+
 ## Kev against Kev's own code
 
 The Kev family has no counterpart in #49, so these compare Honing with Kev's own code at the commit in `pins.json`. They need the Kev environment from `scripts/setup-kev.sh` (`KEV_PYTHON`, `KEV_SOURCE_DIR`) and the pinned snapshots in the Hugging Face cache.

@@ -18,6 +18,10 @@ source must be the pinned, unmodified checkout, the model files must match the
 checksums the model repository publishes (``SHA256_MANIFEST.json``), a trained
 checkpoint must match its recorded hash, the GPU is locked for this process,
 and an overrun is refused with the wording ``RA2Grader`` scores as 0.
+
+``NanoJevSettings.inference`` can instead score a request's candidate paths as
+one token tree (``honing.backends.jev.nanojev_tree``): the same model, inputs
+and answer checks, with the shared prefixes computed once.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ from typing import Any
 
 from honing.backends.jev.kev import STATE_OVERRUN
 from honing.backends.jev.laya import gpu_lock
+from honing.backends.jev.nanojev_tree import INFERENCE_MODES, TreeScorer
 from honing.backends.jev.token_budget import SECTIONS
 from honing.core import ArchitectureSpec, CheckpointRef, LayerShape, ModelSnapshot
 
@@ -63,6 +68,9 @@ class NanoJevSettings:
     ``max_length`` is the longest candidate path in tokens; 2,048 is what #49
     ran (the checkpoint was trained up to 8,192). ``precision`` is ``bf16``
     (fp32 parameters, bf16 autocast forward, NanoJev's default) or ``fp32``.
+    ``inference`` is ``reference`` (NanoJev's ``DecisionPredictor``, one padded
+    row per candidate path), ``tree`` or ``tree-compiled`` (one forward over the
+    request's token tree; see ``nanojev_tree``). ``tree-compiled`` needs ``bf16``.
     """
 
     pins_path: Path
@@ -73,12 +81,17 @@ class NanoJevSettings:
     lock_dir: Path | None = None
     max_length: int = 2048
     precision: str = "bf16"
+    inference: str = "reference"
 
     def __post_init__(self) -> None:
         if self.max_length <= 0:
             raise ValueError("max_length must be positive")
         if self.precision not in ("bf16", "fp32"):
             raise ValueError("precision must be bf16 or fp32")
+        if self.inference not in INFERENCE_MODES:
+            raise ValueError(f"inference must be one of {', '.join(INFERENCE_MODES)}")
+        if self.inference == "tree-compiled" and self.precision != "bf16":
+            raise ValueError("tree-compiled runs under bf16 autocast; use precision bf16, or inference tree")
 
 
 def _sha256(path: Path) -> str:
@@ -273,10 +286,17 @@ def pack_request(
 class NanoJevDecisionModel:
     """A loaded NanoJev checkpoint. Create it with :meth:`load`, which holds the GPU lock while in use."""
 
-    def __init__(self, predictor: Any, prepare_examples: Any, metadata: Mapping[str, object]) -> None:
+    def __init__(
+        self,
+        predictor: Any,
+        prepare_examples: Any,
+        metadata: Mapping[str, object],
+        scorer: TreeScorer | None = None,
+    ) -> None:
         self._predictor = predictor
         self._prepare_examples = prepare_examples
         self._metadata = dict(metadata)
+        self._scorer = scorer
 
     @property
     def metadata(self) -> Mapping[str, object]:
@@ -304,6 +324,9 @@ class NanoJevDecisionModel:
                     device_name="cuda:0",
                     precision=settings.precision,
                 )
+                scorer = None
+                if settings.inference != "reference":
+                    scorer = TreeScorer(predictor, upstream, settings.inference)
             metadata = {
                 "family": FAMILY,
                 "model": settings.model,
@@ -316,9 +339,10 @@ class NanoJevDecisionModel:
                 "maxLen": settings.max_length,
                 "parameterStorage": "float32",
                 "forwardAutocast": "bfloat16" if settings.precision == "bf16" else "disabled",
+                "inference": settings.inference,
                 "python": sys.version.split()[0],
             }
-            yield cls(predictor, upstream.prepare_examples, metadata)
+            yield cls(predictor, upstream.prepare_examples, metadata, scorer)
 
     def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
         started = time.perf_counter()
@@ -330,7 +354,10 @@ class NanoJevDecisionModel:
             self._predictor.limit,
         )
         with contextlib.redirect_stdout(sys.stderr):
-            response = self._predictor.predict(payload(state, questions), batch_questions=1, temperature=1.0)
+            if self._scorer is None:
+                response = self._predictor.predict(payload(state, questions), batch_questions=1, temperature=1.0)
+            else:
+                response = self._scorer.predict(payload(state, questions))
         states = response.get("states")
         if not isinstance(states, list) or len(states) != 1 or states[0].get("id") != "decision":
             raise ValueError("NanoJev returned a different state batch")

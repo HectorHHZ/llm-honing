@@ -20,7 +20,7 @@ Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the
 
 - Laya: ``--model typed-decisions --model-config-dir <records> --laya-source <checkout>``
 - Kev: ``--family kev --kev-source <checkout>``
-- NanoJev: ``--family nanojev --nanojev-source <checkout>``
+- NanoJev: ``--family nanojev --nanojev-source <checkout>``, optionally ``--nanojev-inference tree-compiled``
 - StartLux-Decision: ``--family startlux --startlux-source <checkout> --model startlux-4b``
 - Nimble-v4-max: ``--family nimble --nimble-source <source snapshot> --nimble-kit <checkout>``
 - djev: ``--family djev --djev-url http://127.0.0.1:8011 --model dgemma`` (no local pins/GPU)
@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from honing.backends.jev.model import DecisionModel
+from honing.backends.jev.nanojev_tree import INFERENCE_MODES
 
 MAX_BODY_BYTES = 16 * 1024 * 1024
 
@@ -187,6 +188,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--kev-source", type=Path, help="kev: Kev checkout at the pinned revision")
     parser.add_argument("--nanojev-source", type=Path, help="nanojev: NanoJev checkout at the pinned revision")
     parser.add_argument(
+        "--nanojev-inference",
+        choices=INFERENCE_MODES,
+        default="reference",
+        help="nanojev: score each candidate path on its own (reference) or a request's paths as one token tree",
+    )
+    parser.add_argument(
         "--startlux-source", type=Path, help="startlux: StartLux-Decision checkout at the pinned revision"
     )
     parser.add_argument(
@@ -284,6 +291,7 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
                 gpu=args.gpu,
                 checkpoint_manifest=args.checkpoint_manifest,
                 max_length=args.max_len or 2048,
+                inference=args.nanojev_inference,
             )
         )
     if args.family == "kev":
