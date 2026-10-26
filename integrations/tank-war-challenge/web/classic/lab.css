@@ -1,0 +1,59 @@
+.lab {
+    max-width: 1040px;
+    margin: 40px auto;
+    padding: 0 24px 50px;
+}
+.lab header {
+    margin-bottom: 36px;
+}
+.lab h1 {
+    font-size: clamp(32px, 6vw, 58px);
+    margin: 10px 0;
+}
+.lab h2 {
+    font-size: 25px;
+    margin: 0 0 14px;
+}
+.lab p {
+    line-height: 1.7;
+    max-width: 850px;
+}
+.lab section {
+    padding: 26px 0;
+    border-top: 2px solid currentColor;
+}
+.lab table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+}
+.lab td,
+.lab th {
+    padding: 12px;
+    border-bottom: 1px solid #c8c5ba;
+}
+.lab th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.table-scroll {
+    overflow: auto;
+}
+.lab a {
+    color: inherit;
+}
+.lab footer {
+    margin-top: 24px;
+}
+.reflection {
+    padding: 8px 14px;
+    border-left: 3px solid #3a67bf;
+    margin-top: 18px;
+}
+.lab header > p:first-of-type {
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    margin-top: 24px;
+}
