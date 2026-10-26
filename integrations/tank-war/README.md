@@ -180,7 +180,13 @@ A simplified independent-control request to `/v1/decide` is:
 
 The live request contains the complete observations and option forecasts.
 Planned Steering sends a motion question, then a weapon question conditioned on
-the selected motion. The bridge rejects truncated context, missing candidates,
+the selected motion. When the server's health reports `maxBranches` of at least
+the number of admissible motions, as Honing's decision server does, both go in
+one request: the weapon question of each admissible motion is a branch of the
+motion request, the server answers every branch in the same model call, and the
+bridge keeps the selected motion's. The recorded calls, probabilities and
+controls are those of the two-request decision; `structured_requests` counts the
+requests sent. The bridge rejects truncated context, missing candidates,
 invalid probabilities and mismatched identities. It does not invent model
 probabilities or substitute a scripted player after an error.
 

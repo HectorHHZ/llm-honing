@@ -325,6 +325,7 @@ export async function playMatch({
                           model: model.model,
                           agentIds: ["agent", "agent"],
                           contextLimit: null,
+                          branches: model.branches,
                           ask,
                       },
                       body,
