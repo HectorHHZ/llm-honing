@@ -418,7 +418,10 @@ function pathDistance(game, p, enemy) {
 }
 export function tankMotion(maze, t, drive, turn, dt, other = null) {
     if (turn)
-        t.angle = angleDelta(t.angle + clamp(turn, -1, 1) * TURN_SPEED * dt, 0);
+        t.angle = angleDelta(
+            t.angle + clamp(turn, -1, 1) * (t.turnSpeed ?? TURN_SPEED) * dt,
+            0,
+        );
     movePosition(
         maze,
         t,
@@ -1370,6 +1373,11 @@ export class Game {
             t.cooldown = Math.max(0, t.cooldown - dt);
             t.recoil = Math.max(0, t.recoil - dt * 7);
             if (!t.alive) continue;
+            // Public human controls receive the selected turn boost. Model turns stay unchanged.
+            t.turnSpeed =
+                TURN_SPEED *
+                (manual[t.id]?.responsiveTurn ? 1.68 : 1) *
+                (manual[t.id]?.fastHumanTurn ? 2 : 1);
             if (manual[t.id]) {
                 const c = manual[t.id];
                 t.drive =
@@ -1379,12 +1387,49 @@ export class Game {
                 t.executedTurn = t.turn;
                 t.firing = !!c.fire;
                 t.assistActive = false;
-                this.move(t, c.drive || 0, c.turn || 0, dt);
+                if (c.freeMove) {
+                    const dx = Number.isFinite(c.moveX)
+                        ? clamp(c.moveX, -1, 1)
+                        : 0;
+                    const dy = Number.isFinite(c.moveY)
+                        ? clamp(c.moveY, -1, 1)
+                        : 0;
+                    const before = { x: t.x, y: t.y };
+                    t.hullAngle ??= t.angle;
+                    if (dx || dy) t.hullAngle = Math.atan2(dy, dx);
+                    movePosition(
+                        this.maze,
+                        t,
+                        dx,
+                        dy,
+                        dt,
+                        this.tanks[1 - t.id],
+                    );
+                    t.travel += distance(before, t);
+                    if (
+                        Number.isFinite(c.aimPoint?.x) &&
+                        Number.isFinite(c.aimPoint?.y) &&
+                        Math.hypot(c.aimPoint.x - t.x, c.aimPoint.y - t.y) >
+                            0.001
+                    )
+                        t.angle = Math.atan2(
+                            c.aimPoint.y - t.y,
+                            c.aimPoint.x - t.x,
+                        );
+                } else {
+                    delete t.hullAngle;
+                    this.move(t, c.drive || 0, c.turn || 0, dt);
+                }
                 if (c.fire) this.fire(t);
             } else this.control(t, dt);
             t.lastTrack += dt;
             if (t.lastTrack > 0.11) {
-                this.tracks.push({ x: t.x, y: t.y, angle: t.angle, age: 0 });
+                this.tracks.push({
+                    x: t.x,
+                    y: t.y,
+                    angle: t.hullAngle ?? t.angle,
+                    age: 0,
+                });
                 t.lastTrack = 0;
             }
         }
