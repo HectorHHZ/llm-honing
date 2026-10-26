@@ -79,7 +79,7 @@ It needs the `gepa` and `litellm` extras (`uv pip install -e ".[dev,gepa,litellm
 
 | Part | What runs |
 | --- | --- |
-| Tasks | `examples/tasks/python-bugfix/gepa-live.jsonl`: 6 train and 5 val bug-fix tasks, graded by `CommandGrader` on the fraction of hidden cases passed |
+| Tasks | `integrations/python-bugfix/tasks/gepa-live.jsonl`: 6 train and 5 val bug-fix tasks, a second manifest beside the suite's `suite.jsonl`, graded by `CommandGrader` on the fraction of hidden cases passed |
 | Agent | `scripts/e2e/minimal_agent.py`, run by the workspace runner: reads `AGENTS.md` and `skills/*.md`, sends the task's files to the policy, writes back the files it returns |
 | Policy | an OpenAI-compatible API (`components.endpoints`), called by the agent with the key named by `api_key_env` |
 | Reflection | `LiteLLMChatModel` inside `GEPAMethod` (`components.method.args.reflection`) |

@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-SUITE = Path(__file__).resolve().parents[2] / "examples/tasks/python-bugfix"
+SUITE = Path(__file__).resolve().parents[2] / "integrations/python-bugfix/tasks"
 SLOW_SECONDS = 5.0
 # What a system prompt must say for each convention, lower-cased.
 CONVENTIONS = {"none": "return none", "half-open": "half-open", "casefold": "casefold", "first": "first occurrence"}

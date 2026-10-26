@@ -9,11 +9,11 @@
   "model": {"provider": "openai", "name": "gpt-4.1-mini-2025-04-14"},
   "tasks": {
     "factory": "honing.e2e.gepa_live:suite_tasks",
-    "args": {"manifest": "examples/tasks/python-bugfix/gepa-live.jsonl", "split": "val"}
+    "args": {"manifest": "integrations/python-bugfix/tasks/gepa-live.jsonl", "split": "val"}
   },
   "harness_tasks": {
     "factory": "honing.e2e.gepa_live:suite_tasks",
-    "args": {"manifest": "examples/tasks/python-bugfix/gepa-live.jsonl", "split": "train"}
+    "args": {"manifest": "integrations/python-bugfix/tasks/gepa-live.jsonl", "split": "train"}
   },
   "harness": {
     "episode_budget": 6
@@ -21,7 +21,7 @@
   "harness_seed": {
     "factory": "honing.e2e.gepa_live:harness_seed",
     "args": {
-      "directory": "examples/harnesses/gepa-live-seed",
+      "directory": "integrations/python-bugfix/config/gepa-live-seed",
       "files": {"AGENTS.md": "instructions", "skills/debugging.md": "skill"}
     }
   },
@@ -42,7 +42,7 @@
       "factory": "honing.e2e.gepa_live:manifest_runner",
       "args": {
         "command": ["{python}", "{root}/scripts/e2e/minimal_agent.py"],
-        "manifest": "examples/tasks/python-bugfix/gepa-live.jsonl",
+        "manifest": "integrations/python-bugfix/tasks/gepa-live.jsonl",
         "api_key_env": "OPENAI_API_KEY",
         "agents": ["minimal"],
         "file_kinds": ["instructions", "skill"],
@@ -55,12 +55,12 @@
     },
     "grader": {
       "factory": "honing.e2e.gepa_live:command_grader",
-      "args": {"manifest": "examples/tasks/python-bugfix/gepa-live.jsonl", "timeout_seconds": 120}
+      "args": {"manifest": "integrations/python-bugfix/tasks/gepa-live.jsonl", "timeout_seconds": 120}
     },
     "method": {
       "factory": "honing.e2e.gepa_live:gepa_method",
       "args": {
-        "manifest": "examples/tasks/python-bugfix/gepa-live.jsonl",
+        "manifest": "integrations/python-bugfix/tasks/gepa-live.jsonl",
         "reflection": {
           "model": {"ref": "model"},
           "api_key_env": "OPENAI_API_KEY",
