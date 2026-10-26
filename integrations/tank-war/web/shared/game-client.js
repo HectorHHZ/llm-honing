@@ -1,3 +1,5 @@
+import { mountPointerControls } from "./pointer-controls.js";
+import { manualPlayers, playerControlHelp } from "./player-controls.js";
 import { AdaptiveCadence } from "./cadence.js";
 import { mountTankSetup } from "../game/setup.js";
 import { defaultSeats, seatProtocol } from "./seat-config.js";
@@ -74,6 +76,47 @@ export async function boot(adapter) {
         side = (i) => (i ? "Red" : "Blue"),
         isAI = (i) => mode === "ai" || (mode === "human" && i === 1);
     const ready = () => seats.every((_, i) => !isAI(i) || !!health[i]);
+    const desktopInput = matchMedia("(hover: hover) and (pointer: fine)");
+    const landscape = matchMedia(
+        "(orientation: landscape) and (max-height: 520px) and (max-width: 1100px)",
+    );
+    let controlScheme = "mouse";
+    const pointer = mountPointerControls({
+        canvas,
+        zone: $("joystick-zone"),
+        stick: $("joystick"),
+        knob: $("joystick-knob"),
+        fire: $("touch-fire"),
+        tank: () => game.tanks[0],
+        enabled: () =>
+            mode !== "ai" &&
+            (!desktopInput.matches || controlScheme !== "keyboard") &&
+            !paused &&
+            game.phase === "running" &&
+            game.tanks[0].alive,
+    });
+    $("control-picker").addEventListener("change", (event) => {
+        if (!["mouse", "keyboard", "hybrid"].includes(event.target.value))
+            return;
+        controlScheme = event.target.value;
+        pointer.reset();
+        keys.clear();
+        taps.clear();
+        update();
+    });
+    desktopInput.addEventListener("change", () => {
+        pointer.reset();
+        keys.clear();
+        taps.clear();
+        update();
+    });
+    landscape.addEventListener("change", () => {
+        pointer.reset();
+        keys.clear();
+        taps.clear();
+        update();
+    });
+
     const modelName = (i) =>
         models.find((m) => m.id === seats[i].backend)?.label ||
         health[i]?.metadata?.model_label ||
@@ -148,6 +191,7 @@ export async function boot(adapter) {
         [0, 1].forEach(cancelSeat);
         keys.clear();
         taps.clear();
+        pointer.reset();
     }
     function reset(random = false) {
         cancel();
@@ -237,6 +281,10 @@ export async function boot(adapter) {
                 assistance: adapter.assistance(game, i),
             })),
             mode,
+            player_controls: {
+                blue: desktopInput.matches ? controlScheme : "touch",
+                human_turn_boost: 2,
+            },
             seed: game.seed,
             scores: game.scores,
             shots: game.shots,
@@ -471,6 +519,21 @@ export async function boot(adapter) {
         }
     }
     function update() {
+        const playerMode = mode !== "ai";
+        const active = playerMode && game.phase !== "ready";
+        const shell = document.querySelector("main");
+        shell.classList.toggle("player-mode", playerMode);
+        shell.classList.toggle("game-active", active);
+        shell.dataset.controlScheme = desktopInput.matches
+            ? controlScheme
+            : "touch";
+        const sidePanel = $("agent-1");
+        const panelHome =
+            active && mode === "human" && landscape.matches
+                ? $("mobile-probabilities")
+                : document.querySelector(".telemetry");
+        if (sidePanel.parentElement !== panelHome) panelHome.append(sidePanel);
+
         $("connection-light").className = ready() ? "ready" : "error";
         $("connection-title").textContent =
             mode === "local"
@@ -525,8 +588,17 @@ export async function boot(adapter) {
                               }`,
                       )
                       .join(" · ");
+        $("control-picker")
+            .querySelector('input[value="keyboard"]')
+            .closest("label")
+            .querySelector("span").textContent =
+            mode === "local" ? "WASD" : "WASD / ↑ ↓ ← →";
         $("keyboard-help").hidden = mode === "ai";
-        $("keyboard-help").textContent = adapter.keyboard(mode);
+        $("keyboard-help").textContent = playerControlHelp(
+            controlScheme,
+            mode,
+            !desktopInput.matches,
+        );
         $("controller-description").textContent = seats
             .map(
                 (s, i) =>
@@ -543,6 +615,8 @@ export async function boot(adapter) {
         const overlay =
             paused || game.phase === "ready" || game.phase === "matchover";
         $("overlay").hidden = !overlay;
+        $("control-picker").hidden =
+            !playerMode || !desktopInput.matches || !overlay;
         $("round-result").hidden = game.phase !== "roundover" || paused;
         $("result-title").textContent =
             game.result === null
@@ -575,8 +649,12 @@ export async function boot(adapter) {
                 mode === "ai"
                     ? `${modelName(0)} vs ${modelName(1)}`
                     : mode === "human"
-                      ? `You are Blue · ${adapter.shortControls}`
-                      : "Blue: WASD + Space · Red: arrows + Enter";
+                      ? `You are Blue · ${playerControlHelp(controlScheme, mode, !desktopInput.matches)}`
+                      : playerControlHelp(
+                            controlScheme,
+                            mode,
+                            !desktopInput.matches,
+                        );
         }
         for (let id = 0; id < 2; id++) {
             const p = panels[id],
@@ -593,7 +671,11 @@ export async function boot(adapter) {
                   : game.phase !== "running"
                     ? "Ready"
                     : !ai
-                      ? "Keyboard"
+                      ? id === 0
+                          ? desktopInput.matches
+                              ? controlScheme
+                              : "Touch"
+                          : "Keyboard"
                       : pending[id]
                         ? "Thinking"
                         : "Acting";
@@ -615,7 +697,13 @@ export async function boot(adapter) {
             );
             p.querySelector(".aim-note").textContent = ai
                 ? adapter.aimNote(data)
-                : "Keyboard controls";
+                : id === 0
+                  ? playerControlHelp(
+                        controlScheme,
+                        mode,
+                        !desktopInput.matches,
+                    )
+                  : "Arrows to drive/turn · Enter to fire";
             p.querySelector(".execution-note").textContent =
                 ai && data
                     ? adapter.execution(data)
@@ -659,10 +747,14 @@ export async function boot(adapter) {
         if (!paused) {
             accumulator += dt;
             while (accumulator >= 1 / 60) {
-                const manual = {},
-                    held = (k) => keys.has(k) || taps.has(k);
-                if (mode !== "ai") manual[0] = adapter.manual(0, mode, held);
-                if (mode === "local") manual[1] = adapter.manual(1, mode, held);
+                const manual = manualPlayers({
+                    adapter,
+                    mode,
+                    scheme: controlScheme,
+                    touch: !desktopInput.matches,
+                    held: (k) => keys.has(k) || taps.has(k),
+                    pointer: pointer.sample(),
+                });
                 game.step(1 / 60, manual);
                 taps.clear();
                 accumulator -= 1 / 60;

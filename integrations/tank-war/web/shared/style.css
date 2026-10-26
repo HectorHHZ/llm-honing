@@ -1124,3 +1124,354 @@ h1 span {
 .seat-config.red h3 {
     color: #c4654b;
 }
+
+/* Human input: the model laboratory keeps its existing controls and panels. */
+.control-picker {
+    border: 0;
+    margin: 18px 0;
+    padding: 0;
+    min-width: 0;
+    text-align: left;
+}
+.control-picker legend {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 10px;
+}
+.control-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+.control-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 12px;
+    border: 1.5px solid var(--line);
+    border-radius: 8px 5px 10px 6px;
+    background: #fffcf4;
+    cursor: pointer;
+    min-width: 0;
+}
+.control-card input {
+    position: absolute;
+    top: 12px;
+    right: 10px;
+    accent-color: var(--blue);
+}
+.control-card strong {
+    padding-right: 18px;
+}
+.control-card span,
+.control-card small {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.control-card:has(input:checked) {
+    border-color: var(--blue);
+    background: #edf4f5;
+    box-shadow: 2px 3px 0 #357a9b18;
+}
+.control-card:has(input:focus-visible) {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+}
+.overlay {
+    grid-template-columns: minmax(0, 1fr);
+}
+.overlay-inner:has(.control-picker:not([hidden])) {
+    width: 650px;
+    min-width: 0;
+    max-width: calc(100% - 28px);
+    max-height: calc(100% - 18px);
+    overflow-y: auto;
+}
+.player-mode #arena {
+    touch-action: none;
+    cursor: crosshair;
+}
+.player-mode .play-guide {
+    display: none;
+}
+.touch-controls,
+.mobile-probabilities {
+    display: none;
+}
+.joystick-zone,
+.touch-fire {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+.joystick-zone {
+    width: 176px;
+    height: 176px;
+    margin-bottom: 16px;
+    transform: translateY(16px);
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+}
+.joystick {
+    width: 100%;
+    height: 100%;
+    border: 2px solid #357a9b77;
+    border-radius: 50%;
+    background: #357a9b0b;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+.joystick-knob {
+    width: 72px;
+    height: 72px;
+    background: #e0ebee;
+    border: 2px solid var(--blue);
+    border-radius: 48%;
+    box-shadow: 2px 3px 0 #357a9b20;
+}
+.joystick-hint {
+    display: none;
+}
+.touch-fire {
+    width: 82px;
+    height: 82px;
+    border: 2px solid var(--red);
+    border-radius: 48%;
+    background: #fff6ef;
+    color: var(--red);
+    font: 600 23px var(--hand);
+    padding: 0;
+}
+.touch-fire.pressed {
+    background: var(--red);
+    color: #fffaf0;
+}
+@media (any-pointer: coarse), (max-width: 700px) {
+    .player-mode .touch-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        padding: 12px 8px 6px;
+    }
+    .player-mode #keyboard-help {
+        font-size: 11px;
+    }
+}
+@media (max-width: 800px) {
+    .control-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .control-card:has(input[value="hybrid"]) {
+        grid-column: 1 / -1;
+    }
+}
+/* During a landscape match, reserve a rail for each thumb. Reset returns to setup. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
+    html:has(.player-mode.game-active),
+    body:has(.player-mode.game-active) {
+        height: 100svh;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+    .shell.player-mode.game-active {
+        --stick-size: clamp(136px, 44svh, 176px);
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        max-width: none;
+        height: 100svh;
+        display: grid;
+        grid-template-columns: var(--stick-size) minmax(0, 1fr) 96px;
+        grid-template-rows: 32px auto 18px;
+        gap: 4px 8px;
+        padding: 6px max(10px, env(safe-area-inset-right)) 4px
+            max(10px, env(safe-area-inset-left));
+        background: var(--paper);
+        touch-action: none;
+    }
+    .game-active .masthead,
+    .game-active .match-setup,
+    .game-active .more,
+    .game-active footer,
+    .game-active #keyboard-help,
+    .game-active .assist-note {
+        display: none;
+    }
+    .game-active .player-arena {
+        display: contents;
+    }
+    .game-active .toolbar {
+        position: fixed;
+        z-index: 6;
+        top: max(6px, env(safe-area-inset-top));
+        left: max(10px, env(safe-area-inset-left));
+        width: 110px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+    .game-active .toolbar-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .game-active .toolbar button,
+    .game-active .toolbar select {
+        font-size: 10px;
+        min-height: 25px;
+        padding: 4px;
+        max-width: 110px;
+    }
+    .game-active .scoreboard {
+        grid-column: 2;
+        grid-row: 1;
+        margin: 0;
+        padding: 0;
+        gap: 8px;
+    }
+    .game-active .score-team {
+        gap: 5px;
+    }
+    .game-active .team-mark,
+    .game-active .score-team span,
+    .game-active .round-clock small {
+        display: none;
+    }
+    .game-active .score-team strong {
+        font-size: 10px;
+    }
+    .game-active .score-team b {
+        font-size: 24px;
+    }
+    .game-active .round-clock strong {
+        font-size: 18px;
+    }
+    .game-active .round-clock span {
+        font-size: 8px;
+    }
+    .game-active .board-wrap {
+        grid-column: 2;
+        grid-row: 2;
+        width: min(100%, calc((100svh - 70px) * 1.42857));
+        align-self: start;
+        justify-self: center;
+    }
+    .game-active .player-strip {
+        grid-column: 2;
+        grid-row: 3;
+        width: min(100%, calc((100svh - 70px) * 1.42857));
+        justify-self: center;
+        padding: 0;
+        margin: 0;
+    }
+    .game-active .player-chip > :not(.ammo-slots) {
+        display: none;
+    }
+    .game-active .touch-controls {
+        display: flex;
+        position: fixed;
+        z-index: 5;
+        inset: 0 max(10px, env(safe-area-inset-right)) 0
+            max(10px, env(safe-area-inset-left));
+        padding: 0;
+        align-items: center;
+        justify-content: space-between;
+        pointer-events: none;
+    }
+    .game-active .joystick-zone {
+        width: var(--stick-size);
+        height: var(--stick-size);
+        margin-bottom: 0;
+        margin-left: max(
+            0px,
+            calc(
+                (100% - var(--stick-size) - 112px - (100svh - 70px) * 1.42857) /
+                    2
+            )
+        );
+        transform: translateY(clamp(24px, 10svh, 44px));
+        pointer-events: auto;
+    }
+    .game-active .joystick-knob {
+        width: clamp(56px, 18svh, 72px);
+        height: clamp(56px, 18svh, 72px);
+    }
+    .game-active .touch-fire {
+        width: 72px;
+        height: 72px;
+        margin-right: 10px;
+        pointer-events: auto;
+    }
+    .game-active:has(.overlay:not([hidden])) .joystick-zone {
+        pointer-events: none;
+    }
+    .game-active .mobile-probabilities:not(:empty) {
+        display: block;
+        position: fixed;
+        right: max(10px, env(safe-area-inset-right));
+        bottom: max(6px, env(safe-area-inset-bottom));
+        width: 96px;
+    }
+    .mobile-probabilities .agent-panel {
+        padding: 4px;
+    }
+    .mobile-probabilities .agent-panel > :not(.probabilities) {
+        display: none;
+    }
+    .mobile-probabilities .probabilities {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .mobile-probabilities .decision-head {
+        font-size: 8px;
+        margin: 0 0 1px;
+    }
+    .mobile-probabilities .prob-row {
+        grid-template-columns: 36px minmax(0, 1fr) 22px;
+        font-size: 7px;
+        line-height: 8px;
+        min-height: 9px;
+        margin: 0;
+        gap: 2px;
+    }
+    .mobile-probabilities .prob-track {
+        height: 2px;
+        grid-column: auto;
+        grid-row: auto;
+    }
+    .game-active .overlay-inner {
+        padding: 12px;
+    }
+    .game-active .overlay .little-note,
+    .game-active #overlay-note {
+        display: none;
+    }
+    .game-active .overlay h2 {
+        font-size: 22px;
+        margin-bottom: 10px;
+    }
+    .game-active .overlay p {
+        font-size: 11px;
+    }
+}
+@media (orientation: landscape) and (max-height: 350px) and (max-width: 1100px) {
+    .game-active .mobile-probabilities {
+        display: none !important;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
+    .game-active .player-chip:last-child {
+        justify-content: flex-end;
+    }
+}

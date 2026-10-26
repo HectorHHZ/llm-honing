@@ -5,8 +5,8 @@ Decision models need iteration.
 https://github.com/user-attachments/assets/9dca9289-bb7d-4b51-bd0b-8b896fabd42d
 
 Two tanks fire shells that bounce off the walls. One hit ends a round. A tank's
-own shells can kill it. Drive forward or backward, rotate the hull to aim, and
-fire. The barrel stays fixed to the hull.
+own shells can kill it. Model tanks drive forward or backward and rotate the
+hull to aim. Human players can also select independent mouse aiming.
 
 The video shows four controller versions with the same NanoJev weights. V1
 spins, V2 fires but can hit itself, V3 fights, and V4 adds dodge assistance.
@@ -31,9 +31,30 @@ cd integrations/tank-war
 npm start
 ```
 
-Open <http://127.0.0.1:4177/>. Blue uses W/S to drive, A/D to turn, and Space to
-fire. Red uses Up/Down to drive, Left/Right to turn, and Enter to fire. P pauses.
-A keyboard is required. Backgrounding the tab also pauses the game.
+Open <http://127.0.0.1:4177/>. Before a human match, select Blue's controls:
+
+| Control card    | Move                                              | Aim                                         | Fire       |
+| --------------- | ------------------------------------------------- | ------------------------------------------- | ---------- |
+| Mouse (default) | Follow the cursor; stop near it                   | Turn the hull toward the cursor             | Left click |
+| Keyboard        | W/S forward/reverse                               | A/D turn the hull                           | Space      |
+| Mouse + WASD    | W/S up/down; A/D left/right in screen coordinates | Point the independent barrel with the mouse | Left click |
+
+In You vs model, arrow keys also work in Keyboard and Mouse + WASD modes.
+In Local two-player, arrows and Enter remain reserved for Red. Red keeps hull
+steering. P pauses. You can change Blue's control card while paused. Changing
+controls clears held inputs. Backgrounding the tab pauses the game.
+
+On a phone, use the fixed joystick and the Fire button with separate fingers.
+The joystick controls hull steering. In landscape, starting a human match opens
+a console layout with the arena between the large lower-left joystick and Fire.
+The opponent's decision bars fit below Fire when space permits. The page does
+not scroll during landscape play; Restart returns to the setup screen. Local
+Red still needs a keyboard, so You vs model is the intended single-phone mode.
+
+Human keyboard turns run at 5 rad/s; mouse and joystick turns run at up to
+8.4 rad/s. Model turns remain at 2.5 rad/s. Mouse + WASD aims the barrel directly.
+All modes use the same movement speed, wall/tank collision, ammunition, cooldown,
+and ricochet rules. Diagonal movement does not give a speed bonus.
 
 To enable **You vs model** and **Model vs model**, start a Honing decision
 server, then give the game its base URL:
@@ -49,9 +70,11 @@ SDK and retail game assets; Tank War includes its game engine.
 
 ## Game and controllers
 
-There is one game: hull steering with a fixed barrel, bouncing shells, five
-active shells per tank, lethal self-hits, and a first-to-five match. Settings
-can change the model's decision interface without changing these rules.
+Model tanks retain hull steering with a fixed barrel. All matches use bouncing
+shells, five active shells per tank, lethal self-hits, and first-to-five scoring.
+Human control cards change movement and aiming only; model decision protocols
+and model-vs-model evaluation remain unchanged. Exports record the selected
+human control scheme. Compare human results only with the same control scheme.
 
 | Decision version | Context                                     | Behavior                                                                                                                                                      |
 | ---------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |

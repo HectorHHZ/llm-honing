@@ -50,7 +50,7 @@ export function createRenderer(
         ctx.arc(0, 0, TANK_RADIUS - 0.5, 0, Math.PI * 2);
         ctx.clip();
         ctx.save();
-        ctx.rotate(t.angle);
+        ctx.rotate(t.hullAngle ?? t.angle);
         for (const s of [-1, 1]) {
             box(-15, s * 11 - 3, 30, 6, color + "18", color);
             for (let x = -11; x < 13; x += 5)
