@@ -1,0 +1,1 @@
+{"module": "in_range", "function": "in_range", "cases": [{"args": [5, 0, 10], "expected": true}, {"args": [0, 0, 10], "expected": true}, {"args": [10, 0, 10], "expected": false}, {"args": [-1, 0, 10], "expected": false}, {"args": [11, 0, 10], "expected": false}, {"args": [3, 3, 4], "expected": true}, {"args": [2, 2, 2], "expected": false}]}

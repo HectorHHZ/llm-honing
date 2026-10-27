@@ -40,6 +40,7 @@ from honing.core import (
     require,
 )
 from honing.harness.methods.gepa.archive import ARCHIVE_SCHEMA_VERSION, Archive, ArchiveCandidate
+from honing.harness.models import ChatModelError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -316,11 +317,13 @@ class GEPAMethod:
                 max_tokens=self.config.reflection_max_tokens,
                 temperature=self.config.reflection_temperature,
             )
-        except Exception:
-            # Upstream isolates a failed reflection and proposes nothing for it
-            # (reflective_mutation.py:203-224); the parent episodes stay charged.
-            # Logged with the traceback so a bug in a chat client is not silent.
-            _LOGGER.exception("GEPA reflection on %s failed; proposing nothing this iteration", path)
+        except ChatModelError as error:
+            # A failed API call (a timeout, a rate limit after the client's retries, a
+            # bad key) proposes nothing, as upstream does (reflective_mutation.py:203-224);
+            # the parent episodes ran and stay charged, and no child runs. Anything else,
+            # a bug in a chat client included, propagates: upstream swallows every
+            # exception here, which would hide it. The error's message holds no reply body.
+            _LOGGER.warning("GEPA reflection on %s failed: %s; proposing nothing this iteration", path, error)
             return ""
         return extract_text(reply.text)
 

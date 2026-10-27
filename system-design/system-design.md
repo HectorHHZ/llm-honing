@@ -148,7 +148,7 @@ trainer.
 |---|---|:---:|:---:|---|---|
 | `sft` | token sequences | ✗ | ✗ | slime | native `--loss-type sft_loss` |
 | `distill` | token sequences | ✗ | ✓ | slime | custom-loss hook |
-| `opd` | on-policy samples | ✓ | ✓ | slime | native `--use-opd`; self-distillation when the teacher is a lineage release |
+| `opd` | on-policy samples | ✓ | ✓ | slime | native `--use-opd`: an `in_process` teacher loads beside the student (`--opd-type megatron`); an `engine` teacher's scores arrive with the samples (`teacher_logprobs`, `--opd-type sglang`). Self-distillation is the student itself scored under privileged context: `TeacherRef(kind="lineage", ref="self", placement="engine")` |
 | `gkd` | on-policy samples | ✓ | ✓ | slime | custom-loss hook |
 | `ppo` | on-policy samples with rewards | ✓ | ✗ | slime | native estimator |
 | `grpo` | grouped samples with rewards | ✓ | ✗ | slime | native estimator |
@@ -308,7 +308,9 @@ class TaskGrader(Protocol):
 A runner only runs the agent; a grader judges the outcome, because grading depends on the
 task and the same grader serves the gate, a method's own minibatches, and training
 rollouts. An `EpisodeRecord` is an outcome plus its grade, and `run_graded` is the one
-place that pairs them.
+place that pairs them. A task suite is a JSON Lines manifest (`honing/harness/tasks.py`)
+whose lines name a workspace, a grader command, and a split; `CommandGrader` runs that
+command over a copy of the episode's workspace and reads its score and feedback.
 
 A harness is a set of files for one agent.
 
@@ -639,7 +641,7 @@ Steps are ordered by risk: the assumption the whole design rests on is tested fi
 | **0** | Core contracts: value types and protocols in `honing/core` | done |
 | **1** | Walking skeleton: campaign, rules, gate, and release chain, with every other plane faked | done |
 | **2** | A real expert-drop editor on a small MoE, reading and writing safetensors; `hone compress` | next |
-| **3** | `backends/slime`: SFT through Slime with safetensors ⇄ `torch_dist` conversion, plus a test that pins every Slime argument Honing emits | |
+| **3** | `backends/slime`: SFT, OPD and GRPO through Slime train-only on Honing's batches, loading and saving Hugging Face weights directly, plus a test that pins Slime's model arguments to its own scripts | in progress ([#68](https://github.com/HectorHHZ/llm-honing/issues/68)) |
 | **4** | `DatasetProvider` and `FeedbackProvider` | |
 | **5** | A rollout provider and runner on `slime.agent`; GRPO and on-policy distillation | |
 | **6** | Quantization: PTQ through Slime's tools; quantization-aware training through `numerics` | |
