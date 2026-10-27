@@ -100,7 +100,6 @@ The scripted method (`integrations/officeqa/scripted.py`) in `configs/e2e/openha
 ## Known gaps
 
 - Core cannot represent a model it only reaches through a URL. `honing.backends.llm_gateway` gives one a stand-in snapshot so harness moves can be gated; nothing stops a config from scheduling a train move on it.
-- `PolicyEndpoint.runtime` has no OpenAI-compatible value; the runner uses `sglang`, as the stand-in policy server does.
 - The agent runs on the host, as the current user, in `work/`. Mounts are symlinks and not write-protected. A sandbox (#16) should come before a method searches over toolsets.
 - `command`, `hook`, and `program` files are refused.
 - A skill's frontmatter is parsed by OpenHands, so a malformed skill fails its episode rather than being refused up front.

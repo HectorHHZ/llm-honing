@@ -72,9 +72,12 @@ class GatewayModel:
         return ModelSnapshot(checkpoint=checkpoint, architecture=_PLACEHOLDER, parameters=1)
 
     def endpoint(self) -> PolicyEndpoint:
-        """Returns the endpoint; ``sglang`` is core's runtime for OpenAI-compatible chat."""
+        """Returns the endpoint, an OpenAI-compatible chat API."""
         return PolicyEndpoint(
-            base_url=self.base_url.rstrip("/"), tokenizer_location="gateway", served_model=self.model, runtime="sglang"
+            base_url=self.base_url.rstrip("/"),
+            tokenizer_location="gateway",
+            served_model=self.model,
+            runtime="openai_chat",
         )
 
 

@@ -41,6 +41,8 @@ REFUSED = 2
 # stays out of reach of the agent's terminal.
 _INHERITED = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "TERM"})
 _INHERITED_PREFIXES = ("LC_", "OPENHANDS_")
+# Endpoints that speak OpenAI-compatible chat: an SGLang server, or any other provider, router, or server.
+_CHAT_RUNTIMES = frozenset({"sglang", "openai_chat"})
 
 
 class OpenHandsEpisodeRunner:
@@ -205,7 +207,7 @@ class OpenHandsEpisodeRunner:
 
     def _access(self, policy: PolicyRef) -> dict[str, object]:
         endpoint = self._endpoints.resolve(policy)
-        if endpoint.runtime != "sglang":
+        if endpoint.runtime not in _CHAT_RUNTIMES:
             raise ContractError(f"OpenHands needs an OpenAI-compatible endpoint, not a {endpoint.runtime} one")
         access: dict[str, object] = {"base_url": endpoint.base_url, "model": endpoint.served_model}
         if isinstance(self._endpoints, GatewayEndpoints):

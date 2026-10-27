@@ -31,6 +31,7 @@ from honing.core import (
     HarnessFile,
     HarnessSpec,
     HoneRelease,
+    PolicyEndpoint,
     PolicyRef,
     Task,
     UpdateCandidate,
@@ -260,6 +261,21 @@ def test_the_probe_counts_a_file_only_when_the_worker_reports_its_content(tmp_pa
 def test_bad_settings_are_refused_at_construction(tmp_path: Path, overrides: dict[str, object], message: str) -> None:
     with pytest.raises(ContractError, match=message):
         _runner(tmp_path, **overrides)
+
+
+class _DecisionServers:
+    """Resolves every policy to a Jev decision server, which an OpenHands agent cannot talk to."""
+
+    def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
+        return PolicyEndpoint("http://127.0.0.1:1", "tokenizer", "laya", runtime="jev_decision")
+
+
+@pytest.mark.unit
+def test_a_gateway_endpoint_speaks_openai_chat_and_a_decision_server_is_refused(tmp_path: Path) -> None:
+    assert GatewayEndpoints(MODEL).resolve(_policy()).runtime == "openai_chat"
+
+    with pytest.raises(ContractError, match="OpenAI-compatible"):
+        _run(_runner(tmp_path, endpoints=_DecisionServers()))
 
 
 @pytest.mark.unit
