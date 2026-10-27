@@ -59,6 +59,8 @@ OpenHands' own discovery is off: no user skills from `~/.openhands`, no public s
 
 The worker does not inherit Honing's environment. It gets `PATH`, `HOME`, `LANG`, `TMPDIR`, `TERM`, `LC_*`, `OPENHANDS_*`, the policy's API key, and whatever the runner's `environment` adds, so the agent's terminal cannot print `HF_TOKEN` or cloud credentials. `episode.json` names the key's variable, never its value, and a missing key is refused before the agent starts.
 
+A proxy or a custom CA bundle is not inherited either. On a network that needs one, name the variables in the runner's `inherit_environment` (for example `["HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"]`); the worker takes their values from Honing's environment, and the config holds only the names.
+
 ## Bringing your own skills, MCP servers, and tools
 
 What the harness may change and what the operator controls are split on purpose, because an evolution method writes harness files and proposes whatever its model suggests.

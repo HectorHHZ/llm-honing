@@ -18,7 +18,7 @@ import signal
 import sys
 import uuid
 import weakref
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -74,7 +74,13 @@ class OpenHandsEpisodeRunner:
             large to copy; the links are shared and not write-protected.
         environment: Extra environment variables for the worker. The worker
             sees only these, ``PATH``, ``HOME``, ``LANG``, ``TMPDIR``, ``TERM``,
-            ``LC_*``, ``OPENHANDS_*``, and the policy's API key.
+            ``LC_*``, ``OPENHANDS_*``, the policy's API key, and the variables
+            ``inherit_environment`` names.
+        inherit_environment: Names of further variables the worker takes from
+            Honing's environment, such as ``HTTPS_PROXY``, ``NO_PROXY``, or
+            ``SSL_CERT_FILE`` on a network that needs a proxy or its own CA
+            bundle. Only the names are configured; the values stay in the
+            environment.
         concurrency: How many agents run at once.
         timeout_seconds: An agent still running after this is killed with its
             child processes, and the outcome's exit code is -9.
@@ -83,8 +89,9 @@ class OpenHandsEpisodeRunner:
         llm_timeout_seconds: The limit on one model call.
 
     Raises:
-        ContractError: A limit is not positive, a mount is not a directory, or
-            ``mount_mode`` is neither ``copy`` nor ``link``.
+        ContractError: A limit is not positive, a mount is not a directory,
+            ``mount_mode`` is neither ``copy`` nor ``link``, or an inherited name
+            is not a variable name.
     """
 
     support = RunnerSupport(
@@ -105,6 +112,7 @@ class OpenHandsEpisodeRunner:
         mounts: Mapping[str, Path] | None = None,
         mount_mode: MountMode = "copy",
         environment: Mapping[str, str] | None = None,
+        inherit_environment: Iterable[str] = (),
         concurrency: int = 1,
         timeout_seconds: float = 900.0,
         max_iterations: int = 30,
@@ -128,6 +136,9 @@ class OpenHandsEpisodeRunner:
         require(mount_mode in ("copy", "link"), f"mount_mode must be 'copy' or 'link', got {mount_mode!r}")
         self._mount_mode = mount_mode
         self._environment = dict(environment or {})
+        self._inherit = frozenset(inherit_environment)
+        for name in self._inherit:
+            require(bool(name) and "=" not in name, f"inherit_environment names variables, got {name!r}")
         self._concurrency = concurrency
         self._timeout = timeout_seconds
         self._max_iterations = max_iterations
@@ -213,7 +224,10 @@ class OpenHandsEpisodeRunner:
         inherited = {
             name: value
             for name, value in os.environ.items()
-            if name in _INHERITED or name.startswith(_INHERITED_PREFIXES) or name == api_key_env
+            if name in _INHERITED
+            or name.startswith(_INHERITED_PREFIXES)
+            or name == api_key_env
+            or name in self._inherit
         }
         return {**inherited, **self._environment, "OPENHANDS_SUPPRESS_BANNER": "1"}
 

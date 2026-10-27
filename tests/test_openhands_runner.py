@@ -221,6 +221,17 @@ def test_the_worker_sees_only_allowed_environment_variables(tmp_path: Path, monk
 
 
 @pytest.mark.unit
+def test_a_proxy_reaches_the_worker_only_when_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+
+    default = set(json.loads(_run(_runner(tmp_path)).final_output)["environment"])
+    named = set(json.loads(_run(_runner(tmp_path, inherit_environment=["HTTPS_PROXY"])).final_output)["environment"])
+
+    assert "HTTPS_PROXY" not in default
+    assert "HTTPS_PROXY" in named
+
+
+@pytest.mark.unit
 def test_a_timeout_kills_the_worker_and_its_children(tmp_path: Path) -> None:
     started = time.monotonic()
     outcome = _run(_runner(tmp_path, timeout_seconds=2, environment=HANG))
@@ -278,6 +289,7 @@ def test_the_probe_counts_a_file_only_when_the_worker_reports_its_content(tmp_pa
         ({"mounts": {"a/b": Path(".")}}, "one path segment"),
         ({"mounts": {"data": Path("/no/such/dir")}}, "not a directory"),
         ({"mount_mode": "bind"}, "mount_mode must be"),
+        ({"inherit_environment": ["HTTPS_PROXY=http://p"]}, "names variables"),
     ],
 )
 def test_bad_settings_are_refused_at_construction(tmp_path: Path, overrides: dict[str, object], message: str) -> None:

@@ -37,6 +37,7 @@ def runner(
     mcp_registry_file: str | None = None,
     mounts: Mapping[str, str] | None = None,
     mount_mode: MountMode = "copy",
+    inherit_environment: Sequence[str] = (),
     concurrency: int = 1,
     timeout_seconds: float = 900.0,
     max_iterations: int = 30,
@@ -56,6 +57,8 @@ def runner(
         mounts: Directories put into every agent's working directory, by name.
         mount_mode: ``copy`` (each episode gets its own copy) or ``link``; see
             :class:`~honing.backends.openhands.runner.OpenHandsEpisodeRunner`.
+        inherit_environment: Names of further variables the worker takes from
+            Honing's environment, such as ``HTTPS_PROXY`` or ``SSL_CERT_FILE``.
         concurrency: How many agents run at once.
         timeout_seconds: The limit on one episode.
         max_iterations: The step limit.
@@ -81,6 +84,7 @@ def runner(
         ),
         mounts={name: _path(path, context) for name, path in (mounts or {}).items()},
         mount_mode=mount_mode,
+        inherit_environment=tuple(inherit_environment),
         concurrency=concurrency,
         timeout_seconds=timeout_seconds,
         max_iterations=max_iterations,
