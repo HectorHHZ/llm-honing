@@ -66,21 +66,19 @@ class OfficeQASuite:
         """Returns the questions as tasks, in order."""
         return tuple(q.task() for q in self.questions)
 
-    def question_for(self, task: Task) -> OfficeQAQuestion:
-        """Returns a task's question, matched by id or, for a copy under another id, by prompt.
-
-        The conformance check runs copies of one task under new ids to test concurrency.
+    def question(self, task_id: str) -> OfficeQAQuestion:
+        """Returns the question a task asks.
 
         Args:
-            task: A task from :meth:`tasks`, or a copy of one.
+            task_id: A task id from :meth:`tasks`.
 
         Raises:
             ContractError: The task is not one of the suite's.
         """
         for q in self.questions:
-            if q.uid == task.task_id or q.task().prompt == task.prompt:
+            if q.uid == task_id:
                 return q
-        raise ContractError(f"task {task.task_id!r} is not in the OfficeQA suite")
+        raise ContractError(f"task {task_id!r} is not in the OfficeQA suite")
 
 
 def read_questions(csv_path: Path) -> dict[str, OfficeQAQuestion]:

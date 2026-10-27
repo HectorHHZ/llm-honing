@@ -88,7 +88,7 @@ class OfficeQAGrader:
         Raises:
             ContractError: The task is not in the suite.
         """
-        question = self._suite.question_for(task)
+        question = self._suite.question(task.task_id)
         where = ", ".join(question.source_files) or "an unlisted bulletin"
         label = f" The reference answer is {question.answer!r}." if self._reveal else ""
         if outcome.exit_code == _TIMED_OUT:

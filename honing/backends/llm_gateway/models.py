@@ -68,6 +68,7 @@ class GatewayModel:
             weight_format=MASTER_WEIGHT_FORMAT,
             checksum=self.checksum,
         )
+        # parameters=1 is a placeholder, so a campaign's honing curve says nothing about a gateway model's size.
         return ModelSnapshot(checkpoint=checkpoint, architecture=_PLACEHOLDER, parameters=1)
 
     def endpoint(self) -> PolicyEndpoint:

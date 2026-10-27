@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -77,7 +76,7 @@ def test_a_suite_keeps_the_named_questions_in_order(csv_path: Path) -> None:
     suite = load_suite(csv_path, ["UID0008", "UID0002"])
 
     assert [t.task_id for t in suite.tasks()] == ["UID0008", "UID0002"]
-    assert suite.question_for(suite.tasks()[0]).source_files == (
+    assert suite.question("UID0008").source_files == (
         "treasury_bulletin_2012_06.txt",
         "treasury_bulletin_2022_06.txt",
     )
@@ -147,16 +146,6 @@ def test_an_agent_that_did_not_finish_scores_zero_with_the_reason(
 
     assert grade.score == 0.0
     assert feedback in (grade.feedback or "")
-
-
-@pytest.mark.unit
-def test_a_copy_of_a_task_under_another_id_grades_as_the_original(tmp_path: Path, csv_path: Path) -> None:
-    grader = OfficeQAGrader(load_suite(csv_path, ["UID0002"]), _exact)
-    copy = replace(grader._suite.tasks()[0], task_id="UID0002-3")
-
-    grade = asyncio.run(grader.grade(copy, _outcome(tmp_path, "<FINAL_ANSWER>507</FINAL_ANSWER>")))
-
-    assert grade.score == 1.0
 
 
 @pytest.mark.unit

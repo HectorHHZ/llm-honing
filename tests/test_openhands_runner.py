@@ -18,22 +18,26 @@ import pytest
 from honing.backends.llm_gateway import GatewayEndpoints, GatewayModel, endpoints, model_source
 from honing.backends.openhands import (
     AGENT_SETTINGS,
+    REFUSED,
     OpenHandsDeliveryProbe,
     OpenHandsEpisodeRunner,
     ToolPolicy,
     agent_settings,
 )
 from honing.core import (
-    CampaignRuleError,
     ContractError,
     EpisodeOutcome,
+    Grade,
     HarnessFile,
     HarnessSpec,
+    HoneRelease,
     PolicyRef,
     Task,
+    UpdateCandidate,
     protocols,
 )
 from honing.e2e.components import PipelineContext
+from honing.release import EpisodeEvaluator, Gate, WinLossSelector
 
 REPO = Path(__file__).resolve().parents[1]
 FAKE_WORKER = REPO / "tests/fakes/openhands_worker.py"
@@ -45,6 +49,7 @@ MODEL = GatewayModel(
     output_usd_per_million=0.06,
 )
 TASK = Task(task_id="q1", prompt="What is the figure?")
+HANG = {"FAKE_WORKER_SLEEP": "30", "FAKE_WORKER_CHILD": "1"}
 SEED = HarnessSpec(
     agent="openhands",
     files=(
@@ -53,6 +58,16 @@ SEED = HarnessSpec(
         (AGENT_SETTINGS, agent_settings(["terminal"])),
     ),
 )
+
+
+FORBIDDEN = SEED.with_file(AGENT_SETTINGS, agent_settings(["browser_use"]))
+
+
+class _FinishedGrader:
+    """Scores 1 for an episode whose agent finished, 0 otherwise."""
+
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
+        return Grade(score=float(outcome.exit_code == 0))
 
 
 @pytest.fixture(autouse=True)
@@ -115,6 +130,7 @@ def test_an_episode_directory_holds_the_harness_the_plan_and_the_mounts(tmp_path
         "cwd": str((root / "work").resolve()),
         "key_present": True,
         "tools": ["terminal"],
+        "environment": json.loads(outcome.final_output)["environment"],
     }
     episode = json.loads((root / "episode.json").read_text())
     assert episode["policy"] == {
@@ -147,23 +163,45 @@ def test_a_missing_api_key_is_refused_before_the_agent_starts(tmp_path: Path, mo
 
 
 @pytest.mark.unit
-def test_a_harness_the_policy_forbids_is_refused_before_the_agent_starts(tmp_path: Path) -> None:
-    spec = SEED.with_file(AGENT_SETTINGS, agent_settings(["browser_use"]))
+def test_a_harness_the_policy_forbids_is_refused_without_starting_the_agent(tmp_path: Path) -> None:
+    outcome = _run(_runner(tmp_path), FORBIDDEN)
 
-    with pytest.raises(CampaignRuleError) as refused:
-        _run(_runner(tmp_path), spec)
-
-    assert refused.value.rule == "harness_tools_allowed"
-    assert not (tmp_path / "workspaces").exists()
+    assert outcome.exit_code == REFUSED
+    assert "harness_tools_allowed" in outcome.final_output and "browser_use" in outcome.final_output
+    root = Path(outcome.workspace_location or "")
+    assert json.loads((root / "result.json").read_text())["status"] == "refused"
+    assert not (root / "episode.json").exists()
 
 
 @pytest.mark.unit
-def test_a_timeout_kills_the_worker_and_its_children(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FAKE_WORKER_SLEEP", "30")
-    monkeypatch.setenv("FAKE_WORKER_CHILD", "1")
+def test_the_gate_rejects_a_refused_harness_instead_of_stopping(tmp_path: Path) -> None:
+    snapshot = MODEL.snapshot()
+    incumbent = HoneRelease("r0000", UpdateCandidate("init", None, snapshot, harness=SEED), None)
+    candidate = UpdateCandidate("harness", "r0000", snapshot, harness=FORBIDDEN)
+    gate = Gate(EpisodeEvaluator(_runner(tmp_path), _FinishedGrader(), [TASK]), WinLossSelector())
 
+    evaluation, decision = gate.judge(candidate, incumbent)
+
+    assert (evaluation.candidate_scores, evaluation.incumbent_scores) == ((0.0,), (1.0,))
+    assert not decision.selected
+
+
+@pytest.mark.unit
+def test_the_worker_sees_only_allowed_environment_variables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HF_TOKEN", "hf-secret")
+    monkeypatch.setenv("LC_ALL", "C")
+
+    outcome = _run(_runner(tmp_path, environment={"EXTRA_SETTING": "1"}))
+
+    seen = set(json.loads(outcome.final_output)["environment"])
+    assert {"PATH", "LC_ALL", "HONING_TEST_KEY", "EXTRA_SETTING", "OPENHANDS_SUPPRESS_BANNER"} <= seen
+    assert "HF_TOKEN" not in seen
+
+
+@pytest.mark.unit
+def test_a_timeout_kills_the_worker_and_its_children(tmp_path: Path) -> None:
     started = time.monotonic()
-    outcome = _run(_runner(tmp_path, timeout_seconds=2))
+    outcome = _run(_runner(tmp_path, timeout_seconds=2, environment=HANG))
 
     assert outcome.exit_code == -9
     assert time.monotonic() - started < 15
@@ -171,10 +209,8 @@ def test_a_timeout_kills_the_worker_and_its_children(tmp_path: Path, monkeypatch
 
 
 @pytest.mark.unit
-def test_a_cancelled_episode_kills_its_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FAKE_WORKER_SLEEP", "30")
-    monkeypatch.setenv("FAKE_WORKER_CHILD", "1")
-    runner = _runner(tmp_path)
+def test_a_cancelled_episode_kills_its_worker(tmp_path: Path) -> None:
+    runner = _runner(tmp_path, environment=HANG)
 
     async def cancel_after_start() -> None:
         episode = asyncio.ensure_future(runner.run(SEED, TASK, _policy()))

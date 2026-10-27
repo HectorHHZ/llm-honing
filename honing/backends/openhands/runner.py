@@ -23,6 +23,7 @@ from pathlib import Path
 from honing.backends.llm_gateway import GatewayEndpoints
 from honing.backends.openhands.harness import AGENT, AgentPlan, ToolPolicy, plan_agent
 from honing.core import (
+    CampaignRuleError,
     ContractError,
     EpisodeOutcome,
     HarnessSpec,
@@ -34,6 +35,12 @@ from honing.core import (
 )
 
 TIMED_OUT = -9
+REFUSED = 2
+
+# What the worker inherits from Honing's environment. Everything else, such as HF_TOKEN or cloud credentials,
+# stays out of reach of the agent's terminal.
+_INHERITED = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "TERM"})
+_INHERITED_PREFIXES = ("LC_", "OPENHANDS_")
 
 
 class OpenHandsEpisodeRunner:
@@ -56,7 +63,9 @@ class OpenHandsEpisodeRunner:
         tools: What a harness may give the agent.
         mounts: Directories linked into every working directory, by name. The
             links are not write-protected.
-        environment: Extra environment variables for the worker.
+        environment: Extra environment variables for the worker. The worker
+            sees only these, ``PATH``, ``HOME``, ``LANG``, ``TMPDIR``, ``TERM``,
+            ``LC_*``, ``OPENHANDS_*``, and the policy's API key.
         concurrency: How many agents run at once.
         timeout_seconds: An agent still running after this is killed with its
             child processes, and the outcome's exit code is -9.
@@ -141,19 +150,24 @@ class OpenHandsEpisodeRunner:
 
         Returns:
             The outcome, with ``final_output`` the agent's last message and
-            ``workspace_location`` the episode directory.
+            ``workspace_location`` the episode directory. A harness that
+            :meth:`check_spec` refuses starts no agent: the outcome's exit code
+            is 2 and ``final_output`` gives the reason, so the gate scores and
+            rejects it like any failed episode.
 
         Raises:
             ContractError: The harness is for another agent, the endpoint does
                 not speak OpenAI-compatible chat, or the API key is not set.
-            CampaignRuleError: As :meth:`check_spec`.
         """
-        plan = self.check_spec(spec)
+        try:
+            plan = self.check_spec(spec)
+        except CampaignRuleError as refusal:
+            return self._refused(spec, task, policy, refusal)
         access = self._access(policy)
         slots = self._slots.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(self._concurrency))
         async with slots:
             root = self._prepare(spec, task, plan, access)
-            exit_code = await self._start(root)
+            exit_code = await self._start(root, self._worker_environment(access.get("api_key_env")))
         result_path = root / "result.json"
         result = json.loads(result_path.read_text()) if result_path.exists() else {}
         return EpisodeOutcome(
@@ -165,6 +179,29 @@ class OpenHandsEpisodeRunner:
             transcript_location=str(root / "transcript.jsonl"),
             workspace_location=str(root),
         )
+
+    def _refused(self, spec: HarnessSpec, task: Task, policy: PolicyRef, refusal: CampaignRuleError) -> EpisodeOutcome:
+        root = self._workspaces / f"{task.task_id}--{spec.spec_id[:12]}--{uuid.uuid4().hex[:8]}"
+        root.mkdir(parents=True)
+        reason = f"The harness was refused before the agent started: {refusal}"
+        result = {"final_output": reason, "status": "refused", "error": str(refusal)}
+        (root / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        return EpisodeOutcome(
+            task_id=task.task_id,
+            spec_id=spec.spec_id,
+            policy_checksum=policy.checkpoint.checksum,
+            exit_code=REFUSED,
+            final_output=reason,
+            workspace_location=str(root),
+        )
+
+    def _worker_environment(self, api_key_env: object) -> dict[str, str]:
+        inherited = {
+            name: value
+            for name, value in os.environ.items()
+            if name in _INHERITED or name.startswith(_INHERITED_PREFIXES) or name == api_key_env
+        }
+        return {**inherited, **self._environment, "OPENHANDS_SUPPRESS_BANNER": "1"}
 
     def _access(self, policy: PolicyRef) -> dict[str, object]:
         endpoint = self._endpoints.resolve(policy)
@@ -203,14 +240,14 @@ class OpenHandsEpisodeRunner:
         (root / "episode.json").write_text(json.dumps(episode, indent=2) + "\n", encoding="utf-8")
         return root
 
-    async def _start(self, root: Path) -> int:
+    async def _start(self, root: Path, environment: Mapping[str, str]) -> int:
         with (root / "agent.log").open("wb") as log:
             process = await asyncio.create_subprocess_exec(
                 str(self._python),
                 str(self._worker),
                 str(root),
                 cwd=root / "work",
-                env={**os.environ, **self._environment, "OPENHANDS_SUPPRESS_BANNER": "1"},
+                env=dict(environment),
                 stdout=log,
                 stderr=asyncio.subprocess.STDOUT,
                 # Its own process group, so stopping it also stops the shells the agent's tools started.

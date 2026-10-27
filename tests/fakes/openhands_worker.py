@@ -1,6 +1,7 @@
 """Stands in for integrations/openhands/worker.py: same files in and out, no OpenHands, no model.
 
-It reports every file the plan routes as loaded, and answers with what it saw. FAKE_WORKER_SLEEP makes it
+It reports every file the plan routes as loaded, and answers with what it saw, including the names of the
+environment variables it was given. FAKE_WORKER_SLEEP makes it
 hang, FAKE_WORKER_EXIT sets its exit code, and FAKE_WORKER_CHILD starts a child process that records its pid,
 so a test can check the child is killed too.
 """
@@ -31,6 +32,7 @@ answer = {
     "cwd": os.getcwd(),
     "key_present": bool(key_env and os.environ.get(key_env)),
     "tools": plan["tools"],
+    "environment": sorted(os.environ),
 }
 (root / "transcript.jsonl").write_text(json.dumps({"answer": answer}) + "\n")
 (root / "result.json").write_text(json.dumps({"final_output": json.dumps(answer), "status": "finished"}))

@@ -19,13 +19,20 @@ from honing.backends.openhands.harness import (
     plan_agent,
     skill_files,
 )
-from honing.backends.openhands.runner import TIMED_OUT, OpenHandsDeliveryProbe, OpenHandsEpisodeRunner, default_python
+from honing.backends.openhands.runner import (
+    REFUSED,
+    TIMED_OUT,
+    OpenHandsDeliveryProbe,
+    OpenHandsEpisodeRunner,
+    default_python,
+)
 
 __all__ = [
     "AGENT",
     "AGENT_SETTINGS",
     "DEFAULT_TOOLS",
     "MCP_SETTINGS",
+    "REFUSED",
     "SKILLS_DIR",
     "TIMED_OUT",
     "AgentPlan",

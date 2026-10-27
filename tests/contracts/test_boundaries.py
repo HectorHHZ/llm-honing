@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-FRAMEWORKS = {"slime", "slime_plugins", "megatron", "sglang", "reef", "reef_client"}
+FRAMEWORKS = {"slime", "slime_plugins", "megatron", "sglang", "reef", "reef_client", "openhands"}
 RETIRED_TERMS = re.compile(r"\b(provenance|evidence|ledger|sidecar)\b", re.IGNORECASE)
 
 
@@ -91,6 +91,17 @@ def test_only_the_run_tracker_imports_wandb(repo_root: Path) -> None:
         if "wandb" in imported_top_levels(path)
     ]
     assert importers == ["honing/e2e/tracking.py"]
+
+
+@pytest.mark.unit
+def test_honing_never_imports_openhands(repo_root: Path) -> None:
+    """OpenHands runs in its own environment; its backend only starts the worker there."""
+    offenders = sorted(
+        str(path.relative_to(repo_root))
+        for path in (repo_root / "honing").rglob("*.py")
+        if "openhands" in imported_top_levels(path)
+    )
+    assert offenders == []
 
 
 @pytest.mark.unit

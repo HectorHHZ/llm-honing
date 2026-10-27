@@ -11,6 +11,8 @@ uv venv --python 3.12 integrations/openhands/.venv
 uv pip install --python integrations/openhands/.venv/bin/python -r integrations/openhands/requirements.txt
 ```
 
+`requirements.txt` is a lock compiled from `requirements.in`; recompile it with the command at its top after changing the inputs. The lock matters: the SDK accepts any litellm from 1.93.0, and some later versions fail on the first model call.
+
 ## Run it
 
 With the stand-in policy server, no model or key:
@@ -55,7 +57,7 @@ What a harness file means is decided on Honing's side, in `honing/backends/openh
 
 OpenHands' own discovery is off: no user skills from `~/.openhands`, no public skill registry, no `AGENTS.md` from the working directory, no memory. The agent sees what the harness says.
 
-The policy's API key reaches the worker through the environment; `episode.json` names the variable, never the value. A missing key is refused before the agent starts.
+The worker does not inherit Honing's environment. It gets `PATH`, `HOME`, `LANG`, `TMPDIR`, `TERM`, `LC_*`, `OPENHANDS_*`, the policy's API key, and whatever the runner's `environment` adds, so the agent's terminal cannot print `HF_TOKEN` or cloud credentials. `episode.json` names the key's variable, never its value, and a missing key is refused before the agent starts.
 
 ## Bringing your own skills, MCP servers, and tools
 
@@ -81,7 +83,7 @@ A harness then enables servers by name, for example with `"mcp_servers": ["fetch
 
 **Tools belong to the operator; the harness picks among them.** `tools` is the allowlist and `default_tools` what an agent gets when its harness names none. A custom OpenHands tool goes in a module that calls `openhands.sdk.register_tool`; list it under `tool_modules` (importable in the OpenHands environment) and its name under `tools`.
 
-A harness asking for a tool or server outside the policy is refused with `harness_tools_allowed`; a malformed settings file or two skills with one name, with `harness_well_formed`. Either refusal happens before an episode starts, and a method sees it as a candidate that cannot run.
+A harness asking for a tool or server outside the policy is refused with `harness_tools_allowed`; a malformed settings file or two skills with one name, with `harness_well_formed`. Either way no agent starts: the episode's outcome has exit code 2 and the reason as its output, so the grader scores it 0 and the gate rejects the candidate like any other, and the campaign goes on.
 
 ## What the runner reports
 
