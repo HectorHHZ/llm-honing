@@ -15,7 +15,7 @@ uv pip install --python integrations/openhands/.venv/bin/python -r integrations/
 
 ## Run it
 
-With the stand-in policy server, no model or key:
+With the stand-in policy server, no model or key. CI's `openhands` job runs both on every pull request:
 
 ```bash
 python scripts/e2e/check_runner.py --config configs/e2e/openhands.json

@@ -1,6 +1,6 @@
 # End-to-end runs
 
-Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on every pull request, except the two OpenHands configs, which need their own environment and, for OfficeQA, a model key ([integrations/openhands/README.md](../../integrations/openhands/README.md)).
+Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on every pull request, except the two OpenHands configs ([integrations/openhands/README.md](../../integrations/openhands/README.md)): CI's `openhands` job runs `configs/e2e/openhands.json` in OpenHands' own environment, and `configs/e2e/openhands_officeqa.json` needs a model key, so CI does not run it.
 
 | Command | What it runs |
 | --- | --- |
@@ -8,7 +8,7 @@ Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on
 | `python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json` | the checks a harness runner must pass before it joins a campaign |
 | `python scripts/e2e/check_trainer.py --config configs/e2e/all_planes.json` | the checks a trainer must pass before it joins a campaign |
 | `python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json` | the RA2 runner and grader in a campaign, with stand-in match processes |
-| `python scripts/e2e/check_runner.py --config configs/e2e/openhands.json` (and `honing_pipeline.py`) | the runner checks and the all-planes campaign with OpenHands as the agent, against the stand-in policy; needs the OpenHands environment, so CI does not run it |
+| `python scripts/e2e/check_runner.py --config configs/e2e/openhands.json` (and `honing_pipeline.py`) | the runner checks and the all-planes campaign with OpenHands as the agent, against the stand-in policy; needs the OpenHands environment, which CI's `openhands` job builds from the lock |
 | `python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json` (and `honing_pipeline.py`) | OpenHands on three OfficeQA questions with a real model; needs `OPENROUTER_API_KEY` and fetched data, so CI does not run it |
 | `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json` | a tank campaign on real rounds (the Node match process against the planner opponent, Honing's `DecisionServer`) with a stand-in decision model: a GEPA harness move, sft on planner-teacher demonstrations, and grpo on sampled rollouts |
 | `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
