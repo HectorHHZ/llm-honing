@@ -22,6 +22,7 @@ from honing.backends.openhands.harness import (
 from honing.backends.openhands.runner import (
     REFUSED,
     TIMED_OUT,
+    MountMode,
     OpenHandsDeliveryProbe,
     OpenHandsEpisodeRunner,
     default_python,
@@ -36,6 +37,7 @@ __all__ = [
     "SKILLS_DIR",
     "TIMED_OUT",
     "AgentPlan",
+    "MountMode",
     "OpenHandsDeliveryProbe",
     "OpenHandsEpisodeRunner",
     "SkillPlan",

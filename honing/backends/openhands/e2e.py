@@ -21,7 +21,7 @@ from honing.backends.openhands.harness import (
     mcp_settings,
     skill_files,
 )
-from honing.backends.openhands.runner import OpenHandsDeliveryProbe, OpenHandsEpisodeRunner, default_python
+from honing.backends.openhands.runner import MountMode, OpenHandsDeliveryProbe, OpenHandsEpisodeRunner, default_python
 from honing.core import HarnessFile, HarnessSpec
 from honing.e2e.components import PipelineContext
 
@@ -36,6 +36,7 @@ def runner(
     mcp_registry: Mapping[str, Mapping[str, object]] | None = None,
     mcp_registry_file: str | None = None,
     mounts: Mapping[str, str] | None = None,
+    mount_mode: MountMode = "copy",
     concurrency: int = 1,
     timeout_seconds: float = 900.0,
     max_iterations: int = 30,
@@ -52,7 +53,9 @@ def runner(
         tool_modules: Modules that register custom tools.
         mcp_registry: MCP server definitions by name.
         mcp_registry_file: A ``{"mcpServers": {...}}`` file whose servers join ``mcp_registry``.
-        mounts: Directories linked into every agent's working directory, by name.
+        mounts: Directories put into every agent's working directory, by name.
+        mount_mode: ``copy`` (each episode gets its own copy) or ``link``; see
+            :class:`~honing.backends.openhands.runner.OpenHandsEpisodeRunner`.
         concurrency: How many agents run at once.
         timeout_seconds: The limit on one episode.
         max_iterations: The step limit.
@@ -77,6 +80,7 @@ def runner(
             tool_modules=tuple(tool_modules),
         ),
         mounts={name: _path(path, context) for name, path in (mounts or {}).items()},
+        mount_mode=mount_mode,
         concurrency=concurrency,
         timeout_seconds=timeout_seconds,
         max_iterations=max_iterations,

@@ -13,12 +13,14 @@ import contextlib
 import hashlib
 import json
 import os
+import shutil
 import signal
 import sys
 import uuid
 import weakref
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Literal
 
 from honing.backends.llm_gateway import GatewayEndpoints
 from honing.backends.openhands.harness import AGENT, AgentPlan, ToolPolicy, plan_agent
@@ -36,6 +38,8 @@ from honing.core import (
 
 TIMED_OUT = -9
 REFUSED = 2
+
+MountMode = Literal["copy", "link"]
 
 # What the worker inherits from Honing's environment. Everything else, such as HF_TOKEN or cloud credentials,
 # stays out of reach of the agent's terminal.
@@ -63,8 +67,11 @@ class OpenHandsEpisodeRunner:
             gets the model's API key (through the environment, never on disk)
             and prices.
         tools: What a harness may give the agent.
-        mounts: Directories linked into every working directory, by name. The
-            links are not write-protected.
+        mounts: Directories put into every working directory, by name.
+        mount_mode: ``copy``, the default, gives each episode its own copy of
+            every mount, so an agent that edits one cannot change what another
+            episode reads. ``link`` symlinks them instead, for a directory too
+            large to copy; the links are shared and not write-protected.
         environment: Extra environment variables for the worker. The worker
             sees only these, ``PATH``, ``HOME``, ``LANG``, ``TMPDIR``, ``TERM``,
             ``LC_*``, ``OPENHANDS_*``, and the policy's API key.
@@ -76,7 +83,8 @@ class OpenHandsEpisodeRunner:
         llm_timeout_seconds: The limit on one model call.
 
     Raises:
-        ContractError: A limit is not positive, or a mount is not a directory.
+        ContractError: A limit is not positive, a mount is not a directory, or
+            ``mount_mode`` is neither ``copy`` nor ``link``.
     """
 
     support = RunnerSupport(
@@ -95,6 +103,7 @@ class OpenHandsEpisodeRunner:
         endpoints: PolicyEndpoints,
         tools: ToolPolicy | None = None,
         mounts: Mapping[str, Path] | None = None,
+        mount_mode: MountMode = "copy",
         environment: Mapping[str, str] | None = None,
         concurrency: int = 1,
         timeout_seconds: float = 900.0,
@@ -116,6 +125,8 @@ class OpenHandsEpisodeRunner:
         for name, path in self._mounts.items():
             require("/" not in name and name not in {"", ".", ".."}, f"a mount name is one path segment, got {name!r}")
             require(path.is_dir(), f"mount {name!r} points at {path}, which is not a directory")
+        require(mount_mode in ("copy", "link"), f"mount_mode must be 'copy' or 'link', got {mount_mode!r}")
+        self._mount_mode = mount_mode
         self._environment = dict(environment or {})
         self._concurrency = concurrency
         self._timeout = timeout_seconds
@@ -168,7 +179,8 @@ class OpenHandsEpisodeRunner:
         access = self._access(policy)
         slots = self._slots.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(self._concurrency))
         async with slots:
-            root = self._prepare(spec, task, plan, access)
+            # Off the event loop: copying a mount can take a while, and other episodes are running.
+            root = await asyncio.to_thread(self._prepare, spec, task, plan, access)
             exit_code = await self._start(root, self._worker_environment(access.get("api_key_env")))
         result_path = root / "result.json"
         result = json.loads(result_path.read_text()) if result_path.exists() else {}
@@ -231,7 +243,10 @@ class OpenHandsEpisodeRunner:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(file.content, encoding="utf-8")
         for name, mount in self._mounts.items():
-            (work / name).symlink_to(mount, target_is_directory=True)
+            if self._mount_mode == "copy":
+                shutil.copytree(mount, work / name, ignore_dangling_symlinks=True)
+            else:
+                (work / name).symlink_to(mount, target_is_directory=True)
         episode = {
             "task": {"task_id": task.task_id, "prompt": task.prompt},
             "spec_id": spec.spec_id,

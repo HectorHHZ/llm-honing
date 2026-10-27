@@ -100,6 +100,6 @@ The scripted method (`integrations/officeqa/scripted.py`) in `configs/e2e/openha
 ## Known gaps
 
 - Core cannot represent a model it only reaches through a URL. `honing.backends.llm_gateway` gives one a stand-in snapshot so harness moves can be gated; nothing stops a config from scheduling a train move on it.
-- The agent runs on the host, as the current user, in `work/`. Mounts are symlinks and not write-protected. A sandbox (#16) should come before a method searches over toolsets.
+- The agent runs on the host, as the current user, in `work/`. Each episode gets its own copy of every mount; with `mount_mode` set to `link`, mounts are symlinks shared by every episode and not write-protected. A sandbox (#16) should come before a method searches over toolsets.
 - `command`, `hook`, and `program` files are refused.
 - A skill's frontmatter is parsed by OpenHands, so a malformed skill fails its episode rather than being refused up front.

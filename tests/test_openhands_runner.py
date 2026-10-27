@@ -125,7 +125,7 @@ def test_an_episode_directory_holds_the_harness_the_plan_and_the_mounts(tmp_path
     assert outcome.transcript_location == str(root / "transcript.jsonl")
     for path, file in SEED.files:
         assert (root / "harness" / path).read_text() == file.content
-    assert (root / "work" / "corpus").is_symlink()
+    assert (root / "work" / "corpus").is_dir() and not (root / "work" / "corpus").is_symlink()
     assert json.loads(outcome.final_output) == {
         "task": "q1",
         "cwd": str((root / "work").resolve()),
@@ -143,6 +143,27 @@ def test_an_episode_directory_holds_the_harness_the_plan_and_the_mounts(tmp_path
     }
     assert episode["agent"]["routes"]["skills/search/SKILL.md"] == "skill:search"
     assert episode["limits"] == {"max_budget_usd": None, "llm_timeout_seconds": 120}
+
+
+@pytest.mark.unit
+def test_each_episode_gets_its_own_copy_of_a_mount(tmp_path: Path) -> None:
+    runner = _runner(tmp_path)
+    (tmp_path / "corpus" / "doc.txt").write_text("original\n")
+
+    first = _run(runner)
+    (Path(first.workspace_location or "") / "work" / "corpus" / "doc.txt").write_text("edited by the agent\n")
+    second = _run(runner)
+
+    assert (tmp_path / "corpus" / "doc.txt").read_text() == "original\n"
+    assert (Path(second.workspace_location or "") / "work" / "corpus" / "doc.txt").read_text() == "original\n"
+
+
+@pytest.mark.unit
+def test_link_mode_shares_the_mount(tmp_path: Path) -> None:
+    outcome = _run(_runner(tmp_path, mount_mode="link"))
+
+    linked = Path(outcome.workspace_location or "") / "work" / "corpus"
+    assert linked.is_symlink() and linked.resolve() == (tmp_path / "corpus").resolve()
 
 
 @pytest.mark.unit
@@ -256,6 +277,7 @@ def test_the_probe_counts_a_file_only_when_the_worker_reports_its_content(tmp_pa
         ({"max_budget_usd": 0.0}, "max_budget_usd must be positive"),
         ({"mounts": {"a/b": Path(".")}}, "one path segment"),
         ({"mounts": {"data": Path("/no/such/dir")}}, "not a directory"),
+        ({"mount_mode": "bind"}, "mount_mode must be"),
     ],
 )
 def test_bad_settings_are_refused_at_construction(tmp_path: Path, overrides: dict[str, object], message: str) -> None:
