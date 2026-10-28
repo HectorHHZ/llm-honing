@@ -313,12 +313,13 @@ class OpenAIEndpoints:
 
     The API's model stands in for the campaign's (fake) checkpoint, so every
     checkpoint resolves to it: records name the checkpoint, and the config and
-    summary name the model. ``runtime`` is ``"sglang"``, the closest of
-    ``EndpointRuntime``'s values: the protocol is OpenAI-compatible chat.
+    summary name the model.
     """
 
     def __init__(self, base_url: str, model: str) -> None:
-        self._endpoint = PolicyEndpoint(base_url=base_url, tokenizer_location="remote", served_model=model)
+        self._endpoint = PolicyEndpoint(
+            base_url=base_url, tokenizer_location="remote", served_model=model, runtime="openai_chat"
+        )
 
     @property
     def base_url(self) -> str:

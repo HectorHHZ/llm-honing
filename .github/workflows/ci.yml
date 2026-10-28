@@ -201,3 +201,37 @@ jobs:
             ${{ runner.temp }}/tank-campaign/releases/commits.jsonl
             ${{ runner.temp }}/serving/server.err
           if-no-files-found: ignore
+
+  openhands:
+    # The OpenHands runner with the real worker, in OpenHands' own environment installed from its lock
+    # (integrations/openhands/README.md). No model or key: every episode is a real OpenHands conversation with the
+    # stand-in policy server, so this catches a lock that no longer installs or a worker that no longer runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Honing and the OpenHands environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . uv
+          uv venv --python 3.12 integrations/openhands/.venv
+          uv pip install --python integrations/openhands/.venv/bin/python -r integrations/openhands/requirements.txt
+      - name: Harness runner contract with OpenHands as the agent
+        run: python scripts/e2e/check_runner.py --config configs/e2e/openhands.json --work-dir "$RUNNER_TEMP/openhands-check"
+      - name: All planes with OpenHands as the agent
+        run: python scripts/e2e/honing_pipeline.py --config configs/e2e/openhands.json --work-dir "$RUNNER_TEMP/openhands"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: openhands-output
+          path: |
+            ${{ runner.temp }}/openhands-check/workspaces/*/agent.log
+            ${{ runner.temp }}/openhands/summary.json
+          if-no-files-found: ignore
