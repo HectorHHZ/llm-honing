@@ -1,0 +1,1 @@
+{"module": "count_tag", "function": "count_tag", "cases": [{"args": [["a", "A", " a"], "a"], "expected": 3}, {"args": [["x"], "y"], "expected": 0}, {"args": [["Py"], " py"], "expected": 1}, {"args": [["a"], "  "], "expected": null}, {"args": [[], "a"], "expected": 0}]}

@@ -1,6 +1,6 @@
 """Pinned local decision-model inference over JSON lines; model failure stops the match.
 
-A thin stdio front end for honing.backends.jev (Laya, Kev, NanoJev or StartLux), the same
+A thin stdio front end for honing.backends.jev (Laya, Kev, NanoJev, StartLux or Nimble), the same
 implementations the HTTP decision server uses. DECISION_FAMILY picks the family
 (default laya). Settings come from the environment:
 
@@ -11,6 +11,7 @@ implementations the HTTP decision server uses. DECISION_FAMILY picks the family
 - NanoJev: LAYA_GPU, NANOJEV_MODEL, NANOJEV_SOURCE_DIR, NANOJEV_CHECKPOINT_MANIFEST,
   LAYA_LOCK_DIR, and NANOJEV_MAX_LEN.
 - StartLux: LAYA_GPU, STARTLUX_MODEL, STARTLUX_SOURCE_DIR, LAYA_LOCK_DIR, and STARTLUX_MAX_LEN.
+- Nimble: LAYA_GPU, NIMBLE_MODEL, NIMBLE_SOURCE_DIR, NIMBLE_KIT_DIR, LAYA_LOCK_DIR, and NIMBLE_MAX_LEN.
 """
 
 import json
@@ -27,6 +28,7 @@ sys.path.insert(0, str(ROOT.parents[1]))
 from honing.backends.jev.kev import KevDecisionModel, KevSettings  # noqa: E402
 from honing.backends.jev.laya import LayaDecisionModel, LayaSettings  # noqa: E402
 from honing.backends.jev.nanojev import NanoJevDecisionModel, NanoJevSettings  # noqa: E402
+from honing.backends.jev.nimble import NimbleDecisionModel, NimbleSettings  # noqa: E402
 from honing.backends.jev.startlux import StartLuxDecisionModel, StartLuxSettings  # noqa: E402
 
 
@@ -91,10 +93,29 @@ def startlux_settings_from_environment():
     )
 
 
+def nimble_settings_from_environment():
+    if os.environ.get("NIMBLE_CHECKPOINT_MANIFEST"):
+        raise ValueError("Nimble serves the pinned release only; it has no trained checkpoints yet")
+    if not os.environ.get("NIMBLE_SOURCE_DIR"):
+        raise ValueError("NIMBLE_SOURCE_DIR must name the pinned source snapshot that scripts/setup-nimble.sh prints")
+    lock_dir = os.environ.get("LAYA_LOCK_DIR")
+    return NimbleSettings(
+        pins_path=ROOT / "pins.json",
+        source_dir=Path(os.environ["NIMBLE_SOURCE_DIR"]),
+        kit_dir=Path(os.environ.get("NIMBLE_KIT_DIR", ROOT / "deps/decision-index")),
+        model=os.environ.get("NIMBLE_MODEL", "nimble-v4-max"),
+        gpu=os.environ.get("LAYA_GPU", "0"),
+        lock_dir=Path(lock_dir) if lock_dir else None,
+        max_length=int(os.environ.get("NIMBLE_MAX_LEN", "8192")),
+    )
+
+
 def load_model():
     family = os.environ.get("DECISION_FAMILY", "laya")
     if family == "startlux":
         return StartLuxDecisionModel.load(startlux_settings_from_environment())
+    if family == "nimble":
+        return NimbleDecisionModel.load(nimble_settings_from_environment())
     if family == "nanojev":
         return NanoJevDecisionModel.load(nanojev_settings_from_environment())
     if family == "kev":

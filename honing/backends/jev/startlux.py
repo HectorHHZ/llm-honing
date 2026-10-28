@@ -242,14 +242,19 @@ def pack_request(
     measure: Callable[[str], Mapping[str, int]],
     count: Callable[[str], int],
     max_length: int,
+    *,
+    validate: Callable[[Mapping[str, Any]], None] = validate_questions,
+    encoding: str = "startlux-lettered-prompt",
 ) -> tuple[str, dict[str, dict[str, Any]], list[dict[str, str]]]:
     """Remove optional whole entries only, keeping all essential state and every option, until each prompt fits.
 
     ``measure`` returns the longest rendered prompt of each question for a
     state, and ``count`` the tokens of the state alone. Entries leave ``logs``
-    oldest first, then ``memory`` and ``details`` newest first.
+    oldest first, then ``memory`` and ``details`` newest first. ``validate`` and
+    ``encoding`` let another family that renders whole prompts (Nimble) reuse
+    this with its own question rules and audit label.
     """
-    validate_questions(questions)
+    validate(questions)
     if not isinstance(parts, Mapping) or set(parts) - set(SECTIONS):
         raise ValueError("Unknown context sections")
     retained: dict[str, list[str]] = {}
@@ -263,7 +268,7 @@ def pack_request(
         state = "\n".join(row for section in SECTIONS for row in retained[section])
         lengths = measure(state)
         if set(lengths) != set(questions):
-            raise ValueError("StartLux rendering omitted a question")
+            raise ValueError("Prompt rendering omitted a question")
         state_tokens = count(state)
         audit = {
             key: {
@@ -272,7 +277,7 @@ def pack_request(
                 "inputTokens": lengths[key],
                 "maxInputTokens": max_length,
                 "options": option_count(question),
-                "encoding": "startlux-lettered-prompt",
+                "encoding": encoding,
                 "stateTruncated": False,
             }
             for key, question in questions.items()

@@ -1,175 +1,162 @@
 # Honing
 
-One infra to customize, train, and deploy a model end to end. Use all of its
-modules, or only the ones you need.
+Small decision models get good at a domain by playing in it, training on what
+happened, and improving the harness around them. Two games show the loop. The
+infra it runs on is being built here.
 
-Honing starts from an open model (a 122B mixture-of-experts model, say) or from
-a model behind an API, and ends with a model customized for one user or one
-company and deployed where they run it. Four modules do the work:
+## Two games
+
+### Red Alert 2
+
+https://github.com/user-attachments/assets/08a30342-5381-4f22-a8ae-6b438cff2994
+
+We gave [NanoJev](https://huggingface.co/C-Tianyu/NanoJev), an open decision
+model, a match of Red Alert 2 against the Supalosa bot. It sold its own
+construction yard and lost at tick 140. After supervised training on a
+teacher's matches, the same model builds a base, fights, and wins that
+match-up. Laya, another family trained the same way, fields Kirov airships and
+bombs the enemy base. The game and the opponent are the same in both halves of
+the video; the weights are what changed.
+
+[`integrations/ra2/`](integrations/ra2/README.md) has the headless engine adapter, the
+match runner that records every request and command, supported model families
+behind one decision server, and the SFT, GRPO, and GEPA integration. The video shows SFT; the RA2
+controller does not yet sample actions for GRPO.
+
+### Tank War
+
+https://github.com/user-attachments/assets/9dca9289-bb7d-4b51-bd0b-8b896fabd42d
+
+Two tanks in a maze fire shells that bounce off the walls, and a tank's own
+shell can kill it. NanoJev drove all four versions in the video with the same
+weights. Version 1 spun in circles. Version 2 found the fire button and shot
+itself. Version 3 moves, aims, and fights. Version 4 dodges incoming shells and
+wins. What changed between versions is the controller around the model: what
+it is told about the game, which moves it may pick from, and the checks that
+run its choice. The selected clips show controller changes; they are not
+a release-gate result or a measured win-rate comparison.
+
+The video then compares several models in one arena. In the local game, you
+can take a seat against a configured model from the keyboard. Inference runs
+on the model server; the browser needs no GPU.
+
+[`integrations/tank-war/`](integrations/tank-war/README.md) has the browser
+game, the arena, the headless rounds, and the controller changes that made
+version 4.
+
+### Bring your own model
+
+Both games talk to a model through the same two HTTP routes the decision server
+exposes, `GET /v1/health` and `POST /v1/decide`. Serve a model behind them and
+it can play. [Connect a model](integrations/tank-war/README.md#connect-a-model)
+in the Tank War README shows the request a seat sends, and
+[Using a decision server](integrations/ra2/README.md#using-a-decision-server)
+in the RA2 README runs a match against one.
+
+Try the hosted human-versus-model game at **[play.honinglab.com](https://play.honinglab.com/play/)**.
+We plan to open **Tank War Arena** for bring-your-own-model matches. Public
+model submission is not open yet. The current hosted game uses a configured
+opponent and an admission queue; local model integration is available now.
+
+## Decision models supported
+
+A decision model takes a state and a typed question with its options, and
+returns a probability for every option in one forward pass, with no text
+generated. Six families answer that request in Honing today, all behind one
+HTTP decision server
+([`honing/backends/jev/server.py`](honing/backends/jev/server.py)), so a game
+or a trainer does not care which one it is talking to.
+
+| Model | Base | Checkpoints | Trains in Honing |
+| --- | --- | --- | --- |
+| [NanoJev](https://huggingface.co/C-Tianyu/NanoJev) | Qwen3-0.6B, with a scalar head and a set attention head over candidate paths | `nanojev` | SFT, GRPO |
+| [Laya](https://huggingface.co/convaiinnovations/laya) | its own encoder and option head | `english`, `typed-decisions` | SFT, GRPO |
+| [Kev](https://github.com/jaredpalmer/kev) | Qwen3.5-0.8B-Base and Qwen3.5-4B-Base, with a LoRA adapter and a pointer head | `kev-0.8b`, `kev-4b` | SFT, GRPO |
+| [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision) | Qwen3.5, dense; the answer is read from the next-token logits of the option letters | `startlux-0.8b`, `startlux-4b`, `startlux-27b` | serving only |
+| DiffusionGemma through [djev](integrations/djev/README.md) | `google/diffusiongemma-26B-A4B-it` on a remote djev server | the operator's deployment | serving only |
+| [Nimble-v4-max](integrations/ra2/README.md#using-nimble-v4-max) | Bespoke decision model | `nimble-v4-max` | serving only |
+
+What runs each part today, what each method edits, and what it learns from:
+
+| | Method | What it edits | What it learns from |
+| --- | --- | --- | --- |
+| Training | SFT, in the local trainers for Laya, Kev, and NanoJev, and in [Slime](https://github.com/THUDM/slime) for language models | the weights | a teacher's pick at each decision point |
+| | GRPO, in the same trainers | the weights | the result of the model's own sampled matches |
+| | On-policy distillation, in Slime for language models | the weights | a teacher's log-probabilities on the student's own samples |
+| Inference | The decision server: one request format for the six families above | | |
+| | [djev](integrations/djev/README.md): DiffusionGemma on a remote server | | |
+| | SGLang: any Hugging Face checkpoint, in review ([#109](https://github.com/HectorHHZ/llm-honing/pull/109)) | | |
+| Harness self-evolve | GEPA, with its proposer reaching any chat model through litellm | the question text, instructions, and skills | the match result and the grader's notes |
+| | Auto research: an engineer proposes a change, matches decide | the controller around the model: context, admissible moves, checks | matches between the proposed controller and the current one |
+| | Meta-Harness, in review ([#105](https://github.com/HectorHHZ/llm-honing/pull/105)) | | |
+
+## How a model keeps learning
+
+A released model plays, and the records of its play feed the training and
+harness changes in the table above.
+
+Every change is one candidate. Training candidates must win more paired
+validation comparisons than they lose under the default selector. GEPA uses
+its own selector: a strictly higher validation mean than its served candidate.
+An accepted candidate becomes a versioned release that records the weights and the
+harness together, so a rollback restores both. The loop then starts again from
+the new release.
+
+The infra for this loop is what this repository builds, and it is not finished.
+Today it has the decision server, the SFT and GRPO trainers for Laya, Kev, and
+NanoJev, GEPA for the harness, the gate, the release chain, and both games as
+task environments. CI runs each game through the whole loop with stand-in
+models on every pull request. Each piece has run on a GPU on its own; a
+campaign that trains real weights inside the loop is next.
+
+## Where this goes: decision models as tools for an agent
+
+An LLM agent reasons through a long trajectory for every decision, including
+the routine ones it has made many times before. A decision model trained on
+that domain answers those in one forward pass. We want the agent to call its
+trained decision models as tools: the routine parts come back fast, and the
+agent spends its longer reasoning on the parts that need it. The games are the
+first domains. The loop above is how a decision model gets good enough to be
+called, and stays good as the domain shifts.
+
+## Honing, the infra underneath
+
+Honing is the infra the loop runs on, and the games use the part of it that
+exists. Its scope is wider: one infra that takes an open model, or a model
+behind an API, to a model customized for one user or company and deployed
+where they run it, with the user turning on only the modules they need.
 
 | Module | What it does | Methods |
 | --- | --- | --- |
 | Compression | makes the model smaller | pruning, quantization, recovery training |
 | Post-training | makes it better at your task | SFT, RL (PPO, GRPO, DPO), distillation, on-policy distillation, QAT, LoRA and SMT |
-| Harness self-evolve | improves the prompts, skills, and tools around the model | harness evolve, auto research, GEPA, Meta-Harness |
+| Harness self-evolve | improves the prompts, skills, and tools around the model | GEPA, Meta-Harness, auto research |
 | Serving | deploys the result | SGLang or vLLM on a GPU cluster, or a Mac or mobile app that calls the model |
 
 ![Honing scope: four modules, the data plane, and the gate](system-design/honing_scope.png)
 
-A data plane underneath is shared by every module. Offline data (SFT,
-preference, and distillation sets) becomes training batches. Online data
-(rollouts, user feedback, and serving logs) drives harness self-evolve, and
-serving telemetry such as per-expert routing counts tells compression what to
-prune next.
+A data plane underneath is shared by every module. Offline data becomes
+training batches, online data (rollouts, feedback, serving logs) drives harness
+self-evolve, and serving telemetry tells compression what to prune. Every
+change is one candidate: a training step, a prune, a quantization, or a harness
+edit. One gate judges all of them, and an accepted one settles into one release
+chain. The decision-model loop above is this design with post-training, harness
+self-evolve, and serving turned on and compression turned off.
 
-Every change is one candidate: a training step, a prune, a quantization, or a
-harness edit. One gate judges all of them. A change made for quality must beat
-the release it would replace, and a change made for cost must not regress it.
-An accepted candidate becomes a versioned release that records the model and
-the harness together, so a rollback restores both.
+Beyond that loop, the code today has a Slime trainer for language models (SFT,
+on-policy distillation, GRPO), a GEPA that rewrites the instructions and skills
+of any agent, task suites with a command grader, and a pipeline that assembles
+a campaign from a JSON config and checks a new runner or trainer against what a
+campaign needs from it ([`scripts/e2e/`](scripts/e2e/README.md)). Compression
+is contracts and fakes. Honing does not pretrain a model and has no engine of
+its own: [Slime](https://github.com/THUDM/slime) trains, and SGLang and vLLM
+serve.
 
-## Scope
+The planes behind the modules, the contracts they meet through, the rules every
+move passes before it touches weights, and the implementation steps are in
+[`system-design/`](system-design/README.md).
 
-### Compression
-
-Pruning scores importance from calibration data, weights, gradients, or serving
-telemetry, then removes layers, experts, attention heads, or FFN dimensions.
-Quantization exports low-bit serving weights and never modifies the
-full-precision master weights. A cut is followed by a short post-training job
-that recovers the quality it lost, and the gate judges the recovered model.
-
-### Post-training
-
-The algorithms are SFT, RL (PPO, GRPO, and DPO), distillation, and on-policy
-distillation. A job updates all weights, LoRA adapters, or a sparse subset of
-sub-matrices (SMT), and trains in bf16 or fp8. Quantization-aware training
-shares one quantization scheme with serving, so the model is trained under
-the scheme it is served with.
-
-### Harness self-evolve
-
-The harness is everything around the model: the system prompt, instructions,
-skills, tools, and agent files. The loop runs episodes, scores them with the
-same gate model updates pass, keeps the winner, and proposes the next harness.
-Methods such as GEPA and Meta-Harness plug into the propose step.
-
-The plan is to build this module by integrating a third-party harness
-infrastructure, potentially [Reef](https://github.com/Human-Agent-Society/reef) or
-[OpenHands](https://github.com/OpenHands/OpenHands). Each harness it proposes still
-passes Honing's gate and lands in the release chain with the model it was evolved
-for.
-
-```mermaid
-flowchart LR
-    run[Run episodes] --> score[Score with the gate]
-    score --> keep[Keep the winner]
-    keep --> propose[Propose a new harness]
-    propose --> run
-```
-
-The loop needs no gradients. It learns from online data, so it also works with
-a model behind an API and on a laptop or phone. It can run at three points:
-
-| When | What it does |
-| --- | --- |
-| Before training | searches instructions and skills on the base model |
-| During training | co-adapts with the weights, one harness per training window |
-| After training | evolves against the exact weights that ship |
-
-### Serving
-
-SGLang and vLLM load the serving weights, quantized or not. The same engines
-generate RL rollouts during training, so the model is trained on what it
-serves. The target is a GPU cluster, or a Mac or mobile app that calls the
-model through an API.
-
-### Outside the scope
-
-Honing starts from a trained model and does not pretrain one. It has no
-training or inference engine of its own: [Slime](https://github.com/THUDM/slime)
-trains, and SGLang and vLLM serve. Honing decides what runs next, checks each
-move before it touches weights, and records the result.
-
-## Compose what you need
-
-![Which modules different users turn on](system-design/honing_compositions.png)
-
-A company with GPUs can use every module. It starts from a large open model,
-prunes and quantizes it, post-trains it on its domain data, evolves the
-harness, and serves the result in-house, ending with a domain expert much
-smaller than the model it started from.
-
-An individual with no GPUs can skip compression and post-training. They start
-from an API model, let the harness self-evolve on their own data, and deploy on
-a Mac or phone, which gives a personal agent that keeps improving from daily
-use with no training compute.
-
-Any subset in between works, for example post-training with LoRA or SMT and
-serving with vLLM, because every module shares one data plane and one release
-chain.
-
-## Research it builds on
-
-Three earlier projects of the author supply methods to the model modules:
-
-| Project | Used for |
-| --- | --- |
-| Less is MoE | pruning |
-| ExpertCondenser | MoE post-training |
-| SMT | sparse fine-tuning |
-
-## Status
-
-The contracts every module is built against, the gate, the release chain, and
-the campaign with its ordering rules are implemented. A walking skeleton runs
-a full campaign (train, prune with recovery, quantize, evolve the harness,
-roll back) on a CPU, with every module it does not yet implement replaced by a
-fake. The first real workload is Red Alert 2, where a small decision model
-plays matches and is gated and trained through Honing.
-
-| Module | In code today | Next |
-| --- | --- | --- |
-| Gate and release chain | `honing/release`, `honing/campaign` | chain recovery after a crash |
-| Compression | contracts, rules, and CPU fakes | an expert-drop editor on a small MoE |
-| Post-training | Laya, Kev and NanoJev trainers: SFT and GRPO on typed decisions (`honing/backends/jev`) | a Slime backend for language models |
-| Harness self-evolve | contracts, and the RA2 and tank runners, graders, and harnesses (`honing/backends/ra2`, `honing/backends/tank`) | GEPA ([#77](https://github.com/HectorHHZ/llm-honing/pull/77), in review) |
-| Serving | an HTTP decision server for Laya, Kev, NanoJev and StartLux-Decision (0.8B, 4B, 27B), plus a [djev / DiffusionGemma bridge](integrations/djev/README.md) | managed SGLang and vLLM deployments |
-| Data plane | the batch contracts, and RA2 and tank demonstration and rollout providers | dataset and feedback providers |
-
-[`integrations/ra2/README.md`](integrations/ra2/README.md) runs the RA2 loop
-end to end, and CI runs its dry run on every pull request.
-[`scripts/e2e/`](scripts/e2e/README.md) runs one campaign through every plane
-from a config that names each component, and checks a harness runner
-(OpenHands, Reef, ...) or a trainer (Slime, ...) against what a campaign needs
-from it, before it joins one. The implementation
-steps are in [`system-design/system-design.md`](system-design/system-design.md#7-implementation-steps).
-
-The [RICOCHET tank demo](integrations/tank-duel/README.md) offers two English sketch-style browser games: hull steering and automatic turret aiming. Both run locally without a model; set `HONING_URL` to enable model duels with live decision context and match exports. Classic is also a Honing task environment (`honing/backends/tank`): headless rounds against a planner opponent, a harness GEPA can rewrite, planner-teacher demonstrations for SFT and sampled rollouts for GRPO, and a CPU dry-run campaign CI runs on every pull request.
-
-## System design
-
-![Honing system design](system-design/honing_architecture.png)
-
-In code, the modules are planes on one release spine. The planes meet only
-through the contracts in `honing/core`, which is what lets a user turn one on
-without the others.
-
-| Plane | Module | Owns |
-| --- | --- | --- |
-| Core | | the value types and protocols every plane is built against; imports only the standard library |
-| Model Source | | the initial model: an open checkpoint, or a large model compressed first |
-| Data | data plane | online feedback and offline datasets, behind one batch type |
-| Train | post-training | algorithm, update policy, numerics, rollout source, and teacher as independent choices |
-| Compression | compression | pruning (score, select, edit) and quantization; usable standalone |
-| Harness Evolve | harness self-evolve | harness specs, episode runs, and evolution methods before, during, and after training |
-| Campaign | | which move comes next, and the rules each move must pass before it touches weights |
-| Gate and release | | one gate for every candidate, joint releases, the commit record, and rollback |
-| Serve | serving | live traffic and artifact activation |
-
-| Document | What it covers |
-| --- | --- |
-| [`system-design/system-design.md`](system-design/system-design.md) | subsystem contracts, the coupling model, the ordering rules, worked lifecycles, and the implementation steps |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | issue, commit, and pull request conventions; writing style; development setup |
+The local decision server also supports [Nimble-v4-max](integrations/ra2/README.md#using-nimble-v4-max), with pinned source and checkpoint verification.
 
 ## Development
 
@@ -182,12 +169,8 @@ pre-commit run --all-files
 pytest
 ```
 
-No GPU is needed for the test suite. The diagrams under `system-design/`
-render with matplotlib alone:
-
-```bash
-uv run --no-project --with matplotlib python system-design/honing_scope.py
-```
+No GPU is needed for the test suite. Conventions for issues, commits, pull
+requests, and prose are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 

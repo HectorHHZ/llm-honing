@@ -82,7 +82,10 @@ QUESTION = {"root": {"type": "choice", "instructions": "Next?", "criteria": {"po
 @pytest.mark.unit
 def test_health_reports_what_is_loaded(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
-    assert call(url, "/v1/health") == (200, {"ready": True, "metadata": {"revision": "fake", "dtype": "none"}})
+    assert call(url, "/v1/health") == (
+        200,
+        {"ready": True, "metadata": {"revision": "fake", "dtype": "none"}, "maxBranches": 16},
+    )
 
 
 @pytest.mark.unit
@@ -100,6 +103,21 @@ def test_a_decision_is_answered_and_its_id_echoed(serve) -> None:  # type: ignor
         ({"parts": {}}, "questions must be a non-empty object"),
         ({"parts": [], "questions": QUESTION}, "parts must be an object"),
         ({"parts": {}, "questions": QUESTION, "temperature": 2}, "unknown fields: temperature"),
+        ({"parts": {}, "questions": QUESTION, "branches": []}, "branches must be an object of at most 16"),
+        (
+            {"parts": {}, "questions": QUESTION, "branches": {str(i): {} for i in range(17)}},
+            "branches must be an object of at most 16",
+        ),
+        ({"parts": {}, "questions": QUESTION, "branches": {"a": []}}, "branch a must be a JSON object"),
+        ({"parts": {}, "questions": QUESTION, "branches": {"a": {"parts": {}}}}, "questions in branch a must be"),
+        (
+            {
+                "parts": {},
+                "questions": QUESTION,
+                "branches": {"a": {"parts": {}, "questions": QUESTION, "branches": {}}},
+            },
+            "unknown fields in branch a: branches",
+        ),
     ],
 )
 def test_a_malformed_request_is_refused_without_calling_the_model(serve, body, message) -> None:  # type: ignore[no-untyped-def]
@@ -205,3 +223,83 @@ def test_every_model_call_runs_on_the_serving_thread() -> None:
     assert [status for status, _ in replies] == [200] * 8
     assert model.threads == set(serving)
     assert not thread.is_alive()
+
+
+BRANCHED = {
+    "id": "d",
+    "parts": {"essential": ["tick 30"]},
+    "questions": QUESTION,
+    "branches": {
+        "x": {"id": "d:x", "parts": {"essential": ["after x"]}, "questions": QUESTION},
+        "y": {"parts": {"essential": ["after y"]}, "questions": QUESTION},
+    },
+}
+
+
+@pytest.mark.unit
+def test_branches_are_answered_in_one_call_each_as_if_alone(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(FakeDecisionModel())
+    status, body = call(url, "/v1/decide", BRANCHED)
+    assert status == 200
+    assert body == {
+        "answers": {"root": {"choice": "power"}},
+        "stateText": "tick 30",
+        "id": "d",
+        "branches": {
+            "x": {"answers": {"root": {"choice": "power"}}, "stateText": "after x", "id": "d:x"},
+            "y": {"answers": {"root": {"choice": "power"}}, "stateText": "after y"},
+        },
+    }
+
+
+class SplitModel(FakeDecisionModel):
+    """Offers predict_many, or prepare and run, and records the threads and batches they ran with."""
+
+    def __init__(self, split: bool) -> None:
+        super().__init__()
+        self.batches: list[int] = []
+        self.prepared_on: set[int] = set()
+        self.ran_on: set[int] = set()
+        if split:
+            self.prepare = self._prepare
+            self.run = self._run
+
+    def predict_many(self, requests: list[tuple[Mapping[str, object], Mapping[str, object]]]) -> list[object]:
+        self.batches.append(len(requests))
+        self.ran_on.add(threading.get_ident())
+        return [self.predict(parts, questions) for parts, questions in requests]
+
+    def _prepare(self, requests: list[tuple[Mapping[str, object], Mapping[str, object]]]) -> object:
+        self.prepared_on.add(threading.get_ident())
+        return list(requests)
+
+    def _run(self, prepared: list[tuple[Mapping[str, object], Mapping[str, object]]]) -> list[object]:
+        return self.predict_many(prepared)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("split", [False, True])
+def test_a_model_s_own_batch_and_split_calls_are_used(split: bool) -> None:
+    model = SplitModel(split)
+    server = DecisionServer(("127.0.0.1", 0), model)
+    serving: list[int] = []
+
+    def serve() -> None:
+        serving.append(threading.get_ident())
+        server.serve()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    status, body = call(server.url, "/v1/decide", BRANCHED)
+    single = call(server.url, "/v1/decide", {"parts": {}, "questions": QUESTION})
+    server.stop()
+    thread.join(timeout=10)
+    server.server_close()
+    assert status == 200 and set(body["branches"]) == {"x", "y"}  # type: ignore[arg-type]
+    assert single[0] == 200
+    assert model.ran_on == set(serving)
+    if split:
+        # prepare runs on the request's thread, so one call is encoded while another uses the GPU.
+        assert model.batches == [3, 1] and serving[0] not in model.prepared_on
+    else:
+        assert model.batches == [3] and not model.prepared_on

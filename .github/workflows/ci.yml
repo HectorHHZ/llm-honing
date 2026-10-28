@@ -83,7 +83,8 @@ jobs:
 
   test-litellm:
     # The test job above installs no litellm, which is what shows honing works without the extra.
-    # This job installs it and runs the client against a local stub server; no request leaves the runner.
+    # This job installs it and runs the client, and the live GEPA run, against local stub servers;
+    # no request leaves the runner.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -98,9 +99,9 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,litellm]"
+          python -m pip install -e ".[dev,gepa,litellm]"
       - name: Test
-        run: python -m pytest -m "not gpu" tests/test_chat_client.py tests/contracts
+        run: python -m pytest -m "not gpu" tests/test_chat_client.py tests/test_gepa_live_offline.py tests/contracts
 
   ra2-integration:
     runs-on: ubuntu-latest
@@ -121,7 +122,7 @@ jobs:
           npm test
           npm run format:check
 
-  tank-duel:
+  tank-war:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -132,9 +133,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: integrations/tank-duel/package-lock.json
-      - name: Check both tank games and the model bridge
-        working-directory: integrations/tank-duel
+          cache-dependency-path: integrations/tank-war/package-lock.json
+      - name: Check Tank War and the model bridge
+        working-directory: integrations/tank-war
         run: |
           npm ci
           npm test
@@ -169,6 +170,10 @@ jobs:
         run: python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/runner-check"
       - name: Trainer contract (the checks a Slime trainer must pass)
         run: python scripts/e2e/check_trainer.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/trainer-check"
+      - name: Slime's declared support (trainer contract, then SFT, self-distillation, GRPO and harness moves in one campaign)
+        run: |
+          python scripts/e2e/check_trainer.py --config configs/e2e/slime.json --work-dir "$RUNNER_TEMP/slime-check"
+          python scripts/e2e/honing_pipeline.py --config configs/e2e/slime.json --work-dir "$RUNNER_TEMP/slime"
       - name: Campaign end to end (runner, grader, gate, trainer, release chain)
         run: |
           python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json --work-dir "$RUNNER_TEMP/campaign"
@@ -182,8 +187,8 @@ jobs:
         run: python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json --work-dir "$RUNNER_TEMP/tank-runner-check"
       - name: Serving end to end (decision server process, the match's Node client stack)
         run: scripts/e2e/serving.sh "$RUNNER_TEMP/serving"
-      - name: Tank games end to end (decision server, HTTP bridge, both engines)
-        run: node scripts/e2e/tank-duel.mjs
+      - name: Tank War end to end (decision server, HTTP bridge, both decision interfaces)
+        run: node scripts/e2e/tank-war.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -195,4 +200,38 @@ jobs:
             ${{ runner.temp }}/tank-campaign/summary.json
             ${{ runner.temp }}/tank-campaign/releases/commits.jsonl
             ${{ runner.temp }}/serving/server.err
+          if-no-files-found: ignore
+
+  openhands:
+    # The OpenHands runner with the real worker, in OpenHands' own environment installed from its lock
+    # (integrations/openhands/README.md). No model or key: every episode is a real OpenHands conversation with the
+    # stand-in policy server, so this catches a lock that no longer installs or a worker that no longer runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Honing and the OpenHands environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . uv
+          uv venv --python 3.12 integrations/openhands/.venv
+          uv pip install --python integrations/openhands/.venv/bin/python -r integrations/openhands/requirements.txt
+      - name: Harness runner contract with OpenHands as the agent
+        run: python scripts/e2e/check_runner.py --config configs/e2e/openhands.json --work-dir "$RUNNER_TEMP/openhands-check"
+      - name: All planes with OpenHands as the agent
+        run: python scripts/e2e/honing_pipeline.py --config configs/e2e/openhands.json --work-dir "$RUNNER_TEMP/openhands"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: openhands-output
+          path: |
+            ${{ runner.temp }}/openhands-check/workspaces/*/agent.log
+            ${{ runner.temp }}/openhands/summary.json
           if-no-files-found: ignore
