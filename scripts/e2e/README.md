@@ -170,4 +170,26 @@ The default config's model, policy server, and harness runner key on the fake mo
 
 The rounds are deterministic (the game clock stops while a seat waits for its decision), so these results repeat. A change to the game, the planner, or the bridge can change them; if it does, check the new rounds and update the expectations in CI and `tests/test_tank_e2e.py`.
 
-To run a real model, replace `model_source`, `endpoints`, and `trainer` with the Jev ones (`honing/backends/jev`) and `method.args.chat` with a real chat model.
+To run a real model, replace `model_source`, `endpoints`, and `trainer` with the Jev ones (`honing/backends/jev`) and `method.args.chat` with a real chat model, or use the SGLang config below.
+
+## Serving with SGLang
+
+`honing/backends/sglang` serves any Hugging Face checkpoint SGLang loads (RFC #103). Build its environment once, then point `SGLANG_PYTHON` at it:
+
+```
+scripts/setup-sglang.sh /path/to/sglang-env        # exactly scripts/sglang.lock; prints the export line
+export SGLANG_PYTHON=/path/to/sglang-env/bin/python
+```
+
+The configs read the checkpoint and GPUs from the environment: `HONING_SGLANG_CHECKPOINT` (a checkpoint directory), `HONING_SGLANG_GPUS` (comma-separated, one server per GPU; devices joined with `+`, such as `0+1+2+3`, form one server that shards its checkpoint over them with tensor parallelism, for a model that does not fit one GPU), and for GEPA's reflection `HONING_SGLANG_CHAT_CHECKPOINT` and `HONING_SGLANG_CHAT_GPU`.
+
+| Command | What it checks |
+| --- | --- |
+| `check_runner.py --config configs/e2e/tank_runner_check_sglang.json` | the tank runner on real rounds, the checkpoint answering `/v1/decide` through the lettered readout |
+| `check_runner.py --config configs/e2e/workspace_runner_check_sglang.json` | the workspace runner, the checkpoint answering OpenAI-compatible chat |
+| `tank_campaign.py --config configs/e2e/tank_campaign_sglang.json` | a campaign whose policy and candidates are each started on demand; the trainer (`tests/fakes/serving.py`) writes real, servable checkpoints without training |
+| `sglang_endpoints.py <checkpoint> <work-dir> <gpu> <gpu>` | on-demand start, reuse, least-recently-used stop, weights refused under another checksum, the chat route |
+| `sglang_logprobs.py <ref-gpu> <gpu> <out.json> <checkpoint>...` | next-token log-probabilities against the checkpoint's transformers class in fp32 and bf16 |
+| `sglang_lettered.py <ref-gpu> <gpu> <out.json> <checkpoint>...` | lettered decisions against the same readout on transformers, fp32 and bf16 |
+
+`integrations/ra2/parity/startlux_sglang.py` compares StartLux-Decision on SGLang with Honing's native StartLux path and benchmarks both.
