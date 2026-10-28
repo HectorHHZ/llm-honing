@@ -1,0 +1,8 @@
+{
+  "motion": "Select one joint tank motion. Avoid shells. If a verified AIM hit direction exists, turn toward that heading (positive delta RIGHT, negative LEFT), including wall-bounce directions. Do not substitute the enemy bearing for a ricochet heading. Otherwise follow the navigable waypoint. Compare the forecasts and choose drive and turn together.",
+  "drive": "Choose forward, reverse, or stop. The barrel is fixed to the hull; turn and weapon are separate choices. Avoid all shells.",
+  "turn": "Choose hull rotation. Use the verified firing direction or navigation waypoint in context. Left is negative angle, right is positive.",
+  "weapon": "Which statement matches the shot forecast for the selected motion? The fixed barrel turns with the hull before the single firing attempt.",
+  "weapon.fire": "This is a safe shot that can hit the enemy.",
+  "weapon.hold": "This shot is unsafe, misses the enemy, or the weapon is not ready."
+}
