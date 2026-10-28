@@ -3,7 +3,9 @@
 Paths and GPUs come from the config's args, with ``$VARIABLES`` expanded from
 the environment: by default ``HONING_SGLANG_CHECKPOINT`` (a checkpoint
 directory), ``SGLANG_PYTHON`` (the SGLang environment's interpreter) and
-``HONING_SGLANG_GPUS`` (comma-separated GPU indices or UUIDs).
+``HONING_SGLANG_GPUS`` (comma-separated GPU indices or UUIDs, one server
+each; devices joined with ``+`` form one server that shards its checkpoint
+over them, as ``0+1+2+3`` does for a model that needs four).
 """
 
 from __future__ import annotations
@@ -42,16 +44,22 @@ def endpoints(
     gpus: str = "$HONING_SGLANG_GPUS",
     max_length: int = 8192,
     prefix_cache: bool = True,
+    start_timeout: float = 900.0,
 ) -> SGLangPolicyEndpoints:
-    """Endpoints that start a server per checkpoint; they stop when the process exits."""
+    """Endpoints that start a server per checkpoint; they stop when the process exits.
+
+    ``start_timeout`` is how long one server may take to come up: a 235B checkpoint
+    sharded over four GPUs needs about 20 minutes, a 1.5B one about 80 s.
+    """
     served = SGLangPolicyEndpoints(
         ServingSettings(
             python=Path(os.path.expandvars(python)),
-            gpus=tuple(g.strip() for g in os.path.expandvars(gpus).split(",") if g.strip()),
+            gpus=tuple(g.strip().replace("+", ",") for g in os.path.expandvars(gpus).split(",") if g.strip()),
             runtime=runtime,  # type: ignore[arg-type]
             max_length=max_length,
             prefix_cache=prefix_cache,
             log_dir=Path(context.work_dir) / "serving",
+            start_timeout=start_timeout,
         )
     )
     atexit.register(served.close)

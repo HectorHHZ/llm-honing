@@ -55,7 +55,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send({})
         elif self.path == "/get_server_info":
             self._send({"version": "0.0.test", "disable_radix_cache": "--disable-radix-cache" in sys.argv,
-                        "context_length": 8200, "argv": sys.argv})
+                        "context_length": 8200, "argv": sys.argv,
+                        "tp_size": int(sys.argv[sys.argv.index("--tp") + 1]) if "--tp" in sys.argv else 1})
 
     def do_POST(self):
         payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
@@ -119,6 +120,18 @@ def test_turning_the_prefix_cache_off_reaches_the_server(stand_in_python: SGLang
     settings = SGLangSettings(**{**stand_in_python.__dict__, "prefix_cache": False})
     with SGLangEngine.launch(Path("/models/startlux"), settings) as engine:
         assert engine.versions["server"]["disable_radix_cache"] is True
+
+
+def test_several_devices_shard_the_model_over_them(stand_in_python: SGLangSettings) -> None:
+    settings = SGLangSettings(**{**stand_in_python.__dict__, "gpu": "GPU-a,GPU-b,GPU-c,GPU-d"})
+    assert settings.tp == 4
+    with SGLangEngine.launch(Path("/models/large"), settings) as engine:
+        assert engine.versions["server"]["tp_size"] == 4
+    assert stand_in_python.tp == 1
+    with SGLangEngine.launch(Path("/models/small"), stand_in_python) as engine:
+        assert engine.versions["server"]["tp_size"] == 1
+    explicit = SGLangSettings(**{**stand_in_python.__dict__, "gpu": "GPU-a,GPU-b", "tensor_parallel": 1})
+    assert explicit.tp == 1
 
 
 def test_a_server_that_exits_is_reported_with_its_log(tmp_path: Path) -> None:

@@ -16,7 +16,7 @@ them equals the softmax over the same logits.
 
 Two settings make these the log-probabilities of the checkpoint's own logits.
 The request is greedy: SGLang divides the logits by the sampling temperature
-before its log-softmax unless every request in the batch is greedy (at 0.21,
+before its log-softmax unless every request in the batch is greedy (at 0.5.21,
 ``logprob_processor.py``), so a temperature other than 0 or 1 would change
 them. And the output head runs in fp32 (``--enable-fp32-lm-head``): in bf16
 the logits are rounded to steps of 1/16 to 1/8 at the magnitudes the decision
@@ -71,7 +71,9 @@ class SGLangSettings:
     """How to start one SGLang server for one checkpoint on one GPU.
 
     ``python`` is the interpreter of the environment SGLang is installed in;
-    ``gpu`` is a CUDA device, by index or UUID, made the only visible one.
+    ``gpu`` is a CUDA device, by index or UUID, made the only visible one, or
+    several separated by commas, over which the model is sharded with tensor
+    parallelism (``tensor_parallel`` defaults to their count).
     ``mem_fraction`` is SGLang's ``--mem-fraction-static``. ``chat`` loads
     the tokenizer and serves the OpenAI-compatible routes as ``served_model``.
     ``extra_args`` are passed to ``sglang.launch_server`` unchanged.
@@ -87,11 +89,21 @@ class SGLangSettings:
     served_model: str | None = None
     mem_fraction: float = 0.8
     context_length: int | None = None
+    tensor_parallel: int | None = None
     extra_args: tuple[str, ...] = ()
     start_timeout: float = 900.0
     log_path: Path | None = None
     env: dict[str, str] = field(default_factory=dict)
     check_versions: bool = True
+
+    @property
+    def devices(self) -> list[str]:
+        return [d for d in self.gpu.split(",") if d]
+
+    @property
+    def tp(self) -> int:
+        """The tensor-parallel degree: ``tensor_parallel``, or one shard per visible device."""
+        return self.tensor_parallel or len(self.devices)
 
 
 def die_with_parent() -> None:
@@ -162,6 +174,7 @@ class SGLangEngine:
             *(("--served-model-name", settings.served_model) if settings.served_model else ()),
             "--mem-fraction-static", str(settings.mem_fraction),
             *(("--context-length", str(settings.context_length)) if settings.context_length else ()),
+            *(("--tp", str(settings.tp)) if settings.tp > 1 else ()),
             *(() if settings.prefix_cache else ("--disable-radix-cache",)),
             *(("--enable-fp32-lm-head",) if settings.fp32_lm_head else ()),
             *settings.extra_args,
@@ -218,7 +231,7 @@ class SGLangEngine:
             info = json.load(response)
         keep = (
             "version", "disable_radix_cache", "enable_fp32_lm_head", "attention_backend", "dtype",
-            "mem_fraction_static", "context_length", "served_model_name", "skip_tokenizer_init",
+            "mem_fraction_static", "context_length", "served_model_name", "skip_tokenizer_init", "tp_size",
         )  # fmt: skip
         versions["server"] = {key: info.get(key) for key in keep if key in info}
         return versions

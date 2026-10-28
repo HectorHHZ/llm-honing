@@ -45,7 +45,10 @@ REPO = Path(honing.__file__).resolve().parents[1]
 class ServingSettings:
     """Where and how checkpoints are served.
 
-    ``python`` is the SGLang environment's interpreter. A decision server runs
+    ``python`` is the SGLang environment's interpreter. Each entry of ``gpus``
+    is one server's device, or several devices separated by commas for a
+    checkpoint that needs tensor parallelism (``"0,1,2,3"`` serves it on four).
+    A decision server runs
     from ``decision_python`` (default ``python``), which needs transformers for
     the tokenizer. ``verify`` checks each checkpoint against the policy's
     checksum before serving it.

@@ -89,7 +89,7 @@ scripts/setup-sglang.sh /path/to/sglang-env        # exactly scripts/sglang.lock
 export SGLANG_PYTHON=/path/to/sglang-env/bin/python
 ```
 
-The configs read the checkpoint and GPUs from the environment: `HONING_SGLANG_CHECKPOINT` (a checkpoint directory), `HONING_SGLANG_GPUS` (comma-separated, one server per GPU), and for GEPA's reflection `HONING_SGLANG_CHAT_CHECKPOINT` and `HONING_SGLANG_CHAT_GPU`.
+The configs read the checkpoint and GPUs from the environment: `HONING_SGLANG_CHECKPOINT` (a checkpoint directory), `HONING_SGLANG_GPUS` (comma-separated, one server per GPU; devices joined with `+`, such as `0+1+2+3`, form one server that shards its checkpoint over them with tensor parallelism, for a model that does not fit one GPU), and for GEPA's reflection `HONING_SGLANG_CHAT_CHECKPOINT` and `HONING_SGLANG_CHAT_GPU`.
 
 | Command | What it checks |
 | --- | --- |
