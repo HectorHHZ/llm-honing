@@ -21,7 +21,8 @@ generated.
 - ``noul`` lists ``yes`` and ``no``, with the descriptions it gives; the
   answer is the probability of yes.
 - ``score`` lists its levels lowest first; the answer is the expected level
-  and the probability of each.
+  index (0 for the first level listed, whatever key the criteria give it) and
+  the probability of each.
 
 The state is packed and trimmed by whole entries until every prompt fits
 ``max_length``, exactly as for StartLux (:func:`honing.backends.jev.startlux.pack_request`).

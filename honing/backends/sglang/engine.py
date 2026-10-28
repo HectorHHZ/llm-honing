@@ -107,7 +107,12 @@ class SGLangSettings:
 
 
 def die_with_parent() -> None:
-    """In the child before exec: on Linux, receive SIGTERM when the process that started it dies."""
+    """In the child before exec: on Linux, receive SIGTERM when the process that started it dies.
+
+    The kernel delivers the signal when the parent *thread* exits (prctl(2), PR_SET_PDEATHSIG), so an engine must
+    be started from a thread that outlives it: the main thread, or one long-lived serving thread, never a pool
+    worker.
+    """
     with contextlib.suppress(OSError, AttributeError):
         ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
@@ -213,7 +218,9 @@ class SGLangEngine:
                     raise SGLangError(f"the SGLang server did not start within {settings.start_timeout:.0f} s")
                 time.sleep(2)
             versions = {**cls._versions(settings.python, url, env), "packages": installed}
-            yield cls(url, process, versions)
+            engine = cls(url, process, versions)
+            engine._warm_up(settings, model_path)
+            yield engine
         finally:
             _stop(process)
             if settings.log_path:
@@ -235,6 +242,26 @@ class SGLangEngine:
         )  # fmt: skip
         versions["server"] = {key: info.get(key) for key in keep if key in info}
         return versions
+
+    def _warm_up(self, settings: SGLangSettings, model_path: Path) -> None:
+        """Run one short request through every route the engine serves, so the first real caller does not pay
+        the engine's first-request cost (on a 235B checkpoint over four GPUs it was over a minute, longer than
+        a client's timeout)."""
+        self._post(
+            "/generate",
+            {"input_ids": [[1, 2, 3]], "sampling_params": {"max_new_tokens": 1, "temperature": 0.0}},
+            timeout=settings.start_timeout,
+        )
+        if settings.chat:
+            self._post(
+                "/v1/chat/completions",
+                {
+                    "model": settings.served_model or str(model_path),
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 1,
+                },
+                timeout=settings.start_timeout,
+            )
 
     def _post(self, path: str, payload: dict[str, Any], timeout: float = 600.0) -> Any:
         body = json.dumps(payload).encode()
@@ -281,6 +308,7 @@ class SGLangEngine:
 
 
 if __name__ == "__main__":  # a manual check: python -m honing.backends.sglang.engine <sglang-python> <model> <gpu>
-    with SGLangEngine.launch(Path(sys.argv[2]), SGLangSettings(python=Path(sys.argv[1]), gpu=sys.argv[3])) as engine:
+    manual = SGLangSettings(python=Path(sys.argv[1]), gpu=sys.argv[3], log_path=Path("sglang-engine.log"))
+    with SGLangEngine.launch(Path(sys.argv[2]), manual) as engine:
         print(json.dumps(engine.versions))
         print(engine.next_token_logprobs([[1, 2, 3, 4]], [5, 6, 7]))

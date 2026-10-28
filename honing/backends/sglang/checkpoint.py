@@ -37,10 +37,22 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+_CHECKSUMS: dict[tuple[tuple[str, int, int], ...], str] = {}
+
+
 def checkpoint_checksum(checkpoint: Path) -> str:
-    """One checksum over the checkpoint's weights."""
-    lines = "".join(f"{path.name}:{_sha256(path)}\n" for path in weight_shards(checkpoint))
-    return hashlib.sha256(lines.encode()).hexdigest()
+    """One checksum over the checkpoint's weights.
+
+    Hashing a large checkpoint reads every shard once (several minutes for hundreds of GB), and a checkpoint is
+    named by its checksum (``hf_snapshot``) and then verified against it on its first ``resolve``. The result is
+    kept per process, keyed by each shard's path, size and modification time, so unchanged weights are read once.
+    """
+    shards = weight_shards(checkpoint)
+    key = tuple((str(path.resolve()), path.stat().st_size, path.stat().st_mtime_ns) for path in shards)
+    if key not in _CHECKSUMS:
+        lines = "".join(f"{path.name}:{_sha256(path)}\n" for path in shards)
+        _CHECKSUMS[key] = hashlib.sha256(lines.encode()).hexdigest()
+    return _CHECKSUMS[key]
 
 
 def checkpoint_identity(checkpoint: Path, checksum: str) -> tuple[str, str]:

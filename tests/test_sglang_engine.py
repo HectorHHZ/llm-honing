@@ -63,7 +63,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/flush_cache":
             self._send({})
             return
-        wanted = payload["token_ids_logprob"]
+        if self.path == "/v1/chat/completions":
+            self._send({"choices": [{"message": {"role": "assistant", "content": "hi"}}]})
+            return
+        wanted = payload.get("token_ids_logprob", [])
         self._send([{"meta_info": {"output_token_ids_logprobs": [logprobs_for(p, wanted)]}}
                     for p in payload["input_ids"]])
 
