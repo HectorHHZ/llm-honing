@@ -9,9 +9,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import struct
+import threading
 from collections.abc import Sequence
 from contextlib import ExitStack
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +22,7 @@ import pytest
 
 from honing.backends.jev.kev import STATE_OVERRUN
 from honing.backends.sglang import checkpoint_checksum, hf_snapshot
-from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
+from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints, StartedServer
 from honing.backends.sglang.lettered import LetteredDecisionModel, LetteredPrompts, LetteredSettings, options_of
 from honing.core import ContractError, PolicyRef
 
@@ -221,16 +224,49 @@ def policy(checkpoint: Path) -> PolicyRef:
 
 
 class FakeStarts:
-    """Records what the endpoints start and stop, in place of SGLang."""
+    """Records what the endpoints start and stop, in place of SGLang. Each start gets its own URL; ``exited[i]``
+    says whether the process of start ``i`` has exited, and ``fail_after`` makes every later start raise."""
 
-    def __init__(self) -> None:
+    def __init__(self, fail_after: int | None = None) -> None:
         self.started: list[tuple[str, str]] = []
         self.stopped: list[str] = []
+        self.exited: list[bool] = []
+        self.fail_after = fail_after
 
-    def __call__(self, checkpoint: Path, key: str, gpu: str, stack: ExitStack) -> str:
+    def __call__(self, checkpoint: Path, key: str, gpu: str, stack: ExitStack) -> StartedServer:
+        n = len(self.started)
+        if self.fail_after is not None and n >= self.fail_after:
+            raise RuntimeError("out of memory")
         self.started.append((checkpoint.name, gpu))
+        self.exited.append(False)
         stack.callback(self.stopped.append, checkpoint.name)
-        return f"http://{checkpoint.name}.{gpu}/v1"
+        root = f"http://{checkpoint.name}.{gpu}.{n}" if n else f"http://{checkpoint.name}.{gpu}"
+        return StartedServer(f"{root}/v1", f"{root}/health", lambda: self.exited[n])
+
+
+class FakeProbe:
+    """Answers health probes in place of HTTP: every URL is up unless listed in ``down``, or while it has probes
+    left in ``failures``; records each call."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, float]] = []
+        self.down: set[str] = set()
+        self.failures: dict[str, int] = {}
+
+    def __call__(self, url: str, timeout_seconds: float) -> bool:
+        self.calls.append((url, timeout_seconds))
+        if self.failures.get(url, 0) > 0:
+            self.failures[url] -= 1
+            return False
+        return url not in self.down
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
 
 
 @pytest.mark.parametrize("runtime", ["sglang", "jev_decision"])
@@ -279,8 +315,155 @@ def test_a_server_that_fails_to_start_leaves_its_gpu_free(tmp_path: Path) -> Non
     with pytest.raises(RuntimeError, match="no engine"):
         endpoints.resolve(p)
     assert endpoints.serving == {}
-    with pytest.raises(ContractError, match="failed to start earlier: RuntimeError: no engine"):
+    with pytest.raises(ContractError, match=r"/m \(\w{12}\) failed earlier: RuntimeError: no engine"):
         endpoints.resolve(p)  # not started again
+
+
+def watched(
+    tmp_path: Path, starts: FakeStarts, runtime: str = "sglang", gpus: tuple[str, ...] = ("0",)
+) -> tuple[SGLangPolicyEndpoints, FakeProbe, FakeClock, PolicyRef]:
+    probe, clock = FakeProbe(), FakeClock()
+    settings = ServingSettings(python=Path("python"), gpus=gpus, runtime=runtime)  # type: ignore[arg-type]
+    endpoints = SGLangPolicyEndpoints(settings, start=starts, probe=probe, clock=clock)
+    return endpoints, probe, clock, policy(write_checkpoint(tmp_path / "m"))
+
+
+def test_the_default_health_timeout_leaves_slow_answers_to_sglang_s_own_20_s_limit() -> None:
+    settings = ServingSettings(python=Path("python"), gpus=("0",))
+    assert settings.health_timeout_seconds > 20 and settings.health_ttl_seconds == 30.0
+
+
+def test_a_server_that_passed_within_the_ttl_is_not_probed(tmp_path: Path) -> None:
+    endpoints, probe, clock, p = watched(tmp_path, FakeStarts())
+    first = endpoints.resolve(p)
+    clock.now += 29.9
+    assert endpoints.resolve(p) == first
+    assert probe.calls == []
+
+
+def test_a_server_is_probed_once_the_ttl_has_passed_and_trusted_again_after(tmp_path: Path) -> None:
+    starts = FakeStarts()
+    endpoints, probe, clock, p = watched(tmp_path, starts)
+    first = endpoints.resolve(p)
+    clock.now += 30.0
+    assert endpoints.resolve(p) == first
+    assert probe.calls == [("http://m.0/health", 30.0)]
+    clock.now += 29.9
+    endpoints.resolve(p)
+    assert len(probe.calls) == 1 and starts.started == [("m", "0")]
+
+
+@pytest.mark.parametrize("runtime", ["sglang", "jev_decision"])
+def test_a_server_that_is_down_is_stopped_and_started_again_on_its_gpu(tmp_path: Path, runtime: str) -> None:
+    starts = FakeStarts()
+    endpoints, probe, clock, p = watched(tmp_path, starts, runtime, gpus=("0", "1"))
+    endpoints.resolve(policy(write_checkpoint(tmp_path / "other", b"\1")))  # takes GPU 0
+    first = endpoints.resolve(p)
+    assert first.base_url == "http://m.1.1/v1"
+    probe.down.add("http://m.1.1/health")
+    clock.now += 30.0
+    second = endpoints.resolve(p)
+    assert probe.calls == [("http://m.1.1/health", 30.0)] * 2
+    assert starts.stopped == ["m"] and starts.started[-1] == ("m", "1")
+    assert (second.base_url, second.runtime, second.served_model) == ("http://m.1.2/v1", runtime, first.served_model)
+    assert endpoints.serving[p.checkpoint.checksum] == "1"
+
+
+def test_a_probe_that_fails_once_is_repeated_at_once_and_the_server_kept(tmp_path: Path) -> None:
+    starts = FakeStarts()
+    endpoints, probe, clock, p = watched(tmp_path, starts)
+    first = endpoints.resolve(p)
+    probe.failures["http://m.0/health"] = 1
+    clock.now += 30.0
+    assert endpoints.resolve(p) == first
+    assert probe.calls == [("http://m.0/health", 30.0)] * 2
+    assert starts.started == [("m", "0")] and starts.stopped == []
+    clock.now += 29.9  # the passing retry restarted the TTL
+    assert endpoints.resolve(p) == first and len(probe.calls) == 2
+
+
+def test_two_probes_failing_in_a_row_restart_the_server(tmp_path: Path) -> None:
+    starts = FakeStarts()
+    endpoints, probe, clock, p = watched(tmp_path, starts)
+    endpoints.resolve(p)
+    probe.failures["http://m.0/health"] = 2  # a third probe would pass
+    clock.now += 30.0
+    assert endpoints.resolve(p).base_url == "http://m.0.1/v1"
+    assert probe.calls == [("http://m.0/health", 30.0)] * 2 and starts.stopped == ["m"]
+
+
+def test_a_503_from_the_real_probe_is_repeated_and_a_200_keeps_the_server(tmp_path: Path) -> None:
+    statuses = [503, 200]
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(statuses.pop(0))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    started: list[str] = []
+
+    def start(checkpoint: Path, key: str, gpu: str, stack: ExitStack) -> StartedServer:
+        started.append(gpu)
+        return StartedServer("http://m/v1", f"http://127.0.0.1:{server.server_port}/health", lambda: False)
+
+    settings = ServingSettings(python=Path("python"), gpus=("0",), health_ttl_seconds=0.0, health_timeout_seconds=5.0)
+    try:
+        endpoints = SGLangPolicyEndpoints(settings, start=start)
+        p = policy(write_checkpoint(tmp_path / "m"))
+        first = endpoints.resolve(p)
+        assert endpoints.resolve(p) == first
+        assert statuses == [] and started == ["0"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a_server_whose_process_exited_is_restarted_without_a_probe(tmp_path: Path) -> None:
+    starts = FakeStarts()
+    endpoints, probe, clock, p = watched(tmp_path, starts)
+    endpoints.resolve(p)
+    starts.exited[0] = True
+    clock.now += 1.0  # well within the TTL
+    assert endpoints.resolve(p).base_url == "http://m.0.1/v1"
+    assert probe.calls == [] and starts.stopped == ["m"]
+
+
+def test_a_server_that_is_down_and_does_not_restart_fails_naming_its_checkpoint(tmp_path: Path) -> None:
+    starts = FakeStarts(fail_after=1)
+    endpoints, probe, clock, p = watched(tmp_path, starts)
+    endpoints.resolve(p)
+    probe.down.add("http://m.0/health")
+    clock.now += 30.0
+    named = re.escape(f"{tmp_path}/m") + rf" \({p.checkpoint.checksum[:12]}\)"
+    with pytest.raises(ContractError, match=named + " it went down and did not restart: RuntimeError: out of memory"):
+        endpoints.resolve(p)
+    assert endpoints.serving == {} and starts.stopped == ["m"]
+    calls = len(probe.calls)
+    with pytest.raises(ContractError, match=named + " failed earlier: it went down and did not restart"):
+        endpoints.resolve(p)  # at once: no start, no probe
+    assert len(starts.started) == 1 and len(probe.calls) == calls
+
+
+def test_a_server_that_goes_down_again_after_its_one_restart_fails_naming_its_checkpoint(tmp_path: Path) -> None:
+    starts = FakeStarts()
+    endpoints, probe, _clock, p = watched(tmp_path, starts)
+    endpoints.resolve(p)
+    starts.exited[0] = True
+    endpoints.resolve(p)
+    starts.exited[1] = True
+    named = re.escape(f"{tmp_path}/m") + rf" \({p.checkpoint.checksum[:12]}\)"
+    with pytest.raises(ContractError, match=named + " it went down again after its one restart"):
+        endpoints.resolve(p)
+    assert starts.stopped == ["m", "m"] and endpoints.serving == {}
+    with pytest.raises(ContractError, match=named + " failed earlier: it went down again"):
+        endpoints.resolve(p)
+    assert len(starts.started) == 2 and probe.calls == []
 
 
 def test_a_checkpoint_is_named_by_its_hub_repository_or_its_directory(tmp_path: Path) -> None:
