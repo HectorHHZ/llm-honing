@@ -40,6 +40,7 @@ from honing.core import (
 )
 from honing.core.state import validate_method_state
 from honing.harness.methods.gepa import Archive, GEPAConfig, GEPAMethod, extract_text, improves
+from honing.harness.models import ChatModelError
 from tests.fakes.harness import FakeChatModel, FakeEpisodeRunner, FakeTaskGrader
 from tests.fakes.model import FakeModelSource, FakeWorld
 
@@ -495,26 +496,42 @@ def test_a_runner_refusing_the_child_proposes_nothing_and_charges_what_ran() -> 
 
 
 class FailingChatModel(FakeChatModel):
+    def __init__(self, replies: Sequence[str], error: Exception) -> None:
+        super().__init__(replies)
+        self.error = error
+
     def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int, temperature: float) -> ChatReply:
         super().complete(messages, max_tokens=max_tokens, temperature=temperature)
-        raise RuntimeError("client bug")
+        raise self.error
 
 
 @pytest.mark.unit
-def test_a_failing_chat_model_proposes_nothing_and_logs_the_traceback(caplog: pytest.LogCaptureFixture) -> None:
+def test_a_chat_model_error_proposes_nothing_logs_one_line_and_charges_only_the_parent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     fixture = Fixture()
-    fixture.method.chat_model = FailingChatModel([IMPROVING])
+    error = ChatModelError("openai/some-model", "RateLimitError", 429, attempts=3)
+    fixture.method.chat_model = FailingChatModel([IMPROVING], error)
 
-    with caplog.at_level(logging.ERROR, logger="honing.harness.methods.gepa.method"):
+    with caplog.at_level(logging.DEBUG, logger="honing.harness.methods.gepa.method"):
         result = fixture.propose()
 
     assert result.proposal is None
-    assert (fixture.runner.runs, result.episodes_spent) == (3, 3)
+    # The parent's minibatch ran and is charged; no child ran.
+    assert (fixture.runner.runs, result.episodes_spent, _archive(result).metric_calls) == (3, 3, 3)
     [log] = caplog.records
-    assert log.levelno == logging.ERROR
-    assert INSTRUCTIONS in log.getMessage()
-    assert log.exc_info is not None and isinstance(log.exc_info[1], RuntimeError)
-    assert "client bug" in caplog.text and "Traceback" in caplog.text
+    assert log.levelno == logging.WARNING and log.exc_info is None
+    assert INSTRUCTIONS in log.getMessage() and "RateLimitError (status 429)" in log.getMessage()
+    assert "Traceback" not in caplog.text
+
+
+@pytest.mark.unit
+def test_an_unexpected_reflection_error_propagates() -> None:
+    fixture = Fixture()
+    fixture.method.chat_model = FailingChatModel([IMPROVING], RuntimeError("client bug"))
+
+    with pytest.raises(RuntimeError, match="client bug"):
+        fixture.propose()
 
 
 @pytest.mark.unit

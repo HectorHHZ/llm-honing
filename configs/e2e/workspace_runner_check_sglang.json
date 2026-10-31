@@ -1,0 +1,17 @@
+{
+  "description": "The harness runner checks on the reference workspace runner with a real policy: the stand-in agent process asks any Hugging Face chat checkpoint SGLang loads (HONING_SGLANG_CHECKPOINT) through the OpenAI-compatible route SGLangPolicyEndpoints starts on HONING_SGLANG_GPUS. Needs a GPU and the SGLang environment (SGLANG_PYTHON).",
+  "work_dir": "runs/e2e-workspace-sglang",
+  "requires": {"env": ["SGLANG_PYTHON", "HONING_SGLANG_CHECKPOINT", "HONING_SGLANG_GPUS"], "commands": [], "paths": []},
+  "tasks": {"factory": "tests.fakes.pipeline:tasks"},
+  "harness_seed": {"factory": "tests.fakes.pipeline:harness_seed"},
+  "components": {
+    "model_source": {"factory": "honing.backends.sglang.e2e:model_source"},
+    "endpoints": {"factory": "honing.backends.sglang.e2e:endpoints", "args": {"runtime": "sglang"}},
+    "runner": {"factory": "tests.fakes.pipeline:runner"},
+    "grader": {"factory": "honing.backends.sglang.e2e:reply_grader"}
+  },
+  "conformance": {
+    "probe": {"factory": "honing.e2e.workspace_runner:workspace_probe"},
+    "concurrent": 4
+  }
+}

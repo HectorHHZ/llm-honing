@@ -1,0 +1,7 @@
+# The OpenHands environment's direct requirements; requirements.txt is the lock compiled from this file:
+#   uv pip compile --universal --python-version 3.12 requirements.in -o requirements.txt
+openhands-sdk==1.50.1
+openhands-tools==1.50.1
+# openhands-sdk allows any litellm >= 1.93.0; 1.106.4 fails on the first model call
+# (ImportError: cannot import name 'CacheableResult' from 'mcp.types'). 1.103.2 is the version tested here.
+litellm==1.103.2

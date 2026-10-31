@@ -1,6 +1,6 @@
 """Tank rounds played by the policy being trained, as typed decisions with rewards.
 
-Each round is played with every executed choice drawn from the model's own
+Each round is played with every policy choice drawn from the model's own
 probabilities (:meth:`TankEpisodeRunner.sampling`), so repeats of one task
 differ and a group has a reward spread to learn from. Every decision in a round
 earns that round's score (1 win, 0.5 draw or timeout, 0 loss), is grouped by

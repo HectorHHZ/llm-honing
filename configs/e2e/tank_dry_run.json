@@ -1,6 +1,6 @@
 {
   "description": "Tank duel campaign with no GPU or model: real rounds (the Node match process against the planner opponent, Honing's DecisionServer) with a stand-in decision model, GEPA reflecting through a scripted chat model, planner-teacher demonstrations for sft and sampled rollouts for grpo, and a fake trainer.",
-  "integration_dir": "integrations/tank-duel",
+  "integration_dir": "integrations/tank-war",
   "suite": "tasks/suite.jsonl",
   "work_dir": "runs/tank-e2e-dry-run",
   "gate_tasks": {"split": "val", "limit": 4},

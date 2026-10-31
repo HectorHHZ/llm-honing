@@ -458,10 +458,34 @@ possible is, and is tested.
 **The honing curve** is each release's parameter count and metrics over the chain
 (`ReleaseChain.curve()`), a projection of data the chain already stores.
 
-### 2.9 Serve Plane and telemetry — reserved
+### 2.9 Serve Plane and telemetry
 
-The Serve plane (live traffic, `/v1` routes, artifact activation) is not built. It will
-load a release's serving weights when they exist.
+The Serve plane's live traffic, `/v1` routes, and artifact activation are not built. Its
+engine is ([#103](https://github.com/HectorHHZ/llm-honing/issues/103)): every model a
+campaign's runners call can be served by SGLang, pinned to one version.
+
+- **One process per checkpoint.** `honing/backends/sglang` starts SGLang from its own
+  environment (`scripts/setup-sglang.sh`, built from `scripts/sglang.lock`) and reaches
+  it over HTTP; nothing in Honing imports SGLang. An environment whose versions differ
+  from the pin is refused before anything loads. The server runs in its own process
+  group and dies with the process that started it.
+- **Readouts in Honing.** A decision is read from the log-probabilities of chosen tokens
+  after a prompt, asked greedily (SGLang otherwise divides the logits by the sampling
+  temperature first) with the output head in fp32. Any checkpoint answers `/v1/decide`
+  through the lettered readout; a family with its own decision code (StartLux-Decision)
+  keeps it and replaces only the forward pass. The same server answers OpenAI-compatible
+  chat for harness runners, and for `ChatModel` callers through `LiteLLMChatModel`.
+- **Endpoints for the campaign.** `SGLangPolicyEndpoints` starts a server the first time a
+  runner resolves a policy, after checking the checkpoint's weights against the policy's
+  checksum, so a candidate a train move has just produced is served like a release. A
+  running server is reused; when every GPU is serving, the least recently used one stops.
+- **Families that stay native.** Laya (an encoder) and djev (remote diffusion) cannot run
+  on SGLang. Kev and NanoJev could (hidden states, with their heads in Honing) but are
+  small and stay on their own loaders for now.
+
+The engine reports the checksum Honing computed from the files, so a rollout it produces
+names the release whose weights produced it. Serving weights (`QuantScheme`) are not
+loaded yet.
 
 ```python
 class TelemetryStore(Protocol):
@@ -651,7 +675,7 @@ Steps are ordered by risk: the assumption the whole design rests on is tested fi
 | **8** | Harness phases with a first real evolution method; the harness contracts it needs ([#15](https://github.com/HectorHHZ/llm-honing/issues/15)) are in | in progress |
 | **9** | `backends/local_dpo` | |
 | **10** | `sparse_mask` training unified with `PrunePlan` | |
-| **11** | Serve plane | |
+| **11** | Serve plane: the engine and campaign endpoints (`backends/sglang`, [#103](https://github.com/HectorHHZ/llm-honing/issues/103)) are in; live routes and serving weights are not | in progress |
 
 Step 2 depends on nothing else and answers the riskiest question (§8.1) on its own.
 
@@ -680,7 +704,9 @@ Gaps a reviewer should press on.
    and carries no stability promise; step 5 needs a contract test on `BaseHarness`,
    `Sandbox`, and the adapters.
 8. **Unverified details.** The Codex transcript format; whether transcripts show which
-   skills an agent loaded; whether SGLang loads heterogeneous architectures.
+   skills an agent loaded; whether SGLang loads heterogeneous architectures (it loads the
+   uniform Qwen2, Qwen3 and Qwen3.5 checkpoints Honing uses, #103; a non-uniform pruned
+   model is untested).
 9. **Format conversion per job.** Converting a large MoE between safetensors and
    `torch_dist` around every Slime job may dominate short jobs; caching the converted
    master per release is the likely mitigation.
@@ -731,4 +757,6 @@ release's format, no overwritten checkpoint, and refusal of what it does not dec
 `scripts/e2e/tank_campaign.py` runs a campaign on real tank rounds
 (`honing/backends/tank`) with a stand-in decision model: a GEPA harness move, SFT on
 planner-teacher demonstrations, and GRPO on sampled rollouts, each gated on the
-validation rounds.
+validation rounds. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
+real models served through SGLang: the policy and every candidate started on demand by
+`SGLangPolicyEndpoints`, and GEPA reflecting through a chat model on its own engine.

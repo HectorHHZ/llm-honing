@@ -1,6 +1,6 @@
 # End-to-end runs
 
-Every script here runs on a CPU with no model or GPU, and CI's `e2e` job runs each on every pull request. The tank commands also need Node 22 and the `gepa` extra.
+Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on every pull request, except the two OpenHands configs ([integrations/openhands/README.md](../../integrations/openhands/README.md)): CI's `openhands` job runs `configs/e2e/openhands.json` in OpenHands' own environment, and `configs/e2e/openhands_officeqa.json` needs a model key, so CI does not run it.
 
 | Command | What it runs |
 | --- | --- |
@@ -8,15 +8,19 @@ Every script here runs on a CPU with no model or GPU, and CI's `e2e` job runs ea
 | `python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json` | the checks a harness runner must pass before it joins a campaign |
 | `python scripts/e2e/check_trainer.py --config configs/e2e/all_planes.json` | the checks a trainer must pass before it joins a campaign |
 | `python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json` | the RA2 runner and grader in a campaign, with stand-in match processes |
+| `python scripts/e2e/check_runner.py --config configs/e2e/openhands.json` (and `honing_pipeline.py`) | the runner checks and the all-planes campaign with OpenHands as the agent, against the stand-in policy; needs the OpenHands environment, which CI's `openhands` job builds from the lock |
+| `python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json` (and `honing_pipeline.py`) | OpenHands on three OfficeQA questions with a real model; needs `OPENROUTER_API_KEY` and fetched data, so CI does not run it |
 | `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json` | a tank campaign on real rounds (the Node match process against the planner opponent, Honing's `DecisionServer`) with a stand-in decision model: a GEPA harness move, sft on planner-teacher demonstrations, and grpo on sampled rollouts |
 | `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
 | `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, and every gated episode's run directory |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
-| `node scripts/e2e/tank-duel.mjs` | a decision server, the tank games' HTTP bridge, and both engines; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each engine plays |
+| `node scripts/e2e/tank-war.mjs` | a decision server, Tank War's HTTP bridge, and both decision interfaces; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each interface plays |
+
+One script is the exception: `gepa_live.py` calls real model APIs, needs a key, and costs money, so CI runs it only against a local stub (below).
 
 ## The all-planes pipeline
 
-`configs/e2e/all_planes.json` names one component per slot, by import path (`{"factory": "package.module:function", "args": {...}}`). A real implementation replaces a fake by changing its entry.
+`configs/e2e/all_planes.json` names one component per slot, by import path (`{"factory": "package.module:function", "args": {...}}`). A real implementation replaces a fake by changing its entry. Any value may be `{"ref": "dotted.path"}`, which is replaced by the value at that path in the same config, so a setting several entries share is written once.
 
 | Plane | Slots | Default |
 | --- | --- | --- |
@@ -66,6 +70,77 @@ A harness framework enters as an `EpisodeRunner` (`honing.core`) with its `Runne
 
 `tests/test_e2e_pipeline.py` shows each check failing on a runner that breaks it.
 
+## GEPA against real model APIs
+
+```
+export OPENAI_API_KEY=...
+python scripts/e2e/gepa_live.py --config configs/e2e/gepa_live.json --work-dir runs/gepa-live-1
+```
+
+It needs the `gepa` and `litellm` extras (`uv pip install -e ".[dev,gepa,litellm]"`) and `python3` on `PATH` for the grader. Nothing is served locally and no GPU is used.
+
+| Part | What runs |
+| --- | --- |
+| Tasks | `integrations/python-bugfix/tasks/gepa-live.jsonl`: 6 train and 5 val bug-fix tasks, a second manifest beside the suite's `suite.jsonl`, graded by `CommandGrader` on the fraction of hidden cases passed |
+| Agent | `scripts/e2e/minimal_agent.py`, run by the workspace runner: reads `AGENTS.md` and `skills/*.md`, sends the task's files to the policy, writes back the files it returns |
+| Policy | an OpenAI-compatible API (`components.endpoints`), called by the agent with the key named by `api_key_env` |
+| Reflection | `LiteLLMChatModel` inside `GEPAMethod` (`components.method.args.reflection`) |
+| Schedule | GEPA moves until the first publish (at most 12), one more, a rollback to that first publish, then 29 more; `max_metric_calls` is 100. Every move charges at least 3 metric calls (the parent's minibatch), and the first publish holds at least 16, so the run reaches the budget whatever the models reply |
+
+The model is pinned once, in `model` (`{"provider": ..., "name": ...}`); the policy endpoint and the reflection model both reference it as `{"ref": "model"}`. The key is read only from the environment variables the config names. The agent receives only that variable, and the run checks that no file it wrote holds a key.
+
+Under `--work-dir`, the run writes the release chain (`releases/commits.jsonl`), `summary.json` (steps, checks, calls, tokens, cost), `run.log`, `episodes.jsonl`, `reflections.jsonl`, `faults.jsonl`, and every agent's workspace. It exits 0 only if every check passes:
+
+| Check | Passes when |
+| --- | --- |
+| `1 extracted` | each gated candidate is its parent with one component replaced by the extracted reflection reply |
+| `2 reflection prompt` | each reflection prompt holds the task prompt, the agent's output and the grader's feedback for every parent episode |
+| `3 gate on real scores` | the archive stores the graded gate episodes' scores, and at least one candidate reached the gate |
+| `4 rejected stays` | a candidate the gate rejected stays in the archive (needs at least one rejection) |
+| `5a`-`5d` | `metric_calls` matches GEPA's charges per move and on the final path; every agent the runner started is in `commits.jsonl` or `faults.jsonl`; an abandoned move charges nothing |
+| `6 rollback` | the rollback restores the archive and the served harness together, and the next move starts from them |
+| `7a`, `7b` | a failed reflection call is a skip that charged only its parent's episodes; an abandoned move left no record |
+| `budget stop` | the last move proposed nothing because `metric_calls` reached `max_metric_calls` |
+| `8 no key written` | no file under the work directory holds a key |
+
+Real models publish rarely: over six live runs, a first publish came in about 14% of the moves before one (5 in 36), and one run had none in 12 moves. So a run can end without a rejection or without a publish to roll back to. When checks 4 and 6 are the only ones that fail, and only because the run did not exercise them, the script prints `[NOT EXERCISED]` and `not exercised, rerun`, and `tests/test_gepa_live.py` skips with that reason; the exit code is still 1. Rerun. The real fix is more GEPA iterations per harness move (up to K, until a child passes its minibatch), proposed on #92.
+
+The live schedule has its own step kinds: `{"kind": "harness", "repeat": n}`, `{"kind": "harness_until_publish", "max_moves": n}`, and `{"kind": "rollback", "to": "first_publish"}` (or a release id).
+
+**Failures.** A reflection call that fails after the client's retries (bad key, rate limit, timeout) logs one line and proposes nothing. If the policy cannot be reached after the agent's retries, the agent exits 75 and the move is abandoned: GEPA's state is unchanged, and the move's episodes and tokens go to `faults.jsonl`. After 3 abandoned moves in a row the run stops with exit code 3.
+
+**Cost.** About 200 agent episodes with one policy call each, and about 10 reflection calls. At the prices in litellm's bundled map for `gpt-4.1-mini-2025-04-14` ($0.40 per million input tokens, $1.60 per million output tokens), that is roughly $0.10 to $0.30. `summary.json` reports the actual calls, tokens and cost. A cost litellm's map cannot give (a policy or reflection model served anywhere but its provider's own API, or a model it prices at zero) is reported as unknown, and so is the total.
+
+**Tests.** `tests/test_gepa_live_offline.py` runs this script against a loopback stub for both models, including rate limits, bad keys, timeouts and an outage inside a move; CI's `test-litellm` job runs it. `tests/test_gepa_live.py` (marker `live`) runs it on the real provider and is skipped unless the key is set.
+
+## Logging a run to W&B
+
+A pull request whose end-to-end run trains, as `gepa_live.py` does, links the run's Weights & Biases log (`CONTRIBUTING.md`, "Pull requests"). `honing_pipeline.py` and `gepa_live.py` log a run when their config has a `logging` block. The committed configs have none, so CI and a run without the block log nothing and never import `wandb`. To log a run, copy the config under `runs/` (ignored by git), add the block, and commit your code first, so the logged commit is not `-dirty`:
+
+```json
+"logging": {"wandb": {"project": "llm-honing-e2e", "tags": ["issue-100", "gepa", "live"]}}
+```
+
+The run goes to your own W&B account: `entity` is optional and defaults to the key's. Make the project public, or share it with the maintainers, so the link opens for them.
+
+```
+uv pip install -e ".[dev,gepa,litellm,wandb]"
+export WANDB_API_KEY=...
+python scripts/e2e/gepa_live.py --config runs/gepa_live.logged.json --work-dir runs/gepa-live-7
+```
+
+`"mode": "offline"` writes the run under `<work-dir>/wandb` for a later `wandb sync` and needs no key; the default, `"online"`, needs `WANDB_API_KEY` and refuses to start without it. The script prints the run's link at the start and at the end; put it in the PR's End-to-end section, with the charts a reviewer needs.
+
+| Logged | Where |
+| --- | --- |
+| one step per schedule step, rollbacks and abandoned moves included: `move/kind`, `move/label`, `move/result`, `move/release`, `move/published` | history |
+| the gate's metrics, the candidate's size and `method_episodes`, as `candidate/*`; the selector's metrics as `selector/*` (for GEPA, `selector/gepa_metric_calls`, archive and front sizes, both means) | history |
+| the gate's episode count (`gate/episodes`); for `gepa_live.py`, each move's agent processes, policy and reflection calls, tokens and cost (`usage/*`) | history |
+| the script, the git commit, the pinned model and the config (variable names only) | run config |
+| `summary.json` and `releases/commits.jsonl`, uploaded at the end as copies that name the work directory, the repository and the home directory `<work_dir>`, `<repo>` and `~` | files |
+
+Not logged: keys or environment variables, task prompts, agent outputs, grader feedback, reflection prompts and replies, and decision reasons, which can quote any of these. `commits.jsonl` does hold the harness files GEPA wrote. wandb's own capture of the console, code, git state, installed packages and machine metadata is turned off. If a file under the work directory holds the value of a key the config names, or of `WANDB_API_KEY`, nothing is uploaded and the run exits 1. Only `honing/e2e/tracking.py` imports `wandb`; `tests/test_e2e_tracking.py` and `tests/test_gepa_live_offline.py` run against a stand-in package in `tests/fakes/wandb_stub`, so CI never installs it.
+
 ## Plugging in a trainer (Slime, ...)
 
 A training backend enters as a `Trainer` (`honing.core`) with its `BackendSupport`. The campaign checks every job against that support before calling the trainer (`honing/campaign/rules.py`), draws the batch from `data` or, for on-policy algorithms, from `rollout`, and gates the `TrainResult`.
@@ -87,7 +162,7 @@ The default config's model, policy server, and harness runner key on the fake mo
 
 ## The tank campaign
 
-`configs/e2e/tank_dry_run.json` builds the campaign in `honing/backends/tank/e2e.py`. Every round is real: `TankEpisodeRunner` starts `integrations/tank-duel/scripts/match.mjs`, which plays one Classic round in lockstep against the planner opponent and asks Honing's `DecisionServer` for every decision. Only the decision model (`tests/fakes/tank.py`), the trainer, and the chat model GEPA reflects with are stand-ins. The stand-in model takes no permitted shot below quality 0.7, unless its weapon instructions tell it to fire whenever the shot is permitted. So:
+`configs/e2e/tank_dry_run.json` builds the campaign in `honing/backends/tank/e2e.py`. Every round is real: `TankEpisodeRunner` starts `integrations/tank-war/scripts/match.mjs`, which plays one Tank War round in lockstep against the planner opponent and asks Honing's `DecisionServer` for every decision. Only the decision model (`tests/fakes/tank.py`), the trainer, and the chat model GEPA reflects with are stand-ins. The stand-in model takes no permitted shot below quality 0.7, unless its weapon instructions tell it to fire whenever the shot is permitted. So:
 
 1. harness (GEPA): the scripted reflection rewrites `tank/questions.json` with such instructions; the child beats its parent on a train minibatch, and its validation mean (0.5) beats the seed's (0): published.
 2. train (sft on teacher demonstrations): quality 0.5 to 0.7 changes which motions the model drives (the published instructions already make it fire): 1 win, 3 ties on the gate: published.
@@ -95,4 +170,26 @@ The default config's model, policy server, and harness runner key on the fake mo
 
 The rounds are deterministic (the game clock stops while a seat waits for its decision), so these results repeat. A change to the game, the planner, or the bridge can change them; if it does, check the new rounds and update the expectations in CI and `tests/test_tank_e2e.py`.
 
-To run a real model, replace `model_source`, `endpoints`, and `trainer` with the Jev ones (`honing/backends/jev`) and `method.args.chat` with a real chat model.
+To run a real model, replace `model_source`, `endpoints`, and `trainer` with the Jev ones (`honing/backends/jev`) and `method.args.chat` with a real chat model, or use the SGLang config below.
+
+## Serving with SGLang
+
+`honing/backends/sglang` serves any Hugging Face checkpoint SGLang loads (RFC #103). Build its environment once, then point `SGLANG_PYTHON` at it:
+
+```
+scripts/setup-sglang.sh /path/to/sglang-env        # exactly scripts/sglang.lock; prints the export line
+export SGLANG_PYTHON=/path/to/sglang-env/bin/python
+```
+
+The configs read the checkpoint and GPUs from the environment: `HONING_SGLANG_CHECKPOINT` (a checkpoint directory), `HONING_SGLANG_GPUS` (comma-separated, one server per GPU; devices joined with `+`, such as `0+1+2+3`, form one server that shards its checkpoint over them with tensor parallelism, for a model that does not fit one GPU), and for GEPA's reflection `HONING_SGLANG_CHAT_CHECKPOINT` and `HONING_SGLANG_CHAT_GPU`.
+
+| Command | What it checks |
+| --- | --- |
+| `check_runner.py --config configs/e2e/tank_runner_check_sglang.json` | the tank runner on real rounds, the checkpoint answering `/v1/decide` through the lettered readout |
+| `check_runner.py --config configs/e2e/workspace_runner_check_sglang.json` | the workspace runner, the checkpoint answering OpenAI-compatible chat |
+| `tank_campaign.py --config configs/e2e/tank_campaign_sglang.json` | a campaign whose policy and candidates are each started on demand; the trainer (`tests/fakes/serving.py`) writes real, servable checkpoints without training |
+| `sglang_endpoints.py <checkpoint> <work-dir> <gpu> <gpu>` | on-demand start, reuse, least-recently-used stop, weights refused under another checksum, the chat route |
+| `sglang_logprobs.py <ref-gpu> <gpu> <out.json> <checkpoint>...` | next-token log-probabilities against the checkpoint's transformers class in fp32 and bf16 |
+| `sglang_lettered.py <ref-gpu> <gpu> <out.json> <checkpoint>...` | lettered decisions against the same readout on transformers, fp32 and bf16 |
+
+`integrations/ra2/parity/startlux_sglang.py` compares StartLux-Decision on SGLang with Honing's native StartLux path and benchmarks both.

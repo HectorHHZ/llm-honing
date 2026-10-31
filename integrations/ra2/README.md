@@ -1,12 +1,159 @@
-# RA2 integration
+# Red Alert 2
 
-Plays one Red Alert 2 match between a Laya decision model and the Supalosa bot on the headless `ra2-game-env` engine, then audits it. The runner records the context, every model request, the command receipts, and the replay, and the audit rebuilds each decision from those records.
+Decision models need training.
 
-This directory is the engine side of bringing RA2 into Honing (#50). It runs as its own process: nothing under `honing/` imports it. Later pieces put it behind Honing's interfaces: the decision server (#52), the episode runner and grader (#53), and the harness (#54).
+https://github.com/user-attachments/assets/08a30342-5381-4f22-a8ae-6b438cff2994
 
-It is based on the RA2 experiment in #49.
+We gave NanoJev, an open-source decision model, a game of Red Alert 2 against the Supalosa bot.
+Early on it sold its own construction yard, and it lost at tick 140.
 
-## External inputs
+After supervised training on a teacher's matches, the same model builds a base, fights, and wins
+that match-up. Laya, another family trained the same way, fields Kirov airships and bombs the
+enemy base. The game and the opponent are the same in both halves of the video; the model's weights
+are what changed.
+
+This directory runs those matches. It has a headless Red Alert 2 engine adapter, the Supalosa bot as the
+opponent, supported decision-model families behind one HTTP decision server, a match runner that records
+every request and command, and an audit that rebuilds each decision from the records. Honing's
+gate, trainers, and harness methods run on top of it.
+
+| | |
+| --- | --- |
+| Models that play | [NanoJev](https://huggingface.co/C-Tianyu/NanoJev), Laya, [Kev](https://github.com/jaredpalmer/kev), [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision), [Nimble-v4-max](#using-nimble-v4-max), and DiffusionGemma through [djev](../djev/README.md) |
+| What a model gets | the game state as text, a question, and a short list of options; it returns a probability for every option |
+| What improves it | SFT on a teacher's matches, GRPO on its own matches, and GEPA on the question text |
+| What decides a release | training uses paired wins versus losses; GEPA uses a strictly higher validation mean |
+
+## Contents
+
+1. [How the model learns](#1-how-the-model-learns): SFT, GRPO, GEPA, and the release check
+2. [Quick start](#2-quick-start)
+3. [Reference](#3-reference): external inputs, controller settings, tasks and grading, the harness, duels, training code, the model families, the campaign end to end
+
+## 1. How the model learns
+
+The model plays full matches against Supalosa, a scripted AI. A win scores 1, a draw or timeout
+0.5, and a loss 0. Every few ticks the controller shows the model the state and a question, such as
+which goal to pursue next, with a list of options. The model returns a probability for each option
+and the controller carries out the chosen one.
+
+Training changes the weights in two stages, and the same steps work for the three trainable
+families (Laya, Kev, and NanoJev). GEPA leaves the weights alone and rewrites the questions.
+
+| | SFT | GRPO | GEPA |
+| --- | --- | --- | --- |
+| Changes | weights | weights | question text |
+| Learns from | the teacher's pick at each decision | the match result | the match result and the grader's notes |
+| Plays on | training maps only | training tasks, several times each | a training minibatch, then the validation set |
+
+### Learn from a teacher (SFT)
+
+The teacher is codex. At every decision point it sees the same state and options the model gets and
+picks one. We record the teacher's own matches, and we also let the model play while the teacher
+writes down what it would have done in each situation the model reached (DAgger). The model is then
+trained to give the teacher's pick the highest probability.
+
+Only training maps are used. Every recorded match is checked against its saved hashes before it
+reaches the trainer, so a validation match or an edited record is refused
+(`honing/backends/ra2/demonstrations.py`). The trainer (`honing/backends/jev/trainer.py`) is the
+procedure from the original RA2 experiment, and with deterministic kernels it writes byte-identical
+weights ([`parity/`](parity/README.md)).
+
+### Learn from its own games (GRPO)
+
+The trained model plays the training tasks several times, and every decision in a match gets that
+match's score as its reward. Repeats of one task form a group: a decision's advantage is its reward
+minus the group average, divided by the group spread, so decisions from won matches go up and
+decisions from lost ones go down. A group whose matches all ended the same way has no spread and is
+skipped. Each update is clipped so the model cannot move too far in one step
+(`honing/backends/jev/policy_gradient.py`).
+
+The rollouts have to be sampled from the model's probabilities, because argmax play repeats exactly
+and gives a group no spread. The RA2 match controller does not sample its choices yet; the trainer
+and the rollout provider (`honing/backends/ra2/rollouts.py`) are in place for when it does.
+
+### Evolve the question text (GEPA)
+
+GEPA keeps the model fixed and rewrites the question text in
+[`config/questions.json`](config/questions.json): the wording of each question, its options, and the
+hints. The controller settings, such as how often the model is asked, stay as they are. One round
+(`honing/harness/methods/gepa/`) goes like this:
+
+1. GEPA keeps an archive of every question text it has tried, with its scores. It picks one as the
+   parent and plays it on a small batch of training tasks.
+2. The batch results go to a language model together with the grader's notes on each match (who won,
+   how it ended, what the model built and lost). The language model rewrites one part of the
+   question text.
+3. The rewrite plays the same batch. If its total score is not higher than the parent's, it is
+   dropped.
+4. A rewrite that passes plays the full validation set and is released only if its average score is
+   higher than the current version's. Its scores go into the archive either way, so later rounds can
+   start from it.
+
+Before any match, the harness check refuses question text the model cannot read: every option,
+instruction, and state entry has to fit the family's token limits.
+
+### Check before releasing
+
+New weights and new question text go through the gate on the 24 validation
+tasks (two maps, six seeds, both seats). Training uses the default selector:
+the candidate must win more paired task comparisons than it loses. GEPA supplies
+its own selector: its validation mean must strictly exceed the served candidate's
+stored mean. A tie is rejected in both cases. A release records weights and
+question text together, so a rollback restores both. The gate never plays the
+132 held-out tasks.
+
+## 2. Quick start
+
+You need Linux, Node.js 22 or newer, Python 3.10 or newer, and an NVIDIA GPU for inference. You
+also need the `ra2-game-env` engine SDK, which is supplied privately, and the files of a retail Red
+Alert 2 installation. Neither is in the repository; [External inputs](#external-inputs) says where
+each comes from. Without them, [Tank War](../tank-war/README.md) is the quickest way to try a
+decision model: it needs only Node.js.
+
+```bash
+cd integrations/ra2
+npm ci
+node scripts/setup-dependencies.mjs          # clones Supalosa and Laya at their pins, builds Supalosa
+cp .env.example .env && $EDITOR .env && source .env
+"$LAYA_PYTHON" scripts/setup-model.py --model typed-decisions
+```
+
+`LAYA_PYTHON` is a separate environment with a CUDA build of PyTorch and the Laya revision in
+`pins.json`, so the base Honing install gains no model or GPU dependency.
+
+Play one match and audit it:
+
+```bash
+npm run match -- --gpu=0 --seat=red --seed=1 --ticks=18000 --out=runs/seed1-red
+npm run audit -- runs/seed1-red
+```
+
+`--out` must not exist yet. The run directory holds the manifest, `decisions.jsonl`,
+`actions.jsonl`, `result.json`, an observer-only `viewer.json`, `match.rplx`, the source snapshot,
+and the controller and question files the match used.
+
+To let several matches share one loaded model, start a decision server and point the matches at it
+([Using a decision server](#using-a-decision-server)). The whole loop runs as one campaign with no
+game, Node, or GPU, which is what CI runs:
+
+```bash
+python scripts/e2e/ra2_campaign.py --config configs/e2e/ra2_dry_run.json
+```
+
+The other families are in [Using Kev](#using-kev), [Using NanoJev](#using-nanojev),
+[Using StartLux-Decision](#using-startlux-decision), and [DiffusionGemma / djev](#diffusiongemma--djev).
+Training by hand and gating a candidate are in [End to end](#end-to-end).
+
+## 3. Reference
+
+### This directory
+
+The match runs as its own process, and nothing under `honing/` imports it. Honing reaches it through
+the decision server (#52), the episode runner and grader (#53), and the harness (#54). It is based on
+the RA2 experiment in #49.
+
+### External inputs
 
 None of these are in the repository. Each is pinned or supplied separately.
 
@@ -23,42 +170,22 @@ None of these are in the repository. Each is pinned or supplied separately.
 | NanoJev weights (`nanojev`, full Qwen3-0.6B) | Hugging Face, revision in `pins.json` (`nanojevModels`) | the card names no separate weight license: its source is MIT and the Qwen3-0.6B base keeps Apache-2.0 |
 | StartLux-Decision source | cloned at the commit in `pins.json` (`startluxSource`) | Apache-2.0 |
 | StartLux-Decision weights (`startlux-0.8b`, `startlux-4b`, `startlux-27b`) | Hugging Face, revisions in `pins.json` (`startluxModels`) | CC BY-NC 4.0: non-commercial use only, and commercial use needs a license from StartLux Labs; the tokenizer files they keep from Qwen3.5 stay Apache-2.0 |
+| Nimble-v4-max inference code | the Hugging Face dataset `bespokelabs/nimble-v4-max-decision-index`, revision and per-file SHA-256 in `pins.json` (`nimbleSource`) | CC BY-NC 4.0 |
+| Decision Index kit | cloned at the commit in `pins.json` (`decisionIndexKit`) | MIT |
+| Nimble-v4-max weights (`nimble-v4-max`) and its Qwen3.8-27B tokenizer | Hugging Face, revisions in `pins.json` (`nimbleModels`) | weights CC BY-NC 4.0: non-commercial use only; the Qwen3.8-27B base is Apache-2.0 |
 
 Supalosa's own dependencies currently report 11 advisories from `npm audit`, one of them critical. They run only at setup and inside the match process.
 
-## Setup
+### Controller settings and question text
 
-Linux, Node.js 22 or newer, Python 3.10 or newer, and an NVIDIA GPU for inference.
-
-```bash
-cd integrations/ra2
-npm ci
-node scripts/setup-dependencies.mjs          # clones Supalosa and Laya at their pins, builds Supalosa
-cp .env.example .env && $EDITOR .env && source .env
-"$LAYA_PYTHON" scripts/setup-model.py --model typed-decisions
-```
-
-`LAYA_PYTHON` is a separate environment with a CUDA build of PyTorch and the Laya revision in `pins.json`. The base Honing install gains no model or GPU dependency.
-
-## Run and audit
-
-```bash
-npm run match -- --gpu=0 --seat=red --seed=1 --ticks=18000 --out=runs/seed1-red
-npm run audit -- runs/seed1-red
-```
-
-`--out` must not exist yet. Each run directory holds the manifest, `decisions.jsonl`, `actions.jsonl`, `result.json`, an observer-only `viewer.json`, `match.rplx`, the source snapshot, and the exact controller and question files used.
-
-## Controller settings and question text
-
-Two files control how the model is asked. Both default to the files in `config/`, which reproduce the controller's previous built-in behavior exactly.
+Two files control how the model is asked. Both default to the files in `config/`.
 
 - `--controller=<file>` holds `decisionMode`, `candidateMode`, `decisionInterval`, and `cadence`. A flag such as `--decision-interval=15` overrides the file for one run.
 - `--questions=<file>` holds the question and recommendation text, with `{name}` placeholders filled at run time. A replacement file must define every key in `config/questions.json`, or the run stops before it starts.
 
 The manifest records the path and SHA-256 of both files, and the run directory keeps copies. Per-function parameter labels are still in code; #54 moves the rest of the prompt text and turns these files into a Honing `HarnessSpec`.
 
-## Tasks and grading in Honing
+### Tasks and grading in Honing
 
 `tasks/suite.jsonl` holds 412 tasks built from `tasks/protocol.json`, #49's league protocol:
 
@@ -70,7 +197,7 @@ Rebuild the file with `python -m honing.backends.ra2.scenarios tasks/protocol.js
 
 `honing.backends.ra2.RA2EpisodeRunner` plays a task by running this directory's match as a separate process, with the policy served by a decision server. `RA2Grader` then runs the audit and `scripts/verify_replay.py`, which replays the match with no policy. It scores a win the engine ended 1, a draw, tick-limit truncation, or unended match 0.5, and a loss 0, counting wins as #49 did. A failed match, audit, or replay check raises instead of scoring. The grade's feedback summarizes income, units built, killed, and lost, and command counts.
 
-## The harness
+### The harness
 
 In Honing, the two files above are the harness an evolution method rewrites. `honing.backends.ra2.seed_harness` builds a `HarnessSpec` for agent `ra2_decision` from `config/`:
 
@@ -88,7 +215,7 @@ It also refuses missing question keys and invalid controller settings. The caden
 
 Text built from game content can still overrun during a match. The worker then refuses the request rather than truncating it, and `RA2Grader` scores that match 0, with feedback naming the question and its token counts. Any other failure mid-match is still an invalid episode.
 
-## Duels
+### Duels
 
 `integration/models/duel.mjs`, from #49, plays two decision models against each other:
 - both seats see normal views frozen before either prediction;
@@ -99,11 +226,11 @@ A seat can use a running decision server (`--red-decision-server=URL`, `--blue-d
 
 `honing.backends.ra2.DuelEvaluator` is a gate `Evaluator` that plays the candidate against the incumbent on each task, once in each seat. The candidate scores its result and the incumbent one minus it. Both must use the same question text and the default controller settings, which the duel process uses for both seats, so it judges weight changes; a win counts only when the engine ended the match, as in #49; harness changes are judged against the bot.
 
-## Training a decision model
+### Training a decision model
 
 `honing.backends.ra2.RA2DemonstrationProvider` reads labelled matches (teacher demonstrations and DAgger corrections, in #49's directory format) as one `typed_decisions` batch. It keeps every check #49's trainer made: the match must be a train-split scenario, labelled data, not a model evaluation, with unchanged source files, and every row must name the same scenario as its match. `honing.backends.jev.trainer.LocalJevTrainer` then trains Laya on that batch and writes a checkpoint manifest the decision server can load. `parity/` compares both with #49's code.
 
-## Training on game outcomes
+### Training on game outcomes
 
 `honing.backends.ra2.RA2RolloutProvider` plays tasks with the policy being trained, and turns each model call in the decision logs into a decision. Each decision carries the model's probability for every option, the match's score as its reward, the task as its group, and the release and harness it was played under.
 
@@ -114,7 +241,7 @@ A seat can use a running decision server (`--red-decision-server=URL`, `--blue-d
 
 The matches must be played with sampled choices. Argmax play repeats exactly, gives no reward spread within a group, and so teaches nothing. The controller cannot sample yet.
 
-## Tests
+### Tests
 
 ```bash
 npm test                  # controller, staging, logs, question text, HTTP client; no engine or GPU
@@ -123,7 +250,7 @@ npm run test:engine       # needs the engine, game files, and a GPU
 
 The model code the worker runs is `honing/backends/jev/`, tested with the rest of Honing (`pytest`).
 
-## Using a decision server
+### Using a decision server
 
 `--decision-server=http://host:port` sends every model request to a running Honing decision server instead of starting a worker for this match. Start one with:
 
@@ -134,7 +261,7 @@ The model code the worker runs is `honing/backends/jev/`, tested with the rest o
 
 It answers one request at a time, so several matches can share one loaded model. The worker and the server run the same model code.
 
-## Using Kev
+### Using Kev
 
 [Kev](https://github.com/jaredpalmer/kev) is a second decision-model family: a LoRA adapter and pointer head on a Qwen3.5 base. Two sizes are pinned: `kev-0.8b` (the default) and `kev-4b` (select it with `--model kev-4b` on the server, `--model=kev-4b` on a match, or `KEV_MODEL=kev-4b`). Both answer the same typed questions as Laya with the same response fields. `honing.backends.jev.kev` runs them through Kev's own code at the commit in `pins.json`; the two checkpoints record identical Kev source files, so one commit serves both. It needs its own environment (Python 3.12, torch 2.8, transformers 5.x). A kev-4b server held about 13 GB of GPU memory in bf16 on an H100:
 
@@ -157,7 +284,7 @@ Everything Laya has works with `family=kev`:
 
 Each request runs on its own, with no state cached across requests, so an answer does not depend on what came before. `parity/kev_serving.sh` and `parity/kev_training.py` check both against Kev's own code.
 
-## Using NanoJev
+### Using NanoJev
 
 [NanoJev](https://huggingface.co/C-Tianyu/NanoJev) is a third family: a full Qwen3-0.6B backbone that scores every option on its own candidate path, with a scalar head and a set attention head. `honing.backends.jev.nanojev` runs NanoJev's own `DecisionPredictor` at the source and model revisions #49 pinned, and handles requests as #49's NanoJev adapter did. Its environment follows NanoJev's own requirements (torch 2.14, transformers 5.17):
 
@@ -169,7 +296,9 @@ npm run match -- --family=nanojev --decision-server=http://127.0.0.1:8803 --seat
 
 As for Kev, everything Laya has works with `family=nanojev`: `NanoJevDecisionModel`, the server and the stdio worker (`DECISION_FAMILY=nanojev`, `NANOJEV_*` settings, started with `NANOJEV_PYTHON`), match, duel and audit, `NanoJevQuestionCheck` (`NANOJEV_LIMITS`), and `NanoJevTrainer` (`sft`, `grpo`; full weights, or `param_subset` for the heads). The model files are checked against the checksums the model repository publishes, and a candidate path is limited to 2,048 tokens, as #49 ran it; the state is trimmed by whole entries until every path fits. `parity/nanojev_serving.py` compares serving with #49's worker and `parity/nanojev_training.py` checks the trainer.
 
-## Using StartLux-Decision
+The server's `--nanojev-inference` (`NanoJevSettings.inference`) chooses how a request's candidate paths are scored. `reference`, the default, runs `DecisionPredictor`, one padded row per path. `tree` merges the paths into one token tree, so the state and question tokens they share run once, and runs it through the Hugging Face backbone. `tree-compiled` runs the same tree through a compiled Qwen3 forward with FlexAttention and a CUDA graph per tree size, with the scoring heads of every question in the same graph; it needs bf16, and loading compiles and captures the graphs, which took 69 seconds with filled Triton and Inductor caches at the default `--max-len` and 112 to 130 seconds at `--max-len 8192` (RTX A6000); on empty caches the default took 121 seconds, measured before the heads moved into the graph. In both tree modes the server answers a request's branches in the same forward, and encodes a request on its own thread while the GPU runs another. The answers differ from the reference by bf16 rounding, and `parity/nanojev_tree.py` measures by how much. Tank War's states need `--max-len 8192`, the limit its own NanoJev service uses: at 2,048 a state with ten shells on the board is refused.
+
+### Using StartLux-Decision
 
 [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision) is a fourth family: dense Qwen3.5 models that render each question as one prompt with lettered options and read the answer from the letters' next-token logits after one forward pass. Three sizes are pinned: `startlux-0.8b`, `startlux-4b` (the default) and `startlux-27b`. `honing.backends.jev.startlux` runs StartLux's own `StartLuxDecision` at the source commit in `pins.json`, with its prompts, temperatures and CUDA graphs. The environment follows what StartLux was tested with (torch 2.11, transformers 5.8.1, flash-linear-attention and causal-conv1d, which StartLux requires on a GPU and which `setup-startlux.sh` builds with `nvcc`):
 
@@ -185,7 +314,29 @@ Each weight shard is checked against the SHA-256 the model repository published 
 
 The first request at each new prompt length compiles StartLux's linear-attention kernels. Triton caches them on disk, but on a new machine a 27B server's first requests can take several seconds, and the tank duel's 5-second limit failed once for that reason. Warm a fresh server with a few requests of the lengths it will see before a timed match. `parity/startlux_serving.py` compares serving with StartLux's own server.
 
-## End to end
+### Using Nimble-v4-max
+
+[Nimble-v4-max](https://huggingface.co/bespokelabs/Nimble-v4-max) is a fifth family: Bespoke Labs' 27B fine-tune of Qwen3.8-27B. One prompt holds the whole request, the state and every question, read both ways in the full-attention layers; each question's short tail runs on a copy of the request's cache, and each option is one token whose logit is read at the answer position. `honing.backends.jev.nimble` runs Bespoke's own `NimbleEngine` from the inference code its model card points to, with the settings of its published Decision Index run (shared prefix on, at most 48 question tails per copied cache). The engine subclasses the Decision Index kit's `Engine`, so the kit is pinned as well. The environment follows that run (torch 2.8, transformers 5.17.0, flash-linear-attention 0.5.2 and causal-conv1d 1.7.0, built with `nvcc`):
+
+```bash
+HF_HOME=/disk/with/room scripts/setup-nimble.sh   # about 55 GB; prints the exports
+"$NIMBLE_PYTHON" -m honing.backends.jev.server --family nimble --pins pins.json --nimble-source "$NIMBLE_SOURCE_DIR" --nimble-kit "$NIMBLE_KIT_DIR" --gpu 0 --port 8805
+npm run match -- --family=nimble --decision-server=http://127.0.0.1:8805 --seat=red --seed=1 --out=runs/nimble-seed1-red
+```
+
+The server, the stdio worker (`DECISION_FAMILY=nimble`, `NIMBLE_MODEL`, `NIMBLE_SOURCE_DIR`, `NIMBLE_KIT_DIR`, `NIMBLE_MAX_LEN`, started with `NIMBLE_PYTHON`), match, duel, audit and `NimbleQuestionCheck` (`NIMBLE_LIMITS`) work as they do for the other families. There is no Nimble trainer, so `--checkpoint-manifest` is refused. On an H100 in bf16 the server held 53.2 GB, so the model needs one GPU with at least 80 GB.
+
+The inference code comes from a dataset snapshot rather than a git checkout, so each of its Python files must match the SHA-256 pinned for it, and the kit must be the pinned, unmodified checkout. Each weight shard is checked against the SHA-256 the hub published for it and against the model's own `weights_sha256.json`, and the checkpoint's `schema_config.json` must name the pinned base tokenizer. The state is trimmed by whole entries until every question's prompt fits 8,192 tokens (`--max-len`, up to the model's 32,768). The engine answers a score question as a choice over the level indices; Honing returns it as a score with the expected level and the levels' text, as the djev bridge does. `parity/nimble_serving.py` compares serving with the engine called directly.
+
+Nimble completes representative prefill and shared-prefix/tail warmup before the server or stdio worker reports ready. The warmup uses one, two and three questions at prompt budgets of 512, 2,048 and 4,608 tokens, capped by `--max-len`. Startup can take longer with an empty compiler cache. Keep the Triton cache on persistent storage. Other input shapes can still need compilation, so measure the workloads you deploy.
+
+To check a cold start on an allocated, unused GPU, run this from the repository root in the Nimble environment with Node 22 on `PATH`. The output directory must not exist. It uses new compiler caches, waits for the production server to report ready, then runs both Tank War decision interfaces twice with the normal 5-second client and 10-second bridge limits:
+
+```bash
+"$NIMBLE_PYTHON" scripts/e2e/nimble_cold_start.py --gpu 0 --nimble-source "$NIMBLE_SOURCE_DIR" --nimble-kit "$NIMBLE_KIT_DIR" --out runs/nimble-cold-start
+```
+
+### End to end
 
 This is the whole loop on RA2 today: serve a model, play and grade tasks, gate a candidate, train, and duel.
 
@@ -207,18 +358,18 @@ scripts/e2e/serving.sh /tmp/serving    # a decision server process and the match
 
 `check_campaign.py` reads what the run wrote: a result for every step, the release chain's records and head, and a result on disk for every gated episode. `serving.sh` starts Honing's decision server with a stand-in model whose answers a client can compute, then sends 25 requests through `decisionClientOptions`, `createDecisionClient`, the permutation client (one binary target question, asked twice), and the HTTP client, and checks every answer, probability, and state text. Neither needs a GPU, the game, or model weights; GPU and in-game runs are reported in the pull request.
 
-### Environments
+#### Environments
 
 | Part | Environment |
 |---|---|
 | Honing (tasks, runner, grader, gate, trainers' Python side) | repository `.venv`, Python 3.10+, no GPU |
-| Match process | Node.js 22, `npm ci`, `RA2_SDK_DIR`, `RA2_GAME_DIR`, `SUPALOSA_DIR` (see Setup) |
+| Match process | Node.js 22, `npm ci`, `RA2_SDK_DIR`, `RA2_GAME_DIR`, `SUPALOSA_DIR` (see [Quick start](#2-quick-start)) |
 | Decision server and `LocalJevTrainer` | `LAYA_PYTHON`: CUDA PyTorch, the Laya revision in `pins.json`, and Honing installed (`pip install -e .`) |
 | Replay check | `RA2_REPLAY_PYTHON`: a Python with the SDK's `ra2_game_env` package |
 
 The game files and the engine SDK cannot be redistributed; get them as the External inputs table says. Shell commands run from `integrations/ra2` and Python from the repository root, both with `.env` sourced. The Python steps continue one session.
 
-### 1. Serve the model
+#### 1. Serve the model
 
 ```bash
 "$LAYA_PYTHON" -m honing.backends.jev.server --pins pins.json --model typed-decisions \
@@ -227,7 +378,7 @@ The game files and the engine SDK cannot be redistributed; get them as the Exter
 
 Add `--checkpoint-manifest <train-dir>/checkpoint.json` to serve a trained checkpoint. Serve each checkpoint you compare on its own GPU and port.
 
-### 2. Play one match by hand
+#### 2. Play one match by hand
 
 ```bash
 npm run match -- --decision-server=http://127.0.0.1:8801 --seat=red --seed=1 --ticks=18000 --out=runs/seed1-red
@@ -237,7 +388,7 @@ npm run audit -- runs/seed1-red
 
 `viewer.json` in the run directory is an observer-only record of the match.
 
-### 3. Play and grade tasks through Honing
+#### 3. Play and grade tasks through Honing
 
 ```python
 import asyncio
@@ -267,7 +418,7 @@ print(record.score, record.feedback)
 
 A win the engine ended scores 1, a draw or truncation 0.5, a loss 0.
 
-### 4. Gate a candidate against the incumbent
+#### 4. Gate a candidate against the incumbent
 
 Serve both checkpoints (step 1), map both checksums in `JevEndpoints`, then:
 
@@ -283,7 +434,7 @@ evaluation, decision = gate.judge(candidate, incumbent)
 
 Use `DuelEvaluator` in place of `EpisodeEvaluator` to play the two checkpoints against each other instead of against the bot.
 
-### 5. Train
+#### 5. Train
 
 Supervised, on labelled matches in #49's directory format (`parity/make_demos.py` writes a small synthetic set):
 
@@ -304,7 +455,7 @@ result = LocalJevTrainer(settings).train(job, base, batch)
 
 `parity/train_honing.py` is the same code as a runnable script. On game outcomes, `RA2RolloutProvider(runner, grader).collect(...)` returns a rollout batch for `TrainJobSpec("grpo", ...)`. It needs sampled play, which the controller does not do yet.
 
-### Where new components plug in
+#### Where new components plug in
 
 | Step | Interface | RA2 default | Planned |
 |---|---|---|---|
@@ -317,6 +468,6 @@ result = LocalJevTrainer(settings).train(job, base, batch)
 
 To check a new component, point its slot in a copy of `configs/e2e/ra2_dry_run.json` at your factory (`package.module:function`, called with the run's context and the entry's `args`) and run the script; `tests/test_ra2_e2e.py` does this for a trainer and a runner. With real matches, swap it into step 3 or 4 in place of the default.
 
-## DiffusionGemma / djev
+### DiffusionGemma / djev
 
 `--family=djev --decision-server=<Honing bridge URL>` uses an existing djev structured-read deployment. See [the bridge setup and validation boundary](../djev/README.md). The adapter preserves upstream probabilities and total-prompt token accounting; it does not load weights or provide a trainer. Match and duel records count structured decision requests rather than GPU forwards.

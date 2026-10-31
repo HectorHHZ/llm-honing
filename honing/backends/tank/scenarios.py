@@ -1,7 +1,7 @@
 """Tank duel scenarios and the task suite.
 
 Each suite line is one task: ``task_id``, ``prompt``, ``split``, and a ``tank``
-block with the scenario. A task is one Classic round on the seeded maze, with
+block with the scenario. A task is one Tank War round on the seeded maze, with
 the policy in one seat and the planner opponent in the other. Every seed is
 played from both seats, because the two spawns are not equally placed on a
 given maze. Splits: ``train`` for a method's minibatches and for rollouts,
@@ -59,7 +59,7 @@ class TankScenario:
 
 def _prompt(scenario: TankScenario) -> str:
     return (
-        f"Play the {scenario.seat} tank against the {scenario.opponent} opponent on the Classic maze with seed "
+        f"Play the {scenario.seat} tank against the {scenario.opponent} opponent on the tank maze with seed "
         f"{scenario.seed}. Win the round by hitting the enemy within {scenario.seconds:g} seconds; every shell, "
         "including your own, is lethal."
     )
