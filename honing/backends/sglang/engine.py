@@ -168,6 +168,10 @@ class SGLangEngine:
         """The base URL of the OpenAI-compatible routes (with ``chat``)."""
         return f"{self.url}/v1"
 
+    def exited(self) -> bool:
+        """Whether the server process has exited (an OOM, a crash), without asking it over HTTP."""
+        return self._process is not None and self._process.poll() is not None
+
     @classmethod
     @contextlib.contextmanager
     def launch(cls, model_path: Path, settings: SGLangSettings) -> Iterator[SGLangEngine]:
