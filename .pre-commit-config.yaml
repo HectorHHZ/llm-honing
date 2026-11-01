@@ -29,18 +29,18 @@ repos:
         args: ['--maxkb=1024']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.9
+    rev: v0.17.3
     hooks:
       - id: ruff-check
         args: [--fix]
 
   - repo: https://github.com/pycqa/isort
-    rev: 9.0.1
+    rev: 9.0.2
     hooks:
       - id: isort
         args: ["--profile=black", "--filter-files"]
 
   - repo: https://github.com/psf/black
-    rev: 26.5.1
+    rev: 26.10.1
     hooks:
       - id: black
