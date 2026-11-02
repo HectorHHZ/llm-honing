@@ -1,0 +1,50 @@
+{
+  "hardware": "Apple M1 Pro, macOS arm64; Unity player via Rosetta",
+  "unityVersion": "2019.4.2f1",
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "family": "laya",
+    "device": "cpu",
+    "torch": "2.8.0",
+    "laya": "0.3.20"
+  },
+  "build": {
+    "gameRevision": "c443c6262ab85d007c8ed6f3abb42a8b077df007",
+    "originalAssemblySha256": "7b72fc6c62ca11e8cd864cbe35055185b072fcda7a621c60d079da2c49b91130",
+    "demoAssemblySha256": "8b9f272b49cd415906751bd3b81cf4579d3c8b87f99b2263dac4ef900855616c",
+    "inputReadsRedirected": 7,
+    "originalAppModified": false
+  },
+  "decisionTransport": "Honing DecisionServer HTTP /v1/health and /v1/decide",
+  "scene": "Level1",
+  "decisions": 50,
+  "stateActionPairsVerified": 50,
+  "actions": {
+    "jump_left": 50
+  },
+  "meanDecisionMs": 850.683,
+  "medianDecisionMs": 704.382,
+  "video": {
+    "file": "laya-cpu.mp4",
+    "width": 960,
+    "height": 540,
+    "fps": 30,
+    "frames": 600,
+    "seconds": 20,
+    "decodedSuccessfully": true
+  },
+  "simulationSeconds": 18.333334855735302,
+  "healthStart": 5,
+  "healthEnd": 5,
+  "levelTransitions": 0,
+  "originalGameAssemblyUnchanged": true,
+  "heuristicFallback": false,
+  "limitations": [
+    "Inference-only demo; no game-specific training",
+    "The policy repeated jump_left and remained near the left wall",
+    "Rendered-frame windows are not deterministic fixed-duration simulation steps",
+    "Other model families, Linux, and IL2CPP were not validated"
+  ]
+}
