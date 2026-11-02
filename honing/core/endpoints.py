@@ -7,7 +7,7 @@ from typing import Literal, get_args
 
 from honing.core.errors import require, require_choice
 
-EndpointRuntime = Literal["sglang", "jev_decision"]
+EndpointRuntime = Literal["sglang", "openai_chat", "jev_decision"]
 
 
 @dataclass(frozen=True)
@@ -17,8 +17,9 @@ class PolicyEndpoint:
     ``base_url`` is the engine's HTTP root, ``tokenizer_location`` is where the
     tokenizer for the served weights can be loaded from, and ``served_model``
     is the name the engine answers to. ``runtime`` says which protocol the engine
-    speaks: an SGLang server for language models, or a Jev decision server that
-    answers typed questions with a probability per option.
+    speaks: an SGLang server for language models, any other OpenAI-compatible chat
+    API (a provider, a router such as OpenRouter, or a vLLM server), or a Jev
+    decision server that answers typed questions with a probability per option.
     """
 
     base_url: str

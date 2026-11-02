@@ -1,0 +1,1 @@
+{"module": "find_user", "function": "find_user", "cases": [{"args": [["Ann", "Bob"], "Bob"], "expected": 1}, {"args": [["Ann", "Bob"], " bob "], "expected": 1}, {"args": [["ANN"], "ann"], "expected": 0}, {"args": [["Ann"], "Cy"], "expected": null}, {"args": [[], "x"], "expected": null}]}

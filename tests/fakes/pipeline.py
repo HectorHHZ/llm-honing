@@ -128,6 +128,15 @@ def harness_seed(context: PipelineContext) -> HarnessSpec:
 # ---------------------------------------------------------------- the policy an agent calls
 
 
+def _text(content: object) -> str:
+    """A message's text: OpenAI-compatible clients send either a string or a list of content parts."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
+    return ""
+
+
 class _PolicyHandler(BaseHTTPRequestHandler):
     server: _PolicyServer
 
@@ -142,7 +151,7 @@ class _PolicyHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        system = " ".join(m.get("content", "") for m in body.get("messages", []) if m.get("role") == "system")
+        system = " ".join(_text(m.get("content")) for m in body.get("messages", []) if m.get("role") == "system")
         verified = "verify" in system.lower()
         quality = round(min(1.0, self.server.world.quality[checksum] + (VERIFY_BONUS if verified else 0.0)), 6)
         content = f"quality={quality} verified={int(verified)}"

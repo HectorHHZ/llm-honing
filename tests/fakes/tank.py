@@ -32,7 +32,7 @@ from honing.core import ArchitectureSpec, BackendSupport, PolicyEndpoint, Policy
 from tests.fakes.harness import FakeChatModel
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld
 
-INTEGRATION = Path(__file__).resolve().parents[2] / "integrations/tank-duel"
+INTEGRATION = Path(__file__).resolve().parents[2] / "integrations/tank-war"
 START_QUALITY = 0.5
 # Below this quality the stand-in hesitates: it takes no permitted shot unless told to.
 FIRING_QUALITY = 0.7

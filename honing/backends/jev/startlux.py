@@ -28,6 +28,14 @@ questions of 6,500 to 9,500 tokens take 2 to 3 seconds instead of 0.8.
 
 Requests run one at a time and the model keeps nothing between them, so an
 answer does not depend on the requests before it.
+
+With ``engine="sglang"`` (RFC #103, prototype) the forward pass runs in an
+SGLang server started from its own environment instead, and StartLux's decision
+code reads the option letters from the log-probabilities it returns
+(:mod:`honing.backends.sglang.startlux`). Honing still checks the weights
+against the published hashes and reports their checksum. Requests then run
+concurrently, batched by the engine, and its radix cache reuses prompt
+beginnings across questions and requests unless ``prefix_cache`` is off.
 """
 
 from __future__ import annotations
@@ -78,10 +86,17 @@ class StartLuxSettings:
     lock_dir: Path | None = None
     max_length: int = 8192
     graphs: bool = True
+    engine: str = "native"
+    sglang_python: Path | None = None
+    prefix_cache: bool = True
 
     def __post_init__(self) -> None:
         if not 0 < self.max_length <= 65536:
             raise ValueError("max_length must be between 1 and 65536")
+        if self.engine not in ("native", "sglang"):
+            raise ValueError("engine must be native or sglang")
+        if self.engine == "sglang" and self.sglang_python is None:
+            raise ValueError("engine sglang needs sglang_python, the interpreter of the SGLang environment")
 
 
 def _sha256(path: Path) -> str:
@@ -227,14 +242,19 @@ def pack_request(
     measure: Callable[[str], Mapping[str, int]],
     count: Callable[[str], int],
     max_length: int,
+    *,
+    validate: Callable[[Mapping[str, Any]], None] = validate_questions,
+    encoding: str = "startlux-lettered-prompt",
 ) -> tuple[str, dict[str, dict[str, Any]], list[dict[str, str]]]:
     """Remove optional whole entries only, keeping all essential state and every option, until each prompt fits.
 
     ``measure`` returns the longest rendered prompt of each question for a
     state, and ``count`` the tokens of the state alone. Entries leave ``logs``
-    oldest first, then ``memory`` and ``details`` newest first.
+    oldest first, then ``memory`` and ``details`` newest first. ``validate`` and
+    ``encoding`` let another family that renders whole prompts (Nimble) reuse
+    this with its own question rules and audit label.
     """
-    validate_questions(questions)
+    validate(questions)
     if not isinstance(parts, Mapping) or set(parts) - set(SECTIONS):
         raise ValueError("Unknown context sections")
     retained: dict[str, list[str]] = {}
@@ -248,7 +268,7 @@ def pack_request(
         state = "\n".join(row for section in SECTIONS for row in retained[section])
         lengths = measure(state)
         if set(lengths) != set(questions):
-            raise ValueError("StartLux rendering omitted a question")
+            raise ValueError("Prompt rendering omitted a question")
         state_tokens = count(state)
         audit = {
             key: {
@@ -257,7 +277,7 @@ def pack_request(
                 "inputTokens": lengths[key],
                 "maxInputTokens": max_length,
                 "options": option_count(question),
-                "encoding": "startlux-lettered-prompt",
+                "encoding": encoding,
                 "stateTruncated": False,
             }
             for key, question in questions.items()
@@ -335,11 +355,15 @@ def longest_round(prompts: Any, tokenizer: Any, state: str, question: Mapping[st
 class StartLuxDecisionModel:
     """A loaded StartLux-Decision checkpoint. Create it with :meth:`load`, which holds the GPU lock while in use."""
 
-    def __init__(self, engine: Any, prompts: Any, metadata: Mapping[str, object], max_length: int) -> None:
+    def __init__(
+        self, engine: Any, prompts: Any, metadata: Mapping[str, object], max_length: int, concurrent: bool = False
+    ) -> None:
         self._engine = engine
         self._prompts = prompts
         self._metadata = dict(metadata)
         self._max_length = max_length
+        # An SGLang engine batches concurrent requests itself; the native model answers one at a time.
+        self.concurrent = concurrent
 
     @property
     def metadata(self) -> Mapping[str, object]:
@@ -353,6 +377,10 @@ class StartLuxDecisionModel:
         )
         pins = json.loads(settings.pins_path.read_text())
         upstream, prompts, revision = import_startlux(settings.source_dir, pins)
+        if settings.engine == "sglang":
+            with cls._load_sglang(settings, pins, upstream, prompts, revision) as model:
+                yield model
+            return
         with gpu_lock(settings.gpu, settings.lock_dir) as uuid:
             model_record = resolve_checkpoint(settings, pins)
             with contextlib.redirect_stdout(sys.stderr):
@@ -387,6 +415,45 @@ class StartLuxDecisionModel:
                 "python": sys.version.split()[0],
             }
             yield cls(engine, prompts, metadata, settings.max_length)
+
+    @classmethod
+    @contextlib.contextmanager
+    def _load_sglang(
+        cls, settings: StartLuxSettings, pins: Mapping[str, Any], upstream: Any, prompts: Any, revision: str
+    ) -> Iterator[StartLuxDecisionModel]:
+        from honing.backends.sglang.engine import SGLangEngine, SGLangSettings
+        from honing.backends.sglang.startlux import sglang_startlux
+
+        assert settings.sglang_python is not None
+        with gpu_lock(settings.gpu, settings.lock_dir) as uuid:
+            model_record = resolve_checkpoint(settings, pins)
+            checkpoint = Path(model_record["path"])
+            engine_settings = SGLangSettings(
+                python=settings.sglang_python,
+                gpu=uuid,
+                prefix_cache=settings.prefix_cache,
+                # Room for the longest prompt StartLux renders and the one token asked for after it.
+                context_length=settings.max_length + 8,
+                log_path=Path(os.environ.get("SGLANG_LOG", os.devnull)),
+            )
+            with SGLangEngine.launch(checkpoint, engine_settings) as engine:
+                decision = sglang_startlux(upstream, prompts, engine, checkpoint, settings.max_length)
+                metadata = {
+                    "family": FAMILY,
+                    "model": settings.model,
+                    **model_record,
+                    "sourceCommit": revision,
+                    "engine": "sglang",
+                    "engineVersions": engine.versions,
+                    "prefixCache": settings.prefix_cache,
+                    "gpu": settings.gpu,
+                    "gpuUuid": uuid,
+                    "sharedPrefix": False,
+                    "temperatureByType": dict(decision.temperature),
+                    "maxLen": settings.max_length,
+                    "python": sys.version.split()[0],
+                }
+                yield cls(decision, prompts, metadata, settings.max_length, concurrent=True)
 
     @staticmethod
     def _prepare(engine: Any) -> float:

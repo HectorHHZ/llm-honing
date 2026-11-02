@@ -1,0 +1,167 @@
+{
+  "description": "OpenHands on three real OfficeQA questions with a cheap model (DeepSeek V4 Flash on OpenRouter), about $0.11 per script. Needs OPENROUTER_API_KEY, the OpenHands environment, and the data: python -m integrations.officeqa.fetch --out integrations/officeqa/.cache --uids UID0002,UID0006,UID0016 (with HF_TOKEN). Run: python scripts/e2e/check_runner.py --config configs/e2e/openhands_officeqa.json, then the same with honing_pipeline.py. Only the harness plane is real; its two scripted moves add a search skill, then the grep and glob tools, each gated on the same three questions. The other planes are fakes that are never scheduled but must be named.",
+  "work_dir": "runs/e2e-openhands-officeqa",
+  "requires": {
+    "env": [
+      "OPENROUTER_API_KEY"
+    ],
+    "commands": [],
+    "paths": [
+      "integrations/openhands/.venv/bin/python",
+      "integrations/officeqa/.cache/corpus",
+      "integrations/officeqa/.cache/officeqa_full.csv",
+      "integrations/officeqa/.cache/reward.py"
+    ]
+  },
+  "tasks": {
+    "factory": "integrations.officeqa.e2e:tasks",
+    "args": {
+      "data_dir": "{root}/integrations/officeqa/.cache",
+      "uids": [
+        "UID0002",
+        "UID0006",
+        "UID0016"
+      ]
+    }
+  },
+  "harness_seed": {
+    "factory": "honing.backends.openhands.e2e:seed_harness",
+    "args": {
+      "instructions": "You answer questions about the documents in your working directory.\nLook figures up in the documents rather than answering from memory, and report them in the unit the question asks for.\n",
+      "tools": [
+        "terminal",
+        "file_editor"
+      ],
+      "max_iterations": 25
+    }
+  },
+  "components": {
+    "model_source": {
+      "factory": "honing.backends.llm_gateway:model_source",
+      "args": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "deepseek/deepseek-v4-flash",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "input_usd_per_million": 0.028,
+        "output_usd_per_million": 0.056
+      }
+    },
+    "endpoints": {
+      "factory": "honing.backends.llm_gateway:endpoints",
+      "args": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "deepseek/deepseek-v4-flash",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "input_usd_per_million": 0.028,
+        "output_usd_per_million": 0.056
+      }
+    },
+    "trainer": {
+      "factory": "tests.fakes.pipeline:trainer"
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "rollout": {
+      "factory": "tests.fakes.pipeline:rollout"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "honing.backends.openhands.e2e:runner",
+      "args": {
+        "tools": [
+          "terminal",
+          "file_editor",
+          "grep",
+          "glob",
+          "task_tracker"
+        ],
+        "default_tools": [
+          "terminal",
+          "file_editor"
+        ],
+        "mcp_registry": {},
+        "mounts": {
+          "corpus": "{root}/integrations/officeqa/.cache/corpus"
+        },
+        "concurrency": 2,
+        "timeout_seconds": 600,
+        "max_iterations": 25,
+        "max_budget_usd": 0.05
+      }
+    },
+    "grader": {
+      "factory": "integrations.officeqa.e2e:grader",
+      "args": {
+        "data_dir": "{root}/integrations/officeqa/.cache",
+        "uids": [
+          "UID0002",
+          "UID0006",
+          "UID0016"
+        ]
+      }
+    },
+    "method": {
+      "factory": "integrations.officeqa.scripted:method",
+      "args": {
+        "edits": [
+          {
+            "path": "skills/treasury-bulletins/SKILL.md",
+            "kind": "skill",
+            "note": "add a skill for searching Treasury Bulletins",
+            "file": "{root}/integrations/officeqa/skills/treasury-bulletins/SKILL.md"
+          },
+          {
+            "path": "openhands/agent.json",
+            "kind": "settings",
+            "json": {
+              "tools": [
+                "terminal",
+                "file_editor",
+                "grep",
+                "glob"
+              ],
+              "max_iterations": 25
+            },
+            "note": "give the agent the grep and glob tools"
+          }
+        ]
+      }
+    }
+  },
+  "conformance": {
+    "probe": {
+      "factory": "honing.backends.openhands.e2e:probe"
+    },
+    "concurrent": 2
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    }
+  },
+  "schedule": [
+    {
+      "kind": "harness",
+      "label": "add-search-skill"
+    },
+    {
+      "kind": "harness",
+      "label": "add-search-tools"
+    }
+  ]
+}

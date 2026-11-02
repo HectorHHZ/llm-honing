@@ -21,8 +21,17 @@ decision model on ``typed_decisions`` (:data:`DECISION_REQUIREMENTS`); a job
 opts in with ``TrainJobSpec.contract``, and :func:`requirements_for` returns the
 requirements that apply to it.
 
-On-policy *self*-distillation is ``opd`` with a teacher of kind ``lineage``: the
-student distills from an earlier release of itself.
+On-policy distillation reaches its teacher one of two ways. A teacher with
+``placement="in_process"`` is a checkpoint loaded beside the student, which
+scores the student's samples during training. A teacher with
+``placement="engine"`` is served by its own engine, which scored the samples
+when the rollout was collected, so every sample carries ``teacher_logprobs``
+(:func:`honing.campaign.rules.batch_meets_contract` checks this).
+
+On-policy *self*-distillation is ``opd`` with ``TeacherRef(kind="lineage",
+ref="self", placement="engine")``: the teacher is the student itself, shown
+privileged context (the answer, or a hint) that the student's prompt leaves
+out, and the rollout provider scores each sample under that context.
 """
 
 from __future__ import annotations
@@ -161,9 +170,11 @@ class TeacherRef:
     """The model a distillation job learns from, and where it runs.
 
     ``engine`` serves the teacher from its own inference engine and needs only a
-    compatible tokenizer. ``in_process`` loads it beside the student and needs
-    the same architecture, so it cannot score for a student whose shape a
-    compression step just changed.
+    compatible tokenizer; for an on-policy job, the engine's scores arrive with
+    the samples as ``PolicySample.teacher_logprobs``. ``in_process`` loads it
+    beside the student and needs the same architecture, so it cannot score for
+    a student whose shape a compression step just changed. ``ref="self"`` with
+    kind ``lineage`` is the student itself under privileged context.
     """
 
     kind: TeacherKind

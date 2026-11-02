@@ -195,6 +195,43 @@ def test_a_batch_must_match_the_algorithm_contract() -> None:
         rules.batch_meets_contract(sft, None)
 
 
+@pytest.mark.unit
+def test_grouped_samples_meet_an_on_policy_contract_but_not_the_reverse() -> None:
+    sample = PolicySample(tokens=(1, 2), loss_mask=(0, 1), reward=1.0, logprobs=(0.0, -0.1), group="g")
+    grouped = TrainingBatch(
+        batch_id="grouped",
+        contract=DataContract(kind="grouped_on_policy_samples", requires_reward=True, requires_logprobs=True),
+        samples=(sample,),
+    )
+    ungrouped = TrainingBatch(
+        batch_id="ungrouped",
+        contract=DataContract(kind="on_policy_samples", requires_logprobs=True),
+        samples=(sample,),
+    )
+    opd = TrainJobSpec(
+        algorithm="opd", rollout="direct", teacher=TeacherRef(kind="release", ref="r0001", placement="in_process")
+    )
+    rules.batch_meets_contract(opd, grouped)
+    rules.batch_meets_contract(opd, ungrouped)
+    with refused("batch_meets_contract"):
+        rules.batch_meets_contract(TrainJobSpec(algorithm="grpo", rollout="direct"), ungrouped)
+
+
+@pytest.mark.unit
+def test_an_engine_teacher_needs_its_scores_on_every_sample() -> None:
+    scored = PolicySample(tokens=(1, 2), loss_mask=(0, 1), logprobs=(0.0, -0.4), teacher_logprobs=(0.0, -0.2))
+    unscored = PolicySample(tokens=(1, 3), loss_mask=(0, 1), logprobs=(0.0, -0.4))
+    contract = DataContract(kind="on_policy_samples", requires_logprobs=True)
+    self_distillation = TrainJobSpec(
+        algorithm="opd", rollout="direct", teacher=TeacherRef(kind="lineage", ref="self", placement="engine")
+    )
+    rules.batch_meets_contract(self_distillation, TrainingBatch(batch_id="s", contract=contract, samples=(scored,)))
+    with refused("batch_meets_contract"):
+        rules.batch_meets_contract(
+            self_distillation, TrainingBatch(batch_id="u", contract=contract, samples=(scored, unscored))
+        )
+
+
 def rollout_batch(source_release: str | None, source_harness: str | None) -> TrainingBatch:
     sample = PolicySample(
         tokens=(1, 2),

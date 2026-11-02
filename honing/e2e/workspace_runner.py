@@ -19,14 +19,20 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import uuid
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from honing.core import ContractError, EpisodeOutcome, HarnessSpec, PolicyEndpoints, PolicyRef, RunnerSupport, Task
 
 TIMED_OUT = -9
+# What every agent process gets from the runner's own environment; anything
+# else (an API key, for one) must be named in ``forward_environment``.
+BASE_ENVIRONMENT = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SYSTEMROOT")
+# Files the runner or the agent writes; a task's starting files may not use these names.
+RUNNER_FILES = frozenset({"task.json", "agent.log", "result.json", "transcript.jsonl"})
 
 
 class WorkspaceEpisodeRunner:
@@ -36,7 +42,16 @@ class WorkspaceEpisodeRunner:
     ``HONING_POLICY_CHECKSUM`` (the endpoint the policy resolves to) and
     ``HONING_WORKSPACE``. ``support`` is what the agent framework can run;
     ``concurrency`` caps how many agents run at once; an agent still running
-    after ``timeout_seconds`` is killed and reported with exit code -9.
+    after ``timeout_seconds`` is killed and reported with exit code -9, and so
+    is one whose episode is cancelled.
+
+    The agent's environment is ``BASE_ENVIRONMENT`` and the variables named in
+    ``forward_environment`` (where set), then ``environment``, then the
+    ``HONING_`` variables: not the runner's whole environment, which may hold
+    keys the agent has no use for. ``seed_workspace`` gives a task's starting
+    files (a directory copied in before the harness files), or ``None``. A
+    symbolic link in it is copied as a link, and must be relative and resolve
+    inside that directory.
     """
 
     def __init__(
@@ -47,6 +62,8 @@ class WorkspaceEpisodeRunner:
         endpoints: PolicyEndpoints,
         support: RunnerSupport,
         environment: Mapping[str, str] | None = None,
+        forward_environment: Sequence[str] = (),
+        seed_workspace: Callable[[Task], Path | None] | None = None,
         concurrency: int = 4,
         timeout_seconds: float = 600.0,
     ) -> None:
@@ -57,6 +74,8 @@ class WorkspaceEpisodeRunner:
         self._workspaces = workspaces
         self._endpoints = endpoints
         self._environment = dict(environment or {})
+        self._forward = (*BASE_ENVIRONMENT, *forward_environment)
+        self._seed_workspace = seed_workspace
         self._concurrency = concurrency
         self._timeout = timeout_seconds
         self._slots: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
@@ -67,7 +86,23 @@ class WorkspaceEpisodeRunner:
         if spec.agent not in self.support.agents:
             raise ContractError(f"this runner runs agents {sorted(self.support.agents)}, not {spec.agent!r}")
         workspace = self._workspaces / f"{task.task_id}--{spec.spec_id[:12]}--{uuid.uuid4().hex[:8]}"
-        workspace.mkdir(parents=True)
+        source = self._seed_workspace(task) if self._seed_workspace is not None else None
+        if source is None:
+            workspace.mkdir(parents=True)
+        else:
+            workspace.parent.mkdir(parents=True, exist_ok=True)
+            _refuse_links_that_leave(task, source)
+            # A link stays a link: following it would copy in whatever it points at, hidden cases included.
+            shutil.copytree(source, workspace, symlinks=True)
+            clashes = sorted(
+                name
+                for name in (*RUNNER_FILES, *(path for path, _ in spec.files))
+                if os.path.lexists(workspace / name)
+            )
+            if clashes:
+                raise ContractError(
+                    f"task {task.task_id!r}'s starting files use names the runner or the harness writes: {clashes}"
+                )
         for path, file in spec.files:
             target = workspace / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +114,7 @@ class WorkspaceEpisodeRunner:
         endpoint = self._endpoints.resolve(policy)
         workspace = self._prepare(spec, task)
         env = {
-            **os.environ,
+            **{name: os.environ[name] for name in self._forward if name in os.environ},
             **self._environment,
             "HONING_POLICY_URL": endpoint.base_url,
             "HONING_POLICY_MODEL": endpoint.served_model,
@@ -96,9 +131,14 @@ class WorkspaceEpisodeRunner:
                 try:
                     exit_code = await asyncio.wait_for(process.wait(), self._timeout)
                 except asyncio.TimeoutError:  # the builtin TimeoutError only from Python 3.11
-                    process.kill()
-                    await process.wait()
                     exit_code = TIMED_OUT
+                finally:
+                    # On a timeout, and on cancellation too: when one episode of a
+                    # gather fails, asyncio.run cancels the rest, and an agent left
+                    # running would keep calling the policy after the run is over.
+                    if process.returncode is None:
+                        process.kill()
+                        await process.wait()
         result = workspace / "result.json"
         final_output = str(json.loads(result.read_text()).get("final_output", "")) if result.exists() else ""
         return EpisodeOutcome(
@@ -133,3 +173,22 @@ class WorkspaceDeliveryProbe:
 def workspace_probe(context: object) -> WorkspaceDeliveryProbe:
     """Factory for a config's ``conformance.probe`` entry."""
     return WorkspaceDeliveryProbe()
+
+
+def _refuse_links_that_leave(task: Task, source: Path) -> None:
+    """Refuse a link the copy would keep that points outside the task's starting files.
+
+    The copied link would resolve from the agent's workspace, so an absolute one, or one
+    that climbs out, would let the agent read or write files outside its workspace.
+    """
+    root = source.resolve()
+    for directory, dirnames, filenames in os.walk(source):
+        for name in (*dirnames, *filenames):
+            path = Path(directory) / name
+            if not path.is_symlink():
+                continue
+            if os.path.isabs(os.readlink(path)) or not path.resolve().is_relative_to(root):
+                raise ContractError(
+                    f"task {task.task_id!r}'s starting files hold a link that is absolute or leaves them: "
+                    f"{path.relative_to(source).as_posix()} -> {os.readlink(path)}"
+                )

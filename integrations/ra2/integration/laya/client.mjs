@@ -7,12 +7,14 @@ const PYTHON_VARIABLE = {
     kev: "KEV_PYTHON",
     nanojev: "NANOJEV_PYTHON",
     startlux: "STARTLUX_PYTHON",
+    nimble: "NIMBLE_PYTHON",
 };
 const SETTING_PREFIX = {
     laya: "LAYA",
     kev: "KEV",
     nanojev: "NANOJEV",
     startlux: "STARTLUX",
+    nimble: "NIMBLE",
 };
 export class LayaClient {
     constructor({

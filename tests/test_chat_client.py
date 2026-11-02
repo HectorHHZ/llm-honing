@@ -17,7 +17,7 @@ from typing import ClassVar
 import pytest
 
 from honing.core import ChatMessage, ChatReply, ContractError, protocols, validate_method_state
-from honing.harness.models import ChatModelError, LiteLLMChatModel
+from honing.harness.models import ChatModelError, LiteLLMChatModel, completion_cost_usd
 
 # Read when litellm is imported: use the price map bundled with the pinned
 # version instead of downloading the latest one from GitHub.
@@ -376,6 +376,32 @@ print(json.dumps({
     "cost_usd": reply.cost_usd,
 }))
 """
+
+
+@pytest.mark.unit
+def test_token_counts_are_priced_from_the_bundled_map() -> None:
+    # The bundled map's price per token, so the expectation does not restate a price.
+    prompt, completion = litellm.cost_per_token(model="openai/gpt-4.1-mini", prompt_tokens=1, completion_tokens=1)
+    assert prompt > 0 and completion > 0
+
+    assert completion_cost_usd("openai/gpt-4.1-mini", 1000, 10) == pytest.approx(1000 * prompt + 10 * completion)
+    assert completion_cost_usd("openai/gpt-4.1-mini", 0, 0) == 0.0
+    assert completion_cost_usd("openai/no-such-model-xyz", 1000, 10) is None
+
+
+@pytest.mark.unit
+def test_token_counts_have_no_known_cost_at_a_zero_price_or_on_a_named_server() -> None:
+    # The same rule as the client: a zero price is a local provider's entry, not a free call.
+    free = sorted(
+        name
+        for name, entry in litellm.model_cost.items()
+        if name.startswith("ollama/") and entry.get("input_cost_per_token") == entry.get("output_cost_per_token") == 0
+    )
+    assert free
+    assert completion_cost_usd(free[0], 1000, 10) is None
+    assert completion_cost_usd("openai/gpt-4.1-mini", 1000, 10, api_base="http://127.0.0.1:8000/v1") is None
+    # The price is zero above, not the tokens: a priced model's zero tokens are a known 0.0.
+    assert completion_cost_usd("openai/gpt-4.1-mini", 0, 0) == 0.0
 
 
 @pytest.mark.integration  # starts a subprocess

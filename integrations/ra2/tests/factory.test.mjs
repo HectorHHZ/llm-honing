@@ -9,7 +9,7 @@ import {
 } from "../integration/models/factory.mjs";
 import { LayaClient } from "../integration/laya/client.mjs";
 
-test("the laya, kev, nanojev, and startlux families are accepted, anything else is refused", () => {
+test("the laya, kev, nanojev, startlux, and nimble families are accepted, anything else is refused", () => {
     assert.deepEqual(decisionClientOptions({}, "intent"), {
         family: "laya",
         gpu: "0",
@@ -51,6 +51,10 @@ test("the laya, kev, nanojev, and startlux families are accepted, anything else 
             "intent",
         ).model,
         "startlux-27b",
+    );
+    assert.equal(
+        decisionClientOptions({ family: "nimble", gpu: "4" }, "intent").model,
+        "nimble-v4-max",
     );
     assert.throws(
         () => decisionClientOptions({ family: "jev-omni" }, "intent"),
@@ -162,6 +166,30 @@ test("a startlux worker runs with STARTLUX_PYTHON and the startlux settings", ()
     assert.equal(env.DECISION_FAMILY, "startlux");
     assert.equal(env.STARTLUX_MODEL, "startlux-0.8b");
     assert.equal(env.LAYA_GPU, "5");
+});
+
+test("a nimble worker runs with NIMBLE_PYTHON and the nimble settings", () => {
+    const calls = [];
+    const saved = process.env.NIMBLE_PYTHON;
+    process.env.NIMBLE_PYTHON = "/envs/nimble/bin/python";
+    try {
+        const client = new LayaClient({
+            family: "nimble",
+            gpu: "6",
+            model: "nimble-v4-max",
+            spawnProcess: fakeSpawn(calls),
+        });
+        client.ready.catch(() => {});
+        client.close();
+    } finally {
+        if (saved === undefined) delete process.env.NIMBLE_PYTHON;
+        else process.env.NIMBLE_PYTHON = saved;
+    }
+    const [{ command, env }] = calls;
+    assert.equal(command, "/envs/nimble/bin/python");
+    assert.equal(env.DECISION_FAMILY, "nimble");
+    assert.equal(env.NIMBLE_MODEL, "nimble-v4-max");
+    assert.equal(env.LAYA_GPU, "6");
 });
 
 test("djev uses a bridge and is counted as a structured request", () => {

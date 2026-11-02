@@ -1,0 +1,16 @@
+{
+  "description": "The harness runner checks on the tank runner with a real language model: any Hugging Face checkpoint SGLang loads (HONING_SGLANG_CHECKPOINT) answers /v1/decide through Honing's lettered readout, served on demand by SGLangPolicyEndpoints on HONING_SGLANG_GPUS. Needs a GPU and the SGLang environment (SGLANG_PYTHON).",
+  "requires": {"env": ["SGLANG_PYTHON", "HONING_SGLANG_CHECKPOINT", "HONING_SGLANG_GPUS"], "commands": ["node"], "paths": []},
+  "tasks": {"factory": "honing.backends.tank.e2e:tasks", "args": {"split": "val", "limit": 2}},
+  "harness_seed": {"factory": "honing.backends.tank.e2e:harness_seed"},
+  "components": {
+    "model_source": {"factory": "honing.backends.sglang.e2e:model_source"},
+    "endpoints": {"factory": "honing.backends.sglang.e2e:endpoints", "args": {"runtime": "jev_decision"}},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner"},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"}
+  },
+  "conformance": {
+    "probe": {"factory": "honing.backends.tank.e2e:delivery_probe"},
+    "concurrent": 4
+  }
+}

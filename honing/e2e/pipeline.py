@@ -10,13 +10,18 @@ changing one entry. The slots cover every plane:
 - harness: ``runner``, ``grader``, ``method``
 - gate: ``evaluator`` (optional; the default plays the runner on ``tasks``)
 
-``tasks`` and ``harness_seed`` are factories too. The ``schedule`` lists moves
+``tasks`` and ``harness_seed`` are factories too. ``tasks`` are the gate's;
+an optional ``harness_tasks`` factory gives a harness move its own tasks (a
+method's training split the gate never sees), and ``harness.episode_budget``
+what a harness move may spend on its own episodes (default 0: a method that
+runs episodes, as GEPA does, needs it). The ``schedule`` lists moves
 (``train``, ``prune``, ``quantize``, ``harness``) and ``rollback`` steps; each
 move is gated, and a rollback restores an earlier release and checks that its
 weights and harness came back. ``expect`` gives each step's result
 (``published``, ``rolled back``, ``skipped``, or ``restored``); a run whose
 results differ fails. Everything a run wrote goes under ``work_dir``:
-``summary.json``, the release chain, and whatever the runner keeps.
+``summary.json``, the release chain, and whatever the runner keeps. An
+optional ``logging`` block logs the run to W&B (:mod:`honing.e2e.tracking`).
 
 ``configs/e2e/all_planes.json`` runs fakes for every plane except the harness
 runner, which is :class:`~honing.e2e.workspace_runner.WorkspaceEpisodeRunner`
@@ -66,7 +71,17 @@ from honing.core import (
     Trainer,
     TrainJobSpec,
 )
-from honing.e2e.components import PipelineContext, build_component, missing_requirements
+from honing.e2e.components import PipelineContext, build_component, missing_requirements, resolve_references
+from honing.e2e.tracking import (
+    ChainRecords,
+    NullTracker,
+    RunTracker,
+    WandbSettings,
+    logging_settings,
+    run_config,
+    start_tracker,
+    step_values,
+)
 from honing.release import AcceptAll, EpisodeEvaluator, Gate, NoRegressionSelector, ReleaseChain, WinLossSelector
 
 # Built in this order; a factory can read the components built before it.
@@ -161,11 +176,17 @@ class PipelineRun:
     schedule: tuple[Mapping[str, Any], ...]
     expect: tuple[str, ...]
     context: PipelineContext
+    tracking: WandbSettings | None = None
 
 
 def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -> PipelineRun:
     """Check the environment, build every component, and start the campaign (release 0 is published)."""
-    missing = missing_requirements(config.get("requires", {}))
+    config = resolve_references(config)
+    tracking = logging_settings(config.get("logging"))
+    requires = dict(config.get("requires", {}))
+    if tracking is not None:
+        requires["env"] = [*requires.get("env", ()), *tracking.required_env]
+    missing = missing_requirements(requires)
     if missing:
         raise ContractError("this config needs " + ", ".join(missing))
     work = (work_dir or root / config.get("work_dir", "runs/e2e-pipeline")).resolve()
@@ -180,10 +201,12 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             context.components[slot] = build_component(components[slot], context, slot, protocol)
         elif required:
             raise ContractError(f"the config names no {slot} component")
-    tasks = build_component(config["tasks"], context, "tasks", tuple)
+    tasks = _tasks(config["tasks"], context, "tasks")
+    harness_tasks = _tasks(config["harness_tasks"], context, "harness_tasks") if "harness_tasks" in config else tasks
     seed = build_component(config["harness_seed"], context, "harness_seed", HarnessSpec)
-    if not tasks or not all(isinstance(task, Task) for task in tasks):  # type: ignore[attr-defined]
-        raise ContractError("the tasks factory must return a non-empty tuple of Task")
+    episode_budget = config.get("harness", {}).get("episode_budget", 0)
+    if not isinstance(episode_budget, int) or isinstance(episode_budget, bool) or episode_budget < 0:
+        raise ContractError(f"harness.episode_budget must be an integer >= 0, got {episode_budget!r}")
     c = context.components
     selectors = config.get("selectors", {"default": {"win_loss": {}}})
     evaluator = c.get("evaluator") or EpisodeEvaluator(c["runner"], c["grader"], tasks)  # type: ignore[arg-type]
@@ -208,7 +231,8 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             runner=c["runner"],  # type: ignore[arg-type]
             grader=c["grader"],  # type: ignore[arg-type]
             method=c["method"],  # type: ignore[arg-type]
-            tasks=tasks,  # type: ignore[arg-type]
+            tasks=harness_tasks,
+            episode_budget=episode_budget,
         ),
         defaults=_defaults(config),
         rollout=c.get("rollout"),  # type: ignore[arg-type]
@@ -221,7 +245,14 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     expect = tuple(config.get("expect", ()))
     if expect and (len(expect) != len(schedule) or set(expect) - set(RESULTS)):
         raise ContractError(f"expect needs one of {list(RESULTS)} per schedule step")
-    return PipelineRun(campaign, schedule, expect, context)
+    return PipelineRun(campaign, schedule, expect, context, tracking)
+
+
+def _tasks(spec: Mapping[str, Any], context: PipelineContext, slot: str) -> tuple[Task, ...]:
+    tasks = build_component(spec, context, slot, tuple)
+    if not tasks or not all(isinstance(task, Task) for task in tasks):  # type: ignore[attr-defined]
+        raise ContractError(f"the {slot} factory must return a non-empty tuple of Task")
+    return tasks  # type: ignore[return-value]
 
 
 def _step(outcome: StepOutcome) -> dict[str, object]:
@@ -238,11 +269,13 @@ def _step(outcome: StepOutcome) -> dict[str, object]:
     }
 
 
-def run(pipeline: PipelineRun) -> dict[str, Any]:
+def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, Any]:
     """Run every step in order; returns the summary, with ``failures`` naming any step whose result was unexpected."""
     campaign = pipeline.campaign
+    tracker = tracker or NullTracker()
+    records = ChainRecords(campaign.chain.record_path)
     steps: list[dict[str, object]] = []
-    for entry in pipeline.schedule:
+    for index, entry in enumerate(pipeline.schedule, start=1):
         if entry.get("kind") == "rollback":
             target = campaign.chain.get(str(entry["to"]))
             head = campaign.rollback(target.release_id)
@@ -260,8 +293,9 @@ def run(pipeline: PipelineRun) -> dict[str, Any]:
                     "reason": f"head restored to {target.release_id} with its weights and harness",
                 }
             )
-            continue
-        steps.append(_step(campaign.advance(_move(entry))))
+        else:
+            steps.append(_step(campaign.advance(_move(entry))))
+        tracker.log_step(index, step_values(steps[-1], records.new()))
     head = campaign.chain.head()
     failures = [
         f"step {index + 1} ({step['move']}): expected {wanted}, got {step['result']}"
@@ -292,8 +326,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ContractError as error:
         print(f"cannot start: {error}", file=sys.stderr)
         return 2
-    summary = run(pipeline)
-    (pipeline.context.work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    work_dir = pipeline.context.work_dir
+    try:
+        tracker = start_tracker(
+            pipeline.tracking,
+            name=work_dir.name,
+            work_dir=work_dir,
+            root=args.root,
+            config=run_config(config, args.root, "honing_pipeline"),
+        )
+    except Exception as error:  # wandb raises its own errors for a bad key, project or network
+        print(f"cannot start logging: {type(error).__name__}: {error}", file=sys.stderr)
+        return 2
+    if tracker.url:
+        print(f"wandb: {tracker.url}")
+    failed = True
+    try:
+        summary = run(pipeline, tracker)
+        (work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+        failed = bool(summary["failures"])
+    finally:
+        problems = tracker.finish(work_dir, config.get("requires", {}).get("env", ()), failed=failed)
     for index, step in enumerate(summary["steps"], start=1):
         scores = (
             f" (candidate {step['candidate_mean']:.3f} vs incumbent {step['incumbent_mean']:.3f})"
@@ -304,7 +357,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"head {summary['head']}; releases {[r['kind'] for r in summary['releases']]}; in {summary['work_dir']}")
     for failure in summary["failures"]:
         print("unexpected:", failure, file=sys.stderr)
-    return 1 if summary["failures"] else 0
+    for problem in problems:
+        print("logging:", problem, file=sys.stderr)
+    if tracker.url:
+        print(f"wandb: {tracker.url}")
+    return 1 if summary["failures"] or problems else 0
 
 
 __all__ = ["SLOTS", "PipelineRun", "build", "main", "run"]

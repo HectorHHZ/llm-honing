@@ -1,0 +1,37 @@
+{
+  "description": "Tank duel campaign with real models served through SGLang: real rounds (the Node match process against the planner opponent) answered by any Hugging Face checkpoint (HONING_SGLANG_CHECKPOINT) through Honing's lettered readout, each release and candidate started on demand by SGLangPolicyEndpoints on HONING_SGLANG_GPUS; GEPA reflecting through a chat model on its own SGLang engine (HONING_SGLANG_CHAT_CHECKPOINT on HONING_SGLANG_CHAT_GPU); planner-teacher demonstrations for sft and sampled rollouts for grpo. The trainer is a stand-in that writes real, servable checkpoints (tests/fakes/serving.py) without training, so train moves exercise serving, not learning. Needs GPUs and the SGLang environment (SGLANG_PYTHON).",
+  "integration_dir": "integrations/tank-duel",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-campaign-sglang",
+  "gate_tasks": {"split": "val", "limit": 4},
+  "harness_tasks": {"split": "train", "limit": 4},
+  "episode_budget": 6,
+  "samples_per_task": 2,
+  "schedule": [
+    {"kind": "harness", "label": "gepa"},
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"},
+    {"kind": "train", "algorithm": "grpo", "steps": 1, "contract": "typed_decisions"}
+  ],
+  "requires": {
+    "env": ["SGLANG_PYTHON", "HONING_SGLANG_CHECKPOINT", "HONING_SGLANG_GPUS", "HONING_SGLANG_CHAT_CHECKPOINT", "HONING_SGLANG_CHAT_GPU"],
+    "commands": ["node"],
+    "paths": []
+  },
+  "components": {
+    "model_source": {"factory": "honing.backends.sglang.e2e:model_source"},
+    "endpoints": {"factory": "honing.backends.sglang.e2e:endpoints", "args": {"runtime": "jev_decision"}},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner"},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"},
+    "trainer": {"factory": "tests.fakes.serving:trainer"},
+    "data": {"factory": "honing.backends.tank.e2e:demonstrations", "args": {"limit": 2}},
+    "rollout": {"factory": "honing.backends.tank.e2e:rollouts"},
+    "method": {
+      "factory": "honing.backends.tank.e2e:gepa_method",
+      "args": {
+        "chat": {"factory": "honing.backends.sglang.e2e:chat"},
+        "max_metric_calls": 100,
+        "minibatch_size": 3
+      }
+    }
+  }
+}

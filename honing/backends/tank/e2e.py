@@ -76,7 +76,7 @@ from honing.core import (
 from honing.e2e.components import build_component, missing_requirements
 from honing.release import EpisodeEvaluator, Gate, ReleaseChain, WinLossSelector
 
-DEFAULT_INTEGRATION = "integrations/tank-duel"
+DEFAULT_INTEGRATION = "integrations/tank-war"
 DEFAULT_SUITE = "tasks/suite.jsonl"
 
 # Built in this order; ``rollout`` and ``evaluator`` are optional.

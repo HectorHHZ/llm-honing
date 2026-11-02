@@ -65,5 +65,34 @@
       "repo": "startlux-models/StartLux-Decision-27B",
       "revision": "95e31cda814fec2a7dc4ac4f8b9b832aa1c9c2e6"
     }
+  },
+  "nimbleSource": {
+    "repo": "bespokelabs/nimble-v4-max-decision-index",
+    "repoType": "dataset",
+    "revision": "adea14289afa29dca3ff38b1fcb76e58f6add230",
+    "files": {
+      "code/nimble/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "code/nimble/evaluation/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "code/nimble/evaluation/decision_index_engine.py": "f4764b8e92a66fe85d5a0b43d448ded2eb525fcf5a1fdfde520444a5bc455aa5",
+      "code/nimble/scoring/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "code/nimble/scoring/extended_schema.py": "fb51ac3d51922bb93caa207a34493d6addaa22c9ec1c26df594ba9d46f7a2285",
+      "code/nimble/scoring/parallel_schema.py": "a0a0f94d0f65e972bc20d088678ad3d595ff1c42b9c0d78f96034526303f63fc",
+      "code/nimble/training/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "code/nimble/training/compact_fast.py": "2dbf42164b02b9584ebc96b82d4c2e5b5d18bef642db2dd778a70f8c75c2ee07",
+      "code/nimble/training/compact_schema.py": "4da97595307d9ae494aad3bdc992a17747728cee79a77062ed889b9d9091b092",
+      "code/nimble/training/prefix_attention.py": "f8b35c8ff885fd2742650f1e94da385ab3a78b8570023f1226c8d82faa86cffc"
+    }
+  },
+  "decisionIndexKit": {
+    "url": "https://github.com/apolinario/decision-index.git",
+    "revision": "25c6ec7b6b5f44a216c63c3a700de3a9c6d6699d"
+  },
+  "nimbleModels": {
+    "nimble-v4-max": {
+      "repo": "bespokelabs/Nimble-v4-max",
+      "revision": "655aa7051c2ab39660193ebb70c8926d3d2cb7aa",
+      "base": "Qwen/Qwen3.8-27B",
+      "baseRevision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    }
   }
 }

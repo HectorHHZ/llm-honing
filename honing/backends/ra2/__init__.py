@@ -14,6 +14,7 @@ from honing.backends.ra2.harness import (
     KevQuestionCheck,
     LayaQuestionCheck,
     NanoJevQuestionCheck,
+    NimbleQuestionCheck,
     StartLuxQuestionCheck,
     seed_harness,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "KevQuestionCheck",
     "LayaQuestionCheck",
     "NanoJevQuestionCheck",
+    "NimbleQuestionCheck",
     "RA2DemonstrationProvider",
     "RA2EpisodeRunner",
     "RA2Grader",
