@@ -19,6 +19,10 @@ The layout written under the archive directory:
     under the current weights.
 ``traces/<name>/<task id, percent-quoted>/``
     the episode transcript copied from its location, and ``feedback.txt``.
+
+Every score and trace is from the search tasks, which the method runs itself.
+The gate's held-out tasks never enter the archive: the proposer learns of the
+gate only through which candidate is served.
 """
 
 from __future__ import annotations
@@ -64,9 +68,10 @@ class Trace:
 class Candidate:
     """One harness in the archive.
 
-    ``scores`` follows the archive's task order and stays ``None`` until a gate
-    scores the candidate; ``policy`` is the checksum of the weights they were
-    taken under, and ``traces`` maps each task id to that gate's episode.
+    ``scores`` follows the archive's task order and stays ``None`` until the
+    method runs the candidate on the search tasks; ``policy`` is the checksum of
+    the weights they were taken under, and ``traces`` maps each task id to its
+    episode.
     """
 
     name: str
@@ -102,8 +107,9 @@ class Archive:
     """Every candidate proposed so far and the one being served.
 
     Each operation returns a new archive and leaves this one unchanged.
-    ``task_ids`` is the gate's task order, fixed for the whole search so scores
-    stay comparable.
+    ``task_ids`` are the search tasks, in order: empty in the seed archive, then
+    fixed by the first proposal (:meth:`searching`) for the whole search, so
+    scores stay comparable.
     """
 
     task_ids: tuple[str, ...]
@@ -111,7 +117,6 @@ class Archive:
     candidates: tuple[Candidate, ...]
 
     def __post_init__(self) -> None:
-        require(len(self.task_ids) > 0, "a Meta-Harness archive needs at least one validation task")
         require(len(set(self.task_ids)) == len(self.task_ids), "archive task ids must be unique")
         seen: set[str] = set()
         for candidate in self.candidates:
@@ -121,19 +126,30 @@ class Archive:
                 f"candidate {candidate.name} must name an earlier candidate as its parent, got {candidate.parent!r}",
             )
             require(
-                candidate.scores is None or len(candidate.scores) == len(self.task_ids),
+                candidate.scores is None or (len(self.task_ids) > 0 and len(candidate.scores) == len(self.task_ids)),
                 f"candidate {candidate.name} has {len(candidate.scores or ())} scores for {len(self.task_ids)} tasks",
             )
             seen.add(candidate.name)
         require(self.served in seen, f"the served candidate {self.served!r} is not in the archive")
 
     @classmethod
-    def seed(cls, spec: HarnessSpec, task_ids: Sequence[str]) -> Archive:
+    def seed(cls, spec: HarnessSpec) -> Archive:
         return cls(
-            task_ids=tuple(task_ids),
-            served=SEED_NAME,
-            candidates=(Candidate(name=SEED_NAME, parent=None, files=spec.files),),
+            task_ids=(), served=SEED_NAME, candidates=(Candidate(name=SEED_NAME, parent=None, files=spec.files),)
         )
+
+    def searching(self, task_ids: Sequence[str]) -> Archive:
+        """Fix the search tasks on the first proposal; a later move must offer every one of them."""
+        if not self.task_ids:
+            require(len(task_ids) > 0, "Meta-Harness needs at least one search task")
+            return replace(self, task_ids=tuple(task_ids))
+        missing = sorted(set(self.task_ids) - set(task_ids))
+        if missing:
+            raise ContractError(
+                f"Meta-Harness searches on tasks {list(self.task_ids)}, fixed by its first move;"
+                f" this move lacks {missing}"
+            )
+        return self
 
     def get(self, name: str) -> Candidate:
         for candidate in self.candidates:
@@ -313,7 +329,17 @@ def write_candidate(spec: HarnessSpec, directory: Path) -> None:
 
 
 def read_candidate(directory: Path) -> HarnessSpec:
-    """Read a candidate folder back into a spec. Raises ``ValueError`` for a folder that is not one."""
+    """Read a candidate folder back into a spec. Raises ``ValueError`` for a folder that is not one.
+
+    A link is refused, symbolic or hard: the proposer has Bash, and a link to a
+    file outside the archive, such as ground truth, would put that file's
+    content into the harness and publish it with the release.
+    """
+    for path in (directory, *directory.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"{path} is a symbolic link; a candidate holds only regular files")
+        if path.is_file() and path.stat().st_nlink > 1:
+            raise ValueError(f"{path} is a hard link; a candidate holds only regular files")
     manifest = json.loads((directory / MANIFEST).read_text(encoding="utf-8"))
     if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
         raise ValueError(f"{MANIFEST} must be an object with a 'files' object")

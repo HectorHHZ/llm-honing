@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ def _files(text: str) -> tuple[tuple[str, HarnessFile], ...]:
 def _scored(tmp_path: Path) -> Archive:
     transcript = tmp_path / "episode.jsonl"
     transcript.write_text('{"turn": 1}\n')
-    archive = Archive.seed(SEED_HARNESS, TASK_IDS)
+    archive = Archive.seed(SEED_HARNESS).searching(TASK_IDS)
     archive = archive.score(
         "seed",
         (0.5, 0.5, 0.5),
@@ -54,14 +55,14 @@ def test_the_state_round_trips_and_is_json_native(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_state_under_another_schema_is_refused() -> None:
-    state = {**Archive.seed(SEED_HARNESS, TASK_IDS).to_state(), "schema_version": ARCHIVE_SCHEMA_VERSION + 1}
+    state = {**Archive.seed(SEED_HARNESS).searching(TASK_IDS).to_state(), "schema_version": ARCHIVE_SCHEMA_VERSION + 1}
     with pytest.raises(ContractError, match="schema"):
         Archive.from_state(state)
 
 
 @pytest.mark.unit
 def test_names_must_be_unique_snake_case_and_parents_must_come_first() -> None:
-    archive = Archive.seed(SEED_HARNESS, TASK_IDS)
+    archive = Archive.seed(SEED_HARNESS).searching(TASK_IDS)
     with pytest.raises(ContractError, match="used twice"):
         archive.add(Candidate("seed", "seed", _files("x")))
     with pytest.raises(ContractError, match="earlier candidate"):
@@ -72,7 +73,7 @@ def test_names_must_be_unique_snake_case_and_parents_must_come_first() -> None:
 
 @pytest.mark.unit
 def test_adopting_the_head_serves_it_once_as_a_new_root() -> None:
-    archive = Archive.seed(SEED_HARNESS, TASK_IDS)
+    archive = Archive.seed(SEED_HARNESS).searching(TASK_IDS)
     assert archive.adopt_head(SEED_HARNESS) is archive
 
     head = SEED_HARNESS.with_file(INSTRUCTIONS_PATH, HarnessFile("instructions", "Edited elsewhere."))
@@ -133,7 +134,7 @@ def test_scores_under_other_weights_are_stale_and_leave_the_frontier(tmp_path: P
 
 @pytest.mark.unit
 def test_a_task_id_is_quoted_into_one_folder(tmp_path: Path) -> None:
-    archive = Archive.seed(SEED_HARNESS, ("a/b",)).score("seed", (1.0,), POLICY, {"a/b": Trace(None, "ok")})
+    archive = Archive.seed(SEED_HARNESS).searching(("a/b",)).score("seed", (1.0,), POLICY, {"a/b": Trace(None, "ok")})
 
     write_archive(archive, tmp_path / "archive", agent="claude_code", policy=POLICY)
 
@@ -166,3 +167,48 @@ def test_a_folder_that_disagrees_with_its_manifest_is_refused(tmp_path: Path) ->
     for name in ("extra", "missing", "kind"):
         with pytest.raises(ValueError):
             read_candidate(tmp_path / name)
+
+
+@pytest.mark.unit
+def test_the_search_tasks_start_empty_and_are_fixed_once() -> None:
+    seed = Archive.seed(SEED_HARNESS)
+    assert seed.task_ids == ()
+    with pytest.raises(ContractError, match="scores for 0 tasks"):
+        seed.score("seed", (), POLICY, {})
+
+    archive = seed.searching(TASK_IDS)
+
+    assert archive.task_ids == TASK_IDS
+    assert archive.searching((*TASK_IDS, "more")) is archive
+    with pytest.raises(ContractError, match=r"lacks \['parse'\]"):
+        archive.searching(("sum", "sort"))
+    with pytest.raises(ContractError, match="at least one"):
+        seed.searching(())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("link", ["file", "directory", "folder", "manifest", "hard"])
+def test_a_candidate_holding_a_link_is_refused(tmp_path: Path, link: str) -> None:
+    secret = tmp_path / "groundtruth"
+    secret.mkdir()
+    (secret / "answers.md").write_text("the answers")
+    folder = tmp_path / "c"
+    write_candidate(SEED_HARNESS, folder)
+    if link == "file":
+        (folder / "CLAUDE.md").unlink()
+        (folder / "CLAUDE.md").symlink_to(secret / "answers.md")
+    elif link == "directory":
+        (folder / "skills").symlink_to(secret)
+    elif link == "folder":
+        folder = tmp_path / "linked"
+        folder.symlink_to(tmp_path / "c")
+    elif link == "manifest":
+        (tmp_path / "harness.json").write_text((folder / "harness.json").read_text())
+        (folder / "harness.json").unlink()
+        (folder / "harness.json").symlink_to(tmp_path / "harness.json")
+    else:
+        (folder / "CLAUDE.md").unlink()
+        os.link(secret / "answers.md", folder / "CLAUDE.md")
+
+    with pytest.raises(ValueError, match="link"):
+        read_candidate(folder)

@@ -181,6 +181,8 @@ jobs:
           python -m pip install -e ".[gepa]"
       - name: All planes end to end (every plane in one campaign, a reference harness runner and agent process)
         run: python scripts/e2e/honing_pipeline.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/all-planes"
+      - name: Meta-Harness end to end (a scripted proposer, search tasks held out from the gate, a weights change)
+        run: python scripts/e2e/honing_pipeline.py --config configs/e2e/meta_harness_dry_run.json --work-dir "$RUNNER_TEMP/meta-harness"
       - name: Harness runner contract (the checks an OpenHands or Reef runner must pass)
         run: python scripts/e2e/check_runner.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/runner-check"
       - name: Trainer contract (the checks a Slime trainer must pass)
@@ -210,6 +212,7 @@ jobs:
           name: e2e-output
           path: |
             ${{ runner.temp }}/all-planes/summary.json
+            ${{ runner.temp }}/meta-harness/summary.json
             ${{ runner.temp }}/campaign/summary.json
             ${{ runner.temp }}/campaign/releases/commits.jsonl
             ${{ runner.temp }}/tank-campaign/summary.json

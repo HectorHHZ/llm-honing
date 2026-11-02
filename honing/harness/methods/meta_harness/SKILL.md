@@ -23,7 +23,7 @@ Run ONE iteration of harness evolution.
 
 ## CONTEXT
 
-A harness is the set of files an agent reads: instructions, skills, commands, settings, hooks, or a program for an agent whose loop is itself code. The model is fixed; only the harness changes.
+A harness is the set of files an agent reads: instructions, skills, commands, settings, hooks, or a program for an agent whose loop is itself code. You change only the harness, but the model's weights can change between iterations (training, pruning, quantization), so a candidate's scores hold only for the weights they were taken under.
 
 The working directory is the archive:
 
@@ -43,7 +43,7 @@ Each candidate is a folder `candidates/<name>/`, `<name>` in snake_case (`[a-z0-
 
 ### Design principles
 
-- Your primary goal is to improve the mean score on the evaluation tasks.
+- Your primary goal is to improve the mean score on the evaluation tasks. A candidate that beats the served one there is then judged on held-out tasks you never see, and served only if it wins there too, so a gain that does not generalize is wasted.
 - One mechanism per candidate. Each candidate tests exactly one hypothesis. If you're tempted to add "and also..." — that's a second candidate.
 - Mechanism-first. Identify a specific failure mode or hypothesis from trajectories, then design changes that target it. Never add changes speculatively.
 
