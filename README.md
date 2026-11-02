@@ -46,6 +46,11 @@ version 4.
 
 ### Bring your own model
 
+An [experimental Soul Knight native interface](integrations/soul-knight/README.md)
+also connects an externally supplied Unity game to the same decision routes,
+with JSON controls and native action receipts. Its task suite and grading are
+not yet defined.
+
 Both games talk to a model through the same two HTTP routes the decision server
 exposes, `GET /v1/health` and `POST /v1/decide`. Serve a model behind them and
 it can play. [Connect a model](integrations/tank-war/README.md#connect-a-model)

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.dll
+*.exe
+*.zip
+*.png
+*.mp4
+runtime/
+runs/
+cache/
+deps/
