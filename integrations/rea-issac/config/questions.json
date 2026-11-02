@@ -1,0 +1,5 @@
+{
+  "move": "Choose a movement direction. Avoid contact damage, hostile projectiles, bombs and obstacles. Approach open doors or useful pickups when a room is clear.",
+  "shoot": "Choose a shooting direction independently of movement. Lead moving enemies and keep a clear firing line; choose NONE when there is no useful target.",
+  "bomb": "Place a bomb only when it can help and there is a safe escape. Release with NO before trying to place another bomb."
+}

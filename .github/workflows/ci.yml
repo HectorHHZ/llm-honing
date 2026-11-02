@@ -96,6 +96,20 @@ jobs:
       - name: Check Craftax contracts, the real engine, HTTP decisions and native video
         run: python -m pytest tests/test_craftax.py
 
+  rea-issac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest
+      - name: Check the real simulation, UI, model bridge and replay
+        run: python -m pytest tests/test_rea_issac*.py
+
   test-litellm:
     # The test job above installs no litellm, which is what shows honing works without the extra.
     # This job installs it and runs the client, and the live GEPA run, against local stub servers;

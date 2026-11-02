@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>REA-Issac — A Small Descent</title>
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body>
+        <div class="shell">
+            <header class="masthead">
+                <div class="brand">
+                    <span class="sigil">◇</span>
+                    <div>
+                        <p class="eyebrow">A SMALL DESCENT</p>
+                        <h1>REA-Issac<span>Ⅰ</span></h1>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <span id="mode" class="mode"><i></i> YOU ARE PLAYING</span
+                    ><button id="pause" class="button quiet">
+                        Ⅱ <span>Pause</span></button
+                    ><button id="new-run" class="button gold">
+                        ↻ New descent
+                    </button>
+                </div>
+            </header>
+            <main class="layout">
+                <section class="arena-panel">
+                    <div class="arena-heading">
+                        <div>
+                            <span class="chapter"
+                                >THE HOLLOW <b> / </b> FLOOR 01</span
+                            >
+                            <h2 id="room-name">Threshold</h2>
+                        </div>
+                        <div class="life">
+                            <div id="hearts" class="hearts"></div>
+                            <span id="clock">00:00</span>
+                        </div>
+                    </div>
+                    <div
+                        class="viewport"
+                        id="viewport"
+                        tabindex="0"
+                        aria-label="Game arena. WASD to move, arrow keys to shoot, Space to place a bomb."
+                    >
+                        <canvas id="game" width="1280" height="832"></canvas>
+                        <div class="room-label" id="room-label"></div>
+                        <div class="overlay hidden" id="overlay">
+                            <div class="end-card">
+                                <span id="end-eyebrow" class="eyebrow"
+                                    >TAKE A BREATH</span
+                                >
+                                <h2 id="end-title">Paused</h2>
+                                <p id="end-copy">The hollow can wait.</p>
+                                <button id="end-action" class="button gold">
+                                    Continue
+                                </button>
+                            </div>
+                        </div>
+                        <div id="toast" class="toast hidden"></div>
+                    </div>
+                    <div class="controls">
+                        <span
+                            ><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd
+                            ><kbd>D</kbd> Move</span
+                        ><span
+                            ><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd
+                            ><kbd>→</kbd> Shoot</span
+                        ><span><kbd>SPACE</kbd> Bomb</span
+                        ><span class="control-last"><kbd>P</kbd> Pause</span>
+                    </div>
+                    <div class="goal">
+                        <span class="goal-symbol">✧</span>
+                        <div>
+                            <strong>Find the Warden. End the descent.</strong>
+                            <p>
+                                Clear a chamber to unseal its doors. Gold doors
+                                lead to an offering.
+                            </p>
+                        </div>
+                        <span id="chambers" class="count"
+                            >1 / 8<span>EXPLORED</span></span
+                        >
+                    </div>
+                </section>
+                <aside>
+                    <section class="panel map-panel">
+                        <div class="section-title">
+                            <h3>THE FLOOR</h3>
+                            <span id="seed-label">SEED 7</span>
+                        </div>
+                        <div id="map" class="map"></div>
+                        <div class="map-key">
+                            <span><i class="legend-current"></i>You</span
+                            ><span>◆ Offering</span><span>♛ Warden</span>
+                        </div>
+                    </section>
+                    <section class="panel belongings">
+                        <div class="section-title">
+                            <h3>THE PILGRIM</h3>
+                            <span class="tiny-sigil">✦</span>
+                        </div>
+                        <div class="resources">
+                            <div>
+                                <span class="coin-icon">¢</span
+                                ><strong id="coins">0</strong
+                                ><small>COINS</small>
+                            </div>
+                            <div>
+                                <span class="bomb-icon">●</span
+                                ><strong id="bombs">1</strong
+                                ><small>BOMBS</small>
+                            </div>
+                        </div>
+                        <div class="stats">
+                            <span>Power <b id="power">3.5</b></span
+                            ><span>Tears <b id="tears">3.8/s</b></span
+                            ><span>Pace <b id="pace">138</b></span>
+                        </div>
+                        <h4>KEEPSAKES</h4>
+                        <div id="inventory" class="inventory">
+                            <p class="empty-bag">
+                                A light bag. A long way down.
+                            </p>
+                        </div>
+                    </section>
+                    <section class="panel journal-panel">
+                        <div class="section-title">
+                            <h3>RUN JOURNAL</h3>
+                            <span id="kills">0 defeated</span>
+                        </div>
+                        <div id="journal" class="journal">
+                            <p>Every descent begins with a door.</p>
+                        </div>
+                    </section>
+                    <section class="panel tools-panel">
+                        <button id="bot" class="button full">
+                            ▷ Watch baseline
+                        </button>
+                        <div class="two-buttons">
+                            <button id="export" class="button quiet">
+                                ↓ Save replay</button
+                            ><button id="import" class="button quiet">
+                                ↑ Open replay
+                            </button>
+                        </div>
+                        <input
+                            id="replay-file"
+                            type="file"
+                            accept=".json,application/json"
+                            hidden
+                        />
+                        <div class="seed-entry">
+                            <label for="seed">Next seed</label
+                            ><input
+                                id="seed"
+                                type="number"
+                                min="0"
+                                max="4294967295"
+                                value="7"
+                            /><select id="speed" aria-label="Playback speed">
+                                <option value="1">1× speed</option>
+                                <option value="2">2× speed</option>
+                                <option value="4">4× speed</option>
+                            </select>
+                        </div>
+                    </section>
+                </aside>
+            </main>
+            <footer>
+                <span>REA-ISSAC <b>·</b> INDEPENDENT SCENARIO / V1</span
+                ><span>Deterministic runs. Every action remembered.</span>
+            </footer>
+        </div>
+        <script type="module" src="/app.js"></script>
+    </body>
+</html>
