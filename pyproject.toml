@@ -43,7 +43,7 @@ docs = ["matplotlib>=3.8"]
 gepa = ["gepa==0.1.4"]
 # The ChatModel client (honing/harness/models.py). Pinned exactly, never a range: 1.82.7 and 1.82.8
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
-litellm = ["litellm==1.102.1"]
+litellm = ["litellm==1.106.6"]
 # Opt-in W&B logging for end-to-end runs (honing/e2e/tracking.py). Pinned exactly, like litellm.
 wandb = ["wandb==0.30.0"]
 
