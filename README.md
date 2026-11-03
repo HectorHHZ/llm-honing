@@ -4,7 +4,7 @@ Small decision models get good at a domain by playing in it, training on what
 happened, and improving the harness around them. Two games show the loop. The
 infra it runs on is being built here.
 
-## Two games
+## Game scenarios
 
 ### Red Alert 2
 
@@ -44,9 +44,20 @@ on the model server; the browser needs no GPU.
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
+### Craftax
+
+[`integrations/craftax/`](integrations/craftax/README.md) adds the full Craftax
+roguelike environment with its upstream pixel graphics, 43 native actions,
+headless video recording, and verified action replay. It connects to the same
+typed decision server and provides seeded tasks, an episode runner and a
+grader for achievement goals. The initial task suite covers introductory
+crafting in the full game; it does not measure full-game victory. Game runtime
+dependencies are installed separately, and this integration does not train a
+model or claim a model performance result.
+
 ### Bring your own model
 
-Both games talk to a model through the same two HTTP routes the decision server
+The games talk to a model through the same two HTTP routes the decision server
 exposes, `GET /v1/health` and `POST /v1/decide`. Serve a model behind them and
 it can play. [Connect a model](integrations/tank-war/README.md#connect-a-model)
 in the Tank War README shows the request a seat sends, and
