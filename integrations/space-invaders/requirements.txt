@@ -1,0 +1,3 @@
+ale-py==0.11.2
+gymnasium==1.2.3
+ocatari==2.2.1
