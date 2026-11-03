@@ -162,7 +162,15 @@ class DecisionServer(ThreadingHTTPServer):
         accepting = threading.Thread(target=self.serve_forever, daemon=True)
         accepting.start()
         try:
-            while (decision := self._decisions.get()) is not None:
+            while True:
+                # Wake once a second even when idle: a Python signal handler runs on this thread only when it
+                # executes bytecode, and SIGTERM, delivered to any thread, would otherwise wait for a request.
+                try:
+                    decision = self._decisions.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                if decision is None:
+                    break
                 self._answer(decision)
         finally:
             self.shutdown()

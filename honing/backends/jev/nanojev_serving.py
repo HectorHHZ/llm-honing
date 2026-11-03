@@ -19,8 +19,10 @@ from __future__ import annotations
 import functools
 import json
 import os
+import shutil
 import subprocess
 import sys
+import threading
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,8 +120,17 @@ def start_nanojev_server(serving: NanoJevServing, checkpoint: Path, key: str, gp
         ready: dict[str, Any] = json.loads(line)
     except json.JSONDecodeError:
         raise ContractError(f"the NanoJev decision server for {key[:12]} did not start; see {log}") from None
+    # Whatever the server prints after its ready line goes to the log too. Left unread, a full pipe would
+    # block the server's writes, and its exit, which flushes stdout, with them.
+    if process.stdout is not None:
+        threading.Thread(target=_drain, args=(process.stdout, log), daemon=True).start()
     url: str = ready["url"]
     return url
+
+
+def _drain(source: Any, log: Path | None) -> None:
+    with open(os.devnull, "wb") if log is None else log.open("ab") as sink:
+        shutil.copyfileobj(source.buffer if hasattr(source, "buffer") else source, sink)
 
 
 def nanojev_endpoints(serving: NanoJevServing) -> SGLangPolicyEndpoints:
