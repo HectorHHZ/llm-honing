@@ -188,6 +188,12 @@ thing on the tank campaign: the pinned release, teacher rounds on the train
 split, the edit, and a gate on all 16 validation tasks with the candidate and
 the incumbent each on their own GPU.
 
+The edited checkpoint is published as
+[HectorHe/NanoJev-tank-direction-edit](https://huggingface.co/HectorHe/NanoJev-tank-direction-edit):
+the edited `scalar.weight`, the direction, the trainer's metrics, the
+Honing manifest and `apply_edit.py`, which rebuilds the full checkpoint from
+the released NanoJev and checks its SHA-256.
+
 ```bash
 export HONING_NANOJEV_SOURCE=/path/to/NanoJev   # at the revision in integrations/ra2/pins.json
 export HONING_NANOJEV_GPUS=0,1 HONING_NANOJEV_EDIT_GPU=2 HF_HOME=/path/with/the/pinned/release
