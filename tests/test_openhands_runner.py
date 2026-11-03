@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import time
@@ -15,10 +16,13 @@ from pathlib import Path
 
 import pytest
 
+from honing.backends import openhands as openhands_backend
 from honing.backends.llm_gateway import GatewayEndpoints, GatewayModel, endpoints, model_source
 from honing.backends.openhands import (
     AGENT_SETTINGS,
     REFUSED,
+    Container,
+    EpisodeInfrastructureError,
     OpenHandsDeliveryProbe,
     OpenHandsEpisodeRunner,
     ToolPolicy,
@@ -42,6 +46,7 @@ from honing.release import EpisodeEvaluator, Gate, WinLossSelector
 
 REPO = Path(__file__).resolve().parents[1]
 FAKE_WORKER = REPO / "tests/fakes/openhands_worker.py"
+FAKE_DOCKER = REPO / "tests/fakes/docker.py"
 MODEL = GatewayModel(
     base_url="https://example.invalid/api/v1",
     model="vendor/cheap-model",
@@ -349,3 +354,111 @@ def test_the_real_worker_passes_the_runner_checks_against_the_stand_in_policy(tm
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "runner check: ok" in result.stdout
+
+
+# ---------------------------------------------------------------- task workspaces, containers, and infrastructure
+
+
+@pytest.mark.unit
+def test_a_crashed_worker_raises_instead_of_being_graded(tmp_path: Path) -> None:
+    with pytest.raises(EpisodeInfrastructureError, match="could not run task 'q1'"):
+        _run(_runner(tmp_path, environment={"FAKE_WORKER_EXIT": "1"}))
+
+
+@pytest.mark.unit
+def test_a_task_starts_from_its_own_workspace(tmp_path: Path) -> None:
+    seed = tmp_path / "seed"
+    (seed / "Documents").mkdir(parents=True)
+    (seed / "Documents" / "attendance.csv").write_text("name,hours\n")
+
+    outcome = _run(_runner(tmp_path, seed_workspace=lambda task: seed if task.task_id == "q1" else None))
+
+    work = Path(outcome.workspace_location or "") / "work"
+    assert (work / "Documents" / "attendance.csv").read_text() == "name,hours\n"
+    assert (work / "corpus").is_dir()
+
+
+@pytest.mark.unit
+def test_a_task_workspace_holding_a_link_is_refused(tmp_path: Path) -> None:
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    (seed / "answers").symlink_to(tmp_path / "groundtruth")
+
+    with pytest.raises(ContractError, match="holds the link"):
+        _run(_runner(tmp_path, seed_workspace=lambda task: seed))
+
+
+@pytest.fixture
+def docker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Put the fake ``docker`` first on PATH; returns the directory it records into."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    record = tmp_path / "docker-record"
+    record.mkdir()
+    (bin_dir / "docker").write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE_DOCKER}" "{record}" "$@"\n')
+    (bin_dir / "docker").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(openhands_backend.runner, "_START_RETRY_SECONDS", 0.0)
+    return record
+
+
+def _runs(record: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in (record / "runs.jsonl").read_text().splitlines()]
+
+
+CONTAINER = Container(image="honing-openhands:test", run_args=("--network", "none"))
+
+
+@pytest.mark.unit
+def test_a_container_mounts_only_the_episode_and_the_worker(
+    tmp_path: Path, docker: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret")
+
+    outcome = _run(_runner(tmp_path, container=CONTAINER))
+
+    root = Path(outcome.workspace_location or "").resolve()
+    assert outcome.exit_code == 0
+    ((run,),) = [_runs(docker)]
+    argv = run["argv"]
+    assert isinstance(argv, list)
+    volumes = [argv[index + 1] for index, arg in enumerate(argv) if arg == "--volume"]
+    assert volumes == [f"{root}:{root}", f"{FAKE_WORKER.resolve()}:/opt/honing/worker.py:ro"]
+    assert argv[argv.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+    assert argv[argv.index("--workdir") + 1] == str(root / "work")
+    assert argv[-6:] == ["--network", "none", "honing-openhands:test", "python", "/opt/honing/worker.py", str(root)]
+    # Variables go by name: no value, the API key's included, is on the command line, and the host's PATH stays out.
+    named = [argv[index + 1] for index, arg in enumerate(argv) if arg == "--env"]
+    assert "HONING_TEST_KEY" in named and f"HOME={root / 'home'}" in named and "PATH" not in named
+    assert not any("secret" in arg for arg in argv)
+    answer = json.loads(outcome.final_output)
+    assert answer["key_present"] and "AWS_SECRET_ACCESS_KEY" not in answer["environment"]
+    assert answer["cwd"] == str(root / "work")
+
+
+@pytest.mark.unit
+def test_a_container_that_does_not_start_is_retried_then_raises(tmp_path: Path, docker: Path) -> None:
+    (docker / "failures").write_text("2")
+    outcome = _run(_runner(tmp_path, container=CONTAINER))
+    assert outcome.exit_code == 0 and len(_runs(docker)) == 3
+
+    (docker / "failures").write_text("99")
+    with pytest.raises(EpisodeInfrastructureError, match="did not start in 2 attempts"):
+        _run(_runner(tmp_path, container=Container(image="i", start_attempts=2)))
+
+
+@pytest.mark.unit
+def test_a_timed_out_container_is_killed_by_name(tmp_path: Path, docker: Path) -> None:
+    outcome = _run(_runner(tmp_path, container=CONTAINER, timeout_seconds=2, environment=HANG))
+
+    assert outcome.exit_code == -9
+    ((run,),) = [_runs(docker)]
+    argv = run["argv"]
+    assert isinstance(argv, list)
+    assert (docker / "kills.txt").read_text().split() == [argv[argv.index("--name") + 1]]
+
+
+@pytest.mark.unit
+def test_a_container_cannot_follow_linked_mounts(tmp_path: Path) -> None:
+    with pytest.raises(ContractError, match="copy them"):
+        _runner(tmp_path, container=CONTAINER, mount_mode="link")
