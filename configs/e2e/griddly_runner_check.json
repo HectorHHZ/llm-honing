@@ -1,0 +1,13 @@
+{
+  "description": "Native Griddly Spiders with the real HTTP DecisionServer and a rule stand-in; no model weights or training.",
+  "requires": {"paths": ["integrations/griddly/tasks/suite.jsonl"]},
+  "tasks": {"factory": "honing.backends.griddly.e2e:tasks", "args": {"split": "val", "limit": 2}},
+  "harness_seed": {"factory": "honing.backends.griddly.e2e:harness_seed"},
+  "conformance": {"probe": {"factory": "honing.backends.griddly.e2e:delivery_probe"}, "concurrent": 2},
+  "components": {
+    "model_source": {"factory": "tests.fakes.griddly:model_source"},
+    "endpoints": {"factory": "tests.fakes.griddly:endpoints"},
+    "runner": {"factory": "honing.backends.griddly.e2e:episode_runner", "args": {"concurrency": 2}},
+    "grader": {"factory": "honing.backends.griddly.e2e:grader"}
+  }
+}

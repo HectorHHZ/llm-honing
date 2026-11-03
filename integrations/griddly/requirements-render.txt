@@ -1,0 +1,4 @@
+-r requirements.txt
+imageio-ffmpeg==0.4.9
+# imageio-ffmpeg 0.4.9 imports the legacy pkg_resources loader.
+setuptools==80.9.0

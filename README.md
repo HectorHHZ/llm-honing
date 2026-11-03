@@ -44,6 +44,18 @@ on the model server; the browser needs no GPU.
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
+### Griddly Spiders
+
+[`integrations/griddly/`](integrations/griddly/README.md) adds native Griddly
+Spiders: reach a gem while avoiding moving enemies. It supplies global
+structured observations, native legal actions, isolated headless episodes,
+verified replay, a typed decision runner/grader, rule-teacher SFT data and
+sampled GRPO rollout data. Its global observation condition is named separately
+from the original local-view task. A project-local launcher and English HTML
+replay support local inspection. The runtime is optional; native HTTP contract
+checks use a rule stand-in. A real NanoJev smoke episode reached the step limit
+after choosing WAIT throughout. Real model training remains to be run.
+
 ### Craftax
 
 [`integrations/craftax/`](integrations/craftax/README.md) adds the full Craftax
