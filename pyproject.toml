@@ -28,13 +28,13 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "black==26.5.1",
-    "isort==9.0.1",
+    "black==26.10.1",
+    "isort==9.0.2",
     "mypy>=1.9",
     "pre-commit>=3.7",
     "pytest>=8.0",
     "pytest-cov",
-    "ruff==0.16.9",
+    "ruff==0.17.3",
 ]
 # Diagram sources under system-design/ render with matplotlib alone.
 docs = ["matplotlib>=3.8"]
@@ -43,9 +43,9 @@ docs = ["matplotlib>=3.8"]
 gepa = ["gepa==0.1.4"]
 # The ChatModel client (honing/harness/models.py). Pinned exactly, never a range: 1.82.7 and 1.82.8
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
-litellm = ["litellm==1.102.1"]
+litellm = ["litellm==1.106.6"]
 # Opt-in W&B logging for end-to-end runs (honing/e2e/tracking.py). Pinned exactly, like litellm.
-wandb = ["wandb==0.30.0"]
+wandb = ["wandb==0.31.0"]
 
 [project.urls]
 Homepage = "https://github.com/HectorHHZ/llm-honing"
@@ -59,7 +59,7 @@ Issues = "https://github.com/HectorHHZ/llm-honing/issues"
 runtime = ["slime @ git+https://github.com/THUDM/slime.git@41014d1f29e201137fdffce737bb8bac65bc5219"]
 # The serving engine (honing/backends/sglang). It runs from its own environment, never Honing's:
 # scripts/setup-sglang.sh builds that from scripts/sglang.lock. SGLang 0.5.21 pins the two pre-releases itself.
-serve-sglang = ["sglang==0.5.21", "cuda-tile==1.6.0rc5", "flash-attn-4==4.0.0b34"]
+serve-sglang = ["sglang==0.5.21", "cuda-tile==1.7.0", "flash-attn-4==4.0.0b37"]
 
 [tool.setuptools_scm]
 fallback_version = "0.0.0.dev0"
