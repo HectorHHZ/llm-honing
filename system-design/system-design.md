@@ -337,7 +337,14 @@ Methods that reflect or propose call a model through `ChatModel`, and runners fi
 engine behind a policy through `PolicyEndpoints`; both are protocols in `honing/core`, and
 their implementations live outside it. The `ChatModel` client is `LiteLLMChatModel`
 (`honing/harness/models.py`, the `litellm` extra), which reaches hosted APIs and local
-servers alike.
+servers alike. A method whose proposer is a coding agent rather than one model call, as
+Meta-Harness's is, runs it through `ProposerAgent`: `run(prompt, workdir, *, instructions)`
+starts the agent in a working directory the method has written, with the method's skill
+as its instructions, and returns its exit code; the method then reads back the files the
+agent wrote. `ClaudeCodeProposer` (`honing/harness/proposers/`) runs the `claude` CLI
+headless, with a minimal environment and in its own process group. Meta-Harness scores
+each candidate on the move's tasks, whose trajectories its proposer reads, so its gate
+must run on held-out tasks; its selector refuses a gate on any task the proposer reads.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
