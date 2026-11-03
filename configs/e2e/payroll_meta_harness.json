@@ -1,0 +1,227 @@
+{
+  "description": "Meta-Harness on the attendance-payroll-audit tasks (integrations/payroll), live: an OpenHands agent calling Qwen3 Coder 30B A3B through OpenRouter, in the honing-payroll container, so it cannot read the hidden ground truth; Claude Code as the proposer. Meta-Harness searches on the suite's train tasks and the gate runs the served harness and the candidate on its val tasks. Only harness moves run; the other planes are fakes. Needs the suite (python -m integrations.payroll.build_suite --slm-repo <checkout> --out integrations/payroll/.suite), both images (integrations/payroll/Dockerfile), OPENROUTER_API_KEY, a Claude Code login, and WANDB_API_KEY. The proposer works under the system's temporary directory and may not read the repository or the home directory; add a deny rule for the upstream checkout if it is elsewhere. To call the model on Bedrock instead, run a LiteLLM proxy on the host with drop_params: true (OpenHands sends prompt_cache_key, which Bedrock refuses) and set policy to its URL as the container sees it, http://host.docker.internal:<port>/v1, with no api_key_env. Run: python scripts/e2e/honing_pipeline.py --config configs/e2e/payroll_meta_harness.json",
+  "work_dir": "runs/payroll-meta-harness",
+  "suite": "integrations/payroll/.suite/suite.jsonl",
+  "policy": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "qwen/qwen3-coder-30b-a3b-instruct",
+    "api_key_env": "OPENROUTER_API_KEY"
+  },
+  "requires": {
+    "env": [
+      "OPENROUTER_API_KEY"
+    ],
+    "commands": [
+      "docker",
+      "claude"
+    ],
+    "paths": [
+      "integrations/payroll/.suite/suite.jsonl"
+    ]
+  },
+  "tasks": {
+    "factory": "honing.e2e.gepa_live:suite_tasks",
+    "args": {
+      "manifest": {
+        "ref": "suite"
+      },
+      "split": "val"
+    }
+  },
+  "harness_tasks": {
+    "factory": "honing.e2e.gepa_live:suite_tasks",
+    "args": {
+      "manifest": {
+        "ref": "suite"
+      },
+      "split": "train"
+    }
+  },
+  "harness_seed": {
+    "factory": "honing.backends.openhands.e2e:seed_harness",
+    "args": {
+      "directory": "{root}/integrations/payroll/.suite/seed"
+    }
+  },
+  "harness": {
+    "episode_budget": 21
+  },
+  "components": {
+    "model_source": {
+      "factory": "honing.backends.llm_gateway:model_source",
+      "args": {
+        "ref": "policy"
+      }
+    },
+    "endpoints": {
+      "factory": "honing.backends.llm_gateway:endpoints",
+      "args": {
+        "ref": "policy"
+      }
+    },
+    "trainer": {
+      "factory": "tests.fakes.pipeline:trainer",
+      "args": {
+        "gain": 0.1
+      }
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "honing.backends.openhands.e2e:runner",
+      "args": {
+        "manifest": "{root}/integrations/payroll/.suite/suite.jsonl",
+        "container": {
+          "image": "honing-payroll"
+        },
+        "concurrency": 5,
+        "timeout_seconds": 600,
+        "max_iterations": 50
+      }
+    },
+    "grader": {
+      "factory": "honing.e2e.gepa_live:command_grader",
+      "args": {
+        "manifest": {
+          "ref": "suite"
+        },
+        "timeout_seconds": 300
+      }
+    },
+    "method": {
+      "factory": "honing.e2e.meta_harness:method",
+      "args": {
+        "work_dir": "{tmp}/meta-harness-{run}",
+        "proposer": {
+          "factory": "honing.e2e.meta_harness:claude_code",
+          "args": {
+            "model": "opus",
+            "effort": "high",
+            "timeout_seconds": 2400,
+            "settings": {
+              "permissions": {
+                "deny": [
+                  "Read(~/**)",
+                  "Edit(~/**)",
+                  "Read(/{root}/**)",
+                  "Edit(/{root}/**)"
+                ]
+              },
+              "sandbox": {
+                "enabled": true,
+                "autoAllowBashIfSandboxed": true,
+                "allowUnsandboxedCommands": false
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    },
+    "prune": {
+      "no_regression": {
+        "max_regression": 0.05
+      }
+    },
+    "quantize": {
+      "no_regression": {
+        "max_regression": 0.01
+      }
+    }
+  },
+  "defaults": {
+    "train": {
+      "algorithm": "sft",
+      "steps": 10
+    },
+    "budget": {
+      "keep_ratio": 0.75
+    },
+    "recovery": {
+      "algorithm": "distill",
+      "steps": 10,
+      "teacher": {
+        "kind": "lineage",
+        "ref": "parent",
+        "placement": "engine"
+      }
+    },
+    "scheme": {
+      "weight_format": "int4",
+      "granularity": "group",
+      "group_size": 128
+    }
+  },
+  "schedule": [
+    {
+      "kind": "harness",
+      "label": "iter1"
+    },
+    {
+      "kind": "harness",
+      "label": "iter2"
+    },
+    {
+      "kind": "harness",
+      "label": "iter3"
+    },
+    {
+      "kind": "harness",
+      "label": "iter4"
+    },
+    {
+      "kind": "harness",
+      "label": "iter5"
+    },
+    {
+      "kind": "harness",
+      "label": "iter6"
+    },
+    {
+      "kind": "harness",
+      "label": "iter7"
+    },
+    {
+      "kind": "harness",
+      "label": "iter8"
+    },
+    {
+      "kind": "harness",
+      "label": "iter9"
+    },
+    {
+      "kind": "harness",
+      "label": "iter10"
+    }
+  ],
+  "logging": {
+    "wandb": {
+      "project": "llm-honing-meta-harness",
+      "tags": [
+        "meta-harness",
+        "payroll",
+        "live"
+      ]
+    }
+  }
+}

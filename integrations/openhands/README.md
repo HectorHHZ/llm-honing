@@ -59,7 +59,26 @@ OpenHands' own discovery is off: no user skills from `~/.openhands`, no public s
 
 The worker does not inherit Honing's environment. It gets `PATH`, `HOME`, `LANG`, `TMPDIR`, `TERM`, `LC_*`, `OPENHANDS_*`, the policy's API key, and whatever the runner's `environment` adds, so the agent's terminal cannot print `HF_TOKEN` or cloud credentials. `episode.json` names the key's variable, never its value, and a missing key is refused before the agent starts.
 
+An episode the worker could not run at all (it crashed, for example because the model's API failed after its retries) raises `EpisodeInfrastructureError` instead of returning an outcome, so a broken machine or API is not scored 0 against the harness. An agent that ran and stopped for any other reason (stuck, out of iterations or budget) is graded as usual, and so is a harness OpenHands cannot load (a skill whose frontmatter does not parse, say): the worker refuses it with exit code 2, since the harness is at fault, and an evolution method's bad candidate does not stop the campaign.
+
 A proxy or a custom CA bundle is not inherited either. On a network that needs one, name the variables in the runner's `inherit_environment` (for example `["HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"]`); the worker takes their values from Honing's environment, and the config holds only the names.
+
+## Task workspaces and containers
+
+A task suite (`honing/harness/tasks.py`) gives each task a `workspace` to start from and, optionally, hidden `grader_files`. Give the runner the manifest and each episode's `work/` starts as a copy of its task's workspace (links in it are refused):
+
+```json
+"runner": {"factory": "honing.backends.openhands.e2e:runner",
+           "args": {"manifest": "{root}/path/to/suite.jsonl", "container": {"image": "honing-openhands"}}}
+```
+
+On the host the agent's terminal can read anything you can, hidden grader files included. With `container`, the worker runs in Docker instead: only the episode directory and `worker.py` are mounted, the container runs as you with `HOME` in the episode directory, and it gets the worker's variables by name, never on the command line, without the host's `PATH`, `HOME`, or `TMPDIR`. Build the image from this directory and add what your tasks need on top (`integrations/payroll/Dockerfile` does):
+
+```bash
+docker build -t honing-openhands integrations/openhands
+```
+
+A container that does not start is retried (`start_attempts`, default 3) and then raises `EpisodeInfrastructureError`; a timed-out one is killed by name. A policy served on the host's loopback is not reachable from Docker's default network as `127.0.0.1`: point the endpoint at `host.docker.internal`, which Docker Desktop routes to the host's loopback, or on Linux add `"run_args": ["--network", "host"]` (Docker Desktop honours that only with host networking turned on in its settings). Linked mounts (`mount_mode: link`) cannot be followed from a container and are refused.
 
 ## Bringing your own skills, MCP servers, and tools
 
@@ -102,6 +121,6 @@ The scripted method (`integrations/officeqa/scripted.py`) in `configs/e2e/openha
 ## Known gaps
 
 - Core cannot represent a model it only reaches through a URL. `honing.backends.llm_gateway` gives one a stand-in snapshot so harness moves can be gated; nothing stops a config from scheduling a train move on it.
-- The agent runs on the host, as the current user, in `work/`. Each episode gets its own copy of every mount; with `mount_mode` set to `link`, mounts are symlinks shared by every episode and not write-protected. A sandbox (#16) should come before a method searches over toolsets.
+- Without `container`, the agent runs on the host, as the current user, in `work/`. Each episode gets its own copy of every mount; with `mount_mode` set to `link`, mounts are symlinks shared by every episode and not write-protected. A container keeps the agent off the rest of the host's files, but not off the network; a full sandbox (#16) should still come before a method searches over toolsets.
 - `command`, `hook`, and `program` files are refused.
-- A skill's frontmatter is parsed by OpenHands, so a malformed skill fails its episode rather than being refused up front.
+- A skill's frontmatter is parsed by OpenHands, so a malformed skill is refused by the worker when its episode starts (exit code 2, graded) rather than by `check_spec` up front.
