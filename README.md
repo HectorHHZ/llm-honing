@@ -90,7 +90,7 @@ or a trainer does not care which one it is talking to.
 
 | Model | Base | Checkpoints | Trains in Honing |
 | --- | --- | --- | --- |
-| [NanoJev](https://huggingface.co/C-Tianyu/NanoJev) | Qwen3-0.6B, with a scalar head and a set attention head over candidate paths | `nanojev` | SFT, GRPO |
+| [NanoJev](https://huggingface.co/C-Tianyu/NanoJev) | Qwen3-0.6B, with a scalar head and a set attention head over candidate paths | `nanojev` | SFT, GRPO, direction edit |
 | [Laya](https://huggingface.co/convaiinnovations/laya) | its own encoder and option head | `english`, `typed-decisions` | SFT, GRPO |
 | [Kev](https://github.com/jaredpalmer/kev) | Qwen3.5-0.8B-Base and Qwen3.5-4B-Base, with a LoRA adapter and a pointer head | `kev-0.8b`, `kev-4b` | SFT, GRPO |
 | [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision) | Qwen3.5, dense; the answer is read from the next-token logits of the option letters | `startlux-0.8b`, `startlux-4b`, `startlux-27b` | serving only |
@@ -103,6 +103,7 @@ What runs each part today, what each method edits, and what it learns from:
 | --- | --- | --- | --- |
 | Training | SFT, in the local trainers for Laya, Kev, and NanoJev, and in [Slime](https://github.com/THUDM/slime) for language models | the weights | a teacher's pick at each decision point |
 | | GRPO, in the same trainers | the weights | the result of the model's own sampled matches |
+| | Direction edit, for NanoJev ([report](integrations/tank-war/direction-edit.md)) | the decision head, 1,024 weights, no gradients | the head's own inputs on a teacher's decisions |
 | | On-policy distillation, in Slime for language models | the weights | a teacher's log-probabilities on the student's own samples |
 | Inference | The decision server: one request format for the six families above | | |
 | | [djev](integrations/djev/README.md): DiffusionGemma on a remote server | | |
