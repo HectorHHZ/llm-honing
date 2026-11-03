@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "source_edition": "Afterbirth+ macOS x86_64",
+  "method": "REA inspected Archive::open/extract/Unscramble in the supplied ResourceExtractor. A verified copy of that official tool then recovered XML using an allowlist. Only selected factual configuration values are retained here.",
+  "source_hashes": {
+    "enums.lua": "b915d3916c8d0338c635b6d2b881320899e5103db32dda9a53e4385ebe298d17",
+    "players.xml": "2b3c0b2dc5851d27d8345c9280ca4bebe6d1651941735c8dd92d59c6ff21f23d",
+    "entities2.xml": "00277cfdbf23a699bc709f33fd974c1041637a41986dd1f79fd0f6db1473c4d7"
+  },
+  "player": {
+    "health": 6,
+    "bombs": 1,
+    "radius": 10
+  },
+  "entities": {
+    "player": {
+      "id": "1",
+      "variant": "0",
+      "name": "Player",
+      "baseHP": "10",
+      "collisionRadius": "10",
+      "collisionDamage": "0"
+    },
+    "chaser": {
+      "id": "10",
+      "variant": "0",
+      "name": "Frowning Gaper",
+      "baseHP": "10",
+      "collisionRadius": "13",
+      "collisionDamage": "1"
+    },
+    "spitter": {
+      "id": "12",
+      "variant": "0",
+      "name": "Horf",
+      "baseHP": "10",
+      "collisionRadius": "13",
+      "collisionDamage": "1"
+    },
+    "fly": {
+      "id": "14",
+      "variant": "0",
+      "name": "Pooter",
+      "baseHP": "8",
+      "collisionRadius": "17",
+      "collisionDamage": "0"
+    },
+    "boss": {
+      "id": "20",
+      "variant": "0",
+      "name": "Monstro",
+      "baseHP": "250",
+      "collisionRadius": "40",
+      "collisionDamage": "1"
+    }
+  },
+  "actions": {
+    "ACTION_LEFT": 0,
+    "ACTION_RIGHT": 1,
+    "ACTION_UP": 2,
+    "ACTION_DOWN": 3,
+    "ACTION_SHOOTLEFT": 4,
+    "ACTION_SHOOTRIGHT": 5,
+    "ACTION_SHOOTUP": 6,
+    "ACTION_SHOOTDOWN": 7,
+    "ACTION_BOMB": 8,
+    "ACTION_ITEM": 9,
+    "ACTION_PILLCARD": 10,
+    "ACTION_DROP": 11,
+    "ACTION_PAUSE": 12,
+    "ACTION_MAP": 13,
+    "ACTION_MENUCONFIRM": 14,
+    "ACTION_MENUBACK": 15,
+    "ACTION_RESTART": 16,
+    "ACTION_FULLSCREEN": 17,
+    "ACTION_MUTE": 18,
+    "ACTION_JOINMULTIPLAYER": 19,
+    "ACTION_MENULEFT": 20,
+    "ACTION_MENURIGHT": 21,
+    "ACTION_MENUUP": 22,
+    "ACTION_MENUDOWN": 23,
+    "ACTION_MENULT": 24,
+    "ACTION_MENURT": 25,
+    "ACTION_MENUTAB": 26,
+    "ACTION_CONSOLE": 28
+  },
+  "simulation_choices": {
+    "boss_hp_scale": 0.5,
+    "boss_radius_scale": 0.65,
+    "warning": "Movement speeds, attack patterns, projectile physics, drop probabilities, map generation and item effects are independent prototype rules, not recovered original behavior."
+  },
+  "analysis_notes": "integrations/rea-issac/ANALYSIS.md",
+  "extractor_sha256": "7d0b837bf3826915be1eb3f42cb117a0496ebb1c27aa765b841c61fa587e519b"
+}

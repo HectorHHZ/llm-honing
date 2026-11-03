@@ -55,6 +55,16 @@ crafting in the full game; it does not measure full-game victory. Game runtime
 dependencies are installed separately, and this integration does not train a
 model or claim a model performance result.
 
+### REA-Issac
+
+[`integrations/rea-issac/`](integrations/rea-issac/README.md) adds an independent
+Isaac-inspired room-combat simulation informed by REA resource analysis. It has
+a real-time browser UI, deterministic action replay, a rule baseline, and the
+same typed model interface with seeded tasks and boss-defeat grading. The CPU
+engine needs only the Python standard library. It is not the original Isaac
+engine and includes no original game assets. Model integration is checked with
+a local protocol stand-in; no model performance result is claimed yet.
+
 ### Bring your own model
 
 The games talk to a model through the same two HTTP routes the decision server
