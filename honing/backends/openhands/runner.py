@@ -117,7 +117,9 @@ class OpenHandsEpisodeRunner:
 
     An episode whose worker crashes (exit code 1), or whose container does not
     start, raises :class:`EpisodeInfrastructureError` instead of returning an
-    outcome to be graded.
+    outcome to be graded. A harness OpenHands cannot load, such as a skill
+    whose frontmatter does not parse, is the harness's failure, not the
+    machine's: the worker refuses it with exit code 2, and it is graded.
 
     Args:
         python: The OpenHands environment's interpreter.

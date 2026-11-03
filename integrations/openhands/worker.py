@@ -5,7 +5,8 @@ the agent plan in ``episode.json`` as given; what each harness file means was
 decided on Honing's side (``honing/backends/openhands/harness.py``).
 
 Exit code: 0 when the conversation finished, 2 when it stopped for another
-reason (error, stuck, iteration or budget limit), 1 when it could not run.
+reason (error, stuck, iteration or budget limit) or OpenHands could not load
+the harness, 1 when it could not run.
 """
 
 from __future__ import annotations
@@ -22,6 +23,18 @@ from typing import Any
 
 os.environ.setdefault("OPENHANDS_SUPPRESS_BANNER", "1")
 
+#: The exit code for an episode that stopped, or whose harness OpenHands could not load; it is graded.
+STOPPED = 2
+
+
+class HarnessLoadError(Exception):
+    """OpenHands could not load the harness's own content, such as a skill whose frontmatter does not parse.
+
+    The harness is at fault, not the machine, so the episode is graded as
+    refused instead of exiting 1, which the runner raises as an
+    infrastructure error.
+    """
+
 
 def build_agent(episode: dict[str, Any], root: Path) -> tuple[Any, dict[str, dict[str, str]]]:
     """Builds the OpenHands agent an episode's plan describes.
@@ -33,6 +46,9 @@ def build_agent(episode: dict[str, Any], root: Path) -> tuple[Any, dict[str, dic
     Returns:
         The agent, and each harness path it loaded with its route and the
         SHA-256 of the content read.
+
+    Raises:
+        HarnessLoadError: OpenHands refused a skill or the instructions.
     """
     from openhands.sdk import LLM, Agent, AgentContext, Tool
     from openhands.sdk.skills.skill import Skill
@@ -51,7 +67,10 @@ def build_agent(episode: dict[str, Any], root: Path) -> tuple[Any, dict[str, dic
         read(skill["path"])
         for resource in skill["resources"]:
             read(resource)
-        loaded_skill = Skill.load(harness / skill["path"], skill_base_dir=harness, strict=False)
+        try:
+            loaded_skill = Skill.load(harness / skill["path"], skill_base_dir=harness, strict=False)
+        except Exception as error:
+            raise HarnessLoadError(f"skill {skill['path']!r}: {type(error).__name__}: {error}") from error
         skills.append(loaded_skill.model_copy(update={"name": skill["name"]}))
     for path in plan["files"]:
         target = root / "work" / ".harness" / path
@@ -79,14 +98,17 @@ def build_agent(episode: dict[str, Any], root: Path) -> tuple[Any, dict[str, dic
         timeout=int(episode["limits"]["llm_timeout_seconds"]),
         **prices,
     )
-    context = AgentContext(
-        skills=skills,
-        system_message_suffix="\n\n".join(instructions) or None,
-        load_user_skills=False,
-        load_public_skills=False,
-        load_project_skills=False,
-        load_memory=False,
-    )
+    try:
+        context = AgentContext(
+            skills=skills,
+            system_message_suffix="\n\n".join(instructions) or None,
+            load_user_skills=False,
+            load_public_skills=False,
+            load_project_skills=False,
+            load_memory=False,
+        )
+    except Exception as error:
+        raise HarnessLoadError(f"the skills or instructions: {type(error).__name__}: {error}") from error
     tools = [Tool(name=name) for name in plan["tools"]]
     return Agent(llm=llm, tools=tools, mcp_config=plan["mcp_servers"], agent_context=context), loaded
 
@@ -104,7 +126,15 @@ def run(root: Path) -> int:
     from openhands.sdk.conversation.response_utils import get_agent_final_response
 
     episode = json.loads((root / "episode.json").read_text())
-    agent, loaded = build_agent(episode, root)
+    try:
+        agent, loaded = build_agent(episode, root)
+    except HarnessLoadError as error:
+        # Like a harness the runner's check_spec refuses: no agent starts, and the episode is graded.
+        reason = f"OpenHands could not load the harness: {error}"
+        result = {"final_output": reason, "status": "refused", "error": str(error)}
+        (root / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+        traceback.print_exc()
+        return STOPPED
     plan = episode["agent"]
     # LocalConversation directly: the Conversation factory does not forward max_budget_per_run.
     conversation = LocalConversation(
@@ -147,7 +177,7 @@ def run(root: Path) -> int:
         }
         (root / "result.json").write_text(json.dumps(result, indent=2) + "\n")
         conversation.close()
-    return 0 if status == "finished" else 2
+    return 0 if status == "finished" else STOPPED
 
 
 def main(argv: list[str]) -> int:

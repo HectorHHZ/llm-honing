@@ -365,6 +365,53 @@ def test_a_crashed_worker_raises_instead_of_being_graded(tmp_path: Path) -> None
         _run(_runner(tmp_path, environment={"FAKE_WORKER_EXIT": "1"}))
 
 
+# The OpenHands modules the real worker imports, with Skill.load failing as OpenHands' does on a malformed skill.
+_STUB_OPENHANDS = {
+    "openhands/__init__.py": "",
+    "openhands/sdk/__init__.py": "LLM = Agent = AgentContext = Tool = LocalConversation = MessageEvent = object\n",
+    "openhands/sdk/conversation/__init__.py": "",
+    "openhands/sdk/conversation/response_utils.py": "def get_agent_final_response(events):\n    return ''\n",
+    "openhands/sdk/skills/__init__.py": "",
+    "openhands/sdk/skills/skill.py": (
+        "class Skill:\n"
+        "    @classmethod\n"
+        "    def load(cls, path, skill_base_dir=None, strict=True):\n"
+        "        raise ValueError(f'cannot parse the frontmatter of {path.name}')\n"
+    ),
+}
+
+
+@pytest.mark.unit
+def test_a_harness_openhands_cannot_load_is_graded_instead_of_raised(tmp_path: Path) -> None:
+    stub = tmp_path / "stub"
+    for path, content in _STUB_OPENHANDS.items():
+        (stub / path).parent.mkdir(parents=True, exist_ok=True)
+        (stub / path).write_text(content)
+    runner = _runner(tmp_path, worker=REPO / "integrations/openhands/worker.py", environment={"PYTHONPATH": str(stub)})
+
+    outcome = _run(runner)
+
+    assert outcome.exit_code == REFUSED
+    assert "could not load the harness: skill 'skills/search/SKILL.md'" in outcome.final_output
+    assert "cannot parse the frontmatter of SKILL.md" in outcome.final_output
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not (REPO / "integrations/openhands/.venv/bin/python").exists(), reason="no OpenHands environment")
+def test_the_real_worker_refuses_a_skill_whose_frontmatter_does_not_parse(tmp_path: Path) -> None:
+    broken = SEED.with_file("skills/search/SKILL.md", HarnessFile("skill", "---\nname: [unclosed\n---\nUse grep.\n"))
+    runner = _runner(
+        tmp_path,
+        python=REPO / "integrations/openhands/.venv/bin/python",
+        worker=REPO / "integrations/openhands/worker.py",
+    )
+
+    outcome = _run(runner, broken)
+
+    assert outcome.exit_code == REFUSED
+    assert "could not load the harness: skill 'skills/search/SKILL.md'" in outcome.final_output
+
+
 @pytest.mark.unit
 def test_a_task_starts_from_its_own_workspace(tmp_path: Path) -> None:
     seed = tmp_path / "seed"
