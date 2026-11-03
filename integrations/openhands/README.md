@@ -59,7 +59,7 @@ OpenHands' own discovery is off: no user skills from `~/.openhands`, no public s
 
 The worker does not inherit Honing's environment. It gets `PATH`, `HOME`, `LANG`, `TMPDIR`, `TERM`, `LC_*`, `OPENHANDS_*`, the policy's API key, and whatever the runner's `environment` adds, so the agent's terminal cannot print `HF_TOKEN` or cloud credentials. `episode.json` names the key's variable, never its value, and a missing key is refused before the agent starts.
 
-An episode the worker could not run at all (it crashed, for example because the model's API failed after its retries) raises `EpisodeInfrastructureError` instead of returning an outcome, so a broken machine or API is not scored 0 against the harness. An agent that ran and stopped for any other reason (stuck, out of iterations or budget) is graded as usual.
+An episode the worker could not run at all (it crashed, for example because the model's API failed after its retries) raises `EpisodeInfrastructureError` instead of returning an outcome, so a broken machine or API is not scored 0 against the harness. An agent that ran and stopped for any other reason (stuck, out of iterations or budget) is graded as usual, and so is a harness OpenHands cannot load (a skill whose frontmatter does not parse, say): the worker refuses it with exit code 2, since the harness is at fault, and an evolution method's bad candidate does not stop the campaign.
 
 A proxy or a custom CA bundle is not inherited either. On a network that needs one, name the variables in the runner's `inherit_environment` (for example `["HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"]`); the worker takes their values from Honing's environment, and the config holds only the names.
 
@@ -123,4 +123,4 @@ The scripted method (`integrations/officeqa/scripted.py`) in `configs/e2e/openha
 - Core cannot represent a model it only reaches through a URL. `honing.backends.llm_gateway` gives one a stand-in snapshot so harness moves can be gated; nothing stops a config from scheduling a train move on it.
 - Without `container`, the agent runs on the host, as the current user, in `work/`. Each episode gets its own copy of every mount; with `mount_mode` set to `link`, mounts are symlinks shared by every episode and not write-protected. A container keeps the agent off the rest of the host's files, but not off the network; a full sandbox (#16) should still come before a method searches over toolsets.
 - `command`, `hook`, and `program` files are refused.
-- A skill's frontmatter is parsed by OpenHands, so a malformed skill fails its episode rather than being refused up front.
+- A skill's frontmatter is parsed by OpenHands, so a malformed skill is refused by the worker when its episode starts (exit code 2, graded) rather than by `check_spec` up front.
