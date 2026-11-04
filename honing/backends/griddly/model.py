@@ -47,6 +47,7 @@ def make_request(
 
 
 def validate_reply(request: dict[str, Any], reply: dict[str, Any]) -> dict[str, float]:
+    """Validate context and rounded server probabilities; return the normalized acting distribution."""
     audit = reply.get("tokenAudit")
     if (
         reply.get("id") != request["id"]
@@ -66,11 +67,14 @@ def validate_reply(request: dict[str, Any], reply: dict[str, Any]) -> dict[str, 
         raise ValueError("model returned incomplete native probabilities or choice")
     if any(type(p) not in (int, float) or not math.isfinite(p) or not 0 <= p <= 1 for p in probabilities.values()):
         raise ValueError("model returned invalid probabilities")
-    if not math.isclose(sum(probabilities.values()), 1.0, abs_tol=1e-5):
+    total = math.fsum(probabilities.values())
+    # Pinned Laya rounds each option to four decimal places: at most half a unit per option.
+    tolerance = len(options) * 0.5e-4 + 1e-12
+    if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=tolerance):
         raise ValueError("model probabilities must sum to one")
     if probabilities[choice] < max(probabilities.values()):
         raise ValueError("server choice must maximize its probabilities")
-    return {name: float(probabilities[name]) for name in options}
+    return {name: probabilities[name] / total for name in options}
 
 
 class DecisionClient:

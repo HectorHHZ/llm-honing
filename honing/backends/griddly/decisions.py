@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from honing.backends.griddly.model import validate_reply
 from honing.core import DecisionQuestion, DecisionSample
 
 
@@ -33,9 +34,7 @@ def decision_samples(
                 ),
                 chosen=(("action", row["chosen"]["action"]),),
                 behavior_probs=(
-                    (("action", tuple(row["response"]["answers"]["action"]["probabilities"].items())),)
-                    if behavior
-                    else None
+                    (("action", tuple(validate_reply(request, row["response"]).items())),) if behavior else None
                 ),
                 reward=reward,
                 group=group,

@@ -44,6 +44,142 @@ LF; the Windows and Linux wheels package its line endings differently.
 The adapter refuses another game version, changed rules, or changed action
 mapping. It implements the 1.6.7 four-return-value step API, not develop's API.
 
+## Python engine API
+
+Import `GriddlyEngine` from `honing.backends.griddly.engine` and
+`GriddlyScenario` from `honing.backends.griddly.scenarios`. Run this API in the
+separate game environment. Construction loads the native engine but does not
+start an episode. Call `reset()` before reading or advancing it. One instance
+owns one native environment; use separate instances for concurrent episodes.
+
+### Construction and lifecycle
+
+`GriddlyEngine(scenario: GriddlyScenario, *, render: bool = False)` requires a
+scenario. `GriddlyScenario()` has these defaults and validation rules:
+
+| Argument | Type and default | Meaning and accepted values |
+|---|---|---|
+| `seed` | `int = 1` | Native game RNG seed, `0 <= seed < 2**32` |
+| `level_id` | `int = 0` | Upstream Spiders layout, `0..4` |
+| `max_steps` | `int = 100` | Episode budget in native ticks, `1..10000` |
+| `observation` | `str = "spiders-full-state-v1"` | Only this global public-object condition is supported |
+
+Boolean values are refused for integer arguments. Invalid scenario values
+raise `honing.core.ContractError`. The constructor raises `RuntimeError` for
+missing or mismatched pinned dependencies, a changed rule hash or incompatible
+action mapping. Native loader, filesystem and engine exceptions propagate.
+No game package is imported merely by importing the adapter module.
+
+| Method | Arguments and return value | Preconditions, effects and errors |
+|---|---|---|
+| `reset()` | No arguments; returns a frame `dict[str, Any]` described below | Starts a seeded episode at the configured level, with step/tick 0 and reward 0. Reseeds and clears prior episode history. May be called again during or after an episode. A closed engine raises `RuntimeError`. |
+| `observe()` | No arguments; returns a JSON deep copy of the latest frame | Requires a reset, open engine; otherwise `RuntimeError`. Reads without advancing ticks or RNG. |
+| `step(action: str)` | One exact action name; returns the resulting frame | Requires a reset, open, nonterminal engine; otherwise `RuntimeError`. `action` must occur in the current `legal_actions`, or `ValueError` is raised without advancing. Each accepted action advances exactly one native tick, including WAIT. |
+| `pixels()` | No arguments; returns a copied NumPy `ndarray[uint8]` with shape `(height_px, width_px, 3)`, RGB channels `0..255` | Requires construction with `render=True`, a reset and an open engine; otherwise `RuntimeError`. Uses the upstream global Vector2RGB renderer. Reading does not advance time and is allowed on the final frame. Pixel dimensions depend on the grid and renderer. |
+| `close()` | No arguments; returns `None` | Releases the native environment. Repeated calls are harmless. The instance cannot be reopened. |
+
+The engine also supports `with GriddlyEngine(...) as engine:`; leaving the
+context calls `close()` even if the body raises. It does not call `reset()`
+automatically. After any non-running status, `step()` fails until a new
+`reset()`. There is no automatic reset or continuation from a saved frame.
+Treat the frames returned by `reset()` and `step()` as read-only; use
+`observe()` when a separate mutable copy is needed.
+
+### Frame schema and units
+
+`reset()`, `observe()` and `step()` expose the same fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `step` | `int` | Number of actions applied since reset; starts at 0 |
+| `observation` | `dict[str, Any]` | Global public object state, detailed below |
+| `legal_actions` | `list[str]` | Current native legal action names in the fixed order WAIT, TURN_LEFT, FORWARD, TURN_RIGHT, BACKWARD; empty after any non-running status |
+| `reward` | `float` | Native reward from this action, not accumulated reward; reset gives `0.0` |
+| `status` | `str` enum | `running`, `won`, `lost`, `native_terminal` or `step_limit` |
+| `terminated` | `bool` | The native Griddly `done` flag |
+| `truncated` | `bool` | True only when the adapter stops at `max_steps` with status `step_limit` |
+| `native_state` | `dict[str, Any]` | JSON snapshot returned by upstream `get_state()`, for audit/replay; includes internal objects, hashes and queued actions. Its nested schema belongs to the pinned Griddly runtime and it must not be sent to a decision model. |
+| `events` | `list[dict[str, Any]]` | The action's native `info["History"]`, or an empty list; nested event fields belong to the upstream runtime |
+| `frame_hash` | `str` | SHA-256 hex digest of canonical JSON for all other frame fields |
+
+`observation` contains:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `grid` | `dict[str, int]` with `Width`, `Height` | Grid dimensions in cells |
+| `objects` | `list[dict[str, Any]]` | Public objects sorted by canonical JSON; native names starting with `_` are excluded |
+| `tick` | `int` | Native `GameTicks`; ticks, not milliseconds |
+| `npc_period_ticks` | `int` | `3` for the pinned spiders' random-motion schedule |
+| `coordinates` | `str` | Declares `[x,y]`, right/down positive, absolute orientation and relative actions |
+
+Each public object has `Name: str`, `Location: list[int]` of length 2,
+`Orientation: str` (`NONE`, `UP`, `RIGHT`, `DOWN`, `LEFT`), `PlayerId: int` and
+`Variables: dict[str, int]`. Coordinates are grid cells from the upper-left
+origin, with x increasing right and y increasing down. `NONE` uses the native
+UP default for relative actions. The model request uses public observations
+and legal actions, excluding `native_state` and internal event information.
+There is no wall-clock simulation during inference or observation calls.
+
+`won` means native termination with a surviving gnome and no gem; `lost`
+means the gnome is absent. `native_terminal` covers other native endings.
+`step_limit` means the configured action budget was exhausted without one of
+those outcomes. Otherwise the status is `running`. Native win/loss/end
+classification takes priority over reaching the budget on the same action.
+The two flags are deliberately distinct: a normal budget stop has
+`terminated=False, truncated=True`; a native terminal at the budget keeps its
+native outcome and has `truncated=False`. End loops on `status != "running"`
+and retain both flags in recordings.
+
+### Minimum successful and error sequences
+
+This complete sequence initializes, observes, advances and closes a game with
+no model server. The rule controller selects from public state; the reported
+outcome remains a native game outcome, not a learned-model result.
+
+```python
+from honing.backends.griddly.engine import GriddlyEngine
+from honing.backends.griddly.model import baseline
+from honing.backends.griddly.scenarios import GriddlyScenario
+
+with GriddlyEngine(GriddlyScenario(seed=7), render=True) as engine:
+    frame = engine.reset()
+    assert engine.observe() == frame
+    while frame["status"] == "running":
+        frame = engine.step(baseline(frame))
+    rgb = engine.pixels()
+    print(frame["status"], frame["step"], rgb.shape)
+```
+
+This error sequence catches the expected exceptions, then resets and closes
+normally. It shows that a budget ending does not allow another action:
+
+```python
+from honing.backends.griddly.engine import GriddlyEngine
+from honing.backends.griddly.scenarios import GriddlyScenario
+
+engine = GriddlyEngine(GriddlyScenario(seed=7, max_steps=1))
+try:
+    try:
+        engine.observe()
+    except RuntimeError:
+        pass  # reset is required first
+    engine.reset()
+    try:
+        engine.step("INVALID_ACTION")
+    except ValueError:
+        pass  # no native tick was applied
+    frame = engine.step("WAIT")
+    assert frame["truncated"] and not frame["terminated"]
+    try:
+        engine.step("WAIT")
+    except RuntimeError:
+        pass  # the episode has ended
+    assert engine.reset()["step"] == 0
+finally:
+    engine.close()
+    engine.close()  # idempotent
+```
+
 ## Run an episode
 
 The project-local Windows launcher runs a game and opens an English HTML
@@ -132,8 +268,19 @@ integrations/griddly/.venv/bin/python integrations/griddly/scripts/match.py \
 The integration checks `GET /v1/health` and posts one `action` question to
 `POST /v1/decide`, using the existing `id`, `parts`, `questions` format.
 The criteria contain exactly the current native legal actions. All option
-probabilities must be finite, normalized and present. The reply must preserve
+probabilities must be finite, lie in `[0, 1]` and cover every legal option.
+The reply must preserve
 the request ID and complete state text and report no context trimming.
+The pinned Laya source rounds each probability to four decimal places. The
+adapter accepts a sum error of at most `N * 0.00005 + 1e-12`, where `N` is
+the number of legal options; the last term covers floating-point comparison.
+A larger error is refused. Accepted values are divided by their sum (computed
+with `math.fsum`) in native legal-action order. Evaluation preserves the
+server's maximizing choice, including ties. Sampling, audit reconstruction
+and exported training `behavior_probs` all use this normalized distribution.
+The raw response probabilities are retained unchanged in `decisions.jsonl`;
+they are not claimed to be the model's pre-rounding softmax values.
+
 Model/network failures stop the run; there is no scripted fallback.
 When configured, `HONING_TOKEN` is forwarded as a Bearer header and is not recorded.
 Configure authentication at the serving deployment.
@@ -265,6 +412,12 @@ framework; a Griddly GEPA experiment has not been run.
 
 ## Replay and records
 
+The integration-local `griddly-match-v1` format is proposed in
+[RFC #148](https://github.com/HectorHHZ/llm-honing/issues/148), which requires
+explicit maintainer acceptance before merge. It does not establish the
+shared Reef record/data format discussed in
+[#137](https://github.com/HectorHHZ/llm-honing/issues/137).
+
 Every completed run contains:
 
 - `manifest.json`: runtime/platform, native rule and adapter hashes, scenario,
@@ -332,7 +485,8 @@ Linux CI job.
 An isolated candidate containing the repository baseline plus only this
 integration's changes was checked on Ubuntu 24.04 with Python 3.11.18:
 
-- 36 Griddly tests and 55 core contract tests passed, including native vector video.
+- 55 Griddly tests and 55 core contract tests passed, including native vector video
+  and rounded HTTP replies through sampling, replay and training conversion.
 - The runner check passed support, episodes, delivery, concurrency, repeated
   event loops and Gate behavior.
 - Black, isort, Ruff and mypy checks passed for the Griddly backend and its

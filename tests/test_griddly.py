@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import math
 import shutil
 import subprocess
 import sys
+import threading
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -28,9 +31,10 @@ from honing.backends.griddly.demonstrations import GriddlyDemonstrationProvider
 from honing.backends.griddly.engine import GriddlyEngine, canonical, digest
 from honing.backends.griddly.harness import CONTROLLER_PATH, load_harness, parse_harness, write_harness
 from honing.backends.griddly.match import run_match
-from honing.backends.griddly.model import baseline, make_request, validate_reply
+from honing.backends.griddly.model import DecisionClient, baseline, make_request, validate_reply
 from honing.backends.griddly.replay import audit_run, verify_replay
 from honing.backends.griddly.rollouts import GriddlyRolloutProvider
+from honing.backends.jev.server import DecisionServer
 from honing.core import (
     CampaignRuleError,
     ContractError,
@@ -130,7 +134,10 @@ def test_request_contains_only_public_state_and_exact_candidates() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("fault", ["id", "state", "trim", "nan", "missing", "sum", "choice", "audit"])
+@pytest.mark.parametrize(
+    "fault",
+    ["id", "state", "trim", "nan", "inf", "negative", "over_one", "bool", "zero", "missing", "sum", "choice", "audit"],
+)
 def test_model_replies_cannot_change_context_or_distribution(fault: str) -> None:
     request = make_request(public_frame(), GriddlyScenario(), parse_harness(SEED), [])
     reply = reply_for(request)
@@ -144,6 +151,16 @@ def test_model_replies_cannot_change_context_or_distribution(fault: str) -> None
         reply["trimmed"] = ["essential"]
     elif fault == "nan":
         answer["probabilities"]["WAIT"] = float("nan")
+    elif fault == "inf":
+        answer["probabilities"]["WAIT"] = float("inf")
+    elif fault == "negative":
+        answer["probabilities"]["WAIT"] = -0.01
+    elif fault == "over_one":
+        answer["probabilities"]["WAIT"] = 1.01
+    elif fault == "bool":
+        answer["probabilities"]["WAIT"] = True
+    elif fault == "zero":
+        answer["probabilities"] = dict.fromkeys(answer["probabilities"], 0.0)
     elif fault == "missing":
         del answer["probabilities"]["WAIT"]
     elif fault == "sum":
@@ -154,6 +171,89 @@ def test_model_replies_cannot_change_context_or_distribution(fault: str) -> None
         reply["tokenAudit"]["action"]["stateTruncated"] = True
     with pytest.raises(ValueError):
         validate_reply(request, reply)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "values",
+    [
+        [0.5001, 0.5],
+        [0.3333, 0.3333, 0.3333],
+        [0.3334, 0.2222, 0.2222, 0.2223],
+        [0.3333, 0.3333, 0.1111, 0.1111, 0.1111],
+    ],
+)
+def test_rounded_probabilities_are_normalized_without_changing_the_reply(values: list[float]) -> None:
+    frame = public_frame()
+    frame["legal_actions"] = ["WAIT", "TURN_LEFT", "FORWARD", "TURN_RIGHT", "BACKWARD"][: len(values)]
+    request = make_request(frame, GriddlyScenario(), parse_harness(SEED), [])
+    probabilities = dict(zip(frame["legal_actions"], values, strict=True))
+    reply = reply_for(request)
+    reply["answers"]["action"].update(probabilities=probabilities, choice=max(probabilities, key=probabilities.get))
+    original = canonical(reply)
+    normalized = validate_reply(request, reply)
+    assert math.fsum(normalized.values()) == pytest.approx(1.0, abs=1e-15)
+    assert normalized == {name: p / math.fsum(values) for name, p in probabilities.items()}
+    assert canonical(reply) == original
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "values",
+    [
+        [0.5001] * 2,
+        [0.4999] * 2,
+        [0.3334] * 3,
+        [0.3332] * 3,
+        [0.2501] * 4,
+        [0.2499] * 4,
+        [0.2001] * 5,
+        [0.1999] * 5,
+    ],
+)
+def test_sum_error_beyond_four_decimal_rounding_is_refused(values: list[float]) -> None:
+    frame = public_frame()
+    frame["legal_actions"] = ["WAIT", "TURN_LEFT", "FORWARD", "TURN_RIGHT", "BACKWARD"][: len(values)]
+    request = make_request(frame, GriddlyScenario(), parse_harness(SEED), [])
+    reply = reply_for(request)
+    probabilities = dict(zip(frame["legal_actions"], values, strict=True))
+    reply["answers"]["action"].update(probabilities=probabilities, choice=max(probabilities, key=probabilities.get))
+    with pytest.raises(ValueError, match="sum to one"):
+        validate_reply(request, reply)
+
+
+@pytest.fixture
+def rounded_server() -> Any:
+    class RoundedModel(PublicStateModel):
+        def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
+            reply: Any = super().predict(parts, questions)
+            answer = reply["answers"]["action"]
+            answer["probabilities"] = {name: round(p, 4) for name, p in answer["probabilities"].items()}
+            return reply
+
+    server = DecisionServer(("127.0.0.1", 0), RoundedModel())
+    thread = threading.Thread(target=server.serve, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.stop()
+        thread.join(timeout=5)
+
+
+@pytest.mark.integration
+def test_http_rounded_response_preserves_raw_values_and_normalizes_training(rounded_server: DecisionServer) -> None:
+    request = make_request(public_frame(), GriddlyScenario(), parse_harness(SEED), [])
+    reply = DecisionClient(rounded_server.url).decide(request)
+    raw = reply["answers"]["action"]["probabilities"]
+    assert math.fsum(raw.values()) == pytest.approx(1.0001)
+    original = canonical(reply)
+    expected = {name: value / math.fsum(raw.values()) for name, value in raw.items()}
+    row = {"request": request, "response": reply, "chosen": {"action": "WAIT"}, "forced_action": False}
+    sample = decision_samples([row], group="train", reward=1.0, behavior=True)[0]
+    assert dict(dict(sample.behavior_probs)["action"]) == expected
+    assert dict(sample.chosen)["action"] == "WAIT"
+    assert canonical(reply) == original
 
 
 @pytest.mark.unit
@@ -314,6 +414,32 @@ def test_real_engine_http_runner_grader_and_sampling(
     forged = replace(record.outcome, policy_checksum="different")
     with pytest.raises(ContractError, match="does not match"):
         asyncio.run(grader.grade(task, forged))
+
+
+@native
+@pytest.mark.integration
+def test_rounded_http_sampling_audit_replay_and_training_agree(tmp_path: Path, rounded_server: DecisionServer) -> None:
+    out = tmp_path / "rounded"
+    result = run_match(
+        GriddlyScenario(seed=7, max_steps=15),
+        out,
+        SEED,
+        policy="model",
+        decision_server=rounded_server.url,
+        sample=True,
+        policy_seed=93,
+    )
+    assert verify_replay(out)["steps"] == result["steps"]
+    rows = [json.loads(line) for line in (out / "decisions.jsonl").read_text().splitlines()]
+    first = rows[0]["response"]["answers"]["action"]["probabilities"]
+    assert math.fsum(first.values()) == pytest.approx(1.0001)
+    samples = decision_samples(rows, group="train", reward=1.0, behavior=True)
+    for row, sample in zip((row for row in rows if not row["forced_action"]), samples, strict=True):
+        raw = row["response"]["answers"]["action"]["probabilities"]
+        assert dict(dict(sample.behavior_probs)["action"]) == {
+            name: p / math.fsum(raw.values()) for name, p in raw.items()
+        }
+        assert dict(sample.chosen) == row["chosen"]
 
 
 @native
