@@ -1,9 +1,21 @@
-# Final Space Invaders harness
+# Space Invaders
+
+NanoJev chooses high-level target lanes and single-alien intercept plans. The
+harness handles aiming, lead, shields, movement, firing, dodging, and landing
+urgency.
+
+https://github.com/user-attachments/assets/5805ecfb-4bab-4b60-ae7a-12eb712913da
+
+The video is one complete `ALE/SpaceInvaders-v5` game rendered from the game
+engine at 60 fps. The trained NanoJev model made the high-level choices with
+the final `--landing-priority` harness: seed 1047, score 3665, natural game end
+with zero lives. It is a selected demonstration, not an estimate of average
+performance. The video is hosted as a GitHub attachment; no recording is
+committed to this repository.
 
 `final-harness.json` identifies the one controller configuration presented as
 the final hand-tuned Jev system. The runner is `lane_pilot.py`. NanoJev chooses
-between high-level target lanes or single-alien intercept plans; the harness
-handles aiming, lead, shields, movement, firing, dodging, and landing urgency.
+between high-level target lanes or single-alien intercept plans.
 The exact runner flags and expected NanoJev weight checksum are in that JSON
 file. `docs/space-invaders-final-harness.md` gives the commands to run it.
 
@@ -19,7 +31,7 @@ Install `requirements.txt` in a dedicated Python environment for the OCAtari
 runner. ALE needs an external Space Invaders ROM. Download the model checkpoint
 from external storage and pass its local `checkpoint.json` to the Honing
 NanoJev server. The manifest's `path` must point to the local checkpoint
-directory. No ROM, model weights, experiment data, or rendered video is
+directory. No ROM, model weights, experiment data, or rendered video file is
 included in this PR.
 
 The SFT and optimization scripts remain as supporting tools for later work.

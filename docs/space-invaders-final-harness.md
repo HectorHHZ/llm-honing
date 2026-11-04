@@ -6,7 +6,9 @@ the `--landing-priority` variant, and NanoJev weights with SHA-256
 `287ff07466032fa0a8054783300ac4a3123f6c6a2bc691815a4f60287b36913b`.
 The earlier game that prompted the landing-priority change used a different
 controller configuration. The checkpoint bytes are supplied separately; this
-PR does not contain a model or a game recording.
+PR does not contain a model or a game recording. The integration
+[README](../integrations/space-invaders/README.md) links to an externally hosted
+video of the final controller playing one complete Jev game.
 
 The OCAtari lane controller lives in `integrations/space-invaders/`. Its game
 entry point is `lane_pilot.py`; `lane_controller.py` and `solo_intercept.py`
@@ -64,4 +66,4 @@ native action, and rewards in JSONL. `--policy best` is a code selector and
 `--policy random` randomly selects valid high-level options. Both exercise the
 same harness, but neither is a Jev game. The controller can run without model
 weights in these two modes. No checkpoint, generated training data, game
-trace, result summary, or rendered demo is included in this PR.
+trace, result summary, or rendered demo file is committed in this PR.
