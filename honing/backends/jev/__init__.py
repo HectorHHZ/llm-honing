@@ -7,11 +7,7 @@ every option. :mod:`honing.backends.jev.laya` loads the Laya family and
 Kev, NanoJev, StartLux-Decision and Nimble families; :mod:`honing.backends.jev.djev` bridges a remote
 DiffusionGemma structured-read server;
 :mod:`honing.backends.jev.server` serves any :class:`DecisionModel` over HTTP,
-and :class:`JevEndpoints` lets a runner find the server for a policy;
-:mod:`honing.backends.jev.nanojev_serving` starts a NanoJev server per
-checkpoint on demand, and :mod:`honing.backends.jev.direction_edit` edits a
-NanoJev head along a direction read from the model (the ``direction_edit``
-algorithm), with no training.
+and :class:`JevEndpoints` lets a runner find the server for a policy.
 """
 
 from honing.backends.jev.endpoints import JevEndpoints
