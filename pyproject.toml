@@ -47,7 +47,7 @@ gepa = ["gepa==0.1.4"]
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
 litellm = ["litellm==1.102.1"]
 # Opt-in W&B logging for end-to-end runs (honing/e2e/tracking.py). Pinned exactly, like litellm.
-wandb = ["wandb==0.30.0"]
+wandb = ["wandb==0.31.0"]
 
 [project.urls]
 Homepage = "https://github.com/HectorHHZ/llm-honing"
