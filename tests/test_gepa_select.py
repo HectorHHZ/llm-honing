@@ -244,8 +244,15 @@ def test_after_a_weight_move_gepa_starts_over_from_the_served_harness(tmp_path: 
     # A prune publishes an edited master (campaign.py:237-249) and a quantize publishes
     # serving weights (campaign.py:260-265); either changes the checksum head.policy()
     # reports (candidate.py:78-81), as a train does.
+    # The fourth reply is for the move after the rollback, which only has to start. A chat model
+    # with no reply left raises, and only a ChatModelError is a skip (method.py, _reflect).
     method = SpyGEPAMethod(
-        [_reply("Add the numbers."), _reply("Order the list."), _reply("Add the numbers and order the list.")]
+        [
+            _reply("Add the numbers."),
+            _reply("Order the list."),
+            _reply("Add the numbers and order the list."),
+            _reply("Add the numbers."),
+        ]
     )
     fixture = build_campaign(tmp_path, method=method, make_runner=KeywordRunner)
     campaign = fixture.campaign

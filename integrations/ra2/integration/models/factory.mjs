@@ -2,16 +2,24 @@ import { LayaClient } from "../laya/client.mjs";
 import { PermutationClient } from "../laya/permutation-client.mjs";
 import { HttpDecisionClient } from "../laya/http-client.mjs";
 
-// Local Laya, Kev, NanoJev, StartLux and remote djev answer the same
+// Local Laya, Kev, NanoJev, StartLux, Nimble and remote djev answer the same
 // typed questions with the same response fields (honing/backends/jev/laya.py, kev.py,
-// nanojev.py, startlux.py).
-export const FAMILIES = ["laya", "kev", "nanojev", "startlux", "djev"];
+// nanojev.py, startlux.py, nimble.py).
+export const FAMILIES = [
+    "laya",
+    "kev",
+    "nanojev",
+    "startlux",
+    "nimble",
+    "djev",
+];
 const DEFAULT_MODEL = {
     laya: (candidateMode) =>
         candidateMode === "intent" ? "typed-decisions" : "english",
     kev: () => "kev-0.8b",
     nanojev: () => "nanojev",
     startlux: () => "startlux-4b",
+    nimble: () => "nimble-v4-max",
 };
 export function decisionClientOptions(args, candidateMode) {
     const family = args.family ?? "laya";

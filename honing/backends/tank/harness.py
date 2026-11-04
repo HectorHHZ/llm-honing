@@ -1,6 +1,6 @@
 """The tank harness: how the decision model is asked, as files an evolution method can rewrite.
 
-A harness for agent ``tank_classic`` is read by ``integrations/tank-duel/scripts/match.mjs``:
+A harness for agent ``tank_classic`` is read by ``integrations/tank-war/scripts/match.mjs``:
 
 - ``tank/controller.json`` (kind ``settings``): controller mode (planned steering
   or raw controls), context profile, dodge assist, shot guard, and for planned

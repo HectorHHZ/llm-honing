@@ -8,6 +8,8 @@
   pin is reviewed on its own.
 - ``honing/backends/slime/sandbox.py`` imports only the standard library, so it
   also runs inside Slime's image, where Honing's own dependencies may be absent.
+- Only ``honing/e2e/tracking.py`` imports wandb, another optional extra, and
+  only when a run asks to be logged.
 - Retired design terms stay out of code and the specification.
 """
 
@@ -20,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-FRAMEWORKS = {"slime", "slime_plugins", "megatron", "sglang", "reef", "reef_client"}
+FRAMEWORKS = {"slime", "slime_plugins", "megatron", "sglang", "reef", "reef_client", "openhands"}
 RETIRED_TERMS = re.compile(r"\b(provenance|evidence|ledger|sidecar)\b", re.IGNORECASE)
 
 
@@ -86,6 +88,28 @@ def test_only_the_chat_client_imports_litellm(repo_root: Path) -> None:
 def test_the_slime_sandbox_imports_only_the_standard_library(repo_root: Path) -> None:
     path = repo_root / "honing" / "backends" / "slime" / "sandbox.py"
     assert imported_top_levels(path) - set(sys.stdlib_module_names) == set()
+
+
+@pytest.mark.unit
+def test_only_the_run_tracker_imports_wandb(repo_root: Path) -> None:
+    package = repo_root / "honing"
+    importers = [
+        str(path.relative_to(repo_root))
+        for path in sorted(package.rglob("*.py"))
+        if "wandb" in imported_top_levels(path)
+    ]
+    assert importers == ["honing/e2e/tracking.py"]
+
+
+@pytest.mark.unit
+def test_honing_never_imports_openhands(repo_root: Path) -> None:
+    """OpenHands runs in its own environment; its backend only starts the worker there."""
+    offenders = sorted(
+        str(path.relative_to(repo_root))
+        for path in (repo_root / "honing").rglob("*.py")
+        if "openhands" in imported_top_levels(path)
+    )
+    assert offenders == []
 
 
 @pytest.mark.unit

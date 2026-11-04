@@ -1,0 +1,1 @@
+{"module": "max_index", "function": "max_index", "cases": [{"args": [[3, 9, 2]], "expected": 1}, {"args": [[7]], "expected": 0}, {"args": [[1, 2, 3]], "expected": 2}, {"args": [[5, 1]], "expected": 0}]}

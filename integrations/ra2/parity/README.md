@@ -19,6 +19,17 @@ These scripts compare the code in Honing with the original RA2 experiment in #49
 - The first HTTP server ran each call on the request's thread, which changed request 4 by 0.0015 against the loading thread. The server now runs every call on the thread that loaded the model, and matches.
 - Training: sft validation loss 1.60 to 1.30 (584 train, 118 validation); the trained checkpoint serves from its manifest; grpo raises the favored option from 0.44 to 0.997, on 16 of 16 states; 1 minute 40 seconds for all three steps.
 
+`nanojev_tree.py <out> <gpu> [requests]` compares the token-tree inference modes (`NanoJevSettings.inference`) with the reference on one GPU. It loads each mode in its own process, answers the serving requests twice and times the second pass, and measures every bf16 mode against the reference in fp32. For the tree modes it also answers the requests three to a call (`predict_many`, as the server answers branches) and compares them with the same requests answered alone, and checks that encoding a request in one tokenizer call gives the paths NanoJev's own `prepare_examples` gives. It needs `NANOJEV_SOURCE_DIR` and a Python with NanoJev's requirements that can import Honing. Results on an RTX A6000, 24 requests (50 questions):
+
+| Mode | Largest probability difference from fp32 | Choices that differ from fp32 (fp32's top-two gap) | Median per request | Load | Peak reserved |
+|---|---|---|---|---|---|
+| reference, fp32 | (the yardstick) | | 88.4 ms | 18 s | 7.0 GiB |
+| reference, bf16 | 0.0076 | 1 (0.0012) | 99.5 ms | 18 s | 4.3 GiB |
+| `tree` | 0.0054 | 1 (0.00007) | 35.5 ms | 18 s | 3.5 GiB |
+| `tree-compiled` | 0.0056 | 2 (0.00007, 0.0012) | 6.5 ms | 69 s with filled compile caches | 4.1 GiB |
+
+The choices that differ are near ties, which bf16 rounding moves either way. Answered three to a call, the requests moved by at most 0.0057 (`tree`) and 0.0044 (`tree-compiled`) against answering them alone, the same rounding on a tree of another shape; some of those trees were larger than the captured graphs and ran without one. The one-call encoding gave every path `prepare_examples` gives, with no string encoded outside the batch. `tree-compiled`'s exact values depend on the kernels Inductor picked when it compiled: two runs on the same caches gave the same probabilities, while an earlier compile with other cache contents measured a largest difference of 0.0064 and no differing choice.
+
 ## Kev against Kev's own code
 
 The Kev family has no counterpart in #49, so these compare Honing with Kev's own code at the commit in `pins.json`. They need the Kev environment from `scripts/setup-kev.sh` (`KEV_PYTHON`, `KEV_SOURCE_DIR`) and the pinned snapshots in the Hugging Face cache.
@@ -46,6 +57,18 @@ The Kev family has no counterpart in #49, so these compare Honing with Kev's own
 | `startlux-27b` | identical probabilities | same choice 12 of 15, largest difference 0.012 | 49.0 ms |
 
 The 15 differing questions come from requests with two or more questions over 4,096 tokens, where the reference reads the letters in bf16 and Honing, with that path off, reads them in fp32. The three 27B questions that choose differently are near-ties in the reference's bf16 values; one is an exact tie (0.3535 and 0.3535). All three servers passed StartLux's own graph self-test with a difference of 0.0 over 40 graphs. The long requests trimmed 2,873 entries in all, and the longest prompt was 8,179 tokens.
+
+## Nimble-v4-max against Bespoke's engine
+
+`nimble_serving.py <our-gpu> <reference-gpu> <out>` loads Honing's `NimbleDecisionModel` on one GPU and, in a second process on another, Bespoke's `NimbleEngine` from the pinned source snapshot with its Decision Index run's settings, called as the Decision Index kit calls it. Bespoke ships no server for the model, so the engine itself is the reference. It sends both the 24 serving requests, 3 with long logs that make Honing trim the state, and 3 that add a yes/no and a five-level score question; the reference gets the state text Honing sent the model. It needs the environment from `scripts/setup-nimble.sh` (`NIMBLE_PYTHON`, `NIMBLE_SOURCE_DIR`, `NIMBLE_KIT_DIR`). Results on H100s:
+
+| Questions | Same choice | Largest probability difference |
+|---|---|---|
+| choice (62) | 62 of 62 | 0.000000 |
+| yes/no (3) | 3 of 3 | 0.000000 |
+| score (3) | 3 of 3 | 0.000000 |
+
+The probabilities are identical, including after Honing converts a score answer from the engine's choice over level indices. The long requests trimmed 2,880 entries in all, the longest prompt was 8,165 tokens, and the median latency of the untrimmed requests was 102.9 ms.
 
 ## Real game controller parity on CPU
 

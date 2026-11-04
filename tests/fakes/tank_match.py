@@ -1,4 +1,4 @@
-"""Stands in for integrations/tank-duel/scripts/match.mjs: same flags, same output files, no game.
+"""Stands in for integrations/tank-war/scripts/match.mjs: same flags, same output files, no game.
 
 The decision server URL decides the result: a URL containing "strong" wins, "weak" loses, anything
 else runs out the clock. ``--teacher`` records a teacher demonstration. FAKE_TANK_ERROR=harness

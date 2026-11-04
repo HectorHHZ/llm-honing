@@ -1,0 +1,116 @@
+{
+  "request": {
+    "id": 1,
+    "parts": {
+      "essential": [
+        "Play a Hollow Knight imitation platformer. Reach the level exit, stay alive, and fight nearby enemies. Positive x is right and positive y is up. floorLeft/floorRight report ground within two units below a point 1.2 units to that side; false indicates a gap, which may lead to an exit below you. Exits are rectangles with world coordinates and sizes. wallLeft/wallRight are distances capped at two units. Each input is requested for 12 rendered frames at 30 fps. The game pauses while you decide. Inputs only succeed when the game's own rules permit them.",
+        "{\"id\":1,\"frame\":0,\"health\":5,\"jumps\":0,\"fixedSteps\":0,\"scene\":\"Level1\",\"x\":-6.559999942779541,\"y\":4.656543254852295,\"vx\":0.0,\"vy\":-0.5885999798774719,\"wallLeft\":2.0,\"wallRight\":2.0,\"simulationTime\":0.06666667014360428,\"grounded\":false,\"floorLeft\":false,\"floorRight\":false,\"enemies\":[{\"name\":\"Enemy (1)\",\"x\":24.369998931884766,\"y\":2.1764562129974365,\"health\":3},{\"name\":\"Enemy\",\"x\":102.05529022216797,\"y\":10.010944366455078,\"health\":3}],\"exits\":[{\"x\":113.70842742919922,\"y\":11.062509536743164,\"width\":0.4522705078125,\"height\":4.445018768310547}]}"
+      ]
+    },
+    "questions": {
+      "action": {
+        "type": "choice",
+        "instructions": "Choose the next input to make progress and survive.",
+        "criteria": {
+          "wait": "Stay still briefly.",
+          "left": "Walk left.",
+          "right": "Walk right.",
+          "jump_left": "Jump or double jump while moving left.",
+          "jump_right": "Jump or double jump while moving right.",
+          "dash_left": "Dash left if the cooldown permits.",
+          "dash_right": "Dash right if the cooldown permits.",
+          "attack_left": "Face left and attack with the sword.",
+          "attack_right": "Face right and attack with the sword.",
+          "attack_up": "Attack upward.",
+          "attack_down": "Attack downward while airborne."
+        }
+      }
+    }
+  },
+  "response": {
+    "id": 1,
+    "stateText": "incomplete",
+    "trimmed": [
+      "essential"
+    ],
+    "tokenAudit": {
+      "action": {
+        "stateTruncated": true,
+        "options": 11
+      }
+    },
+    "answers": {
+      "action": {
+        "choice": "left",
+        "probabilities": {
+          "wait": 0.0,
+          "left": 1.0,
+          "right": 0.0,
+          "jump_left": 0.0,
+          "jump_right": 0.0,
+          "dash_left": 0.0,
+          "dash_right": 0.0,
+          "attack_left": 0.0,
+          "attack_right": 0.0,
+          "attack_up": 0.0,
+          "attack_down": 0.0
+        }
+      }
+    }
+  },
+  "error": "ValueError: Decision response trimmed context or omitted its trimmed audit",
+  "rawResponse": "{\"id\": 1, \"stateText\": \"incomplete\", \"trimmed\": [\"essential\"], \"tokenAudit\": {\"action\": {\"stateTruncated\": true, \"options\": 11}}, \"answers\": {\"action\": {\"choice\": \"left\", \"probabilities\": {\"wait\": 0.0, \"left\": 1.0, \"right\": 0.0, \"jump_left\": 0.0, \"jump_right\": 0.0, \"dash_left\": 0.0, \"dash_right\": 0.0, \"attack_left\": 0.0, \"attack_right\": 0.0, \"attack_up\": 0.0, \"attack_down\": 0.0}}}}",
+  "rawResponseSha256": "db006a14fb9a31265e22607dcb9793a6889753c4c27e88b07ed25748e5a74ccd",
+  "observation": {
+    "id": 1,
+    "frame": 0,
+    "health": 5,
+    "jumps": 0,
+    "fixedSteps": 0,
+    "scene": "Level1",
+    "x": -6.559999942779541,
+    "y": 4.656543254852295,
+    "vx": 0.0,
+    "vy": -0.5885999798774719,
+    "wallLeft": 2.0,
+    "wallRight": 2.0,
+    "simulationTime": 0.06666667014360428,
+    "grounded": false,
+    "floorLeft": false,
+    "floorRight": false,
+    "enemies": [
+      {
+        "name": "Enemy (1)",
+        "x": 24.369998931884766,
+        "y": 2.1764562129974365,
+        "health": 3
+      },
+      {
+        "name": "Enemy",
+        "x": 102.05529022216797,
+        "y": 10.010944366455078,
+        "health": 3
+      }
+    ],
+    "exits": [
+      {
+        "x": 113.70842742919922,
+        "y": 11.062509536743164,
+        "width": 0.4522705078125,
+        "height": 4.445018768310547
+      }
+    ]
+  },
+  "nativeVerification": {
+    "kind": "real-Unity-HTTP-rejection-test",
+    "requiredContextRejected": true,
+    "reason": "Decision response trimmed context or omitted its trimmed audit",
+    "nativeFramesAdvanced": 0,
+    "actionFileCreated": false,
+    "successResultCreated": false,
+    "ownedNativePlayerExited": true,
+    "nativeExitCode": -15,
+    "unrelatedSentinelPreserved": true,
+    "responseBytesRetained": true
+  }
+}

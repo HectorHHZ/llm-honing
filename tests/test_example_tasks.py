@@ -1,4 +1,4 @@
-"""The python-bugfix example suite: its grader gives 0 to every unmodified workspace and 1 to its reference fix."""
+"""The python-bugfix suite: its grader gives 0 to every unmodified workspace and 1 to its reference fix."""
 
 from __future__ import annotations
 
@@ -18,12 +18,12 @@ from honing.core import EpisodeOutcome, Grade
 from honing.harness.graders import CommandGrader
 from honing.harness.tasks import load_task_suite
 
-SUITE = Path(__file__).resolve().parents[1] / "examples" / "tasks" / "python-bugfix"
+SUITE = Path(__file__).resolve().parents[1] / "integrations" / "python-bugfix" / "tasks"
 TASK_IDS = ("clamp", "mean", "reverse_words")
 
 
 def _grade(task_id: str, workspace: Path) -> Grade:
-    suite = load_task_suite(SUITE / "manifest.jsonl")
+    suite = load_task_suite(SUITE / "suite.jsonl")
     entry = suite.entry(task_id)
     outcome = EpisodeOutcome(
         task_id=task_id, spec_id="h-seed", policy_checksum="sha", exit_code=0, workspace_location=str(workspace)
@@ -39,7 +39,7 @@ def _agent_copy(task_id: str, tmp_path: Path) -> Path:
 
 
 def test_the_suite_has_three_tasks_one_per_split() -> None:
-    suite = load_task_suite(SUITE / "manifest.jsonl")
+    suite = load_task_suite(SUITE / "suite.jsonl")
     assert tuple(entry.task_id for entry in suite.entries) == TASK_IDS
     assert [suite.split_of(task_id) for task_id in TASK_IDS] == ["train", "val", "heldout"]
     # The hidden tests and the grading script live outside every workspace.
@@ -136,11 +136,10 @@ def test_grade_py_run_without_a_workspace_exits_before_deleting_its_cases(
     assert result.returncode != 0
     assert result.stdout == ""
     assert "HONING_WORKSPACE is not set" in result.stderr
-    assert sorted(path.name for path in (tmp_path / "grader" / "cases").iterdir()) == [
-        "clamp.json",
-        "mean.json",
-        "reverse_words.json",
-    ]
+    # Every case the suite holds is still there, however many manifests share the grader.
+    expected = sorted(path.name for path in (SUITE / "grader" / "cases").iterdir())
+    assert "clamp.json" in expected
+    assert sorted(path.name for path in (tmp_path / "grader" / "cases").iterdir()) == expected
 
 
 # The agent writes the workspace, so it must not be able to change how its work is graded.
@@ -238,7 +237,8 @@ ANSWER_FROM_A_PARENTS_CWD = (
     "    pid = os.getppid()\n"
     "    while pid > 1:\n"
     "        try:\n"
-    "            s = json.load(open(f'/proc/{pid}/cwd/examples/tasks/python-bugfix/grader/cases/clamp.json'))\n"
+    "            path = f'/proc/{pid}/cwd/integrations/python-bugfix/tasks/grader/cases/clamp.json'\n"
+    "            s = json.load(open(path))\n"
     "            return next(c['expected'] for c in s['cases'] if c['args'] == list(a))\n"
     "        except OSError:\n"
     "            pid = int(open(f'/proc/{pid}/stat').read().rsplit(')', 1)[1].split()[1])\n"
@@ -292,7 +292,7 @@ def test_a_value_json_cannot_encode_fails_the_case(tmp_path: Path) -> None:
 def test_a_case_that_runs_past_its_limit_fails(tmp_path: Path) -> None:
     suite_copy = tmp_path / "suite"
     shutil.copytree(SUITE, suite_copy)
-    manifest = suite_copy / "manifest.jsonl"
+    manifest = suite_copy / "suite.jsonl"
     lines = [json.loads(line) for line in manifest.read_text().splitlines()]
     lines[0]["metadata"] = {"case_timeout_seconds": 1}
     manifest.write_text("".join(json.dumps(line) + "\n" for line in lines))

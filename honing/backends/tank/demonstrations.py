@@ -1,6 +1,6 @@
 """Planner-teacher demonstrations as typed-decision training data.
 
-The planner teacher (``integrations/tank-duel/web/classic/teacher.js``) plays
+The planner teacher (``integrations/tank-war/web/game/teacher.js``) plays
 the agent's seat against the planner opponent and answers the same questions,
 under the same harness, that the model is asked: the motion with the planner's
 best score, and fire only when that motion's fresh shot is verified safe. Its

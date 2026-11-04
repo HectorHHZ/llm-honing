@@ -1,0 +1,6 @@
+.venv/
+runs/
+play_data/
+*.mp4
+*.npz
+.env

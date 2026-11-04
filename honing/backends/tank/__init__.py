@@ -1,8 +1,8 @@
-"""Tank duels (RICOCHET Classic) as a Honing task environment.
+"""Tank duels (Tank War) as a Honing task environment.
 
 A task is one round against the planner opponent, described by a scenario in
 the task suite. :class:`TankEpisodeRunner` plays it through the tank
-integration (``integrations/tank-duel/scripts/match.mjs``) with the policy
+integration (``integrations/tank-war/scripts/match.mjs``) with the policy
 served by a Jev decision server, and :class:`TankGrader` checks the round and
 turns its result into a grade. :class:`TankRolloutProvider` plays sampled
 rounds for policy gradient, and :class:`TankDemonstrationProvider` labels the

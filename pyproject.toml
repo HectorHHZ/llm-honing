@@ -28,22 +28,26 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "black==26.5.1",
-    "isort==9.0.1",
+    "black==26.10.1",
+    "isort==9.0.2",
     "mypy>=1.9",
     "pre-commit>=3.7",
     "pytest>=8.0",
     "pytest-cov",
-    "ruff==0.16.9",
+    "ruff==0.17.3",
 ]
 # Diagram sources under system-design/ render with matplotlib alone.
 docs = ["matplotlib>=3.8"]
+# CPU checkpoint operations; model-specific feature readers have their own runtime.
+weight-edit = ["torch>=2.4", "safetensors>=0.4"]
 # GEPA parent sampling calls upstream's pure functions; the engine loop is not used.
 # Pinned exactly: Honing's parity tests assert upstream's draws.
 gepa = ["gepa==0.1.4"]
 # The ChatModel client (honing/harness/models.py). Pinned exactly, never a range: 1.82.7 and 1.82.8
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
-litellm = ["litellm==1.102.1"]
+litellm = ["litellm==1.106.6"]
+# Opt-in W&B logging for end-to-end runs (honing/e2e/tracking.py). Pinned exactly, like litellm.
+wandb = ["wandb==0.31.0"]
 
 [project.urls]
 Homepage = "https://github.com/HectorHHZ/llm-honing"
@@ -55,12 +59,18 @@ Issues = "https://github.com/HectorHHZ/llm-honing/issues"
 # Only modules under honing/backends/ may import it (tests/contracts/test_boundaries.py).
 [dependency-groups]
 runtime = ["slime @ git+https://github.com/THUDM/slime.git@41014d1f29e201137fdffce737bb8bac65bc5219"]
+# The serving engine (honing/backends/sglang). It runs from its own environment, never Honing's:
+# scripts/setup-sglang.sh builds that from scripts/sglang.lock. SGLang 0.5.21 pins the two pre-releases itself.
+serve-sglang = ["sglang==0.5.21", "cuda-tile==1.6.0rc5", "flash-attn-4==4.0.0b34"]
 
 [tool.setuptools_scm]
 fallback_version = "0.0.0.dev0"
 
 [tool.setuptools.packages.find]
 include = ["honing", "honing.*"]
+
+[tool.setuptools.package-data]
+"honing.backends.rea_issac" = ["source_facts.json"]
 
 [tool.isort]
 profile = "black"          # black-compatible
@@ -110,7 +120,7 @@ disallow_untyped_defs = true
 
 # Model libraries exist only in the GPU environment, and backends import them lazily.
 [[tool.mypy.overrides]]
-module = ["torch", "torch.*", "laya", "laya.*", "kev", "kev.*", "peft", "peft.*", "huggingface_hub", "huggingface_hub.*", "transformers", "transformers.*", "safetensors", "safetensors.*"]
+module = ["torch", "torch.*", "laya", "laya.*", "kev", "kev.*", "peft", "peft.*", "huggingface_hub", "huggingface_hub.*", "transformers", "transformers.*", "safetensors", "safetensors.*", "numpy", "numpy.*"]
 ignore_missing_imports = true
 
 # gepa is an optional extra; the documented ".[dev]" setup must type-check without it.
@@ -123,6 +133,16 @@ ignore_missing_imports = true
 module = ["litellm.*"]
 ignore_missing_imports = true
 
+# wandb is an optional extra; the documented ".[dev]" setup must type-check without it.
+[[tool.mypy.overrides]]
+module = ["wandb.*"]
+ignore_missing_imports = true
+
+# Craftax runs in its own optional game environment, outside base Honing.
+[[tool.mypy.overrides]]
+module = ["craftax", "craftax.*", "jax", "jax.*", "numpy", "numpy.*", "imageio", "imageio.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
@@ -131,6 +151,7 @@ markers = [
     "integration: several components together; may start subprocesses",
     "gpu: requires an accelerator; skipped in CI",
     "slow: takes more than roughly ten seconds",
+    "live: calls real model APIs and costs money; skipped unless its key variables are set",
 ]
 
 [tool.coverage.run]

@@ -51,12 +51,12 @@ function auditCall(record, stageIndex = 1) {
         : [record];
     if (
         result.modelFamily &&
-        !["laya", "kev", "nanojev", "startlux", "djev"].includes(
+        !["laya", "kev", "nanojev", "startlux", "nimble", "djev"].includes(
             result.modelFamily,
         )
     )
         throw new Error(
-            `This audit covers the laya, kev, nanojev, startlux, and djev families, not ${result.modelFamily}`,
+            `This audit covers the laya, kev, nanojev, startlux, nimble, and djev families, not ${result.modelFamily}`,
         );
     latencies.push(...forwards.map((r) => r.latencyMs));
     for (const r of forwards)

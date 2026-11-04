@@ -2,13 +2,15 @@
 
 ``decisions.jsonl`` has one row per question set the agent was asked: the state
 exactly as the model read it (``contextParts``), the questions as sent, the
-model's answers with a probability for every option, and the option the match
-executed (``chosen``). Planned steering asks twice per decision, the motion and
+model's answers with a probability for every option, and the policy choice
+(``chosen``). Planned steering asks twice per decision, the motion and
 then the weapon for that motion, and each ask is its own row.
 
-The executed option is the training label: for a model's round it is what the
+The policy choice is the training label: for a model's round it is what the
 policy did (drawn from its probabilities in a rollout), and for a teacher's
-round it is the teacher's answer.
+round it is the teacher's answer. Safety can project a sampled motion before
+execution; the log keeps that change in ``constraints`` and ``applied``. The
+sampled choice and native behavior probabilities stay aligned.
 """
 
 from __future__ import annotations

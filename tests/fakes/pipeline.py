@@ -13,10 +13,12 @@ changes what the model is told, as with a real agent.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import threading
 from collections.abc import Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 from honing.campaign import rules
@@ -43,7 +45,7 @@ from tests.fakes.compression import (
     skewed_expert_telemetry,
 )
 from tests.fakes.data import FakeRolloutProvider, ListDatasetProvider, token_batch
-from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeTaskGrader
+from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeProposerAgent, FakeTaskGrader
 from tests.fakes.model import SLIME_LIKE, FakeModelSource, FakeTrainer, FakeWorld, small_moe
 
 VERIFY_BONUS = 0.05
@@ -121,11 +123,54 @@ def tasks(context: PipelineContext) -> tuple[Task, ...]:
     return TASKS
 
 
+def search_tasks(context: PipelineContext) -> tuple[Task, ...]:
+    """Training twins of the gate's tasks, for a method that must not search on what the gate scores."""
+    return tuple(Task(task_id=f"train-{task.task_id}", prompt=task.prompt) for task in TASKS)
+
+
+def proposer(
+    context: PipelineContext, lines: Sequence[str] = ("Verify the result before answering.", "Answer briefly.")
+) -> FakeProposerAgent:
+    """A Meta-Harness proposer that follows the skill's workflow with scripted edits, one line per iteration.
+
+    Each call copies the served candidate, appends the next line to its
+    instructions, and writes ``pending_eval.json``; with no line left it exits 1.
+    """
+    queue = list(lines)
+
+    def script(workdir: Path) -> int:
+        if not queue:
+            return 1
+        line = queue.pop(0)
+        rows = [json.loads(row) for row in (workdir / "evolution_summary.jsonl").read_text().splitlines()]
+        parent = next(row["name"] for row in rows if row["served"])
+        name = f"edit_{len(rows)}"
+        folder = workdir / "candidates" / name
+        shutil.copytree(workdir / "candidates" / parent, folder)
+        manifest = json.loads((folder / "harness.json").read_text())
+        path = next(path for path, kind in manifest["files"].items() if kind == "instructions")
+        (folder / path).write_text((folder / path).read_text() + line + "\n")
+        entry = {"name": name, "parent": parent, "hypothesis": line, "changes": f"appended {line!r} to {path}"}
+        (workdir / "pending_eval.json").write_text(json.dumps({"iteration": len(rows), "candidates": [entry]}))
+        return 0
+
+    return FakeProposerAgent(script)
+
+
 def harness_seed(context: PipelineContext) -> HarnessSpec:
     return SEED_HARNESS
 
 
 # ---------------------------------------------------------------- the policy an agent calls
+
+
+def _text(content: object) -> str:
+    """A message's text: OpenAI-compatible clients send either a string or a list of content parts."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
+    return ""
 
 
 class _PolicyHandler(BaseHTTPRequestHandler):
@@ -142,7 +187,7 @@ class _PolicyHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        system = " ".join(m.get("content", "") for m in body.get("messages", []) if m.get("role") == "system")
+        system = " ".join(_text(m.get("content")) for m in body.get("messages", []) if m.get("role") == "system")
         verified = "verify" in system.lower()
         quality = round(min(1.0, self.server.world.quality[checksum] + (VERIFY_BONUS if verified else 0.0)), 6)
         content = f"quality={quality} verified={int(verified)}"

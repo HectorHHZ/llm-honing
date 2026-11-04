@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 
 from honing.core import (
     ChatMessage,
@@ -71,7 +72,10 @@ class FakeTaskGrader:
 
     async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
         self.grades += 1
-        fields = dict(part.split("=", 1) for part in outcome.final_output.split())
+        fields = dict(part.split("=", 1) for part in outcome.final_output.split() if "=" in part)
+        if "quality" not in fields or "verified" not in fields:
+            # An agent that failed or was refused reports no score; that is a failed episode, not a crash.
+            return Grade(score=0.0, feedback=f"no score in the agent's output: {outcome.final_output[:200]!r}")
         verified = fields["verified"] == "1"
         return Grade(
             score=float(fields["quality"]),
@@ -138,6 +142,18 @@ class FakeChatModel:
             output_tokens=len(text.split()),
             cost_usd=self._cost,
         )
+
+
+class FakeProposerAgent:
+    """Runs ``script`` on the working directory, as a coding agent would edit it, and returns its exit code."""
+
+    def __init__(self, script: Callable[[Path], int] | None = None) -> None:
+        self._script = script
+        self.calls: list[tuple[str, Path, str]] = []
+
+    def run(self, prompt: str, workdir: Path, *, instructions: str) -> int:
+        self.calls.append((prompt, workdir, instructions))
+        return 0 if self._script is None else self._script(workdir)
 
 
 class StaticPolicyEndpoints:
