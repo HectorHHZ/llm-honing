@@ -38,6 +38,8 @@ dev = [
 ]
 # Diagram sources under system-design/ render with matplotlib alone.
 docs = ["matplotlib>=3.8"]
+# CPU checkpoint operations; model-specific feature readers have their own runtime.
+weight-edit = ["torch>=2.4", "safetensors>=0.4"]
 # GEPA parent sampling calls upstream's pure functions; the engine loop is not used.
 # Pinned exactly: Honing's parity tests assert upstream's draws.
 gepa = ["gepa==0.1.4"]

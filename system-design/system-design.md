@@ -133,7 +133,7 @@ neither. That attribution is what the `batch_from_one_release` rule reads (P4).
 ```python
 @dataclass(frozen=True)
 class TrainJobSpec:
-    algorithm: AlgorithmName          # sft | distill | opd | gkd | ppo | grpo | dpo | direction_edit
+    algorithm: AlgorithmName          # sft | distill | opd | gkd | ppo | grpo | dpo | direction_edit | weight_edit
     update_policy: UpdatePolicy       # full | lora | param_subset | sparse_mask
     numerics: NumericsPolicy          # bf16 | fp8 | fake_quant_qat (with its QuantScheme)
     rollout: RolloutKind              # none | direct | harness
@@ -153,6 +153,12 @@ trainer.
 | `ppo` | on-policy samples with rewards | ✓ | ✗ | slime | native estimator |
 | `grpo` | grouped samples with rewards | ✓ | ✗ | slime | native estimator |
 | `dpo` | preference pairs | ✗ | ✗ | local | — Slime's data flow has no preference-pair path |
+| `direction_edit` | typed decisions | ✗ | ✗ | local | — feature-derived parameter operations |
+| `weight_edit` | no batch; configured parameter operations | ✗ | ✗ | local | — general checkpoint editor |
+
+[`WeightEditTrainer`](weight-edit.md) supports named tensor addition, scaling and replacement.
+It uses the normal train move and release gate. `requires_batch=False` prevents data
+collection for static `weight_edit` jobs; existing training algorithms still require data.
 
 **Update policy.** `full` trains everything. `lora` passes Megatron's LoRA arguments
 through Slime. `param_subset` selects parameters by name pattern, which Slime supports

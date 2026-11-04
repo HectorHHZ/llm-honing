@@ -48,7 +48,7 @@ from honing.core.numerics import NumericsPolicy
 from honing.core.structure import ParamMask
 from honing.core.weights import ModelSnapshot
 
-AlgorithmName = Literal["sft", "distill", "opd", "gkd", "ppo", "grpo", "dpo", "direction_edit"]
+AlgorithmName = Literal["sft", "distill", "opd", "gkd", "ppo", "grpo", "dpo", "direction_edit", "weight_edit"]
 UpdatePolicyKind = Literal["full", "lora", "param_subset", "sparse_mask"]
 RolloutKind = Literal["none", "direct", "harness"]
 TeacherKind = Literal["lineage", "release", "external"]
@@ -67,8 +67,11 @@ class AlgorithmRequirements:
     requires_reward: bool = False
     requires_logprobs: bool = False
     requires_group: bool = False
+    requires_batch: bool = True
 
     def data_contract(self) -> DataContract:
+        if not self.requires_batch:
+            raise ContractError("this algorithm takes no data batch")
         return DataContract(
             kind=self.contract,
             requires_reward=self.requires_reward,
@@ -108,6 +111,10 @@ _REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
     # A decision model's head edited along a direction read from its own inputs: no language-model form.
     "direction_edit": AlgorithmRequirements(
         "typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"
+    ),
+    # Static parameter operations use Trainer without consuming training data.
+    "weight_edit": AlgorithmRequirements(
+        "token_sequences", requires_rollout=False, requires_teacher=False, executor="local", requires_batch=False
     ),
 }
 
@@ -216,6 +223,8 @@ class TrainJobSpec:
         require_choice(self.algorithm, get_args(AlgorithmName), "TrainJobSpec.algorithm")
         require_choice(self.rollout, get_args(RolloutKind), "TrainJobSpec.rollout")
         require(self.steps > 0, f"steps must be > 0, got {self.steps}")
+        if not ALGORITHM_REQUIREMENTS[self.algorithm].requires_batch:
+            require(self.contract is None, f"{self.algorithm} takes no data contract")
         if self.contract is not None:
             require_choice(self.contract, get_args(ContractKind), "TrainJobSpec.contract")
             defaults = ALGORITHM_REQUIREMENTS[self.algorithm].contract

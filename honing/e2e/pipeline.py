@@ -58,6 +58,7 @@ from honing.core import (
     ModelSource,
     Move,
     NumericsPolicy,
+    ParamMask,
     PolicyEndpoints,
     PruneSelector,
     Quantizer,
@@ -70,6 +71,7 @@ from honing.core import (
     TelemetryStore,
     Trainer,
     TrainJobSpec,
+    UpdatePolicy,
 )
 from honing.e2e.components import PipelineContext, build_component, missing_requirements, resolve_references
 from honing.e2e.tracking import (
@@ -117,11 +119,18 @@ def _selector(spec: Mapping[str, Any]) -> CandidateSelector:
 def _job(entry: Mapping[str, Any]) -> TrainJobSpec:
     """A train step's job; ``numerics`` is ``{"mode": ..., "scheme": {...}}`` for quantization-aware training."""
     teacher, numerics = entry.get("teacher"), entry.get("numerics")
+    update = dict(entry.get("update_policy", {}))
+    for key in ("lora_targets", "trainable_patterns"):
+        if key in update:
+            update[key] = tuple(update[key])
+    if "masks" in update:
+        update["masks"] = tuple(ParamMask(**mask) for mask in update["masks"])
     return TrainJobSpec(
         algorithm=entry.get("algorithm", "sft"),
         steps=int(entry.get("steps", 1)),
         rollout=entry.get("rollout", "none"),
         contract=entry.get("contract"),
+        update_policy=UpdatePolicy(**update),
         teacher=TeacherRef(**teacher) if teacher else None,
         numerics=(
             NumericsPolicy(

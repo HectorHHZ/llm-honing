@@ -103,7 +103,7 @@ def algorithm_requirements_met(job: TrainJobSpec, support: BackendSupport) -> No
     problems = []
     if support.support_for(job.algorithm) == "unsupported":
         problems.append(f"{support.name} cannot run {job.algorithm}")
-    if requirements.contract not in support.contracts:
+    if requirements.requires_batch and requirements.contract not in support.contracts:
         problems.append(f"{support.name} cannot train on {requirements.contract} data")
     if requirements.requires_rollout and job.rollout == "none":
         problems.append(f"{job.algorithm} learns from its own samples and needs a rollout source")
@@ -127,7 +127,12 @@ def batch_meets_contract(job: TrainJobSpec, batch: TrainingBatch | None) -> None
     An on-policy job whose teacher is served by its own engine learns from the scores that engine gave each
     sample when the rollout was collected, so every sample must carry ``teacher_logprobs``.
     """
-    contract = requirements_for(job).contract
+    requirements = requirements_for(job)
+    if not requirements.requires_batch:
+        if batch is not None:
+            raise CampaignRuleError("batch_meets_contract", f"{job.algorithm} takes no batch")
+        return
+    contract = requirements.contract
     if batch is None:
         raise CampaignRuleError(
             "batch_meets_contract", f"no batch meets the {contract} contract {job.algorithm} needs"

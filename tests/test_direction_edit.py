@@ -9,6 +9,7 @@ import pytest
 
 np = pytest.importorskip("numpy")
 safetensors = pytest.importorskip("safetensors.numpy")
+pytest.importorskip("torch")
 
 from honing.backends.jev.direction_edit import (  # noqa: E402
     HEAD_WEIGHT,
@@ -171,6 +172,11 @@ def test_the_trainer_changes_only_the_scalar_head_and_writes_a_servable_manifest
     assert manifest["sourceRevision"] == "source-rev" and manifest["edit"]["tensor"] == HEAD_WEIGHT
     assert (edited / "tokenizer" / "tokenizer.json").exists() and (edited / "backbone_config" / "config.json").exists()
     assert trained_manifest(checkpoint) is None
+    # Compare the complete weight file with the pre-refactor NumPy writer.
+    expected = dict(before)
+    expected[HEAD_WEIGHT] = edited_head(before[HEAD_WEIGHT], unit, 1.0)
+    safetensors.save_file(expected, str(tmp_path / "legacy.safetensors"))
+    assert (edited / "best.safetensors").read_bytes() == (tmp_path / "legacy.safetensors").read_bytes()
 
 
 @pytest.mark.unit
@@ -201,3 +207,31 @@ def test_direction_edit_is_a_decision_algorithm_the_rules_accept() -> None:
     rules.algorithm_requirements_met(job, SUPPORT)
     with pytest.raises(ContractError, match="does not train on token_sequences"):
         TrainJobSpec("direction_edit", contract="token_sequences")
+
+
+@pytest.mark.unit
+def test_general_nanojev_factory_edits_other_parameters_and_keeps_serving_identity(tmp_path: Path) -> None:
+    from honing.backends.jev.weight_edit import weight_edit_trainer
+    from honing.e2e.components import PipelineContext
+
+    checkpoint = _base_checkpoint(tmp_path)
+    base = nanojev_snapshot(checkpoint)
+    context = PipelineContext(root=tmp_path, work_dir=tmp_path / "generic")
+    trainer = weight_edit_trainer(
+        context,
+        pins=str(_pins(tmp_path)),
+        edits=[
+            {"parameter": "norm.weight", "operation": "scale", "value": 1.5},
+            {"parameter": "scalar.bias", "operation": "replace", "value": [0.25]},
+        ],
+    )
+    result = trainer.train(TrainJobSpec("weight_edit"), base, None)
+    output = Path(result.snapshot.checkpoint.location)
+    before = safetensors.load_file(str(checkpoint / "best.safetensors"))
+    after = safetensors.load_file(str(output / "best.safetensors"))
+    assert np.array_equal(after["norm.weight"], before["norm.weight"] * 1.5)
+    assert after["scalar.bias"].tolist() == [0.25]
+    assert np.array_equal(after[HEAD_WEIGHT], before[HEAD_WEIGHT])
+    assert nanojev_snapshot(output) == result.snapshot
+    manifest = trained_manifest(output)
+    assert manifest is not None and json.loads(manifest.read_text())["algorithm"] == "weight_edit"

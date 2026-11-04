@@ -175,6 +175,11 @@ artifacts on the cluster.
 
 ## In Honing
 
+The checkpoint writer is now shared with the [general weight modification trainer](../../system-design/weight-edit.md).
+Use `weight_edit` for configured additions, scaling or replacement of named tensors.
+`direction_edit` retains the NanoJev feature reader and produces an edit plan for the
+same writer. Both enter the campaign through `Trainer` and use its release gate.
+
 `NanoJevDirectionEditTrainer` is a `Trainer` for the `direction_edit`
 algorithm on `typed_decisions` batches, so a campaign schedules it as a train
 move and gates it like any other candidate. Its settings choose the question

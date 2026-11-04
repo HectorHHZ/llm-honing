@@ -33,28 +33,24 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import hashlib
 import json
 import math
 import os
-import shutil
 import sys
-import time
-import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from honing.backends.jev.nanojev import (
     import_nanojev,
     measure,
-    nanojev_snapshot,
     pack_request,
     payload,
-    weights_checksum,
 )
 from honing.backends.jev.trainer import laya_question
+from honing.backends.jev.weight_edit import nanojev_layout
+from honing.backends.weight_edit import EditPlan, TensorEdit, WeightEditTrainer
 
 if TYPE_CHECKING:
     import numpy as np
@@ -175,14 +171,6 @@ def edited_head(weight: np.ndarray, unit: np.ndarray, strength: float) -> np.nda
     return flat.reshape(weight.shape).astype(weight.dtype)
 
 
-def _sha256(path: Path) -> str:
-    checksum = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
-            checksum.update(block)
-    return checksum.hexdigest()
-
-
 def _target_share(inputs: HeadInputs, weight: np.ndarray, question: str | None, target: str) -> float:
     """The share of selected questions whose target option gets the largest scalar score under ``weight``."""
     import numpy as np
@@ -202,12 +190,11 @@ def _target_share(inputs: HeadInputs, weight: np.ndarray, question: str | None, 
     return hits / total if total else float("nan")
 
 
-class NanoJevDirectionEditTrainer:
-    """Satisfies :class:`~honing.core.Trainer` for ``direction_edit`` on NanoJev checkpoints.
+class NanoJevDirectionEditTrainer(WeightEditTrainer):
+    """NanoJev feature reader and direction plan on the general weight-edit trainer.
 
-    ``reader`` gives the head's inputs for a batch's decisions on a base
-    checkpoint; the default runs NanoJev on the GPU in ``settings``. Tests
-    pass one that returns prepared arrays.
+    Existing settings and reader injection remain supported. Checkpoint writes,
+    update-policy checks and result publication use WeightEditTrainer.
     """
 
     support = SUPPORT
@@ -215,89 +202,69 @@ class NanoJevDirectionEditTrainer:
     def __init__(self, settings: DirectionEditSettings, reader: Reader | None = None) -> None:
         self._settings = settings
         self._reader = reader or self._read
+        layout = nanojev_layout(settings.pins_path, settings.model)
+        super().__init__(
+            settings.work_dir,
+            self._plan,
+            algorithm="direction_edit",
+            layout=replace(
+                layout,
+                manifest_fields={
+                    **layout.manifest_fields,
+                    "settings": {
+                        "model": settings.model,
+                        "maxQuestions": settings.max_questions,
+                        "maxLength": settings.max_length,
+                    },
+                },
+            ),
+        )
+        self.support = SUPPORT
 
     def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult:
-        settings = self._settings
-        if job.algorithm != "direction_edit" or job.contract != "typed_decisions":
+        if job.algorithm != "direction_edit" or job.contract not in (None, "typed_decisions"):
             raise ContractError("the direction-edit trainer runs direction_edit on typed_decisions only")
-        if job.update_policy.kind not in ("full", "param_subset"):
-            raise ContractError(f"the direction-edit trainer cannot apply a {job.update_policy.kind} update")
         if batch is None or batch.contract.kind != "typed_decisions" or not batch.decisions:
             raise ContractError("the direction-edit trainer needs a typed_decisions batch with decisions")
-        import numpy as np
-        from safetensors.numpy import load_file, save_file
+        return super().train(job, base, batch)
 
+    def _plan(self, base: ModelSnapshot, batch: TrainingBatch | None) -> EditPlan:
+        import numpy as np
+        from safetensors.numpy import load_file
+
+        assert batch is not None  # validated by the Trainer contract
+        settings = self._settings
         parent = Path(base.checkpoint.location)
-        if weights_checksum(parent) != base.checkpoint.checksum:
-            raise ContractError("the base checkpoint's weights differ from its checksum")
-        pins = json.loads(settings.pins_path.read_text())
-        pin = pins["nanojevModels"][settings.model]
-        run = settings.work_dir / f"edit-{uuid.uuid4().hex[:12]}"
-        run.mkdir(parents=True)
-        started = time.time()
-        try:
-            decisions = batch.decisions[: settings.max_questions]
-            inputs = self._reader(decisions, parent)
-            unit, stats = direction(inputs, settings.question, settings.target)
-            state = load_file(str(parent / "best.safetensors"))
-            if HEAD_WEIGHT not in state:
-                raise ContractError(f"the base checkpoint has no {HEAD_WEIGHT}")
-            before = state[HEAD_WEIGHT]
-            if before.reshape(-1).shape != unit.shape:
-                raise ContractError(f"{HEAD_WEIGHT} has {before.size} entries, the head's input {unit.size}")
-            after = edited_head(before, unit, settings.strength)
-            state[HEAD_WEIGHT] = after
-            w0, w1 = before.reshape(-1).astype(np.float32), after.reshape(-1).astype(np.float32)
-            metrics = {
-                "questions": stats["questions"],
-                "margin_added": settings.strength * stats["margin_per_unit"],
-                "head_cosine": float(w0 @ w1 / (np.linalg.norm(w0) * np.linalg.norm(w1))),
-                "head_direction_cosine": float(w0 @ unit / np.linalg.norm(w0)),
-                "target_argmax_before": _target_share(inputs, before, settings.question, settings.target),
-                "target_argmax_after": _target_share(inputs, after, settings.question, settings.target),
-                "entries_changed": float(int((w0 != w1).sum())),
-            }
-            checkpoint = run / "checkpoint"
-            checkpoint.mkdir()
-            save_file({k: np.ascontiguousarray(v) for k, v in state.items()}, str(checkpoint / "best.safetensors"))
-            shutil.copyfile(parent / "config.json", checkpoint / "config.json")
-            for directory in ("backbone_config", "tokenizer"):
-                shutil.copytree(parent / directory, checkpoint / directory)
-            checksum = _sha256(checkpoint / "best.safetensors")
-            if checksum == base.checkpoint.checksum:
-                raise ContractError("the edit did not change the weights")
-            manifest = {
-                "kind": "trained-nanojev",
-                "repo": "local:honing-nanojev-direction-edit/" + run.name,
-                "revision": checksum,
-                "path": str(checkpoint.resolve()),
-                "weightsSha256": checksum,
-                "parent": {"repo": pin["repo"], "revision": pin["revision"]},
-                "base": {"location": base.checkpoint.location, "checksum": base.checkpoint.checksum},
-                "sourceRevision": pins["nanojevSource"]["revision"],
-                "batchId": batch.batch_id,
-                "algorithm": "direction_edit",
-                "edit": {
-                    "tensor": HEAD_WEIGHT,
-                    "question": settings.question,
-                    "target": settings.target,
-                    "strength": settings.strength,
-                    "direction_norm": stats["direction_norm"],
-                    "direction": unit.tolist(),
-                },
-                "metrics": metrics,
-                "settings": {
-                    "model": settings.model,
-                    "maxQuestions": settings.max_questions,
-                    "maxLength": settings.max_length,
-                },
-                "elapsedSeconds": time.time() - started,
-            }
-            (run / "checkpoint.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        except Exception as error:
-            (run / "error.json").write_text(json.dumps({"error": str(error)}) + "\n")
-            raise
-        return TrainResult(snapshot=nanojev_snapshot(checkpoint), metrics=metrics)
+        inputs = self._reader(batch.decisions[: settings.max_questions], parent)
+        unit, stats = direction(inputs, settings.question, settings.target)
+        state = load_file(str(parent / "best.safetensors"))
+        if HEAD_WEIGHT not in state:
+            raise ContractError(f"the base checkpoint has no {HEAD_WEIGHT}")
+        before = state[HEAD_WEIGHT]
+        if before.reshape(-1).shape != unit.shape:
+            raise ContractError(f"{HEAD_WEIGHT} has {before.size} entries, the head's input {unit.size}")
+        after = edited_head(before, unit, settings.strength)
+        w0, w1 = before.reshape(-1).astype(np.float32), after.reshape(-1).astype(np.float32)
+        metrics = {
+            "questions": stats["questions"],
+            "margin_added": settings.strength * stats["margin_per_unit"],
+            "head_cosine": float(w0 @ w1 / (np.linalg.norm(w0) * np.linalg.norm(w1))),
+            "head_direction_cosine": float(w0 @ unit / np.linalg.norm(w0)),
+            "target_argmax_before": _target_share(inputs, before, settings.question, settings.target),
+            "target_argmax_after": _target_share(inputs, after, settings.question, settings.target),
+        }
+        return EditPlan(
+            edits=(TensorEdit(HEAD_WEIGHT, "replace", after),),
+            metrics=metrics,
+            metadata={
+                "tensor": HEAD_WEIGHT,
+                "question": settings.question,
+                "target": settings.target,
+                "strength": settings.strength,
+                "direction_norm": stats["direction_norm"],
+                "direction": unit.tolist(),
+            },
+        )
 
     # -------------------------------------------------------------- the forward pass
 

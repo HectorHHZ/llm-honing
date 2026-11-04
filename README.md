@@ -114,6 +114,10 @@ What runs each part today, what each method edits, and what it learns from:
 
 ## How a model keeps learning
 
+[Weight modification](system-design/weight-edit.md) also uses the Trainer interface:
+named tensor addition, scaling and replacement, with the same candidate gate and
+release records. NanoJev's direction edit uses this shared checkpoint writer.
+
 A released model plays, and the records of its play feed the training and
 harness changes in the table above.
 
