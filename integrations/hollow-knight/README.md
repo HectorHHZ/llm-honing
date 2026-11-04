@@ -9,6 +9,9 @@ This is a standalone play-and-record demo. It has no campaign runner, reward fun
 or deterministic reset/step contract. The game build, project assets, Unity, REA and model
 weights are operator-supplied; only validation footage and traces are included here.
 
+The [observation/action contract](API.md) defines every field, units, defaults, timing,
+visibility, command rejection and response-validation behavior.
+
 ## Build the isolated demo
 
 The tested target is macOS with Unity 2019.4.2f1, Mono, and the game revision in `pins.json`.
@@ -61,15 +64,17 @@ python integrations/hollow-knight/encode.py --session work/hollow-knight/runs/<s
 ```
 
 Use `--headless` instead of `--capture` for a state/control run without graphics. The client
-refuses stale response IDs, incomplete or invalid probability distributions, and choices that
-are not the model's argmax. A server error or stalled game stops the run and cleans up its
+refuses stale response IDs, changed or truncated required state, missing truncation audits,
+incomplete or invalid probability distributions, and choices that are not the model's argmax.
+A server error or stalled game stops the run and cleans up its
 owned player process; there is no scripted policy fallback. `encode.py` requires a completed
 capture and every numbered render frame before creating a video.
 
 `--timeout` controls the model HTTP timeout (180 seconds by default); the bridge watchdog
-receives the same value plus 30 seconds of headroom. Standard JSON responses are recorded
-before validation; HTTP failures get error records in `decisions.jsonl`. Failed sessions
-do not get a successful `result.json`.
+receives the same value plus 30 seconds of headroom. Raw response bytes, including HTTP error
+bodies and malformed JSON, are saved under `responses/` before decoding or validation.
+`decisions.jsonl` records the request, decoded response when available, raw file reference,
+and rejection/error reason. Failed sessions do not get a successful `result.json`.
 
 ## Observations and timing
 
@@ -78,6 +83,10 @@ left/right walls and local floor probes; and exit collider bounds. `frame`, `fix
 `simulationTime` record render and physics progress. The 11 inputs include walking, jumping,
 dashing and directional sword attacks. The game's own cooldowns and collision rules still
 decide whether an input takes effect.
+
+This is scene-state access: up to six nearest enemies and scene exits are exposed without
+screen-visibility or line-of-sight filtering. The model can receive off-screen information.
+See [API.md](API.md) for the selection rules and the input adapter's held-axis/single-press behavior.
 
 The default input window is 12 rendered frames at 30 fps. Unity game time pauses while the
 model decides. Waiting frames are omitted from capture, so video duration is playback time,
@@ -131,7 +140,7 @@ request/response IDs were matched to game observations, physics advanced at each
 and the resulting video was decoded successfully. The original game assembly hash was unchanged.
 
 The policy chose `jump_left` every time and remained near the left wall; it did not finish
-the level. Health stayed at 5. Mean model latency in this run was about 851 ms. The video
+the level. Health stayed at 5. Mean model latency in this run was about 597 ms. The video
 shows the model-to-game connection, not a trained policy's proficiency or a win-rate estimate.
 No weights or harness training was performed, and no training tracker run was needed.
 
@@ -154,3 +163,23 @@ reconstruction. Portable client, builder and capture checks need no game or mode
 ```sh
 pytest tests/test_hollow_knight.py
 ```
+
+With the supplied Mac build, run the fixed native control sequence separately from the model:
+
+```sh
+python integrations/hollow-knight/verify_native.py --game work/hollow-knight/Demo.app
+```
+
+This explicitly scripted adapter check runs all 11 inputs for 12 frames each in `Spawn`,
+checks movement in both directions, duplicate-command rejection, and watchdog exit after
+stale/future/malformed/invalid commands. It saves command/state pairs and owned-process exit
+receipts under `work/hollow-knight/native-checks/`. It does not measure model performance.
+
+The review-fix validation also includes [native acceptance receipts](validation/native-checks.json),
+[all fixed-input state/action pairs](validation/native-control-trace.jsonl), an actual
+[rejected-context response and native cleanup receipt](validation/rejected-context.json),
+and the [first game render used for the visibility comparison](validation/visibility.png).
+These are author-side native checks; independent reviewer native re-execution remains unverified.
+
+The fresh review-fix capture produced an MP4 byte-identical to the prior recording;
+the updated trace, source/build hashes and native receipts identify the new validation run.

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import threading
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -30,15 +33,165 @@ def answer(actions: dict[str, str], *, identity: int = 7) -> dict:
     }
 
 
+def complete_answer(request: dict) -> dict:
+    response = answer(request["questions"]["action"]["criteria"], identity=request["id"])
+    response.update(
+        stateText="\n".join(request["parts"]["essential"]),
+        trimmed=[],
+        tokenAudit={
+            "action": {
+                "stateTokens": 100,
+                "stateRoom": 1000,
+                "inputTokens": 200,
+                "options": 11,
+                "stateTruncated": False,
+            }
+        },
+    )
+    return response
+
+
+def damage_context(response: dict, problem: str) -> None:
+    audit = response["tokenAudit"]["action"]
+    if problem == "trimmed_essential":
+        response["trimmed"] = [{"section": "essential", "text": "removed current state"}]
+    elif problem == "reviewer_case":
+        response.update(trimmed=["essential"], stateText="different state")
+        audit["stateTruncated"] = True
+    elif problem == "wrong_echo":
+        response["stateText"] += " altered"
+    elif problem == "missing_echo":
+        del response["stateText"]
+    elif problem == "missing_trimmed":
+        del response["trimmed"]
+    elif problem == "malformed_trimmed":
+        response["trimmed"] = {}
+    elif problem == "missing_audit":
+        del response["tokenAudit"]
+    elif problem == "missing_question_audit":
+        response["tokenAudit"] = {}
+    elif problem == "extra_question_audit":
+        response["tokenAudit"]["other"] = dict(audit)
+    elif problem == "malformed_audit":
+        response["tokenAudit"]["action"] = []
+    elif problem == "missing_truncated":
+        del audit["stateTruncated"]
+    elif problem == "truncated":
+        audit["stateTruncated"] = True
+    elif problem == "false_string":
+        audit["stateTruncated"] = "false"
+    elif problem == "false_integer":
+        audit["stateTruncated"] = 0
+    elif problem == "wrong_options":
+        audit["options"] = 10
+    elif problem == "boolean_options":
+        audit["options"] = True
+    elif problem == "over_budget":
+        audit["stateTokens"] = 1001
+    elif problem == "bad_count":
+        audit["stateTokens"] = -1
+    elif problem == "boolean_count":
+        audit["inputTokens"] = True
+    elif problem == "zero_budget_with_unknown_size":
+        audit.update(stateTokens=None, stateRoom=0, inputTokens=0, maxInputTokens=0)
+    else:
+        raise AssertionError(f"Unknown test case: {problem}")
+
+
+@contextmanager
+def response_server(make_response):
+    """Exercise the real HTTP client, including bytes that cannot be decoded as JSON."""
+    responses = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_GET(self):
+            body = b'{"ready":true}'
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            response = make_response(request)
+            status, response = response if isinstance(response, tuple) else (200, response)
+            raw = response if isinstance(response, bytes) else json.dumps(response).encode()
+            responses.append(raw)
+            self.send_response(status)
+            self.end_headers()
+            self.wfile.write(raw)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", responses
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "reviewer_case",
+        "trimmed_essential",
+        "wrong_echo",
+        "missing_echo",
+        "missing_trimmed",
+        "malformed_trimmed",
+        "missing_audit",
+        "missing_question_audit",
+        "extra_question_audit",
+        "malformed_audit",
+        "missing_truncated",
+        "truncated",
+        "false_string",
+        "false_integer",
+        "wrong_options",
+        "boolean_options",
+        "over_budget",
+        "bad_count",
+        "boolean_count",
+        "zero_budget_with_unknown_size",
+    ],
+)
+def test_http_required_context_is_checked_before_an_input(demo, problem: str) -> None:
+    def respond(request):
+        response = complete_answer(request)
+        damage_context(response, problem)
+        return response
+
+    request = demo.request_for({"id": 7, "frame": 0, "health": 5}, 12)
+    with response_server(respond) as (url, _responses):
+        response = demo.DecisionClient(url).decide(request)
+    with pytest.raises(ValueError, match=r"context|stateText|tokenAudit|trimmed"):
+        demo.checked_action(response, request)
+
+
 @pytest.mark.unit
 def test_model_argmax_becomes_the_input_without_a_policy_fallback(demo) -> None:
-    assert demo.checked_action(answer(demo.ACTIONS), 7) == ("right", 1.0)
+    request = demo.request_for({"id": 7, "frame": 0}, 12)
+    assert demo.checked_action(complete_answer(request), request) == ("right", 1.0)
+
+
+@pytest.mark.unit
+def test_null_token_counts_are_supported_without_weakening_the_truncation_audit(demo) -> None:
+    request = demo.request_for({"id": 7, "frame": 0}, 12)
+    response = complete_answer(request)
+    response["tokenAudit"]["action"].update(stateTokens=None, stateRoom=None, inputTokens=None)
+    assert demo.checked_action(response, request) == ("right", 1.0)
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("problem", ["stale", "missing", "nan", "negative", "sum", "non_argmax", "boolean"])
 def test_bad_model_response_cannot_become_an_input(demo, problem: str) -> None:
-    response = answer(demo.ACTIONS)
+    request = demo.request_for({"id": 7, "frame": 0}, 12)
+    response = complete_answer(request)
     result = response["answers"]["action"]
     if problem == "stale":
         response["id"] = 6
@@ -55,16 +208,17 @@ def test_bad_model_response_cannot_become_an_input(demo, problem: str) -> None:
     else:
         result["probabilities"]["right"] = True
     with pytest.raises(ValueError):
-        demo.checked_action(response, 7)
+        demo.checked_action(response, request)
 
 
 @pytest.mark.unit
 def test_rounded_laya_distribution_is_accepted(demo) -> None:
-    response = answer(demo.ACTIONS)
+    request = demo.request_for({"id": 7, "frame": 0}, 12)
+    response = complete_answer(request)
     probabilities = response["answers"]["action"]["probabilities"]
     probabilities.update(dict.fromkeys(probabilities, 0.0909))
     response["answers"]["action"]["choice"] = "wait"
-    assert demo.checked_action(response, 7) == ("wait", 0.0909)
+    assert demo.checked_action(response, request) == ("wait", 0.0909)
 
 
 @pytest.mark.unit
@@ -94,7 +248,7 @@ def test_client_uses_honing_health_and_decision_routes(demo) -> None:
         metadata: ClassVar[dict[str, str]] = {"family": "unit-test"}
 
         def predict(self, parts, questions):
-            return {"answers": answer(questions["action"]["criteria"])["answers"]}
+            return complete_answer({"id": 7, "parts": parts, "questions": questions})
 
     server = DecisionServer(("127.0.0.1", 0), Model())
     thread = threading.Thread(target=server.serve, daemon=True)
@@ -103,7 +257,7 @@ def test_client_uses_honing_health_and_decision_routes(demo) -> None:
         client = demo.DecisionClient(server.url, timeout_seconds=2)
         assert client.health()["metadata"] == {"family": "unit-test"}
         request = demo.request_for({"id": 7, "frame": 0}, 12)
-        assert demo.checked_action(client.decide(request), 7) == ("right", 1.0)
+        assert demo.checked_action(client.decide(request), request) == ("right", 1.0)
     finally:
         server.stop()
         thread.join(timeout=5)
@@ -267,14 +421,13 @@ def test_untracked_csharp_cannot_enter_a_pinned_build(tmp_path: Path) -> None:
         builder.verify_source(tmp_path, revision)
 
 
-@pytest.mark.integration
-@pytest.mark.parametrize("case", ["invalid_response", "http_error", "stalled_game", "success"])
-def test_episode_owns_its_player_on_success_and_failures(demo, tmp_path: Path, monkeypatch, case: str) -> None:
+def write_test_player(tmp_path: Path, *, stall: bool = False) -> Path:
     player = tmp_path / "player"
-    player.write_text("#!/usr/bin/env python3\nstall = " + repr(case == "stalled_game") + "\n" + """
+    player.write_text("#!/usr/bin/env python3\nstall = " + repr(stall) + "\n" + r"""
 import json, os, time
 from pathlib import Path
 session = Path(os.environ['HONING_SESSION_DIR'])
+(session / 'pid.txt').write_text(str(os.getpid()))
 (session / 'watchdog.txt').write_text(os.environ.get('HONING_MODEL_TIMEOUT_SECONDS', '180'))
 identity = 1
 while True:
@@ -293,11 +446,20 @@ while True:
             if command['id'] == identity:
                 if command['action'] == 'stop':
                     raise SystemExit(0)
+                with (session / 'applied.jsonl').open('a') as output:
+                    output.write(json.dumps(command)+'\n')
                 identity += 1
                 break
         time.sleep(0.01)
 """)
     player.chmod(0o755)
+    return player
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", ["invalid_response", "http_error", "stalled_game", "success"])
+def test_episode_owns_its_player_on_success_and_failures(demo, tmp_path: Path, monkeypatch, case: str) -> None:
+    player = write_test_player(tmp_path, stall=case == "stalled_game")
 
     class Client:
         def __init__(self, *_args):
@@ -306,10 +468,10 @@ while True:
         def health(self):
             return {"ready": True, "metadata": {"family": "protocol-test"}}
 
-        def decide(self, request):
+        def decide(self, request, *, raw_path=None):
             if case == "http_error":
                 raise URLError("test server failure")
-            response = answer(demo.ACTIONS, identity=request["id"])
+            response = complete_answer(request)
             if case == "invalid_response":
                 response["answers"]["action"]["choice"] = "left"
             return response
@@ -355,3 +517,59 @@ while True:
             )
         assert not (session / "result.json").exists()
     assert len(launched) == 1 and launched[0].poll() is not None
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "problem", ["success", "reviewer_case", "wrong_echo", "missing_audit", "json", "utf8", "nan", "overflow", "http"]
+)
+def test_http_episode_retains_rejections_without_executing_them(demo, tmp_path: Path, problem: str) -> None:
+    player = write_test_player(tmp_path)
+
+    def respond(request):
+        if problem == "json":
+            return b'{"id": 1, broken JSON'
+        if problem == "utf8":
+            return b"\xff\xfeinvalid response"
+        if problem == "http":
+            return 503, b"upstream model failed"
+        response = complete_answer(request)
+        if problem == "nan":
+            response["answers"]["action"]["probabilities"]["right"] = float("nan")
+        elif problem == "overflow":
+            response["answers"]["action"]["probabilities"]["right"] = float("inf")
+            return json.dumps(response).encode().replace(b"Infinity", b"1e309")
+        elif problem != "success":
+            damage_context(response, problem)
+        return response
+
+    with response_server(respond) as (url, responses):
+        args = SimpleNamespace(
+            game=player,
+            decision_url=url,
+            timeout=2,
+            output_dir=tmp_path / "runs",
+            headless=True,
+            capture=False,
+            scene="Level1",
+            decisions=1,
+            frames=12,
+            observation_timeout=2,
+        )
+        if problem == "success":
+            session = demo.run_episode(args)
+            assert json.loads((session / "applied.jsonl").read_text())["action"] == "right"
+            assert json.loads((session / "result.json").read_text())["decisions"] == 1
+        else:
+            with pytest.raises((ValueError, URLError)):
+                demo.run_episode(args)
+            session = next(args.output_dir.iterdir())
+            assert not (session / "action.json").exists()
+            assert not (session / "applied.jsonl").exists()
+            assert not (session / "result.json").exists()
+            record = json.loads((session / "decisions.jsonl").read_text())
+            assert record["request"]["id"] == 1 and record["error"]
+        raw_path = session / "responses/000001.raw"
+        assert raw_path.read_bytes() == responses[0]
+        with pytest.raises(ProcessLookupError):
+            os.kill(int((session / "pid.txt").read_text()), 0)

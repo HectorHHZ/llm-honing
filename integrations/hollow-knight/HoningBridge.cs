@@ -50,7 +50,7 @@ public class HoningBridge : MonoBehaviour
         public Exit[] exits;
     }
     [Serializable] public class Command
-    { public int id; public string action; public int frames = 12; public string model; public float probability; }
+    { public int id; public string action; public int frames; public string model; public float probability; }
     static readonly string[] Actions = { "wait", "left", "right", "jump_left", "jump_right",
         "dash_left", "dash_right", "attack_left", "attack_right", "attack_up", "attack_down" };
     static bool booted;
@@ -151,14 +151,16 @@ public class HoningBridge : MonoBehaviour
         if (File.Exists(path)) {
             Command command;
             try { command = JsonUtility.FromJson<Command>(File.ReadAllText(path)); }
-            catch (Exception) { return; }
-            if (command == null || command.id != sequence) return;
-            if (command.action == "stop") { Application.Quit(); ready = false; return; }
-            if (!Actions.Contains(command.action) || command.frames < 1 || command.frames > 120) return;
-            modelLabel = command.model + " | " + command.action + " | p=" + command.probability.ToString("F3");
-            remaining = command.frames;
-            HoningInput.Set(command.action);
-            Time.timeScale = 1;
+            catch (Exception) { command = null; }
+            if (command != null && command.id == sequence) {
+                if (command.action == "stop") { Application.Quit(); ready = false; return; }
+                if (Actions.Contains(command.action) && command.frames >= 1 && command.frames <= 120) {
+                    modelLabel = command.model + " | " + command.action + " | p=" + command.probability.ToString("F3");
+                    remaining = command.frames;
+                    HoningInput.Set(command.action);
+                    Time.timeScale = 1;
+                }
+            }
         }
         if (Time.realtimeSinceStartup - waitStart > modelTimeoutSeconds) {
             Debug.LogError("Honing bridge timed out waiting for a model response.");

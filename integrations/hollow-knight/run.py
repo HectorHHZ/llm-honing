@@ -10,6 +10,7 @@ import plistlib
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -58,16 +59,53 @@ def request_for(observation: dict[str, Any], frames: int) -> dict[str, Any]:
     }
 
 
-def checked_action(response: dict[str, Any], expected_id: int) -> tuple[str, float]:
-    """Refuse stale, partial or invalid distributions before sending an input to Unity."""
-    if type(response.get("id")) is not int or response["id"] != expected_id:
+def checked_action(response: dict[str, Any], request: dict[str, Any]) -> tuple[str, float]:
+    """Require the complete submitted state and audited choices before sending input to Unity."""
+    if type(response.get("id")) is not int or response["id"] != request["id"]:
         raise ValueError("Decision response id does not match the observation")
+    # This adapter submits only required state; there is no optional history to prune.
+    if response.get("trimmed") != []:
+        raise ValueError("Decision response trimmed context or omitted its trimmed audit")
+    state = "\n".join(
+        text for section in ("essential", "details", "memory", "logs") for text in request["parts"].get(section, [])
+    )
+    if response.get("stateText") != state:
+        raise ValueError("Decision response stateText differs from the complete submitted context")
+    audits = response.get("tokenAudit")
+    if not isinstance(audits, dict) or set(audits) != set(request["questions"]):
+        raise ValueError("Decision response tokenAudit does not cover the submitted questions")
+    for key, question in request["questions"].items():
+        audit = audits[key]
+        if not isinstance(audit, dict) or audit.get("stateTruncated") is not False:
+            raise ValueError(f"Decision tokenAudit reports truncated or unaudited context for {key}")
+        if type(audit.get("options")) is not int or audit["options"] != len(question["criteria"]):
+            raise ValueError(f"Decision tokenAudit has the wrong option count for {key}")
+        # DJEV reports null token counts. Validate all available counts without inventing them.
+        for field in ("stateTokens", "stateRoom", "inputTokens", "maxInputTokens"):
+            value = audit.get(field)
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(f"Decision tokenAudit has an invalid {field} for {key}")
+        size, room, total, limit = (
+            audit.get(field) for field in ("stateTokens", "stateRoom", "inputTokens", "maxInputTokens")
+        )
+        if (
+            (size is not None and room is not None and size > room)
+            or (size is not None and total is not None and size > total)
+            or (total is not None and limit is not None and total > limit)
+            or (state and any(value == 0 for value in (size, room, total, limit)))
+        ):
+            raise ValueError(f"Decision tokenAudit contradicts complete context for {key}")
     try:
         answer = response["answers"]["action"]
         action, probabilities = answer["choice"], answer["probabilities"]
     except (KeyError, TypeError) as error:
         raise ValueError("Decision response has no action distribution") from error
-    if not isinstance(probabilities, dict) or set(probabilities) != set(ACTIONS) or action not in ACTIONS:
+    if (
+        not isinstance(probabilities, dict)
+        or set(probabilities) != set(ACTIONS)
+        or not isinstance(action, str)
+        or action not in ACTIONS
+    ):
         raise ValueError("Decision response does not cover the offered actions")
     values = list(probabilities.values())
     if any(
@@ -83,6 +121,19 @@ def checked_action(response: dict[str, Any], expected_id: int) -> tuple[str, flo
     return action, float(probabilities[action])
 
 
+def reject_json_constant(value: str) -> Any:
+    """Keep NaN/Infinity out of the JSON trace as well as the game input."""
+    raise ValueError(f"Nonstandard JSON numeric constant: {value}")
+
+
+def finite_json_float(value: str) -> float:
+    """Reject exponent overflow before a decoded response can enter the JSON trace."""
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"Nonfinite JSON number: {value}")
+    return result
+
+
 class DecisionClient:
     """Use Honing's existing health and decide routes without loading a model in the game client."""
 
@@ -95,11 +146,21 @@ class DecisionClient:
         self.url = url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
-    def _call(self, route: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _call(
+        self, route: str, payload: dict[str, Any] | None = None, *, raw_path: Path | None = None
+    ) -> dict[str, Any]:
         body = None if payload is None else json.dumps(payload, allow_nan=False).encode()
         request = urllib.request.Request(self.url + route, body, {"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-            result = json.load(response)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as error:
+            if raw_path is not None:
+                raw_path.write_bytes(error.read())
+            raise
+        if raw_path is not None:
+            raw_path.write_bytes(raw)
+        result = json.loads(raw, parse_constant=reject_json_constant, parse_float=finite_json_float)
         if not isinstance(result, dict):
             raise ValueError("Decision server response must be an object")
         return result
@@ -110,8 +171,8 @@ class DecisionClient:
             raise ValueError("Decision server is not ready")
         return result
 
-    def decide(self, request: dict[str, Any]) -> dict[str, Any]:
-        return self._call("/v1/decide", request)
+    def decide(self, request: dict[str, Any], *, raw_path: Path | None = None) -> dict[str, Any]:
+        return self._call("/v1/decide", request, raw_path=raw_path)
 
 
 def atomic_json(path: Path, data: dict[str, Any]) -> None:
@@ -158,6 +219,7 @@ def run_episode(args: argparse.Namespace) -> Path:
     binary = executable(args.game)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     session = Path(tempfile.mkdtemp(prefix=datetime.now().strftime("%Y%m%d-%H%M%S-"), dir=args.output_dir))
+    (session / "responses").mkdir()
     atomic_json(session / "model.json", health)
     environment = {
         **os.environ,
@@ -185,15 +247,18 @@ def run_episode(args: argparse.Namespace) -> Path:
                         raise RuntimeError("Unity did not exit cleanly after the final action")
                     break
                 request = request_for(observation, args.frames)
+                raw_file = f"responses/{previous:06d}.raw"
+                record: dict[str, Any] = {"request": request, "responseRawFile": raw_file}
                 try:
-                    response = client.decide(request)
+                    response = client.decide(request, raw_path=session / raw_file)
+                    record["response"] = response
+                    action, probability = checked_action(response, request)
                 except Exception as error:
-                    with (session / "decisions.jsonl").open("a") as log:
-                        log.write(json.dumps({"request": request, "error": f"{type(error).__name__}: {error}"}) + "\n")
+                    record["error"] = f"{type(error).__name__}: {error}"
                     raise
-                with (session / "decisions.jsonl").open("a") as log:
-                    log.write(json.dumps({"request": request, "response": response}, allow_nan=False) + "\n")
-                action, probability = checked_action(response, previous)
+                finally:
+                    with (session / "decisions.jsonl").open("a") as log:
+                        log.write(json.dumps(record, allow_nan=False) + "\n")
                 atomic_json(
                     session / "action.json",
                     {
