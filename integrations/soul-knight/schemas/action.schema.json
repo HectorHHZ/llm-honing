@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Experimental Soul Knight action; omitted fields use client defaults",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "move": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "enum": [
+          -1,
+          0,
+          1
+        ]
+      }
+    },
+    "aim": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "number",
+        "minimum": -1000000,
+        "maximum": 1000000
+      }
+    },
+    "attack": {
+      "type": "boolean"
+    },
+    "interact": {
+      "type": "boolean"
+    },
+    "skill": {
+      "type": "boolean"
+    },
+    "switch_weapon": {
+      "type": "boolean"
+    }
+  }
+}
