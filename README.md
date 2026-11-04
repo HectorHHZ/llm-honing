@@ -74,6 +74,10 @@ in the Tank War README shows the request a seat sends, and
 [Using a decision server](integrations/ra2/README.md#using-a-decision-server)
 in the RA2 README runs a match against one.
 
+A standalone [Hollow Knight imitation demo](integrations/hollow-knight/README.md)
+connects a caller-supplied Unity Mono build to those same routes and records the
+game's rendered frames. It is an input-adapter demo; it has no training or campaign runner.
+
 Try the hosted human-versus-model game at **[play.honinglab.com](https://play.honinglab.com/play/)**.
 We plan to open **Tank War Arena** for bring-your-own-model matches. Public
 model submission is not open yet. The current hosted game uses a configured

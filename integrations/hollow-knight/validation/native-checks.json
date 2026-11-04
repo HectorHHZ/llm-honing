@@ -1,0 +1,194 @@
+{
+  "evidenceKind": "author-side native acceptance; independent reviewer native re-execution remains unverified",
+  "verifiedAtUtc": "2026-11-04T04:24:51.683720+00:00",
+  "build": {
+    "gameRevision": "c443c6262ab85d007c8ed6f3abb42a8b077df007",
+    "originalAssemblySha256": "7b72fc6c62ca11e8cd864cbe35055185b072fcda7a621c60d079da2c49b91130",
+    "demoAssemblySha256": "d8b39ca365c5d64a40f44619463b9644b40ad172e3f6ce63cb77aa4b6aa7dc03",
+    "inputReadsRedirected": 7,
+    "originalAppModified": false
+  },
+  "sourceSha256": {
+    "run.py": "79778b2de6292e2b0e5fb23d1acb13a21052884c93043288f95e97bfe667badb",
+    "HoningBridge.cs": "fa20090f25853ad14cd896957280d7ef62c9c21ec834fc8a35c789c7580a2ee3",
+    "build.py": "6e6cd94a8450f7a9a5e5ca402152b0be97be0f73935c546b52772145b9fb249c",
+    "verify_native.py": "20d81170bdf7b31ce0b015bce518fd0aca628077563ff08bcf939edcab3a12a7"
+  },
+  "control": {
+    "kind": "scripted-native-bridge-verification",
+    "modelUsed": false,
+    "scene": "Spawn",
+    "framesPerAction": 12,
+    "actions": [
+      "wait",
+      "right",
+      "left",
+      "jump_right",
+      "attack_left",
+      "dash_right",
+      "attack_up",
+      "attack_down",
+      "jump_left",
+      "dash_left",
+      "attack_right"
+    ],
+    "renderFramesAdvanced": 132,
+    "allPhysicsAndTimeAdvanced": true,
+    "movementBothDirections": true,
+    "duplicateCommandsDidNotAdvance": true,
+    "rejections": [
+      {
+        "case": "stale",
+        "command": {
+          "id": 0,
+          "action": "left",
+          "frames": 12
+        },
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      },
+      {
+        "case": "future",
+        "command": {
+          "id": 999,
+          "action": "left",
+          "frames": 12
+        },
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      },
+      {
+        "case": "missing_frames",
+        "command": {
+          "id": 1,
+          "action": "left"
+        },
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      },
+      {
+        "case": "zero_frames",
+        "command": {
+          "id": 1,
+          "action": "left",
+          "frames": 0
+        },
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      },
+      {
+        "case": "too_many_frames",
+        "command": {
+          "id": 1,
+          "action": "left",
+          "frames": 121
+        },
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      },
+      {
+        "case": "unknown_action",
+        "command": {
+          "id": 1,
+          "action": "teleport",
+          "frames": 12
+        },
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      },
+      {
+        "case": "malformed_json",
+        "command": null,
+        "framesAdvanced": 0,
+        "watchdogExited": true
+      }
+    ],
+    "ownedPlayersExited": true
+  },
+  "nativeProcessReceipts": [
+    {
+      "case": "control",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "future",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "malformed_json",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "missing_frames",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "stale",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "too_many_frames",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "unknown_action",
+      "exited": true,
+      "exitCode": 0
+    },
+    {
+      "case": "zero_frames",
+      "exited": true,
+      "exitCode": 0
+    }
+  ],
+  "failedModelResponse": {
+    "kind": "real-Unity-HTTP-rejection-test",
+    "requiredContextRejected": true,
+    "reason": "Decision response trimmed context or omitted its trimmed audit",
+    "nativeFramesAdvanced": 0,
+    "actionFileCreated": false,
+    "successResultCreated": false,
+    "ownedNativePlayerExited": true,
+    "nativeExitCode": -15,
+    "unrelatedSentinelPreserved": true,
+    "responseBytesRetained": true
+  },
+  "visibilityComparison": {
+    "scene": "Level1",
+    "initialPlayer": {
+      "x": -6.559999942779541,
+      "y": 4.656543254852295
+    },
+    "exposedEnemies": [
+      {
+        "name": "Enemy (1)",
+        "x": 24.369998931884766,
+        "y": 2.1764562129974365,
+        "health": 3
+      },
+      {
+        "name": "Enemy",
+        "x": 102.05529022216797,
+        "y": 10.010944366455078,
+        "health": 3
+      }
+    ],
+    "exposedExits": [
+      {
+        "x": 113.70842742919922,
+        "y": 11.062509536743164,
+        "width": 0.4522705078125,
+        "height": 4.445018768310547
+      }
+    ],
+    "firstRender": "visibility.png",
+    "inspection": "Initial scene-state entities are exposed although the distant enemies and exit are absent from the inspected first render. Discovery uses scene objects, not camera or line-of-sight filtering.",
+    "limitations": "This is an author-side code/render comparison, not an independent visibility audit."
+  }
+}

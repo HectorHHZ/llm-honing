@@ -1,0 +1,12 @@
+{
+  "game": {
+    "url": "https://github.com/DanielDFY/Hollow-Knight-Imitation.git",
+    "revision": "c443c6262ab85d007c8ed6f3abb42a8b077df007",
+    "unityVersion": "2019.4.2f1"
+  },
+  "reaAnalysis": {
+    "url": "https://github.com/morluto/rea",
+    "revision": "8250bf2320ea57aab4e664db4b4d44b8abd2004e",
+    "version": "6.8.0"
+  }
+}
