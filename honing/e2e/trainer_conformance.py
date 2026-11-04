@@ -17,8 +17,8 @@ a campaign:
   supported architecture, and finite metrics;
 - ``fresh``: training again does not overwrite the first result, which a release
   may already point at;
-- ``refuses``: the trainer refuses a missing batch and an algorithm it does not
-  declare, rather than training something else.
+- ``refuses``: the trainer refuses a missing required batch (or an unexpected
+  batch for static edits) and an algorithm it does not declare.
 
 ``scripts/e2e/check_trainer.py`` runs these on the trainer a pipeline config names.
 """
@@ -33,10 +33,12 @@ from typing import get_args
 from honing.campaign import rules
 from honing.core import (
     AlgorithmName,
+    DataContract,
     DataProvider,
     HarnessSpec,
     HoneRelease,
     ModelSnapshot,
+    PolicySample,
     RolloutProvider,
     Task,
     TeacherRef,
@@ -67,9 +69,11 @@ def _batch(
     head: HoneRelease,
     tasks: Sequence[Task],
     samples_per_task: int,
-) -> TrainingBatch:
+) -> TrainingBatch | None:
     """The batch the campaign would hand this job, checked by the campaign's rules."""
     requirements = requirements_for(job)
+    if not requirements.requires_batch:
+        return None
     if requirements.requires_rollout:
         if rollout is None:
             raise ValueError(f"{job.algorithm} learns from rollouts, but the config names no rollout component")
@@ -158,7 +162,7 @@ def check_trainer(
     if not case("support", support):
         return checks
 
-    results: dict[int, tuple[TrainJobSpec, TrainingBatch, TrainResult]] = {}
+    results: dict[int, tuple[TrainJobSpec, TrainingBatch | None, TrainResult]] = {}
     for index, job in enumerate(jobs):
 
         def train(job: TrainJobSpec = job, index: int = index) -> tuple[bool, str]:
@@ -169,7 +173,8 @@ def check_trainer(
                 return False, "; ".join(problems)
             results[index] = (job, batch, result)
             source = "rollouts" if requirements_for(job).requires_rollout else "fixed data"
-            return True, f"{source} batch {batch.batch_id} -> {result.snapshot.checkpoint.checksum[:16]}"
+            label = f"{source} batch {batch.batch_id}" if batch is not None else "configured edits (no batch)"
+            return True, f"{label} -> {result.snapshot.checkpoint.checksum[:16]}"
 
         case(f"train:{job.algorithm}", train)
 
@@ -191,12 +196,23 @@ def check_trainer(
             return False, "no job trained, so there is no valid batch to misuse"
         job, batch, _ = next(iter(results.values()))
         refused = []
-        try:
-            trainer.train(job, base, None)
-        except Exception as error:  # the expected outcome: the trainer refuses
-            refused.append(f"no batch ({type(error).__name__})")
+        if requirements_for(job).requires_batch:
+            try:
+                trainer.train(job, base, None)
+            except Exception as error:  # the expected outcome: the trainer refuses
+                refused.append(f"no batch ({type(error).__name__})")
+            else:
+                return False, f"{job.algorithm} trained with no batch"
         else:
-            return False, f"{job.algorithm} trained with no batch"
+            unexpected = TrainingBatch(
+                "unexpected", DataContract("token_sequences"), samples=(PolicySample((1,), (1,)),)
+            )
+            try:
+                trainer.train(job, base, unexpected)
+            except Exception as error:
+                refused.append(f"unexpected batch ({type(error).__name__})")
+            else:
+                return False, f"{job.algorithm} accepted a batch it does not consume"
         undeclared = _undeclared(trainer)
         if undeclared is not None:
             try:

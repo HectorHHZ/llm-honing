@@ -38,6 +38,8 @@ dev = [
 ]
 # Diagram sources under system-design/ render with matplotlib alone.
 docs = ["matplotlib>=3.8"]
+# CPU checkpoint operations; model-specific feature readers have their own runtime.
+weight-edit = ["torch>=2.4", "safetensors>=0.4"]
 # GEPA parent sampling calls upstream's pure functions; the engine loop is not used.
 # Pinned exactly: Honing's parity tests assert upstream's draws.
 gepa = ["gepa==0.1.4"]
@@ -118,7 +120,7 @@ disallow_untyped_defs = true
 
 # Model libraries exist only in the GPU environment, and backends import them lazily.
 [[tool.mypy.overrides]]
-module = ["torch", "torch.*", "laya", "laya.*", "kev", "kev.*", "peft", "peft.*", "huggingface_hub", "huggingface_hub.*", "transformers", "transformers.*", "safetensors", "safetensors.*"]
+module = ["torch", "torch.*", "laya", "laya.*", "kev", "kev.*", "peft", "peft.*", "huggingface_hub", "huggingface_hub.*", "transformers", "transformers.*", "safetensors", "safetensors.*", "numpy", "numpy.*"]
 ignore_missing_imports = true
 
 # gepa is an optional extra; the documented ".[dev]" setup must type-check without it.
