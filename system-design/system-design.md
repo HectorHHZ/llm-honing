@@ -133,7 +133,7 @@ neither. That attribution is what the `batch_from_one_release` rule reads (P4).
 ```python
 @dataclass(frozen=True)
 class TrainJobSpec:
-    algorithm: AlgorithmName          # sft | distill | opd | gkd | ppo | grpo | dpo
+    algorithm: AlgorithmName          # sft | distill | opd | gkd | ppo | grpo | dpo | direction_edit
     update_policy: UpdatePolicy       # full | lora | param_subset | sparse_mask
     numerics: NumericsPolicy          # bf16 | fp8 | fake_quant_qat (with its QuantScheme)
     rollout: RolloutKind              # none | direct | harness
