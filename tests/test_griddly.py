@@ -76,6 +76,114 @@ def reply_for(request: dict[str, Any]) -> dict[str, Any]:
     return {"id": request["id"], **PublicStateModel().predict(request["parts"], request["questions"])}
 
 
+BROKEN_CONTEXT_AUDITS = [
+    pytest.param({}, id="empty"),
+    pytest.param({"other": {"stateTruncated": False}}, id="wrong-question"),
+    pytest.param({"action": {}}, id="missing-flag"),
+    pytest.param(
+        {"action": {"stateTruncated": False, "options": 4, "stateTokens": 100, "stateRoom": 0, "inputTokens": 120}},
+        id="contradictory-counts",
+    ),
+]
+
+
+@pytest.fixture
+def audit_server(request: pytest.FixtureRequest) -> Any:
+    class AuditModel(PublicStateModel):
+        def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
+            reply = dict(super().predict(parts, questions))
+            reply["tokenAudit"] = request.param
+            return reply
+
+    with DecisionServer(("127.0.0.1", 0), AuditModel()) as server:
+        thread = threading.Thread(target=server.serve, daemon=True)
+        thread.start()
+        try:
+            yield server
+        finally:
+            server.stop()
+            thread.join(timeout=5)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("audit_server", BROKEN_CONTEXT_AUDITS, indirect=True)
+def test_http_refuses_incomplete_context_audits(audit_server: DecisionServer) -> None:
+    request = make_request(public_frame(), GriddlyScenario(), parse_harness(SEED), [])
+    with pytest.raises(ValueError, match=r"context|audit"):
+        DecisionClient(audit_server.url).decide(request)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"stateTruncated": True},
+        {"stateTruncated": 0},
+        {"stateTruncated": 1},
+        {"stateTruncated": "false"},
+        {"stateTruncated": None},
+        {"options": 0},
+        {"options": True},
+        {"options": 4.0},
+        {"stateTokens": -1},
+        {"stateTokens": True},
+        {"stateRoom": 200.0},
+        {"inputTokens": "120"},
+        {"maxInputTokens": False},
+        {"inputTokens": 99},
+        {"maxInputTokens": 119},
+        {"maxInputTokens": 199},
+        {"stateTokens": 0},
+        {"inputTokens": 0},
+    ],
+)
+def test_token_audit_types_and_available_counts_must_be_consistent(change: dict[str, Any]) -> None:
+    request = make_request(public_frame(), GriddlyScenario(), parse_harness(SEED), [])
+    reply = reply_for(request)
+    reply["tokenAudit"]["action"].update(stateTokens=100, stateRoom=200, inputTokens=120, maxInputTokens=220)
+    assert validate_reply(request, reply)
+    reply["tokenAudit"]["action"].update(change)
+    with pytest.raises(ValueError, match="audit"):
+        validate_reply(request, reply)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["stateTokens", "stateRoom", "inputTokens", "options", "stateTruncated"])
+def test_token_audit_requires_fields_even_when_counts_are_unavailable(field: str) -> None:
+    request = make_request(public_frame(), GriddlyScenario(), parse_harness(SEED), [])
+    reply = reply_for(request)
+    # An explicit null audit remains usable for a server without token accounting.
+    assert validate_reply(request, reply)
+    del reply["tokenAudit"]["action"][field]
+    with pytest.raises(ValueError, match="audit"):
+        validate_reply(request, reply)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "audit_server",
+    [
+        {"action": {"stateTruncated": False, "options": 4, "stateTokens": 100, "stateRoom": 200, "inputTokens": 120}},
+        {
+            "action": {
+                "stateTruncated": False,
+                "options": 4,
+                "stateTokens": None,
+                "stateRoom": None,
+                "inputTokens": 120,
+            }
+        },
+    ],
+    indirect=True,
+    ids=["measured", "djev-null-state-counts"],
+)
+def test_http_accepts_measured_and_explicit_null_count_audits(audit_server: DecisionServer) -> None:
+    request = make_request(public_frame(), GriddlyScenario(), parse_harness(SEED), [])
+    reply = DecisionClient(audit_server.url).decide(request)
+    assert reply["id"] == request["id"]
+    assert validate_reply(request, reply)
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "config",
@@ -481,6 +589,50 @@ def test_audit_or_native_replay_detects_changed_records(
         path.write_text(canonical(value))
     with pytest.raises((ValueError, CampaignRuleError)):
         verify_replay(run)
+
+
+@native
+@pytest.mark.integration
+@pytest.mark.parametrize("audit_server", BROKEN_CONTEXT_AUDITS, indirect=True)
+def test_bad_http_audit_does_not_advance_native_game(
+    tmp_path: Path, audit_server: DecisionServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    applied = []
+    original_step = GriddlyEngine.step
+
+    def track_step(self: GriddlyEngine, action: str) -> dict[str, Any]:
+        applied.append(action)
+        return original_step(self, action)
+
+    monkeypatch.setattr(GriddlyEngine, "step", track_step)
+    out = tmp_path / "rejected"
+    with pytest.raises(ValueError, match=r"context|audit"):
+        run_match(GriddlyScenario(seed=7, max_steps=1), out, SEED, policy="model", decision_server=audit_server.url)
+    assert applied == []
+    rows = [json.loads(line) for line in (out / "steps.jsonl").read_text().splitlines()]
+    assert len(rows) == 1 and rows[0]["event"] == "reset" and rows[0]["frame"]["step"] == 0
+    assert (out / "decisions.jsonl").read_text() == ""
+    assert "context" in (out / "error.json").read_text()
+    assert not (out / "result.json").exists()
+
+
+@native
+@pytest.mark.integration
+@pytest.mark.parametrize("audit", BROKEN_CONTEXT_AUDITS)
+def test_replay_refuses_a_record_with_a_removed_or_contradictory_audit(
+    tmp_path: Path, endpoints: StandInEndpoints, audit: dict[str, Any]
+) -> None:
+    out = tmp_path / "run"
+    run_match(GriddlyScenario(seed=7, max_steps=1), out, SEED, policy="model", decision_server=endpoints.server.url)
+    assert verify_replay(out)["verified"] is True
+    path = out / "decisions.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[0]["response"]["tokenAudit"] = audit
+    path.write_text("\n".join(canonical(row) for row in rows) + "\n")
+    with pytest.raises(ValueError, match=r"context|audit"):
+        verify_replay(out)
+    with pytest.raises(ValueError, match=r"context|audit"):
+        decision_samples(rows, group="train", behavior=True)
 
 
 @native

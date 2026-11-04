@@ -34,7 +34,15 @@ class PublicStateModel:
             "answers": {"action": {"type": "choice", "choice": preferred, "probabilities": probabilities}},
             "stateText": state,
             "trimmed": [],
-            "tokenAudit": {"action": {"stateTruncated": False}},
+            "tokenAudit": {
+                "action": {
+                    "stateTruncated": False,
+                    "options": len(options),
+                    "stateTokens": None,
+                    "stateRoom": None,
+                    "inputTokens": None,
+                }
+            },
         }
 
 

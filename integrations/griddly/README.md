@@ -271,6 +271,17 @@ The criteria contain exactly the current native legal actions. All option
 probabilities must be finite, lie in `[0, 1]` and cover every legal option.
 The reply must preserve
 the request ID and complete state text and report no context trimming.
+`tokenAudit` must cover exactly the submitted questions. Each entry must report
+Boolean `stateTruncated: false` and an integer `options` count equal to the
+offered choices. `stateTokens`, `stateRoom` and `inputTokens` must be present;
+explicit `null` counts are permitted for unavailable accounting, including DJEV.
+Available counts, including optional `maxInputTokens`, must be nonnegative
+integers, not booleans. For nonempty state, reported zero counts are rejected.
+State tokens must fit the reported room and input length; reported input length
+and state room must fit an available maximum. Missing, malformed or contradictory
+audits fail before native execution. Replay and training behavior-probability
+export use the same validation. These checks verify the server's report; they
+do not independently tokenize the model input.
 The pinned Laya source rounds each probability to four decimal places. The
 adapter accepts a sum error of at most `N * 0.00005 + 1e-12`, where `N` is
 the number of legal options; the last term covers floating-point comparison.
@@ -412,9 +423,9 @@ framework; a Griddly GEPA experiment has not been run.
 
 ## Replay and records
 
-The integration-local `griddly-match-v1` format is proposed in
-[RFC #148](https://github.com/HectorHHZ/llm-honing/issues/148), which requires
-explicit maintainer acceptance before merge. It does not establish the
+The integration-local `griddly-match-v1` format is accepted in
+[RFC #148](https://github.com/HectorHHZ/llm-honing/issues/148#issuecomment-6623228995).
+It does not establish the
 shared Reef record/data format discussed in
 [#137](https://github.com/HectorHHZ/llm-honing/issues/137).
 

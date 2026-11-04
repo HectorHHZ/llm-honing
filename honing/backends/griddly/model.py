@@ -54,9 +54,33 @@ def validate_reply(request: dict[str, Any], reply: dict[str, Any]) -> dict[str, 
         or reply.get("stateText") != request["parts"]["essential"][0]
         or reply.get("trimmed") != []
         or not isinstance(audit, dict)
-        or any(not isinstance(v, dict) or v.get("stateTruncated") is True for v in audit.values())
+        or set(audit) != set(request["questions"])
     ):
         raise ValueError("model did not preserve complete decision context")
+    for key, question in request["questions"].items():
+        entry = audit[key]
+        if not isinstance(entry, dict) or entry.get("stateTruncated") is not False:
+            raise ValueError("model token audit must explicitly preserve every question's context")
+        if type(entry.get("options")) is not int or entry["options"] != len(question["criteria"]):
+            raise ValueError("model token audit does not cover the offered options")
+        # DJEV reports unavailable state counts as null; missing fields are not an audit.
+        counts = ("stateTokens", "stateRoom", "inputTokens")
+        if any(field not in entry for field in counts):
+            raise ValueError("model token audit is missing token counts")
+        for field in (*counts, "maxInputTokens"):
+            value = entry.get(field)
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError("model token audit counts must be nonnegative integers or null")
+        size, room, total = (entry[field] for field in counts)
+        limit = entry.get("maxInputTokens")
+        if (
+            (size is not None and room is not None and size > room)
+            or (size is not None and total is not None and size > total)
+            or (total is not None and limit is not None and total > limit)
+            or (room is not None and limit is not None and room > limit)
+            or (reply["stateText"] and any(value == 0 for value in (size, room, total, limit)))
+        ):
+            raise ValueError("model token audit contradicts complete decision context")
     answers = reply.get("answers")
     if not isinstance(answers, dict) or set(answers) != {"action"} or not isinstance(answers["action"], dict):
         raise ValueError("model returned incomplete answers")
