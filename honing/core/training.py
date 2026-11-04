@@ -48,7 +48,7 @@ from honing.core.numerics import NumericsPolicy
 from honing.core.structure import ParamMask
 from honing.core.weights import ModelSnapshot
 
-AlgorithmName = Literal["sft", "distill", "opd", "gkd", "ppo", "grpo", "dpo"]
+AlgorithmName = Literal["sft", "distill", "opd", "gkd", "ppo", "grpo", "dpo", "direction_edit"]
 UpdatePolicyKind = Literal["full", "lora", "param_subset", "sparse_mask"]
 RolloutKind = Literal["none", "direct", "harness"]
 TeacherKind = Literal["lineage", "release", "external"]
@@ -105,6 +105,10 @@ _REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
         requires_logprobs=True,
     ),
     "dpo": AlgorithmRequirements("preference_pairs", requires_rollout=False, requires_teacher=False, executor="local"),
+    # A decision model's head edited along a direction read from its own inputs: no language-model form.
+    "direction_edit": AlgorithmRequirements(
+        "typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"
+    ),
 }
 
 ALGORITHM_REQUIREMENTS: Final[Mapping[AlgorithmName, AlgorithmRequirements]] = MappingProxyType(_REQUIREMENTS)
@@ -112,6 +116,8 @@ ALGORITHM_REQUIREMENTS: Final[Mapping[AlgorithmName, AlgorithmRequirements]] = M
 # Training a decision model. Supervised decisions need no rollout; policy
 # gradient over option distributions needs each decision's reward, behavior
 # probabilities, and a group to compare within, for example the seeds of one scenario.
+# A direction edit reads the head's inputs on labelled decisions and moves the
+# head along one direction, with no gradient; it needs the same data as SFT.
 _DECISION_REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
     "sft": AlgorithmRequirements("typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"),
     "grpo": AlgorithmRequirements(
@@ -122,6 +128,9 @@ _DECISION_REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
         requires_reward=True,
         requires_logprobs=True,
         requires_group=True,
+    ),
+    "direction_edit": AlgorithmRequirements(
+        "typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"
     ),
 }
 
