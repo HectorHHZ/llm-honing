@@ -32,6 +32,10 @@ MOVES = {
     "south_west": [-1, -1],
 }
 BUTTONS = ("none", "attack", "interact", "skill", "switch_weapon")
+CONTEXT_SECTIONS = ("essential", "details", "memory", "logs")
+# Pinned Laya rounds each returned probability to four decimal places.
+PROBABILITY_ROUNDING_ERROR = 0.00005
+PROBABILITY_SUM_EPSILON = 1e-12
 
 
 def utc() -> str:
@@ -74,19 +78,18 @@ def actions_match(expected: dict, actual: Any) -> bool:
 
 def write_json(path: Path, value: Any) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
 
 
-def call(endpoint: str, route: str, body: Any = None) -> tuple[Any, bytes]:
+def call(endpoint: str, route: str, body: Any = None) -> bytes:
     request = Request(
         endpoint.rstrip("/") + route,
         data=None if body is None else encoded(body),
         headers={"Content-Type": "application/json"},
     )
     with urlopen(request, timeout=90) as response:
-        raw = response.read()
-    return json.loads(raw), raw
+        return response.read()
 
 
 def unwrap_state(value: dict) -> dict:
@@ -156,16 +159,28 @@ def make_request(state: dict, decision_id: int, previous: list[dict]) -> tuple[d
 
 
 def choose(response: dict, request: dict, aims: dict) -> tuple[dict, dict]:
+    answers = response.get("answers") if isinstance(response, dict) else None
+    if not isinstance(answers, dict) or set(answers) != set(request["questions"]):
+        raise ValueError("Model answers must match the submitted questions")
     selected = {}
     for key, question in request["questions"].items():
-        answer = response["answers"][key]
-        probabilities = answer["probabilities"]
-        if set(probabilities) != set(question["criteria"]):
+        answer = answers[key]
+        if not isinstance(answer, dict):
+            raise ValueError(f"Invalid model answer for {key}")
+        probabilities = answer.get("probabilities")
+        if not isinstance(probabilities, dict) or set(probabilities) != set(question["criteria"]):
             raise ValueError(f"Model probability support differs from offered {key} choices")
-        if not all(isinstance(v, (int, float)) and math.isfinite(v) and v >= 0 for v in probabilities.values()):
-            raise ValueError("Invalid model probability")
-        choice = answer["choice"]
-        if choice not in probabilities or probabilities[choice] != max(probabilities.values()):
+        if not all(type(v) in (int, float) and 0 <= v <= 1 and math.isfinite(v) for v in probabilities.values()):
+            raise ValueError(f"Invalid model probability for {key}: require finite non-boolean numbers in [0,1]")
+        tolerance = len(probabilities) * PROBABILITY_ROUNDING_ERROR + PROBABILITY_SUM_EPSILON
+        if abs(math.fsum(probabilities.values()) - 1) > tolerance:
+            raise ValueError(f"Invalid model probability total for {key}: require 1 within {tolerance:g}")
+        choice = answer.get("choice")
+        if (
+            not isinstance(choice, str)
+            or choice not in probabilities
+            or probabilities[choice] != max(probabilities.values())
+        ):
             raise ValueError("Model choice does not equal returned probability argmax")
         selected[key] = choice
     action = {
@@ -174,6 +189,59 @@ def choose(response: dict, request: dict, aims: dict) -> tuple[dict, dict]:
         **{button: selected["button"] == button for button in BUTTONS if button != "none"},
     }
     return selected, action
+
+
+def validate_context(response: dict, request: dict) -> None:
+    """Require current-state entries; permit only reported, ordered history removal."""
+    retained = {section: list(request["parts"][section]) for section in CONTEXT_SECTIONS}
+    trimmed = response.get("trimmed")
+    if not isinstance(trimmed, list):
+        raise ValueError("Model response must report trimmed context entries")
+    for entry in trimmed:
+        if not isinstance(entry, dict) or set(entry) != {"section", "text"}:
+            raise ValueError("Invalid model context removal entry")
+        section = entry["section"]
+        if section in ("essential", "details"):
+            raise ValueError(f"Model removed required {section} context")
+        # Honing removes logs oldest first, then memory newest first, then details.
+        expected_section = next((key for key in ("logs", "memory", "details") if retained[key]), None)
+        if section not in ("logs", "memory") or section != expected_section:
+            raise ValueError("Model context removal order differs from submitted history")
+        text = retained[section].pop(0 if section == "logs" else -1)
+        if entry["text"] != text:
+            raise ValueError("Model context removal text differs from submitted history")
+    state_text = "\n".join(text for section in CONTEXT_SECTIONS for text in retained[section])
+    if response.get("stateText") != state_text:
+        raise ValueError("Model stateText differs from retained submitted context")
+    audits = response.get("tokenAudit")
+    if not isinstance(audits, dict) or set(audits) != set(request["questions"]):
+        raise ValueError("Model tokenAudit must match the submitted questions")
+    state_token_counts, budgets = set(), set()
+    for key, question in request["questions"].items():
+        audit = audits[key]
+        counts = ("stateTokens", "stateRoom", "inputTokens", "options")
+        if not isinstance(audit, dict) or any(type(audit.get(k)) is not int or audit[k] < 0 for k in counts):
+            raise ValueError(f"Invalid model tokenAudit counts for {key}")
+        if audit.get("stateTruncated") is not False or audit["stateTokens"] > audit["stateRoom"]:
+            raise ValueError(f"Model tokenAudit reports required context truncation for {key}")
+        if audit["options"] != len(question["criteria"]):
+            raise ValueError(f"Model tokenAudit option count differs from offered {key} choices")
+        if (state_text and audit["stateTokens"] == 0) or audit["inputTokens"] < audit["stateTokens"] + audit[
+            "options"
+        ]:
+            raise ValueError(f"Inconsistent model tokenAudit counts for {key}")
+        state_token_counts.add(audit["stateTokens"])
+        budgets.add(audit["stateRoom"] + audit["inputTokens"] - audit["stateTokens"])
+    if len(state_token_counts) != 1 or len(budgets) != 1:
+        raise ValueError("Model tokenAudit disagrees across questions on state size or token budget")
+
+
+def validate_response(response: Any, request: dict, aims: dict) -> tuple[dict, dict]:
+    """Validate the complete model envelope before constructing a native action."""
+    if not isinstance(response, dict) or response.get("id") != request["id"]:
+        raise ValueError("Decision endpoint did not echo request id")
+    validate_context(response, request)
+    return choose(response, request, aims)
 
 
 def run_episode(
@@ -208,7 +276,8 @@ def run_episode(
     run_id = run_id or output.name
     if (output / "decisions.jsonl").exists():
         raise ValueError("Refusing to overwrite an existing trace")
-    health, raw_health = call(endpoint, "/v1/health")
+    raw_health = call(endpoint, "/v1/health")
+    health = json.loads(raw_health)
     if health.get("ready") is not True:
         raise RuntimeError("Actual model endpoint is not ready")
     write_json(output / "model_health.json", health)
@@ -237,6 +306,13 @@ def run_episode(
                 "raw_native_states_preserved_exactly": True,
             },
             "controller_sha256": digest(Path(__file__).read_bytes()),
+            "response_validation": {
+                "probability_decimal_places": 4,
+                "probability_sum_tolerance": "option_count * 0.00005 + 1e-12",
+                "required_context_sections": ["essential", "details"],
+                "optional_context_sections": ["logs", "memory"],
+                "require_untruncated_token_audit": True,
+            },
             "smoke_defaults_only": True,
         },
     )
@@ -277,13 +353,11 @@ def run_episode(
                 write_json(output / "status.json", status)
                 request_start = utc()
                 start = time.perf_counter()
-                response, raw = call(endpoint, "/v1/decide", request)
+                raw = call(endpoint, "/v1/decide", request)
                 request_finish = utc()
                 latency_ms = (time.perf_counter() - start) * 1000
-                if response.get("id") != request["id"]:
-                    raise ValueError("Decision endpoint did not echo request id")
-                selected, action = choose(response, request, aims)
-                execution_start = utc()
+                # Preserve exact bytes before JSON decoding or any response validation.
+                (output / "current_decision.response.raw").write_bytes(raw)
                 pending = {
                     "run_id": run_id,
                     "decision_id": decision_id,
@@ -291,16 +365,37 @@ def run_episode(
                     "request_started_utc": request_start,
                     "request_finished_utc": request_finish,
                     "request": request,
-                    "response": response,
-                    "response_raw": raw.decode(),
+                    "response_raw": raw.decode(errors="replace"),
+                    "response_raw_file": "current_decision.response.raw",
                     "request_sha256": digest(encoded(request)),
                     "response_sha256": digest(raw),
-                    "selected_choices": selected,
-                    "selected_action": action,
                     "native_before": before,
-                    "execution_started_utc": execution_start,
-                    "execution_pending": True,
+                    "validation_pending": True,
+                    "execution_pending": False,
                 }
+                write_json(output / "current_decision.pending.json", pending)
+                try:
+                    response = json.loads(raw.decode())
+                    pending["response"] = response
+                    selected, action = validate_response(response, request, aims)
+                except ValueError as exc:
+                    pending.update(
+                        validation_pending=False,
+                        response_rejected=True,
+                        rejection_reason=f"{type(exc).__name__}: {exc}",
+                    )
+                    write_json(output / "current_decision.pending.json", pending)
+                    write_json(output / "current_decision.rejected.json", pending)
+                    raise
+                execution_start = utc()
+                pending.update(
+                    validation_pending=False,
+                    response_validated=True,
+                    selected_choices=selected,
+                    selected_action=action,
+                    execution_started_utc=execution_start,
+                    execution_pending=True,
+                )
                 write_json(output / "current_decision.pending.json", pending)
                 status.update(
                     stage="executing", selected_choices=selected, action=action, execution_started_utc=execution_start
@@ -349,7 +444,7 @@ def run_episode(
                     "native_after_sha256": digest(encoded(after)),
                     "smoke_defaults_only": True,
                 }
-                trace.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+                trace.write(json.dumps(record, separators=(",", ":")) + "\n")
                 trace.flush()
                 write_json(output / "current_decision.json", record)
                 if not all(checks.values()):

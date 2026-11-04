@@ -241,10 +241,44 @@ three choice questions against one paused native snapshot:
 | `button` | `none`, `attack`, `interact`, `skill`, `switch_weapon` | Exactly the chosen Boolean is true, or all are false for `none`. |
 | `aim` | Four cardinal points five world units from the current player, plus up to six active living scene enemies | The selected absolute point or that enemy's current world position. No nearest-enemy selection or automatic aiming policy is added. |
 
-The driver takes the maximum returned probability for each question and checks
-that the returned `choice` agrees and its probability support matches the
-offered criteria. It preserves the complete request, raw model response,
-choices, mapped action, native request/response and before/after snapshots.
+Before any native `step`, the driver checks the echoed request ID, exact
+question/option sets, and each returned `choice` against a maximum probability
+(ties are allowed). Probabilities must be JSON numbers, excluding booleans,
+finite and in `[0,1]`. Their sum must differ from 1 by at most
+`option_count * 0.00005 + 1e-12`. The pinned Laya source
+(`970dc8c5f63d7b886a68409493f37d569424f933`, `laya/agent.py`,
+`_decode_answers`) rounds each probability to four decimal places: each can
+contribute at most `0.00005` rounding error; `1e-12` allows floating-point
+summation error. This contract covers that serving format, not arbitrary
+decision servers. For example, three `0.3333` values plus zeros total `0.9999`
+and can pass; all-zero, all-two and all-`true` maps fail. No normalization or
+fallback action is applied.
+
+The smoke controller requires every submitted `essential` and `details` entry,
+including player/progress and entity information. Only optional history in
+`logs` and `memory` may be removed: whole logs oldest first, then memory newest
+first, matching Honing's token-budget order. The driver reconstructs retained
+text from the submitted parts and reported `trimmed` entries and requires exact
+equality with `stateText` (newline join in `essential`, `details`, `memory`,
+`logs` order). Unreported changes, fabricated/out-of-order removals and any
+required-section removal are rejected. Honing's server already protects
+`essential`; this receiver also protects the submitted `details`.
+
+`tokenAudit` must cover exactly the submitted questions. Each audit must contain
+nonnegative integer `stateTokens`, `stateRoom`, `inputTokens` and `options`,
+with the offered option count intact and `stateTruncated` exactly `false`.
+State must fit its reported room; counts must be coherent and agree across
+questions on state size and the implied total budget. These checks validate
+the server's report; the adapter does not independently tokenize text or prove
+model comprehension. Whole optional-entry removal is distinct from token
+clipping. The latter is rejected. Oversized required context stops the run;
+reducing the current observation is a separate research choice.
+
+The driver preserves the complete request, raw model response, choices, mapped
+action, native request/response and before/after snapshots. Exact response
+bytes are saved before JSON parsing, ID/context checks or choice validation;
+any rejected response stops the run before native execution and retains its
+request, decision ID and explicit reason locally.
 Float32 aim serialization uses a bounded comparison tolerance; discrete
 movement and button controls remain exact.
 
@@ -271,6 +305,14 @@ outputs. This small example offers fewer choices than the driver:
 ```json
 {
   "id": "example:0",
+  "stateText": "Player is at world (0,0); choose a movement.",
+  "trimmed": [],
+  "tokenAudit": {
+    "move": {
+      "stateTokens":12, "stateRoom":2000, "inputTokens":60,
+      "options":2, "stateTruncated":false
+    }
+  },
   "answers": {
     "move": {
       "type":"choice", "choice":"east",
@@ -280,8 +322,9 @@ outputs. This small example offers fewer choices than the driver:
 }
 ```
 
-The service can return additional model metadata and token/latency audit
-fields; retain its complete response rather than reducing it to this example.
+The token counts above illustrate the audit shape, not measured tokenization.
+The service can return additional model metadata and latency fields; retain
+its complete response rather than reducing it to this example.
 The driver formats full debug state into text, filters inactive enemies, limits
 the displayed entity lists and retains a short action history. Candidate order,
 text precision, argmax readout, frame duration and full-state access are smoke
@@ -292,11 +335,13 @@ The fresh `--output` directory contains:
 | Artifact | Contents |
 | --- | --- |
 | `model_health.json`, `model_health.raw.json` | Parsed health and exact response bytes. A ready endpoint alone is not evidence of its model's identity; inspect its metadata. |
-| `run_manifest.json` | Run ID, endpoint/health identity, controller hash, frame count, reset seed and observation defaults. |
+| `run_manifest.json` | Run ID, endpoint/health identity, controller hash, frame count, reset seed, observation defaults and response-validation policy. |
 | `reset.json` | Reset snapshot when `--reset` is requested. |
 | `decisions.jsonl` | One completed decision per row: HTTP request/raw response, hashes, selected choices/action, execution UTC times and latency, native IPC envelopes and before/after snapshots. |
 | `current_decision.json` | Latest completed row. |
-| `current_decision.pending.json` | Actual HTTP exchange saved before native execution; retained if execution fails and removed after a completed checked row. |
+| `current_decision.response.raw` | Exact latest decision HTTP body, written before decoding/validation; also preserves malformed JSON or invalid UTF-8. |
+| `current_decision.pending.json` | Request, decision ID, raw-body reference/hash and snapshot saved before JSON parsing. Updated after validation; retained on rejection/execution failure and removed after a completed checked row. |
+| `current_decision.rejected.json` | On validation failure, the pending exchange plus parsed response when available, `response_rejected`, explicit `rejection_reason`, and `execution_pending=false`. No action is submitted. |
 | `status.json` | Current phase, completed decisions, last frame/action and stop/error details. |
 
 Model IDs use `run_id:decision_id`; native IPC operations have separate generated
