@@ -92,7 +92,9 @@ class DirectionEditSettings:
     batch's own labels) or an option id (``"fire"``: the direction toward that
     option, whatever the label); a question without that option is skipped.
     ``strength`` multiplies the unit direction; the metrics report the logit
-    margin it adds on the batch. ``max_questions`` caps the forward pass.
+    margin it adds on the batch. For compatibility, ``max_questions`` is the
+    limit on decisions sent to the reader; each decision can contain several
+    questions. It is not a limit on the total number of questions.
     ``pins_path`` names the pinned NanoJev source and release, as the other
     NanoJev backends do; ``source_dir`` is the pinned checkout.
     """

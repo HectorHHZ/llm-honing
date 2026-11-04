@@ -91,7 +91,9 @@ def _apply(weight: Any, edit: TensorEdit) -> Any:
         result = weight.to(dtype) + value if edit.operation == "add" else value
     else:
         raise ContractError(f"{edit.parameter}: unknown operation {edit.operation!r}")
-    result = result.to(weight.dtype).contiguous()
+    # A modifier can reuse one value tensor for several replacements. Give each
+    # output its own storage: safetensors refuses tensors that share memory.
+    result = result.to(weight.dtype).contiguous().clone()
     if not torch.isfinite(result).all():
         raise ContractError(f"{edit.parameter}: edit overflows the stored dtype")
     return result

@@ -108,6 +108,30 @@ def test_sharded_checkpoint_keeps_index_metadata_and_untouched_shard(tmp_path: P
 
 
 @pytest.mark.unit
+def test_replacement_values_can_share_storage_across_parameters(tmp_path: Path) -> None:
+    parent = checkpoint(tmp_path)
+    weights = parent / "model.safetensors"
+    state = st.load_file(str(weights))
+    state["second.weight"] = state["head.weight"].clone()
+    st.save_file(state, str(weights))
+    base = hf_snapshot(parent)
+    before = weights.read_bytes()
+    shared = torch.full((2, 3), 2.0)
+    result = trainer(
+        tmp_path,
+        TensorEdit("head.weight", "replace", shared),
+        TensorEdit("second.weight", "replace", shared.view(2, 3)),
+    ).train(JOB, base, None)
+    output = Path(result.snapshot.checkpoint.location)
+    saved = st.load_file(str(output / "model.safetensors"))
+    assert torch.equal(saved["head.weight"], shared)
+    assert torch.equal(saved["second.weight"], shared)
+    assert weights.read_bytes() == before
+    assert result.metrics["entries_changed"] == 12.0
+    assert hf_snapshot(output) == result.snapshot
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("edit", "message"),
     [

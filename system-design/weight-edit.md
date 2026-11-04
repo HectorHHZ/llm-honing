@@ -20,6 +20,8 @@ direction reader still needs its pinned source and GPU runtime.
 
 Each parameter can appear once in a plan. Operations apply to stored tensors;
 they do not change the model architecture, tokenizer, parameter names or shapes.
+Multiple replacements may reuse the same input tensor or its views. The writer
+gives each output tensor separate storage before saving.
 
 | Operation | Value | Result |
 | --- | --- | --- |
@@ -129,6 +131,8 @@ for a model source that hashes only `best.safetensors`. Use `nanojev_layout` for
 NanoJev. A data-derived typed-decision modifier selects `algorithm="direction_edit"`.
 The existing `NanoJevDirectionEditTrainer` is such an adapter; its public settings
 and feature-reader injection remain available.
+Its legacy `max_questions` setting limits input decisions, each of which can
+contain several questions. It does not cap the total number of extracted questions.
 
 ## Output, failures and validation
 
