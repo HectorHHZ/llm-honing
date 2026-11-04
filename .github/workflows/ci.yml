@@ -98,6 +98,29 @@ jobs:
       - name: Check generic editing and NanoJev compatibility
         run: python -m pytest tests/test_weight_edit.py tests/test_direction_edit.py
 
+  griddly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install the native loader and isolated Griddly runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan1
+          python -m venv integrations/griddly/.venv
+          integrations/griddly/.venv/bin/python -m pip install -r integrations/griddly/requirements-render.txt pytest
+      - name: Check native rules, HTTP decisions, replay and typed training data
+        run: integrations/griddly/.venv/bin/python -m pytest tests/test_griddly.py
+      - name: Check the native runner against Honing contracts
+        run: |
+          integrations/griddly/.venv/bin/python scripts/e2e/check_runner.py \
+            --config configs/e2e/griddly_runner_check.json --work-dir "$RUNNER_TEMP/griddly-check"
+
   craftax:
     runs-on: ubuntu-latest
     timeout-minutes: 15

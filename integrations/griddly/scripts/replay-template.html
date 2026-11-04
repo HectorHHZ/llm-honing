@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spiders Replay</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f5f8;color:#182638;font:15px/1.6 system-ui,"Segoe UI",sans-serif}
+main{max-width:1160px;margin:28px auto;padding:0 24px}h1{font-size:28px;margin:0}h2{font-size:17px;margin:0 0 12px}
+p{margin:8px 0 16px}.muted{color:#5b6b80}.tag{display:inline-block;background:#e2eaf3;border-radius:6px;padding:3px 10px;margin:10px 6px 0 0}
+.layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(290px,1fr);gap:20px;margin-top:20px}
+.card{background:white;border:1px solid #dbe2eb;border-radius:16px;padding:22px;box-shadow:0 3px 12px #18263806}
+canvas{display:block;width:100%;height:auto;background:#f8fafc}.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}.key{font-weight:700;padding:2px 6px;border-radius:4px}
+.player{color:#086950;background:#d3f6e9}.gem{color:#805600;background:#fff0bc}.spider{color:#af233d;background:#ffe2e8}.wall{color:#fff;background:#64748b}
+.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}button,select{font:inherit;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{background:#edf4fc}button:disabled{opacity:.4;cursor:default}#play{background:#175fba;color:#fff;border-color:#175fba;min-width:100px}
+input[type=range]{width:100%;margin:18px 0 0;accent-color:#175fba}.stat{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid #edf0f5}
+.stat strong{text-align:right}.notice{background:#eef5ff;border-left:3px solid #175fba;padding:12px;margin-bottom:18px;border-radius:5px}.win{background:#e5f7ef;border-color:#148761}.end{background:#fff3df;border-color:#d18a16}
+.prob{margin:10px 0}.prob-label{display:flex;justify-content:space-between;font-size:14px}.track{height:7px;background:#edf1f6;border-radius:6px;overflow:hidden;margin-top:4px}.fill{height:100%;background:#769cc7}.chosen .fill{background:#175fba}
+.recent{max-height:145px;overflow:auto;margin:8px 0 0;padding-left:24px}.foot{font-size:13px;color:#607086;margin:18px 0}#source{overflow-wrap:anywhere}section+section{margin-top:22px}
+@media(max-width:760px){main{padding:0 14px;margin:18px auto}.layout{grid-template-columns:1fr}.card{padding:16px}h1{font-size:23px}}
+</style>
+</head>
+<body><main>
+<h1>Spiders: reach the gem, avoid spiders</h1>
+<p class="muted">Replay a recorded game. Use playback, single steps, and the timeline to inspect each action.</p>
+<span class="tag" id="policy"></span><span class="tag" id="task"></span><span class="tag" id="total"></span>
+<div class="layout">
+<div class="card">
+<canvas id="board" aria-label="Game map: player P, gem G, spider S, wall #"></canvas>
+<div class="legend"><span><b class="key player">P</b> Player</span><span><b class="key gem">G</b> Gem</span><span><b class="key spider">S</b> Spider</span><span><b class="key wall">#</b> Wall</span></div>
+<div class="controls"><button id="prev" type="button">← Previous</button><button id="play" type="button">Play</button><button id="next" type="button">Next →</button><button id="reset" type="button">Restart</button><select id="speed" aria-label="Playback speed"><option value="800">Slow</option><option value="400" selected>Normal</option><option value="120">Fast</option></select></div>
+<input id="seek" type="range" min="0" value="0" aria-label="Replay timeline">
+<p class="muted" id="counter" aria-live="polite"></p>
+</div>
+<aside class="card">
+<div class="notice" id="summary"></div>
+<section><h2>Current state</h2><div class="stat"><span>Player position</span><strong id="position"></strong></div><div class="stat"><span>Player heading</span><strong id="facing"></strong></div><div class="stat"><span>Previous action</span><strong id="action"></strong></div><div class="stat"><span>Current state</span><strong id="status"></strong></div><p class="muted" id="legal"></p></section>
+<section><h2>Previous model decision</h2><div id="probabilities"></div></section>
+<section><h2>Recent actions</h2><ol class="recent" id="recent"></ol></section>
+</aside>
+</div>
+<p class="foot">The arrow shows the player's heading. Forward and backward are relative to that heading. Spiders move randomly every three ticks. Walls block movement, and a legal action can still be dangerous. Coordinates start at (0, 0) in the top-left corner.</p>
+<p class="foot" id="source"></p>
+</main>
+<script id="replay-data" type="application/json">__REPLAY_JSON__</script>
+<script>
+"use strict";
+const data=JSON.parse(document.getElementById("replay-data").textContent);
+const names={WAIT:"Wait",TURN_LEFT:"Turn left",FORWARD:"Forward",TURN_RIGHT:"Turn right",BACKWARD:"Backward"};
+const statuses={running:"Running",won:"Gem reached",lost:"Player died",step_limit:"Step limit reached",native_terminal:"Game over"};
+const headings={NONE:"↑ Up (initial)",UP:"↑ Up",RIGHT:"→ Right",DOWN:"↓ Down",LEFT:"← Left"};
+const byId=id=>document.getElementById(id), canvas=byId("board"), ctx=canvas.getContext("2d");
+let index=0,timer=null;
+const last=data.frames.length-1;
+byId("seek").max=last;
+const policy=data.controller==="model"?(data.model||"Model"):({baseline:"Rule-based policy",random:"Random policy",teacher:"Rule teacher",actions:"Prescribed actions"}[data.controller]||data.controller);
+byId("policy").textContent="Controller: "+policy;
+byId("task").textContent="Level "+data.scenario.level_id+" · Seed "+data.scenario.seed;
+byId("total").textContent=last+" steps";
+byId("source").textContent="Run: "+data.name+". Frames use recorded public coordinates and executed actions.";
+const waits=data.decisions.filter(d=>d.action==="WAIT").length;
+byId("summary").textContent=data.result.success?"This run reached the gem. Play the replay to inspect the route.":
+  (waits===last&&last>0?"No win: the controller chose WAIT for all "+last+" steps, so the player stayed in place.":"No win: "+(statuses[data.result.status]||data.result.status)+". Step through the recorded actions to inspect what happened.");
+byId("summary").classList.add(data.result.success?"win":"end");
+function text(x,y,value,color,size=22){ctx.fillStyle=color;ctx.font="700 "+size+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(value,x,y);}
+function draw(frame){
+  const cell=72,pad=28,w=frame.observation.grid.Width,h=frame.observation.grid.Height;
+  canvas.width=w*cell+2*pad;canvas.height=h*cell+2*pad;
+  ctx.fillStyle="#f8fafc";ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let x=0;x<w;x++)text(pad+(x+.5)*cell,12,x,"#64748b",12);
+  for(let y=0;y<h;y++)text(12,pad+(y+.5)*cell,y,"#64748b",12);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){ctx.fillStyle=(x+y)%2?"#f1f5f9":"#fff";ctx.fillRect(pad+x*cell,pad+y*cell,cell,cell);ctx.strokeStyle="#dbe4ed";ctx.strokeRect(pad+x*cell,pad+y*cell,cell,cell);}
+  const priority={wall:0,gem:1,spider:2,gnome:3};
+  const objects=[...frame.observation.objects].sort((a,b)=>(priority[a.Name]??4)-(priority[b.Name]??4));
+  for(const o of objects){
+    const x=pad+(o.Location[0]+.5)*cell,y=pad+(o.Location[1]+.5)*cell;
+    if(o.Name==="wall"){ctx.fillStyle="#64748b";ctx.fillRect(x-32,y-32,64,64);text(x,y,"#","#e5edf5",25);}
+    else if(o.Name==="gem"){ctx.fillStyle="#f5c342";ctx.beginPath();ctx.moveTo(x,y-26);ctx.lineTo(x+25,y);ctx.lineTo(x,y+26);ctx.lineTo(x-25,y);ctx.closePath();ctx.fill();text(x,y,"G","#624500",22);}
+    else if(o.Name==="spider"){
+      ctx.strokeStyle="#b82d48";ctx.lineWidth=3;for(const side of [-1,1])for(let k=-1.5;k<=1.5;k++){ctx.beginPath();ctx.moveTo(x+side*10,y+k*7);ctx.lineTo(x+side*27,y+k*12);ctx.stroke();}
+      ctx.fillStyle="#d84663";ctx.beginPath();ctx.arc(x,y,19,0,2*Math.PI);ctx.fill();text(x,y,"S","#fff",20);
+    }else if(o.Name==="gnome"){
+      ctx.fillStyle="#169b73";ctx.beginPath();ctx.arc(x,y,23,0,2*Math.PI);ctx.fill();text(x,y+3,"P","#fff",23);
+      const v={NONE:[0,-1],UP:[0,-1],RIGHT:[1,0],DOWN:[0,1],LEFT:[-1,0]}[o.Orientation]||[0,-1];
+      const px=-v[1],py=v[0];ctx.fillStyle="#07543e";ctx.beginPath();ctx.moveTo(x+v[0]*34,y+v[1]*34);ctx.lineTo(x+v[0]*23+px*7,y+v[1]*23+py*7);ctx.lineTo(x+v[0]*23-px*7,y+v[1]*23-py*7);ctx.closePath();ctx.fill();
+    }else text(x,y,o.Name.slice(0,1).toUpperCase(),"#334155",22);
+  }
+}
+function render(){
+  const frame=data.frames[index],previous=index?data.decisions[index-1]:null;
+  draw(frame);byId("seek").value=index;byId("counter").textContent="Step "+index+" / "+last;
+  byId("prev").disabled=index===0;byId("next").disabled=index===last;
+  const player=frame.observation.objects.find(o=>o.Name==="gnome");
+  byId("position").textContent=player?"("+player.Location.join(", ")+")":"Player absent";
+  byId("facing").textContent=player?(headings[player.Orientation]||player.Orientation):"—";
+  byId("action").textContent=previous?(names[previous.action]||previous.action)+" · "+previous.action:"Initial state";
+  byId("status").textContent=statuses[frame.status]||frame.status;
+  byId("legal").textContent=frame.legal_actions.length?"Current legal actions: "+frame.legal_actions.map(a=>names[a]||a).join(", "):"The episode has ended.";
+  const probabilities=byId("probabilities");probabilities.replaceChildren();
+  if(previous?.probabilities){
+    for(const [name,probability] of Object.entries(previous.probabilities).sort((a,b)=>b[1]-a[1])){
+      const row=document.createElement("div");row.className="prob"+(name===previous.action?" chosen":"");
+      const label=document.createElement("div");label.className="prob-label";
+      const title=document.createElement("span");title.textContent=(names[name]||name)+(name===previous.action?" (executed)":"");
+      const value=document.createElement("span");value.textContent=(100*probability).toFixed(1)+"%";
+      label.append(title,value);const track=document.createElement("div"),fill=document.createElement("div");track.className="track";fill.className="fill";fill.style.width=(100*probability)+"%";track.append(fill);row.append(label,track);probabilities.append(row);
+    }
+  }else{const note=document.createElement("p");note.className="muted";note.textContent=index===0?"Advance one step to inspect the decision.":(previous?.forced?"Only one action was legal; it was forced.":"This action came from a rule or prescribed policy; no model probabilities were recorded.");probabilities.append(note);}
+  const recent=byId("recent");recent.replaceChildren();recent.start=Math.max(1,index-5);
+  for(let i=Math.max(0,index-6);i<index;i++){const item=document.createElement("li");item.textContent=(names[data.decisions[i].action]||data.decisions[i].action)+" → "+(statuses[data.frames[i+1].status]||data.frames[i+1].status);recent.append(item);}
+}
+function pause(){if(timer!==null)clearInterval(timer);timer=null;byId("play").textContent="Play";}
+function move(step){pause();index=Math.max(0,Math.min(last,index+step));render();}
+function play(){if(timer!==null){pause();return;}if(index===last)index=0;render();byId("play").textContent="Pause";timer=setInterval(()=>{if(index<last){index++;render();}if(index===last)pause();},Number(byId("speed").value));}
+byId("play").onclick=play;byId("prev").onclick=()=>move(-1);byId("next").onclick=()=>move(1);byId("reset").onclick=()=>{pause();index=0;render();};
+byId("seek").oninput=()=>{pause();index=Number(byId("seek").value);render();};
+byId("speed").onchange=()=>{if(timer!==null){pause();play();}};
+document.addEventListener("keydown",event=>{if(["INPUT","SELECT","BUTTON"].includes(event.target.tagName))return;if(event.key==="ArrowLeft"){event.preventDefault();move(-1);}if(event.key==="ArrowRight"){event.preventDefault();move(1);}if(event.code==="Space"){event.preventDefault();play();}});
+render();
+</script>
+</body></html>

@@ -1,0 +1,9 @@
+# Python 3.10/3.11, Windows or Linux x86-64. Independent from Honing/model environments.
+griddly==1.6.7
+gym==0.23.1
+numpy==1.23.5
+PyYAML==6.0.2
+imageio==2.34.2
+pillow==10.4.0
+cloudpickle==2.2.1
+gym-notices==0.0.8
