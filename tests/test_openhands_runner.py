@@ -38,6 +38,7 @@ from honing.core import (
     protocols,
 )
 from honing.e2e.components import PipelineContext
+from honing.harness.endpoints import StaticEndpoint, StaticPolicyEndpoints
 from honing.release import EpisodeEvaluator, Gate, WinLossSelector
 
 REPO = Path(__file__).resolve().parents[1]
@@ -328,6 +329,56 @@ def test_a_gateway_model_is_one_stable_policy(tmp_path: Path) -> None:
     assert endpoints(context, **fields).resolve(PolicyRef(snapshot.checkpoint, snapshot.architecture, "master"))
     with pytest.raises(ContractError, match="two different ways"):
         endpoints(context, **fields, input_usd_per_million=1.0)
+
+
+@pytest.mark.unit
+def test_a_gateway_names_its_key_variable() -> None:
+    keyless = GatewayModel(base_url="https://example.invalid/api/v1", model="vendor/free")
+
+    assert GatewayEndpoints(MODEL).api_key_env(_policy()) == "HONING_TEST_KEY"
+    assert GatewayEndpoints(keyless).api_key_env(_policy(keyless)) is None
+    with pytest.raises(ContractError, match="no gateway model serves"):
+        GatewayEndpoints(keyless).api_key_env(_policy())
+
+
+class _PlainServers:
+    """Resolves every policy to an SGLang server, with no ``api_key_env`` method."""
+
+    def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
+        return PolicyEndpoint("http://127.0.0.1:30000/v1", "/tok/qwen", "qwen", runtime="sglang")
+
+
+@pytest.mark.unit
+def test_a_declared_sglang_server_with_a_key_passes_it_to_the_worker(tmp_path: Path) -> None:
+    server = StaticEndpoint(
+        base_url="http://127.0.0.1:30000/v1",
+        served_model="qwen",
+        tokenizer_location="/tok/qwen",
+        api_key_env="HONING_TEST_KEY",
+    )
+    outcome = _run(_runner(tmp_path, endpoints=StaticPolicyEndpoints({MODEL.checksum: server})))
+
+    root = Path(outcome.workspace_location or "")
+    assert json.loads(outcome.final_output)["key_present"] is True
+    # The key's name, and no prices: only a gateway model has them.
+    assert json.loads((root / "episode.json").read_text())["policy"] == {
+        "base_url": "http://127.0.0.1:30000/v1",
+        "model": "qwen",
+        "api_key_env": "HONING_TEST_KEY",
+    }
+    assert [p for p in root.rglob("*") if p.is_file() and "secret-value-123" in p.read_text(errors="ignore")] == []
+
+
+@pytest.mark.unit
+def test_endpoints_without_a_key_method_give_the_worker_no_key(tmp_path: Path) -> None:
+    outcome = _run(_runner(tmp_path, endpoints=_PlainServers()))
+
+    root = Path(outcome.workspace_location or "")
+    assert json.loads(outcome.final_output)["key_present"] is False
+    assert json.loads((root / "episode.json").read_text())["policy"] == {
+        "base_url": "http://127.0.0.1:30000/v1",
+        "model": "qwen",
+    }
 
 
 @pytest.mark.integration

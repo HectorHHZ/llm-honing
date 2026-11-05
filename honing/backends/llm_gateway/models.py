@@ -139,6 +139,19 @@ class GatewayEndpoints:
         except KeyError:
             raise ContractError(f"no gateway model serves checkpoint {policy.checkpoint.checksum!r}") from None
 
+    def api_key_env(self, policy: PolicyRef) -> str | None:
+        """Returns the name of the variable holding the key for ``policy``'s model, or None if it needs none.
+
+        Runners find this method with ``hasattr``; it is not part of :class:`~honing.core.PolicyEndpoints`.
+
+        Args:
+            policy: A gateway model's stand-in policy.
+
+        Raises:
+            ContractError: No gateway model has that checksum.
+        """
+        return self.model(policy).api_key_env
+
 
 def model_source(context: object, **model: object) -> GatewayModelSource:
     """Builds the model source for a pipeline config.
