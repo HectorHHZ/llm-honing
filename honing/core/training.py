@@ -48,7 +48,7 @@ from honing.core.numerics import NumericsPolicy
 from honing.core.structure import ParamMask
 from honing.core.weights import ModelSnapshot
 
-AlgorithmName = Literal["sft", "distill", "opd", "gkd", "ppo", "grpo", "dpo"]
+AlgorithmName = Literal["sft", "distill", "opd", "gkd", "ppo", "grpo", "dpo", "direction_edit", "weight_edit"]
 UpdatePolicyKind = Literal["full", "lora", "param_subset", "sparse_mask"]
 RolloutKind = Literal["none", "direct", "harness"]
 TeacherKind = Literal["lineage", "release", "external"]
@@ -67,8 +67,11 @@ class AlgorithmRequirements:
     requires_reward: bool = False
     requires_logprobs: bool = False
     requires_group: bool = False
+    requires_batch: bool = True
 
     def data_contract(self) -> DataContract:
+        if not self.requires_batch:
+            raise ContractError("this algorithm takes no data batch")
         return DataContract(
             kind=self.contract,
             requires_reward=self.requires_reward,
@@ -105,6 +108,14 @@ _REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
         requires_logprobs=True,
     ),
     "dpo": AlgorithmRequirements("preference_pairs", requires_rollout=False, requires_teacher=False, executor="local"),
+    # A decision model's head edited along a direction read from its own inputs: no language-model form.
+    "direction_edit": AlgorithmRequirements(
+        "typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"
+    ),
+    # Static parameter operations use Trainer without consuming training data.
+    "weight_edit": AlgorithmRequirements(
+        "token_sequences", requires_rollout=False, requires_teacher=False, executor="local", requires_batch=False
+    ),
 }
 
 ALGORITHM_REQUIREMENTS: Final[Mapping[AlgorithmName, AlgorithmRequirements]] = MappingProxyType(_REQUIREMENTS)
@@ -112,6 +123,8 @@ ALGORITHM_REQUIREMENTS: Final[Mapping[AlgorithmName, AlgorithmRequirements]] = M
 # Training a decision model. Supervised decisions need no rollout; policy
 # gradient over option distributions needs each decision's reward, behavior
 # probabilities, and a group to compare within, for example the seeds of one scenario.
+# A direction edit reads the head's inputs on labelled decisions and moves the
+# head along one direction, with no gradient; it needs the same data as SFT.
 _DECISION_REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
     "sft": AlgorithmRequirements("typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"),
     "grpo": AlgorithmRequirements(
@@ -122,6 +135,9 @@ _DECISION_REQUIREMENTS: dict[AlgorithmName, AlgorithmRequirements] = {
         requires_reward=True,
         requires_logprobs=True,
         requires_group=True,
+    ),
+    "direction_edit": AlgorithmRequirements(
+        "typed_decisions", requires_rollout=False, requires_teacher=False, executor="local"
     ),
 }
 
@@ -207,6 +223,8 @@ class TrainJobSpec:
         require_choice(self.algorithm, get_args(AlgorithmName), "TrainJobSpec.algorithm")
         require_choice(self.rollout, get_args(RolloutKind), "TrainJobSpec.rollout")
         require(self.steps > 0, f"steps must be > 0, got {self.steps}")
+        if not ALGORITHM_REQUIREMENTS[self.algorithm].requires_batch:
+            require(self.contract is None, f"{self.algorithm} takes no data contract")
         if self.contract is not None:
             require_choice(self.contract, get_args(ContractKind), "TrainJobSpec.contract")
             defaults = ALGORITHM_REQUIREMENTS[self.algorithm].contract

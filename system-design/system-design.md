@@ -133,7 +133,7 @@ neither. That attribution is what the `batch_from_one_release` rule reads (P4).
 ```python
 @dataclass(frozen=True)
 class TrainJobSpec:
-    algorithm: AlgorithmName          # sft | distill | opd | gkd | ppo | grpo | dpo
+    algorithm: AlgorithmName          # sft | distill | opd | gkd | ppo | grpo | dpo | direction_edit | weight_edit
     update_policy: UpdatePolicy       # full | lora | param_subset | sparse_mask
     numerics: NumericsPolicy          # bf16 | fp8 | fake_quant_qat (with its QuantScheme)
     rollout: RolloutKind              # none | direct | harness
@@ -153,6 +153,12 @@ trainer.
 | `ppo` | on-policy samples with rewards | ✓ | ✗ | slime | native estimator |
 | `grpo` | grouped samples with rewards | ✓ | ✗ | slime | native estimator |
 | `dpo` | preference pairs | ✗ | ✗ | local | — Slime's data flow has no preference-pair path |
+| `direction_edit` | typed decisions | ✗ | ✗ | local | — feature-derived parameter operations |
+| `weight_edit` | no batch; configured parameter operations | ✗ | ✗ | local | — general checkpoint editor |
+
+[`WeightEditTrainer`](weight-edit.md) supports named tensor addition, scaling and replacement.
+It uses the normal train move and release gate. `requires_batch=False` prevents data
+collection for static `weight_edit` jobs; existing training algorithms still require data.
 
 **Update policy.** `full` trains everything. `lora` passes Megatron's LoRA arguments
 through Slime. `param_subset` selects parameters by name pattern, which Slime supports
@@ -339,7 +345,14 @@ their implementations live outside it. The `ChatModel` client is `LiteLLMChatMod
 (`honing/harness/models.py`, the `litellm` extra), which reaches hosted APIs and local
 servers alike. For an engine Honing did not start, such as an SGLang server already running or
 a remote API, `StaticPolicyEndpoints` (`honing/harness/endpoints.py`) maps checkpoint checksums
-to endpoints declared up front.
+to endpoints declared up front. A method whose proposer is a coding agent rather than one model call, as
+Meta-Harness's is, runs it through `ProposerAgent`: `run(prompt, workdir, *, instructions)`
+starts the agent in a working directory the method has written, with the method's skill
+as its instructions, and returns its exit code; the method then reads back the files the
+agent wrote. `ClaudeCodeProposer` (`honing/harness/proposers/`) runs the `claude` CLI
+headless, with a minimal environment and in its own process group. Meta-Harness scores
+each candidate on the move's tasks, whose trajectories its proposer reads, so its gate
+must run on held-out tasks; its selector refuses a gate on any task the proposer reads.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:

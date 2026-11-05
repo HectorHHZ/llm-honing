@@ -87,6 +87,21 @@ def test_the_pipeline_crosses_every_plane_and_restores_a_release(tmp_path: Path)
 
 
 @pytest.mark.unit
+def test_meta_harness_searches_on_harness_tasks_and_is_gated_on_held_out_ones(tmp_path: Path) -> None:
+    config = REPO / "configs/e2e/meta_harness_dry_run.json"
+
+    code = main(["--config", str(config), "--root", str(REPO), "--work-dir", str(tmp_path / "out")])
+
+    assert code == 0
+    summary = json.loads((tmp_path / "out/summary.json").read_text())
+    assert [step["result"] for step in summary["steps"]] == ["published", "published", "skipped", "restored"]
+    # The gate ran only on its own tasks; the proposer's archive holds only the search tasks.
+    held_out = {task.task_id for task in TASKS}
+    traces = {path.name for path in (tmp_path / "out/meta-harness/archive/traces").glob("*/*")}
+    assert traces and all(name.startswith("train-") for name in traces) and not traces & held_out
+
+
+@pytest.mark.unit
 def test_an_unexpected_result_fails_the_run(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(_config(expect=["rolled back", *EXPECTED[1:], "restored"])))

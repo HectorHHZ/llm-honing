@@ -4,7 +4,7 @@ Small decision models get good at a domain by playing in it, training on what
 happened, and improving the harness around them. Two games show the loop. The
 infra it runs on is being built here.
 
-## Two games
+## Game scenarios
 
 ### Red Alert 2
 
@@ -44,14 +44,51 @@ on the model server; the browser needs no GPU.
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
+### Griddly Spiders
+
+[`integrations/griddly/`](integrations/griddly/README.md) adds native Griddly
+Spiders: reach a gem while avoiding moving enemies. It supplies global
+structured observations, native legal actions, isolated headless episodes,
+verified replay, a typed decision runner/grader, rule-teacher SFT data and
+sampled GRPO rollout data. Its global observation condition is named separately
+from the original local-view task. A project-local launcher and English HTML
+replay support local inspection. The runtime is optional; native HTTP contract
+checks use a rule stand-in. A real NanoJev smoke episode reached the step limit
+after choosing WAIT throughout. Real model training remains to be run.
+
+### Craftax
+
+[`integrations/craftax/`](integrations/craftax/README.md) adds the full Craftax
+roguelike environment with its upstream pixel graphics, 43 native actions,
+headless video recording, and verified action replay. It connects to the same
+typed decision server and provides seeded tasks, an episode runner and a
+grader for achievement goals. The initial task suite covers introductory
+crafting in the full game; it does not measure full-game victory. Game runtime
+dependencies are installed separately, and this integration does not train a
+model or claim a model performance result.
+
+### REA-Issac
+
+[`integrations/rea-issac/`](integrations/rea-issac/README.md) adds an independent
+Isaac-inspired room-combat simulation informed by REA resource analysis. It has
+a real-time browser UI, deterministic action replay, a rule baseline, and the
+same typed model interface with seeded tasks and boss-defeat grading. The CPU
+engine needs only the Python standard library. It is not the original Isaac
+engine and includes no original game assets. Model integration is checked with
+a local protocol stand-in; no model performance result is claimed yet.
+
 ### Bring your own model
 
-Both games talk to a model through the same two HTTP routes the decision server
+The games talk to a model through the same two HTTP routes the decision server
 exposes, `GET /v1/health` and `POST /v1/decide`. Serve a model behind them and
 it can play. [Connect a model](integrations/tank-war/README.md#connect-a-model)
 in the Tank War README shows the request a seat sends, and
 [Using a decision server](integrations/ra2/README.md#using-a-decision-server)
 in the RA2 README runs a match against one.
+
+A standalone [Hollow Knight imitation demo](integrations/hollow-knight/README.md)
+connects a caller-supplied Unity Mono build to those same routes and records the
+game's rendered frames. It is an input-adapter demo; it has no training or campaign runner.
 
 Try the hosted human-versus-model game at **[play.honinglab.com](https://play.honinglab.com/play/)**.
 We plan to open **Tank War Arena** for bring-your-own-model matches. Public
@@ -69,7 +106,7 @@ or a trainer does not care which one it is talking to.
 
 | Model | Base | Checkpoints | Trains in Honing |
 | --- | --- | --- | --- |
-| [NanoJev](https://huggingface.co/C-Tianyu/NanoJev) | Qwen3-0.6B, with a scalar head and a set attention head over candidate paths | `nanojev` | SFT, GRPO |
+| [NanoJev](https://huggingface.co/C-Tianyu/NanoJev) | Qwen3-0.6B, with a scalar head and a set attention head over candidate paths | `nanojev` | SFT, GRPO, direction edit |
 | [Laya](https://huggingface.co/convaiinnovations/laya) | its own encoder and option head | `english`, `typed-decisions` | SFT, GRPO |
 | [Kev](https://github.com/jaredpalmer/kev) | Qwen3.5-0.8B-Base and Qwen3.5-4B-Base, with a LoRA adapter and a pointer head | `kev-0.8b`, `kev-4b` | SFT, GRPO |
 | [StartLux-Decision](https://github.com/StartLuxLabs/Startlux-Decision) | Qwen3.5, dense; the answer is read from the next-token logits of the option letters | `startlux-0.8b`, `startlux-4b`, `startlux-27b` | serving only |
@@ -82,6 +119,7 @@ What runs each part today, what each method edits, and what it learns from:
 | --- | --- | --- | --- |
 | Training | SFT, in the local trainers for Laya, Kev, and NanoJev, and in [Slime](https://github.com/THUDM/slime) for language models | the weights | a teacher's pick at each decision point |
 | | GRPO, in the same trainers | the weights | the result of the model's own sampled matches |
+| | Direction edit, for NanoJev ([report](integrations/tank-war/direction-edit.md)) | the decision head, 1,024 weights, no gradients | the head's own inputs on a teacher's decisions |
 | | On-policy distillation, in Slime for language models | the weights | a teacher's log-probabilities on the student's own samples |
 | Inference | The decision server: one request format for the six families above | | |
 | | [djev](integrations/djev/README.md): DiffusionGemma on a remote server | | |
@@ -91,6 +129,10 @@ What runs each part today, what each method edits, and what it learns from:
 | | Meta-Harness, in review ([#105](https://github.com/HectorHHZ/llm-honing/pull/105)) | | |
 
 ## How a model keeps learning
+
+[Weight modification](system-design/weight-edit.md) also uses the Trainer interface:
+named tensor addition, scaling and replacement, with the same candidate gate and
+release records. NanoJev's direction edit uses this shared checkpoint writer.
 
 A released model plays, and the records of its play feed the training and
 harness changes in the table above.

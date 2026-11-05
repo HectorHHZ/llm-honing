@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Full native debug snapshot; not a restricted research observation",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "honing.soul-knight.native.v1"
+    },
+    "native_frame_path": {
+      "type": "string"
+    },
+    "bridge_frame": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unity_frame": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "advanced_frames": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sim_time": {
+      "type": "number"
+    },
+    "fixed_delta_time": {
+      "type": "number"
+    },
+    "delta_time": {
+      "type": "number"
+    },
+    "paused": {
+      "type": "boolean"
+    },
+    "terminal": {
+      "type": "boolean"
+    },
+    "won": {
+      "type": "boolean"
+    },
+    "scene": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "index"
+      ],
+      "additionalProperties": false
+    },
+    "player": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "hp": {
+              "type": "integer"
+            },
+            "max_hp": {
+              "type": "integer"
+            },
+            "defence": {
+              "type": "integer"
+            },
+            "energy": {
+              "type": "integer"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "vx": {
+              "type": "number"
+            },
+            "vy": {
+              "type": "number"
+            },
+            "speed": {
+              "type": "number"
+            },
+            "dead": {
+              "type": "boolean"
+            },
+            "active": {
+              "type": "boolean"
+            },
+            "elite": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "weapon": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "tag",
+            "x",
+            "y",
+            "hp",
+            "max_hp",
+            "defence",
+            "energy",
+            "dead",
+            "active",
+            "elite",
+            "weapon",
+            "vx",
+            "vy",
+            "speed"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "enemies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "hp": {
+            "type": "integer"
+          },
+          "max_hp": {
+            "type": "integer"
+          },
+          "defence": {
+            "type": "integer"
+          },
+          "energy": {
+            "type": "integer"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "vx": {
+            "type": "number"
+          },
+          "vy": {
+            "type": "number"
+          },
+          "speed": {
+            "type": "number"
+          },
+          "dead": {
+            "type": "boolean"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "elite": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "weapon": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tag",
+          "x",
+          "y",
+          "hp",
+          "max_hp",
+          "defence",
+          "energy",
+          "dead",
+          "active",
+          "elite",
+          "weapon",
+          "vx",
+          "vy",
+          "speed"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "projectiles": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "landmarks": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "progress": {
+      "type": "object"
+    },
+    "executed_action": {
+      "$ref": "action.schema.json"
+    }
+  },
+  "required": [
+    "schema",
+    "native_frame_path",
+    "bridge_frame",
+    "unity_frame",
+    "advanced_frames",
+    "sim_time",
+    "fixed_delta_time",
+    "delta_time",
+    "paused",
+    "terminal",
+    "won",
+    "scene",
+    "player",
+    "enemies",
+    "projectiles",
+    "landmarks",
+    "progress",
+    "executed_action"
+  ],
+  "additionalProperties": false
+}

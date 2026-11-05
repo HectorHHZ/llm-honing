@@ -59,6 +59,7 @@ from tests.fakes.harness import (
     AppendInstructionMethod,
     FakeChatModel,
     FakeEpisodeRunner,
+    FakeProposerAgent,
     FakeTaskGrader,
     StaticPolicyEndpoints,
 )
@@ -85,6 +86,7 @@ def implementations() -> list[tuple[object, type]]:
         (FakeChatModel(["reply"]), protocols.ChatModel),
         (StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (endpoints.StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
+        (FakeProposerAgent(), protocols.ProposerAgent),
         (AppendInstructionMethod(), protocols.EvolveMethod),
         (WinLossSelector(), protocols.CandidateSelector),
         (NoRegressionSelector(0.1), protocols.CandidateSelector),

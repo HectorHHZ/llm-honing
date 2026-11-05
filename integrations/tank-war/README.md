@@ -324,7 +324,12 @@ python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json
 ```
 
 This checks a GEPA move, SFT and GRPO with a CPU stand-in model and trainers. It
-does not demonstrate improved real model weights. See the
+does not demonstrate improved real model weights. For real NanoJev weights,
+`configs/e2e/tank_direction_edit.json` runs a `direction_edit` train move:
+the head moved along one direction read from the planner teacher's rounds,
+with no gradients, then gated on the validation tasks. [direction-edit.md](direction-edit.md)
+has the method, the numbers (0.38 to 0.56 or 0.64 on 64 unseen rounds, against
+0.53 for one epoch of SFT) and how to run it. See the
 [campaign guide](../../scripts/e2e/README.md#the-tank-campaign). The task suite
 contains 16 training, 8 validation and 8 held-out seeds, each played from both
 seats. From this integration directory, regenerate it with:

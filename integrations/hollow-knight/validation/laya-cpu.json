@@ -1,0 +1,62 @@
+{
+  "hardware": "Apple M1 Pro, macOS arm64; Unity player via Rosetta",
+  "unityVersion": "2019.4.2f1",
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "family": "laya",
+    "device": "cpu",
+    "torch": "2.8.0",
+    "laya": "0.3.20"
+  },
+  "build": {
+    "gameRevision": "c443c6262ab85d007c8ed6f3abb42a8b077df007",
+    "originalAssemblySha256": "7b72fc6c62ca11e8cd864cbe35055185b072fcda7a621c60d079da2c49b91130",
+    "demoAssemblySha256": "d8b39ca365c5d64a40f44619463b9644b40ad172e3f6ce63cb77aa4b6aa7dc03",
+    "inputReadsRedirected": 7,
+    "originalAppModified": false
+  },
+  "decisionTransport": "Honing DecisionServer HTTP /v1/health and /v1/decide",
+  "scene": "Level1",
+  "decisions": 50,
+  "stateActionPairsVerified": 50,
+  "actions": {
+    "jump_left": 50
+  },
+  "meanDecisionMs": 596.709,
+  "medianDecisionMs": 558.016,
+  "video": {
+    "file": "laya-cpu.mp4",
+    "width": 960,
+    "height": 540,
+    "fps": 30,
+    "frames": 600,
+    "seconds": 20,
+    "decodedSuccessfully": true,
+    "sha256": "90492d9f0bebdf666f563b88a46dc8424e42ec10b57b81c7d1febc8f5f965f3c",
+    "byteIdenticalToPreviousRecording": true
+  },
+  "simulationSeconds": 18.333334855735302,
+  "healthStart": 5,
+  "healthEnd": 5,
+  "levelTransitions": 0,
+  "originalGameAssemblyUnchanged": true,
+  "heuristicFallback": false,
+  "limitations": [
+    "Inference-only demo; no game-specific training",
+    "The policy repeated jump_left and remained near the left wall",
+    "Rendered-frame windows are not deterministic fixed-duration simulation steps",
+    "Other model families, Linux, and IL2CPP were not validated"
+  ],
+  "verifiedAtUtc": "2026-11-04T04:24:51.683720+00:00",
+  "requiredContextAndAuditVerified": 50,
+  "rawResponseBodiesVerified": 50,
+  "ownedNativePlayerExitedCleanly": true,
+  "sourceSha256": {
+    "run.py": "79778b2de6292e2b0e5fb23d1acb13a21052884c93043288f95e97bfe667badb",
+    "HoningBridge.cs": "fa20090f25853ad14cd896957280d7ef62c9c21ec834fc8a35c789c7580a2ee3",
+    "build.py": "6e6cd94a8450f7a9a5e5ca402152b0be97be0f73935c546b52772145b9fb249c",
+    "verify_native.py": "20d81170bdf7b31ce0b015bce518fd0aca628077563ff08bcf939edcab3a12a7"
+  }
+}

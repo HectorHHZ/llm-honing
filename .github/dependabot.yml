@@ -15,9 +15,18 @@ updates:
     directory: "/"
     schedule: {interval: monthly}
     commit-message: {prefix: "build"}
+    # SGLang runs from its own environment, built from scripts/sglang.lock, and
+    # sglang 0.5.21 pins cuda-tile itself. These three move with the lock, in a
+    # pull request that rebuilds that environment, never in the grouped bump.
+    ignore:
+      - dependency-name: "sglang"
+      - dependency-name: "cuda-tile"
+      - dependency-name: "flash-attn-4"
     groups:
       python-tooling:
         patterns: ["*"]
+        # Each litellm upgrade is its own reviewed pull request (see pyproject.toml).
+        exclude-patterns: ["litellm"]
 
   # The formatter versions live in two files (see tests/test_tooling_pins.py).
   # Without this ecosystem the pip updates above would move one copy and leave

@@ -1,0 +1,31 @@
+{
+  "repository_url": "https://github.com/huyanjueluowei/SoulKnight",
+  "source_commit": "e5574d9e534098dab927c10c5d7928af3e504f89",
+  "source_tree": "5a819e5d8a8bfe17a8069dabc79106c75f1e27d0",
+  "release_tag": "v1.0",
+  "release_tag_commit": "1e3dcb0a4482bb08e1dd29fe451773609dc06801",
+  "release_url": "https://github.com/huyanjueluowei/SoulKnight/releases/download/v1.0/Beta.1.0.zip",
+  "author_binary_independently_rebuilt": false,
+  "release_archive": {
+    "bytes": 26461462,
+    "sha256": "ced16dffde890cdd51041c027ccbe1ddb15f71e07ff91dab6f31b5c30b115312"
+  },
+  "game_files": {
+    "Soul_Knight.exe": {
+      "bytes": 653824,
+      "sha256": "755e5c2afdec6efddc88e280ecf935a5c97462084e27efa3cafd22b2f6cfaa8e"
+    },
+    "UnityPlayer.dll": {
+      "bytes": 28227976,
+      "sha256": "4becc3cef8ffa6831834607e73e33a6bd2b4a4f5868c02b15483fd7dc888b6ec"
+    },
+    "Soul_Knight_Data/Managed/Assembly-CSharp.dll": {
+      "bytes": 27648,
+      "sha256": "64b1cdefe9987022e7309e1cb4203d7481e0c5438cda8c64f9fd0a115dc72d26"
+    }
+  },
+  "expected_patch_counts": {
+    "guarded_updates": 15,
+    "redirected_input_calls": 12
+  }
+}

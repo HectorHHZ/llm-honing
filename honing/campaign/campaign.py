@@ -367,6 +367,8 @@ class Campaign:
         self, job: TrainJobSpec, head: HoneRelease, policy: PolicyRef, *, release_id: str | None
     ) -> TrainingBatch | None:
         requirements = requirements_for(job)
+        if not requirements.requires_batch:
+            return None
         if not requirements.requires_rollout:
             return self._data.next_batch(requirements.data_contract())
         if self._rollout is None:
