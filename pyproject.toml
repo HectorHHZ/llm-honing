@@ -43,6 +43,8 @@ weight-edit = ["torch>=2.4", "safetensors>=0.4"]
 # GEPA parent sampling calls upstream's pure functions; the engine loop is not used.
 # Pinned exactly: Honing's parity tests assert upstream's draws.
 gepa = ["gepa==0.1.4"]
+# Opt-in ALE game environment; the Atari ROM is external and is not packaged.
+space-invaders = ["gymnasium>=1.0,<2", "ale-py>=0.10,<1", "numpy>=1.24"]
 # The ChatModel client (honing/harness/models.py). Pinned exactly, never a range: 1.82.7 and 1.82.8
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
 litellm = ["litellm==1.106.6"]
@@ -141,6 +143,11 @@ ignore_missing_imports = true
 # Craftax runs in its own optional game environment, outside base Honing.
 [[tool.mypy.overrides]]
 module = ["craftax", "craftax.*", "jax", "jax.*", "numpy", "numpy.*", "imageio", "imageio.*"]
+ignore_missing_imports = true
+
+# The Atari game stack is an optional extra; CI type-checks the base install.
+[[tool.mypy.overrides]]
+module = ["ale_py", "ale_py.*", "gymnasium", "gymnasium.*", "numpy", "numpy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

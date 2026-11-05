@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "name": "space-invaders-landing-priority-jev",
+  "runner": "lane_pilot.py",
+  "runtime_files": [
+    "lane_pilot.py",
+    "lane_controller.py",
+    "solo_intercept.py",
+    "lane_io.py"
+  ],
+  "environment": {
+    "id": "ALE/SpaceInvaders-v5",
+    "observation": "OCAtari RAM objects and visible RGB frame",
+    "frameskip": 4,
+    "sticky_action_probability": 0.25,
+    "full_game_max_steps": 100000
+  },
+  "model": {
+    "family": "nanojev",
+    "policy": "jev",
+    "weights_sha256": "287ff07466032fa0a8054783300ac4a3123f6c6a2bc691815a4f60287b36913b",
+    "checkpoint_location": "external"
+  },
+  "runner_args": [
+    "--replan-steps", "16",
+    "--model-choice-mode", "all",
+    "--scoreless-question",
+    "--balanced-option-order",
+    "--solo-predictive",
+    "--calibrated-geometry",
+    "--fire-while-dodging",
+    "--landing-priority"
+  ]
+}
