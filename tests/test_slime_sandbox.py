@@ -37,6 +37,9 @@ from tests.conftest import REPO_ROOT, require
 
 DOCKERFILE = REPO_ROOT / "honing" / "backends" / "slime" / "sandbox.Dockerfile"
 SMALL = ContainerLimits(cpus=1.0, memory_bytes=512 * 2**20, pids=256)
+# The capabilities the container keeps, and their bit numbers (linux/capability.h).
+CAPABILITIES = ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL")
+CAPABILITY_BITS = {"CHOWN": 0, "DAC_OVERRIDE": 1, "FOWNER": 3, "KILL": 5}
 
 Factory = Callable[..., LocalContainerSandbox]
 
@@ -142,6 +145,55 @@ def test_ensure_agent_user_makes_an_agent_that_owns_the_workdir(
     assert asyncio.run(scenario()) == ["agent\n/home/agent\n", "agent\n", "*\n"]
 
 
+@pytest.mark.integration
+def test_root_writes_the_agents_config_and_reads_its_private_files(
+    make_sandbox: Factory, slime_sandbox: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ClaudeCodeHarness.write_config writes into the agent's home as root, and the episode
+    # worker reads the agent's transcript and workspace as root; the agent's files need not
+    # be readable by anyone else.
+    harness = _slime_harness(monkeypatch).ClaudeCodeHarness()
+
+    async def scenario() -> list[str]:
+        async with make_sandbox() as sandbox:
+            await sandbox.exec("mkdir -p /workspace", check=True)
+            await slime_sandbox.ensure_agent_user(sandbox, "/workspace")
+            await sandbox.exec("chmod 700 ~ && umask 077 && echo private > ~/notes", user="agent", check=True)
+            await harness.write_config(sandbox, None)  # write_config does not read its context
+            return [
+                await sandbox.read_file("/home/agent/notes"),
+                (await sandbox.exec("cat ~/.claude/settings.json", user="agent"))[1],
+            ]
+
+    notes, settings = asyncio.run(scenario())
+    assert notes == "private\n"
+    assert json.loads(settings) == {"hasCompletedOnboarding": True, "bypassPermissionsModeAccepted": True}
+
+
+@pytest.mark.integration
+def test_root_stops_the_agent_users_processes(make_sandbox: Factory, slime_sandbox: ModuleType) -> None:
+    # How the episode worker stops the agent: root kills every process of the agent user.
+    async def scenario() -> tuple[str, int, str]:
+        async with make_sandbox() as sandbox:
+            await sandbox.exec("mkdir -p /workspace", check=True)
+            await slime_sandbox.ensure_agent_user(sandbox, "/workspace")
+            await sandbox.exec("setsid sleep 300 > /dev/null 2>&1 < /dev/null &", user="agent", check=True)
+            before = (await sandbox.exec("pgrep -u agent -x sleep"))[1]
+            code, _, err = await sandbox.exec("pkill -KILL -u agent")
+            # A killed process lingers as a zombie until the container's init reaps it.
+            survivors = "?"
+            for _ in range(50):
+                survivors = (await sandbox.exec("ps -u agent -o stat= | grep -v '^Z' || true"))[1]
+                if not survivors:
+                    break
+                await asyncio.sleep(0.1)
+            assert before.strip(), "the agent's sleep did not start"
+            return err, code, survivors
+
+    err, code, survivors = asyncio.run(scenario())
+    assert (code, survivors) == (0, ""), err
+
+
 def _slime_harness(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Import ``slime.agent.harness`` without torch.
 
@@ -175,7 +227,8 @@ def test_install_npm_cli_installs_through_the_sandbox(
     make_sandbox: Factory, slime_sandbox: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The Node and CLI tarballs are fakes with the real layout: a top directory whose bin/
-    # holds node, npm and npx, and an npm package under package/.
+    # holds node, npm and npx, and an npm package under package/. Node's own tarball is
+    # owned by its builder, not root, so root's tar hands each file to that owner.
     common = _slime_harness(monkeypatch).common
     npm = (
         "#!/bin/bash\n"
@@ -186,6 +239,7 @@ def test_install_npm_cli_installs_through_the_sandbox(
     node_tarball = _tarball(
         tmp_path / "node22.tar",
         {"node-v22/bin/node": "#!/bin/bash\necho v22.0.0-fake\n", "node-v22/bin/npm": npm, "node-v22/bin/npx": npm},
+        owner=1000,
     )
     cli_tarball = _tarball(tmp_path / "cli.tgz", {"package/cli.sh": "#!/bin/bash\necho fake-claude 0.0.1\n"})
 
@@ -203,12 +257,13 @@ def test_install_npm_cli_installs_through_the_sandbox(
     assert (code, out) == (0, "fake-claude 0.0.1\nv22.0.0-fake\n")
 
 
-def _tarball(path: Path, files: dict[str, str]) -> Path:
+def _tarball(path: Path, files: dict[str, str], *, owner: int = 0) -> Path:
     with tarfile.open(path, "w:gz" if path.suffix == ".tgz" else "w") as archive:
         for name, text in files.items():
             data = text.encode()
             info = tarfile.TarInfo(name)
             info.size, info.mode = len(data), 0o755
+            info.uid = info.gid = owner
             archive.addfile(info, io.BytesIO(data))
     return path
 
@@ -347,13 +402,16 @@ def test_exec_as_a_missing_user_is_dockers_failure(make_sandbox: Factory) -> Non
 
 @pytest.mark.integration
 def test_the_container_has_the_limits_and_the_host_alias(make_sandbox: Factory) -> None:
-    async def scenario() -> tuple[dict[str, object], str]:
+    async def scenario() -> tuple[dict[str, object], str, str]:
         async with make_sandbox() as sandbox:
             inspected = json.loads(docker("inspect", sandbox.sandbox_id).stdout)[0]
             hosts = (await sandbox.exec("cat /etc/hosts"))[1]
-            return inspected, hosts
+            bounding = (await sandbox.exec("sed -n 's/^CapBnd:\\t//p' /proc/self/status"))[1]
+            return inspected, hosts, bounding
 
-    inspected, hosts = asyncio.run(scenario())
+    inspected, hosts, bounding = asyncio.run(scenario())
+    # What the runtime applied, not what was asked for: no process in the container can gain another.
+    assert int(bounding, 16) == sum(1 << CAPABILITY_BITS[name] for name in CAPABILITIES)
     host_config = inspected["HostConfig"]
     assert host_config["NanoCpus"] == 10**9
     assert host_config["Memory"] == host_config["MemorySwap"] == 512 * 2**20
@@ -862,3 +920,15 @@ def test_each_sandbox_has_its_own_name_before_it_exists() -> None:
     assert first.sandbox_id != second.sandbox_id
     assert first.sandbox_id.startswith("honing-sandbox-")
     assert first.create_argv()[first.create_argv().index("--name") + 1] == first.sandbox_id
+
+
+@pytest.mark.unit
+def test_the_container_keeps_only_the_capabilities_root_needs() -> None:
+    sandbox = LocalContainerSandbox("image")
+    argv = sandbox.create_argv()
+    options = argv[: argv.index("image")]
+    dropped = [options[i + 1] for i, option in enumerate(options) if option == "--cap-drop"]
+    added = [options[i + 1] for i, option in enumerate(options) if option == "--cap-add"]
+    assert dropped == ["ALL"]
+    assert sorted(added) == sorted(CAPABILITIES)
+

@@ -18,6 +18,8 @@ this module is the smallest one. The agent reaches the host as ``host.docker.int
 Docker Desktop), so an adapter on the host is at ``http://host.docker.internal:<port>``.
 On Linux it must listen on the bridge gateway's address, not only on 127.0.0.1.
 
+The container keeps four Linux capabilities, the ones root's work for the agent needs
+(``_CAPABILITIES``), and no process in it can gain more (``no-new-privileges``).
 What the container does not limit: outbound network (the default ``bridge`` network
 reaches the internet and the host's network) and disk use.
 """
@@ -64,6 +66,13 @@ _DOCKER_FAILURE = re.compile(
     r"|OCI runtime exec failed)"
 )
 _DOCKER_28_MISSING_USER = re.compile(r"^unable to find user ")
+# The only capabilities the container keeps. Root needs them for slime's helpers and the
+# episode worker: CHOWN for useradd's home and the chowns to the agent user, DAC_OVERRIDE
+# to read and write in the agent's files when its home is private, FOWNER for tar restoring
+# modes on files it has handed to their owner (Node's tarball is not root's), and KILL to
+# stop the agent user's processes. ``docker exec --user`` works without SETUID and SETGID,
+# and nothing run as root here switches user, so neither is kept.
+_CAPABILITIES = ("CHOWN", "DAC_OVERRIDE", "FOWNER", "KILL")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _WRITE_SCRIPT = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"'
 
@@ -257,6 +266,9 @@ class LocalContainerSandbox:
             f"{self.host_alias}:{self.host_address}",
             "--security-opt",
             "no-new-privileges",
+            "--cap-drop",
+            "ALL",
+            *(argument for capability in _CAPABILITIES for argument in ("--cap-add", capability)),
             self.image,
             "sleep",
             str(self.lifetime_seconds),
