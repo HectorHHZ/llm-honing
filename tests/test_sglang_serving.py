@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
+from honing.backends.hf_checkpoint import checkpoint_checksum, hf_snapshot
 from honing.backends.jev.kev import STATE_OVERRUN
-from honing.backends.sglang import checkpoint_checksum, hf_snapshot
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
 from honing.backends.sglang.lettered import LetteredDecisionModel, LetteredPrompts, LetteredSettings, options_of
 from honing.core import ContractError, PolicyRef

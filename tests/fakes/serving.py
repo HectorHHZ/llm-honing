@@ -18,7 +18,7 @@ import struct
 from pathlib import Path
 from typing import Any
 
-from honing.backends.sglang.checkpoint import hf_snapshot, weight_shards
+from honing.backends.hf_checkpoint import hf_snapshot, weight_shards
 from honing.core import BackendSupport, ModelSnapshot, TrainingBatch, TrainJobSpec, TrainResult
 
 SUPPORT = BackendSupport(

@@ -9,12 +9,13 @@ and gradients clipped at 1.0. Examples are NanoJev's candidate paths from
 ``prepare_examples``, packed exactly as inference packs them
 (:func:`honing.backends.jev.nanojev.pack_request`).
 
-The data handling is the Laya trainer's (:mod:`honing.backends.jev.trainer`):
-every question of every decision is one example; identical inputs are
-deduplicated and must agree on their label; examples from validation groups
-are held out and must not also appear in training. ``sft`` keeps the
-checkpoint with the best validation loss; ``grpo`` runs the same clipped
-policy gradient as the other trainers and keeps the final weights. The trained
+The data handling, the losses and the loops are the ones every decision-model
+trainer shares (:mod:`honing.backends.jev.decision_training`): every question
+of every decision is one example; identical inputs are deduplicated and must
+agree on their label; examples from validation groups are held out and must
+not also appear in training. ``sft`` keeps the checkpoint with the best
+validation loss; ``grpo`` runs the clipped policy gradient and keeps the final
+weights. The trained
 checkpoint has NanoJev's layout (``best.safetensors``, ``config.json``,
 ``backbone_config/``, ``tokenizer/``), so ``DecisionPredictor`` and
 :class:`~honing.backends.jev.nanojev.NanoJevDecisionModel` load it directly.
@@ -25,19 +26,28 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
-import math
 import os
 import random
 import re
 import shutil
-import statistics
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from honing.backends.jev.decision_training import (
+    Example,
+    Forward,
+    decision_examples,
+    deduplicated_split,
+    group_advantages,
+    policy_gradient_epochs,
+    policy_gradient_record,
+    record_start,
+    supervised_epochs,
+)
 from honing.backends.jev.laya import gpu_lock
 from honing.backends.jev.nanojev import (
     DOWNLOAD_PATTERNS,
@@ -48,7 +58,6 @@ from honing.backends.jev.nanojev import (
     payload,
     weights_checksum,
 )
-from honing.backends.jev.trainer import laya_question, separate_unique
 from honing.core import (
     BackendSupport,
     ContractError,
@@ -167,42 +176,29 @@ class NanoJevTrainer:
 
     def _examples(
         self, decisions: Sequence[DecisionSample], loaded: _Loaded, advantages: Sequence[float] | None = None
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    ) -> tuple[list[Example], list[Example], dict[str, int]]:
         """Every question of every decision as NanoJev's example (candidate paths), packed as inference packs it."""
         tokenizer, limit = loaded.predictor.tokenizer, loaded.predictor.limit
-        held_out = re.compile(self._settings.validation_groups)
-        items: list[dict[str, Any]] = []
-        validation: list[dict[str, Any]] = []
-        packing = {"maxInputTokens": 0, "trimmedRequests": 0}
-        for index, decision in enumerate(decisions):
-            if advantages is not None and advantages[index] == 0.0:
-                continue
-            parts = {name: list(lines) for name, lines in decision.parts}
-            questions = {key: laya_question(q) for key, q in decision.questions}
-            state, audit, trimmed = pack_request(
-                parts,
-                questions,
-                functools.partial(measure, loaded.prepare_examples, tokenizer, questions=questions),
-                limit,
-            )
-            packing["maxInputTokens"] = max(packing["maxInputTokens"], max(v["inputTokens"] for v in audit.values()))
-            packing["trimmedRequests"] += bool(trimmed)
-            chosen = dict(decision.chosen)
-            behavior = dict(decision.behavior_probs or ())
-            target = (
-                validation
-                if advantages is None and decision.group is not None and held_out.search(decision.group)
-                else items
-            )
+
+        def pack(parts: dict[str, list[str]], questions: dict[str, dict[str, Any]]) -> tuple[Any, Any, Any]:
+            measured = functools.partial(measure, loaded.prepare_examples, tokenizer, questions=questions)
+            return pack_request(parts, questions, measured, limit)
+
+        def encode(
+            state: Any, questions: dict[str, dict[str, Any]], chosen: dict[str, str]
+        ) -> Iterator[tuple[str, Example]]:
             for example in loaded.prepare_examples(payload(state, questions), tokenizer, limit):
                 key = example["qid"]
                 label = example["candidate_ids"].index(chosen[key])
-                item = {**example, "label": label, "ids": _identity(example), "markers": []}
-                if advantages is not None:
-                    item["advantage"] = advantages[index]
-                    item["behavior"] = dict(behavior.get(key, ())).get(chosen[key])
-                target.append(item)
-        return items, validation, packing
+                yield key, {**example, "label": label, "ids": _identity(example), "markers": []}
+
+        return decision_examples(
+            decisions,
+            pack=pack,
+            encode=encode,
+            validation_groups=self._settings.validation_groups,
+            advantages=advantages,
+        )
 
     def _trainable(self, job: TrainJobSpec, model: Any) -> None:
         if job.update_policy.kind == "param_subset":
@@ -223,11 +219,16 @@ class NanoJevTrainer:
         ]
         return torch.optim.AdamW(groups, weight_decay=settings.weight_decay)
 
-    def _logits(self, loaded: _Loaded, chunk: Sequence[dict[str, Any]]) -> Any:
+    def _forward(self, loaded: _Loaded) -> Forward:
+        """A chunk's option logits in fp32 from a bf16 autocast forward, and its labels."""
         torch, predictor = loaded.torch, loaded.predictor
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            logits, _ = predictor.model(list(chunk), predictor.tokenizer.pad_token_id)
-        return logits.float()
+
+        def forward(chunk: Sequence[Example]) -> tuple[Any, Any, Any]:
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                logits, _ = predictor.model(list(chunk), predictor.tokenizer.pad_token_id)
+            return logits.float(), torch.tensor([x["label"] for x in chunk], device="cuda"), None
+
+        return forward
 
     # -------------------------------------------------------------- training
 
@@ -236,56 +237,24 @@ class NanoJevTrainer:
     ) -> TrainResult:
         settings, torch, model = self._settings, loaded.torch, loaded.predictor.model
         items, validation, packing = self._examples(batch.decisions, loaded)
-        items, validation, overlap = separate_unique(items, validation)
-        if not items or len(validation) < settings.min_validation:
-            raise ContractError(
-                f"need at least {settings.min_validation} novel validation examples after deduplication, "
-                f"got {len(validation)}"
-            )
+        items, validation, overlap = deduplicated_split(items, validation, settings.min_validation)
         self._trainable(job, model)
         optimizer = self._optimizer(torch, model)
-
-        def labels(chunk: Sequence[dict[str, Any]]) -> Any:
-            return torch.tensor([x["label"] for x in chunk], device="cuda")
-
-        def evaluate() -> tuple[float, float]:
-            model.eval()
-            losses: list[float] = []
-            correct = 0
-            with torch.no_grad():
-                for start in range(0, len(validation), settings.batch_questions):
-                    chunk = validation[start : start + settings.batch_questions]
-                    logits = self._logits(loaded, chunk)
-                    losses.extend(torch.nn.functional.cross_entropy(logits, labels(chunk), reduction="none").tolist())
-                    correct += int((logits.argmax(-1) == labels(chunk)).sum())
-            return sum(losses) / len(losses), correct / len(validation)
-
         started = time.time()
-        initial = evaluate()
-        best, history = float("inf"), []
         checkpoint = run / "checkpoint"
-        for epoch in range(job.steps):
-            random.Random(settings.seed + epoch).shuffle(items)
-            model.train()
-            total, count = 0.0, 0
-            for start in range(0, len(items), settings.batch_questions):
-                chunk = items[start : start + settings.batch_questions]
-                optimizer.zero_grad(set_to_none=True)
-                loss = torch.nn.functional.cross_entropy(self._logits(loaded, chunk), labels(chunk))
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite training loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                total += float(loss.detach()) * len(chunk)
-                count += len(chunk)
-            val, accuracy = evaluate()
-            history.append(
-                {"epoch": epoch + 1, "trainLoss": total / count, "validationLoss": val, "validationAccuracy": accuracy}
-            )
-            if val < best:
-                best = val
-                self._save(checkpoint, Path(base.checkpoint.location), loaded)
+        result = supervised_epochs(
+            torch,
+            model,
+            optimizer,
+            items,
+            validation,
+            forward=self._forward(loaded),
+            epochs=job.steps,
+            batch_size=settings.batch_questions,
+            seed=settings.seed,
+            save=lambda: self._save(checkpoint, Path(base.checkpoint.location), loaded),
+        )
+        fields, metrics = result.record(items, validation, overlap)
         return self._result(
             job,
             base,
@@ -294,80 +263,37 @@ class NanoJevTrainer:
             checkpoint,
             loaded,
             packing,
-            history=history,
+            history=result.history,
             started=started,
-            extra={
-                "dataOverlapAudit": overlap,
-                "trainExamples": len(items),
-                "validationExamples": len(validation),
-                "initialValidation": initial,
-            },
-            metrics={
-                "initial_validation_loss": initial[0],
-                "validation_loss": best,
-                "final_validation_accuracy": history[-1]["validationAccuracy"],
-                "train_examples": float(len(items)),
-                "validation_examples": float(len(validation)),
-            },
+            extra=fields,
+            metrics=metrics,
         )
 
     def _policy_gradient(
         self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch, run: Path, loaded: _Loaded
     ) -> TrainResult:
-        from honing.backends.jev.policy_gradient import group_advantages
-
         settings, torch, model = self._settings, loaded.torch, loaded.predictor.model
         advantages = group_advantages(batch.decisions)
         examples, _, packing = self._examples(batch.decisions, loaded, advantages)
-        if not examples:
-            raise ContractError("every group's rewards are equal; there is nothing to learn from this batch")
-
-        def chosen_log_probs(chunk: Sequence[dict[str, Any]]) -> Any:
-            logits = self._logits(loaded, chunk)
-            chosen = torch.tensor([x["label"] for x in chunk], device="cuda")
-            return torch.log_softmax(logits, dim=-1).gather(1, chosen[:, None]).squeeze(1)
-
-        model.eval()
-        with torch.no_grad():
-            for start in range(0, len(examples), settings.batch_questions):
-                chunk = examples[start : start + settings.batch_questions]
-                for item, value in zip(chunk, chosen_log_probs(chunk).tolist(), strict=True):
-                    item["old"] = value
-        behavior_gap = [abs(math.exp(x["old"]) - x["behavior"]) for x in examples if x["behavior"] is not None]
+        forward = self._forward(loaded)
+        behavior_gap = record_start(torch, model, examples, forward=forward, batch_size=settings.batch_questions)
         self._trainable(job, model)
         optimizer = self._optimizer(torch, model)
-        eps = settings.clip_ratio
-        started, history = time.time(), []
-        for epoch in range(job.steps):
-            random.Random(settings.seed + epoch).shuffle(examples)
-            model.train()
-            totals = {"loss": 0.0, "clipped": 0.0, "kl": 0.0, "ratio": 0.0}
-            count = 0
-            for start in range(0, len(examples), settings.batch_questions):
-                chunk = examples[start : start + settings.batch_questions]
-                optimizer.zero_grad(set_to_none=True)
-                log_probs = chosen_log_probs(chunk)
-                old = torch.tensor([x["old"] for x in chunk], device="cuda")
-                advantage = torch.tensor([x["advantage"] for x in chunk], device="cuda")
-                ratio = torch.exp(log_probs - old)
-                surrogate = torch.minimum(ratio * advantage, torch.clamp(ratio, 1 - eps, 1 + eps) * advantage)
-                loss = -surrogate.mean()
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite policy-gradient loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                n = len(chunk)
-                totals["loss"] += float(loss.detach()) * n
-                totals["clipped"] += float(((ratio - 1).abs() > eps).float().sum())
-                totals["kl"] += float((old - log_probs.detach()).sum())
-                totals["ratio"] += float(ratio.detach().sum())
-                count += n
-            history.append({"epoch": epoch + 1, **{k: v / count for k, v in totals.items()}})
+        started = time.time()
+        history = policy_gradient_epochs(
+            torch,
+            model,
+            optimizer,
+            examples,
+            forward=forward,
+            epochs=job.steps,
+            batch_size=settings.batch_questions,
+            seed=settings.seed,
+            clip_ratio=settings.clip_ratio,
+        )
         checkpoint = run / "checkpoint"
         self._save(checkpoint, Path(base.checkpoint.location), loaded)
-        skipped = sum(1 for a in advantages if a == 0.0)
-        final = history[-1]
+        fields, metrics = policy_gradient_record(batch, advantages, examples, history, behavior_gap)
         return self._result(
             job,
             base,
@@ -378,22 +304,8 @@ class NanoJevTrainer:
             packing,
             history=history,
             started=started,
-            extra={
-                "algorithm": "grpo",
-                "sourceReleases": sorted(batch.source_releases),
-                "sourceHarnesses": sorted(batch.source_harnesses),
-                "decisions": len(batch.decisions),
-                "decisionsWithoutSignal": skipped,
-                "examples": len(examples),
-                "meanBehaviorGap": statistics.fmean(behavior_gap) if behavior_gap else None,
-            },
-            metrics={
-                "policy_loss": final["loss"],
-                "approx_kl": final["kl"],
-                "clipped_fraction": final["clipped"],
-                "examples": float(len(examples)),
-                "decisions_without_signal": float(skipped),
-            },
+            extra=fields,
+            metrics=metrics,
         )
 
     # -------------------------------------------------------------- output

@@ -275,7 +275,7 @@ box(
         "numerics: bf16 · fp8 · fake-quant QAT (QuantScheme)",
         "rollout: harness episodes · direct · none",
         "teacher: lineage · release · external  (engine / in-process)",
-        "Slime runs all but DPO  ·  DPO: local trainer",
+        "Slime runs SFT · OPD · GRPO today  ·  DPO: local trainer, planned",
         "safetensors ⇄ torch_dist around each Slime job",
         "BackendSupport declares what each backend can do",
     ],
@@ -401,7 +401,7 @@ notes = [
     " another scheme is refused before quantizing.",
     "③  After a shape-changing cut, the recovery teacher (typically the pre-cut release) is served by its own"
     " engine, since an in-process teacher must share the student's shape.",
-    "④  v1: uniform layers only · DPO in a local trainer · Slime is the only framework dependency.",
+    "④  v1: uniform layers only · DPO planned in a local trainer · Slime is the only framework dependency.",
 ]
 for i, text in enumerate(notes):
     ax.text(2, 1.0 - i * 1.55, text, fontsize=8.0, color=C["ink"])

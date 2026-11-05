@@ -4,6 +4,8 @@
   on it without pulling in a framework.
 - Only ``honing/backends/`` may import a training framework. Slime is the one
   dependency; Reef is a design reference and is never imported.
+- ``honing/backends/hf_checkpoint.py``, which every backend uses to name a
+  checkpoint, imports only the standard library and ``honing.core``.
 - Only ``honing/harness/models.py`` imports litellm, an optional extra whose
   pin is reviewed on its own.
 - Only ``honing/e2e/tracking.py`` imports wandb, another optional extra, and
@@ -69,6 +71,19 @@ def test_only_backend_packages_import_a_training_framework(repo_root: Path) -> N
         if path.relative_to(package).parts[0] != "backends" and imported_top_levels(path) & FRAMEWORKS
     }
     assert offenders == {}, f"framework imports outside honing/backends/: {offenders}"
+
+
+@pytest.mark.unit
+def test_the_checkpoint_identity_imports_no_backend(repo_root: Path) -> None:
+    """Backends name a Hugging Face checkpoint through hf_checkpoint, so it must not import any of them."""
+    path = repo_root / "honing" / "backends" / "hf_checkpoint.py"
+    assert imported_top_levels(path) <= set(sys.stdlib_module_names) | {"honing"}
+    honing_imports = [
+        node.module
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("honing")
+    ]
+    assert honing_imports and all(name == "honing.core" for name in honing_imports)
 
 
 @pytest.mark.unit

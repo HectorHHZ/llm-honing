@@ -144,17 +144,22 @@ class TrainJobSpec:
 and which executor runs it. The campaign checks a job against it before calling any
 trainer.
 
-| `algorithm` | Consumes | Rollout | Teacher | Executor | How Slime runs it |
-|---|---|:---:|:---:|---|---|
-| `sft` | token sequences | ✗ | ✗ | slime | native `--loss-type sft_loss` |
-| `distill` | token sequences | ✗ | ✓ | slime | custom-loss hook |
-| `opd` | on-policy samples | ✓ | ✓ | slime | native `--use-opd`: an `in_process` teacher loads beside the student (`--opd-type megatron`); an `engine` teacher's scores arrive with the samples (`teacher_logprobs`, `--opd-type sglang`). Self-distillation is the student itself scored under privileged context: `TeacherRef(kind="lineage", ref="self", placement="engine")` |
-| `gkd` | on-policy samples | ✓ | ✓ | slime | custom-loss hook |
-| `ppo` | on-policy samples with rewards | ✓ | ✗ | slime | native estimator |
-| `grpo` | grouped samples with rewards | ✓ | ✗ | slime | native estimator |
-| `dpo` | preference pairs | ✗ | ✗ | local | — Slime's data flow has no preference-pair path |
-| `direction_edit` | typed decisions | ✗ | ✗ | local | — feature-derived parameter operations |
-| `weight_edit` | no batch; configured parameter operations | ✗ | ✗ | local | — general checkpoint editor |
+Every algorithm below is declared, but only the ones a trainer lists in its
+`BackendSupport` can run. The last column says which trainer that is today. A job naming
+an algorithm no trainer lists, such as `ppo` or `dpo`, is refused before its step starts
+(`<trainer> cannot run <algorithm>`).
+
+| `algorithm` | Consumes | Rollout | Teacher | Executor | How Slime runs it | In code today |
+|---|---|:---:|:---:|---|---|---|
+| `sft` | token sequences | ✗ | ✗ | slime | native `--loss-type sft_loss` | `SlimeTrainer`; on typed decisions, `LocalJevTrainer`, `NanoJevTrainer` and `KevTrainer` |
+| `distill` | token sequences | ✗ | ✓ | slime | custom-loss hook | not yet: no trainer runs it |
+| `opd` | on-policy samples | ✓ | ✓ | slime | native `--use-opd`: an `in_process` teacher loads beside the student (`--opd-type megatron`); an `engine` teacher's scores arrive with the samples (`teacher_logprobs`, `--opd-type sglang`). Self-distillation is the student itself scored under privileged context: `TeacherRef(kind="lineage", ref="self", placement="engine")` | `SlimeTrainer` |
+| `gkd` | on-policy samples | ✓ | ✓ | slime | custom-loss hook | not yet: no trainer runs it |
+| `ppo` | on-policy samples with rewards | ✓ | ✗ | slime | native estimator | not yet: Slime has the estimator, `SlimeTrainer` does not pass it |
+| `grpo` | grouped samples with rewards | ✓ | ✗ | slime | native estimator | `SlimeTrainer`; on typed decisions, `LocalJevTrainer`, `NanoJevTrainer` and `KevTrainer` |
+| `dpo` | preference pairs | ✗ | ✗ | local | — Slime's data flow has no preference-pair path | not yet: `backends/local_dpo` is planned (§7, step 9) |
+| `direction_edit` | typed decisions | ✗ | ✗ | local | — feature-derived parameter operations | `NanoJevDirectionEditTrainer`, NanoJev only |
+| `weight_edit` | no batch; configured parameter operations | ✗ | ✗ | local | — general checkpoint editor | `WeightEditTrainer` |
 
 [`WeightEditTrainer`](weight-edit.md) supports named tensor addition, scaling and replacement.
 It uses the normal train move and release gate. `requires_batch=False` prevents data
@@ -196,17 +201,28 @@ class Trainer(Protocol):
     def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult: ...
 ```
 
-Two backends are planned: `backends/slime` for everything but DPO, and
-`backends/local_dpo` for DPO. v1 backends declare `uniform` architectures only.
+Two backends are planned for language models: `backends/slime` for everything but DPO
+(today it runs `sft`, `opd` and `grpo`), and `backends/local_dpo` for DPO, not yet written.
+v1 backends declare `uniform` architectures only.
 
-Decision models have their own trainer. `backends/jev/trainer.py` (`LocalJevTrainer`)
-runs `sft` on `typed_decisions` for Laya: full weights, or head only as `param_subset`. It
-reproduces the RA2 experiment's training procedure, and with deterministic kernels its
-weights are byte-identical to that code's (`integrations/ra2/parity/`). It declares
-`contracts={"typed_decisions"}`, so a campaign can use it, and later replace it,
-through configuration alone. It also runs `grpo` on rollout decisions: a group-baseline
-advantage per decision, a clipped probability ratio against probabilities the model recomputes
-before the first step, and the final weights kept.
+Decision models have their own trainers, one per family: `backends/jev/trainer.py`
+(`LocalJevTrainer`, Laya), `backends/jev/nanojev_trainer.py` (`NanoJevTrainer`) and
+`backends/jev/kev_trainer.py` (`KevTrainer`). Each runs `sft` and `grpo` on
+`typed_decisions` and declares `contracts={"typed_decisions"}`, so a campaign can use
+one, and later replace it, through configuration alone. What they share lives in
+`backends/jev/decision_training.py`: one example per question, deduplication and the
+held-out validation split, cross-entropy with the best validation checkpoint kept for
+`sft`, and for `grpo` a group-baseline advantage per decision, a clipped probability ratio
+against probabilities the model recomputes before the first step, and the final weights
+kept. A trainer file holds only its family's loading, encoding, optimizer and checkpoint
+layout. `LocalJevTrainer` reproduces the RA2 experiment's training procedure, and with
+deterministic kernels its weights are byte-identical to that code's
+(`integrations/ra2/parity/`).
+
+Code that names a Hugging Face checkpoint (its shards, checksum, parameter count and
+snapshot) lives in `backends/hf_checkpoint.py`, which imports only the standard library
+and `honing.core`, so the serving engine, the weight editor and the decision-model
+loaders share one checkpoint identity without importing each other.
 
 ### 2.5 Compression Plane — pruning and quantization
 

@@ -3,7 +3,6 @@ readouts that turn its log-probabilities into decisions, and policy endpoints th
 runner asks for. Its OpenAI-compatible routes are called as a ChatModel through
 :class:`honing.harness.models.LiteLLMChatModel`."""
 
-from honing.backends.sglang.checkpoint import checkpoint_checksum, hf_snapshot
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
 from honing.backends.sglang.engine import SGLangEngine, SGLangError, SGLangSettings
 
@@ -13,6 +12,4 @@ __all__ = [
     "SGLangPolicyEndpoints",
     "SGLangSettings",
     "ServingSettings",
-    "checkpoint_checksum",
-    "hf_snapshot",
 ]

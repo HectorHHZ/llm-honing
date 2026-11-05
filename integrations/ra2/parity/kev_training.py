@@ -21,9 +21,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from honing.backends.jev.decision_training import laya_question
 from honing.backends.jev.kev import kev_snapshot, prepare_request
 from honing.backends.jev.kev_trainer import KevTrainer, KevTrainerSettings, base_config_of
-from honing.backends.jev.trainer import laya_question
 from honing.backends.ra2 import RA2DemonstrationProvider
 from honing.core import DataContract, DecisionQuestion, DecisionSample, TrainingBatch, TrainJobSpec, requirements_for
 

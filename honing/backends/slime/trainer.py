@@ -36,6 +36,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from honing.backends.hf_checkpoint import safetensors_parameters
 from honing.backends.slime.arguments import SlimeSettings, megatron_model_args, read_config, train_args
 from honing.backends.slime.rollout_data import slime_samples, write_samples
 from honing.campaign import rules
@@ -128,19 +129,6 @@ def _sha256(path: Path) -> str:
     return checksum.hexdigest()
 
 
-def _safetensors_parameters(path: Path) -> int:
-    with path.open("rb") as handle:
-        header = json.loads(handle.read(int.from_bytes(handle.read(8), "little")))
-    total = 0
-    for name, tensor in header.items():
-        if name != "__metadata__":
-            count = 1
-            for dimension in tensor["shape"]:
-                count *= int(dimension)
-            total += count
-    return total
-
-
 def hf_snapshot(checkpoint: Path) -> ModelSnapshot:
     """A Hugging Face checkpoint directory as a ModelSnapshot: one checksum over its config and weight files."""
     config = read_config(checkpoint)
@@ -163,7 +151,7 @@ def hf_snapshot(checkpoint: Path) -> ModelSnapshot:
             attention_heads=int(text["num_attention_heads"]),
             ffn_size=int(text["intermediate_size"]),
         ),
-        parameters=sum(_safetensors_parameters(path) for path in weights),
+        parameters=sum(safetensors_parameters(path) for path in weights),
     )
 
 

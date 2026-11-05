@@ -9,14 +9,14 @@ in Kev's layout (adapter, ``head.pt``, tokenizer) with temperature 1.0, raw
 probabilities, as ``kev.train`` saves one, so :class:`KevDecisionModel` serves it
 directly.
 
-The data is prepared as for Laya (:mod:`honing.backends.jev.trainer`): every
-question of every decision is one example, packed exactly as inference packs it
+The data handling, the losses and the loops are the ones every decision-model
+trainer shares (:mod:`honing.backends.jev.decision_training`): every question
+of every decision is one example, packed exactly as inference packs it
 (:func:`honing.backends.jev.kev.prepare_request`); identical inputs are
 deduplicated and must agree on their label; examples from validation groups are
 held out and must not also appear in training. ``sft`` keeps the checkpoint
-with the best validation loss. ``grpo`` runs the same clipped policy gradient
-as the Laya trainer (:mod:`honing.backends.jev.policy_gradient`) and keeps the
-final weights.
+with the best validation loss. ``grpo`` runs the clipped policy gradient and
+keeps the final weights.
 """
 
 from __future__ import annotations
@@ -26,17 +26,26 @@ import math
 import os
 import random
 import re
-import statistics
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from honing.backends.jev.decision_training import (
+    Example,
+    Forward,
+    decision_examples,
+    deduplicated_split,
+    group_advantages,
+    policy_gradient_epochs,
+    policy_gradient_record,
+    record_start,
+    supervised_epochs,
+)
 from honing.backends.jev.kev import import_kev, kev_snapshot, prepare_request, weights_checksum
 from honing.backends.jev.laya import gpu_lock
-from honing.backends.jev.trainer import laya_question, separate_unique
 from honing.core import (
     BackendSupport,
     ContractError,
@@ -187,30 +196,17 @@ class KevTrainer:
 
     def _examples(
         self, decisions: Sequence[DecisionSample], tok: Any, model: Any, advantages: Sequence[float] | None = None
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    ) -> tuple[list[Example], list[Example], dict[str, int]]:
         """Every question of every decision as one encoded example, packed as inference packs it."""
         from kev.api import SystemOneRequest, to_record
         from kev.model import SERVE_MAX_BRANCH, SERVE_MAX_STATE
 
-        held_out = re.compile(self._settings.validation_groups)
-        items: list[dict[str, Any]] = []
-        validation: list[dict[str, Any]] = []
-        packing = {"maxInputTokens": 0, "trimmedRequests": 0}
-        for index, decision in enumerate(decisions):
-            if advantages is not None and advantages[index] == 0.0:
-                continue
-            parts = {name: list(lines) for name, lines in decision.parts}
-            questions = {key: laya_question(q) for key, q in decision.questions}
-            state, audit, trimmed = prepare_request(tok, parts, questions, SERVE_MAX_STATE, SERVE_MAX_BRANCH)
-            packing["maxInputTokens"] = max(packing["maxInputTokens"], max(v["inputTokens"] for v in audit.values()))
-            packing["trimmedRequests"] += bool(trimmed)
-            chosen = dict(decision.chosen)
-            behavior = dict(decision.behavior_probs or ())
-            target = (
-                validation
-                if advantages is None and decision.group is not None and held_out.search(decision.group)
-                else items
-            )
+        def pack(parts: dict[str, list[str]], questions: dict[str, dict[str, Any]]) -> tuple[Any, Any, Any]:
+            return prepare_request(tok, parts, questions, SERVE_MAX_STATE, SERVE_MAX_BRANCH)
+
+        def encode(
+            state: Any, questions: dict[str, dict[str, Any]], chosen: dict[str, str]
+        ) -> Iterator[tuple[str, Example]]:
             for key, question in questions.items():
                 record, _ = to_record(SystemOneRequest(state=state, questions={key: question}))
                 keys = list(question["criteria"])
@@ -219,12 +215,15 @@ class KevTrainer:
                 encoded = model.encode(
                     tok, record, max_state=SERVE_MAX_STATE, max_branch=SERVE_MAX_BRANCH, strict=True
                 )
-                item = {"enc": encoded, "ids": encoded["ids"], "markers": encoded["opt_idx"], "label": label}
-                if advantages is not None:
-                    item["advantage"] = advantages[index]
-                    item["behavior"] = dict(behavior.get(key, ())).get(chosen[key])
-                target.append(item)
-        return items, validation, packing
+                yield key, {"enc": encoded, "ids": encoded["ids"], "markers": encoded["opt_idx"], "label": label}
+
+        return decision_examples(
+            decisions,
+            pack=pack,
+            encode=encode,
+            validation_groups=self._settings.validation_groups,
+            advantages=advantages,
+        )
 
     def _trainable(self, job: TrainJobSpec, model: Any) -> list[Any]:
         if job.update_policy.kind == "param_subset":
@@ -258,15 +257,21 @@ class KevTrainer:
             return self._policy_gradient(job, base, batch, run, loaded)
         return self._supervised(job, base, batch, run, loaded)
 
-    def _logits(self, torch: Any, model: Any, items: Sequence[dict[str, Any]]) -> Any:
-        """Option logits of each single-question example, padded into one [N, K] tensor (-1e4 marks no option)."""
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            nested = model.forward_batch([item["enc"] for item in items])
-        width = max(len(logits[0]) for logits in nested)
-        out = torch.full((len(items), width), -1e4, device="cuda")
-        for row, logits in enumerate(nested):
-            out[row, : len(logits[0])] = logits[0].float()
-        return out
+    @staticmethod
+    def _forward(torch: Any, model: Any) -> Forward:
+        """Option logits of each single-question example, padded into one [N, K] tensor (-1e4 marks no option),
+        and the examples' labels."""
+
+        def forward(items: Sequence[Example]) -> tuple[Any, Any, Any]:
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                nested = model.forward_batch([item["enc"] for item in items])
+            width = max(len(logits[0]) for logits in nested)
+            out = torch.full((len(items), width), -1e4, device="cuda")
+            for row, logits in enumerate(nested):
+                out[row, : len(logits[0])] = logits[0].float()
+            return out, torch.tensor([x["label"] for x in items], device="cuda"), None
+
+        return forward
 
     def _supervised(
         self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch, run: Path, loaded: _Loaded
@@ -274,139 +279,62 @@ class KevTrainer:
         torch, tok, model = loaded.torch, loaded.tok, loaded.model
         settings = self._settings
         items, validation, packing = self._examples(batch.decisions, tok, model)
-        items, validation, overlap = separate_unique(items, validation)
-        if not items or len(validation) < settings.min_validation:
-            raise ContractError(
-                f"need at least {settings.min_validation} novel validation examples after deduplication, "
-                f"got {len(validation)}"
-            )
+        items, validation, overlap = deduplicated_split(items, validation, settings.min_validation)
         self._trainable(job, model)
         steps = job.steps * math.ceil(len(items) / settings.batch_size)
         optimizer, schedule = self._optimizer(torch, model, steps)
-        labels = lambda chunk: torch.tensor([x["label"] for x in chunk], device="cuda")  # noqa: E731
-
-        def evaluate() -> tuple[float, float]:
-            model.eval()
-            losses: list[float] = []
-            correct = 0
-            with torch.no_grad():
-                for start in range(0, len(validation), settings.batch_size):
-                    chunk = validation[start : start + settings.batch_size]
-                    logits = self._logits(torch, model, chunk)
-                    losses.extend(torch.nn.functional.cross_entropy(logits, labels(chunk), reduction="none").tolist())
-                    correct += int((logits.argmax(-1) == labels(chunk)).sum())
-            return sum(losses) / len(losses), correct / len(validation)
-
         started = time.time()
-        initial = evaluate()
-        best, history = float("inf"), []
         checkpoint = run / "checkpoint"
-        for epoch in range(job.steps):
-            random.Random(settings.seed + epoch).shuffle(items)
-            model.train()
-            total, count = 0.0, 0
-            for start in range(0, len(items), settings.batch_size):
-                chunk = items[start : start + settings.batch_size]
-                optimizer.zero_grad(set_to_none=True)
-                loss = torch.nn.functional.cross_entropy(self._logits(torch, model, chunk), labels(chunk))
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite training loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
-                optimizer.step()
-                schedule.step()
-                total += float(loss.detach()) * len(chunk)
-                count += len(chunk)
-            val, accuracy = evaluate()
-            history.append(
-                {"epoch": epoch + 1, "trainLoss": total / count, "validationLoss": val, "validationAccuracy": accuracy}
-            )
-            if val < best:
-                best = val
-                self._save(checkpoint, loaded)
+        result = supervised_epochs(
+            torch,
+            model,
+            optimizer,
+            items,
+            validation,
+            forward=self._forward(torch, model),
+            epochs=job.steps,
+            batch_size=settings.batch_size,
+            seed=settings.seed,
+            save=lambda: self._save(checkpoint, loaded),
+            schedule=schedule,
+        )
+        fields, metrics = result.record(items, validation, overlap)
         return self._result(
             job, base, batch, run, checkpoint, loaded.revision, loaded.pin, packing,
-            history=history, started=started,
-            extra={"dataOverlapAudit": overlap, "trainExamples": len(items), "validationExamples": len(validation),
-                   "initialValidation": initial},
-            metrics={
-                "initial_validation_loss": initial[0],
-                "validation_loss": best,
-                "final_validation_accuracy": history[-1]["validationAccuracy"],
-                "train_examples": float(len(items)),
-                "validation_examples": float(len(validation)),
-            },
+            history=result.history, started=started, extra=fields, metrics=metrics,
         )  # fmt: skip
 
     def _policy_gradient(
         self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch, run: Path, loaded: _Loaded
     ) -> TrainResult:
         torch, tok, model = loaded.torch, loaded.tok, loaded.model
-        from honing.backends.jev.policy_gradient import group_advantages
-
         settings = self._settings
         advantages = group_advantages(batch.decisions)
         examples, _, packing = self._examples(batch.decisions, tok, model, advantages)
-        if not examples:
-            raise ContractError("every group's rewards are equal; there is nothing to learn from this batch")
-
-        def chosen_log_probs(chunk: Sequence[dict[str, Any]]) -> Any:
-            logits = self._logits(torch, model, chunk)
-            chosen = torch.tensor([x["label"] for x in chunk], device="cuda")
-            return torch.log_softmax(logits, dim=-1).gather(1, chosen[:, None]).squeeze(1)
-
-        model.eval()
-        with torch.no_grad():
-            for start in range(0, len(examples), settings.batch_size):
-                chunk = examples[start : start + settings.batch_size]
-                for item, value in zip(chunk, chosen_log_probs(chunk).tolist(), strict=True):
-                    item["old"] = value
-        behavior_gap = [abs(math.exp(x["old"]) - x["behavior"]) for x in examples if x["behavior"] is not None]
+        forward = self._forward(torch, model)
+        behavior_gap = record_start(torch, model, examples, forward=forward, batch_size=settings.batch_size)
         self._trainable(job, model)
         steps = job.steps * math.ceil(len(examples) / settings.batch_size)
         optimizer, schedule = self._optimizer(torch, model, steps)
-        eps = settings.clip_ratio
-        started, history = time.time(), []
-        for epoch in range(job.steps):
-            random.Random(settings.seed + epoch).shuffle(examples)
-            model.train()
-            totals = {"loss": 0.0, "clipped": 0.0, "kl": 0.0, "ratio": 0.0}
-            count = 0
-            for start in range(0, len(examples), settings.batch_size):
-                chunk = examples[start : start + settings.batch_size]
-                optimizer.zero_grad(set_to_none=True)
-                log_probs = chosen_log_probs(chunk)
-                old = torch.tensor([x["old"] for x in chunk], device="cuda")
-                advantage = torch.tensor([x["advantage"] for x in chunk], device="cuda")
-                ratio = torch.exp(log_probs - old)
-                surrogate = torch.minimum(ratio * advantage, torch.clamp(ratio, 1 - eps, 1 + eps) * advantage)
-                loss = -surrogate.mean()
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite policy-gradient loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
-                optimizer.step()
-                schedule.step()
-                n = len(chunk)
-                totals["loss"] += float(loss.detach()) * n
-                totals["clipped"] += float(((ratio - 1).abs() > eps).float().sum())
-                totals["kl"] += float((old - log_probs.detach()).sum())
-                totals["ratio"] += float(ratio.detach().sum())
-                count += n
-            history.append({"epoch": epoch + 1, **{k: v / count for k, v in totals.items()}})
+        started = time.time()
+        history = policy_gradient_epochs(
+            torch,
+            model,
+            optimizer,
+            examples,
+            forward=forward,
+            epochs=job.steps,
+            batch_size=settings.batch_size,
+            seed=settings.seed,
+            clip_ratio=settings.clip_ratio,
+            schedule=schedule,
+        )
         checkpoint = run / "checkpoint"
         self._save(checkpoint, loaded)
-        skipped = sum(1 for a in advantages if a == 0.0)
-        final = history[-1]
+        fields, metrics = policy_gradient_record(batch, advantages, examples, history, behavior_gap)
         return self._result(
             job, base, batch, run, checkpoint, loaded.revision, loaded.pin, packing,
-            history=history, started=started,
-            extra={"algorithm": "grpo", "sourceReleases": sorted(batch.source_releases),
-                   "sourceHarnesses": sorted(batch.source_harnesses), "decisions": len(batch.decisions),
-                   "decisionsWithoutSignal": skipped, "examples": len(examples),
-                   "meanBehaviorGap": statistics.fmean(behavior_gap) if behavior_gap else None},
-            metrics={"policy_loss": final["loss"], "approx_kl": final["kl"], "clipped_fraction": final["clipped"],
-                     "examples": float(len(examples)), "decisions_without_signal": float(skipped)},
+            history=history, started=started, extra=fields, metrics=metrics,
         )  # fmt: skip
 
     # -------------------------------------------------------------- output

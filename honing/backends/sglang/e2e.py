@@ -16,7 +16,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
-from honing.backends.sglang.checkpoint import hf_snapshot
+from honing.backends.hf_checkpoint import hf_snapshot
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints
 from honing.backends.sglang.engine import SGLangEngine, SGLangSettings
 from honing.core import EpisodeOutcome, Grade, ModelSnapshot, Task

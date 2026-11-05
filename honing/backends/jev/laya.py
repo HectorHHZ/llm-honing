@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from honing.backends.hf_checkpoint import safetensors_parameters
 from honing.backends.jev.token_budget import prepare_request
 from honing.core import ArchitectureSpec, CheckpointRef, LayerShape, ModelSnapshot
 
@@ -183,22 +184,6 @@ class LayaDecisionModel:
             "trimmed": trimmed,
             "latencyMs": (time.perf_counter() - started) * 1000,
         }
-
-
-def safetensors_parameters(path: Path) -> int:
-    """Count the parameters in a safetensors file from its header alone."""
-    with path.open("rb") as handle:
-        length = int.from_bytes(handle.read(8), "little")
-        header = json.loads(handle.read(length))
-    total = 0
-    for name, tensor in header.items():
-        if name == "__metadata__":
-            continue
-        count = 1
-        for dimension in tensor["shape"]:
-            count *= int(dimension)
-        total += count
-    return total
 
 
 def laya_snapshot(checkpoint: Path) -> ModelSnapshot:

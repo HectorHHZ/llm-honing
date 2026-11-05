@@ -12,9 +12,15 @@ Executors:
     distillation and GKD run through Slime's custom-loss hook.
 ``local``
     The preference trainer that runs DPO without Slime, because Slime's data
-    flow is built around rollouts and has no preference-pair path; and the
-    decision-model trainer, because a Jev-style model with a scoring head is not
-    a Megatron model.
+    flow is built around rollouts and has no preference-pair path; the
+    decision-model trainers, because a Jev-style model with a scoring head is not
+    a Megatron model; and the weight editor.
+
+This table is what each algorithm needs, not what runs today. A trainer lists
+the algorithms it runs in its ``BackendSupport``, and the campaign refuses a job
+whose trainer does not list its algorithm. Today ``SlimeTrainer`` runs ``sft``,
+``opd`` and ``grpo``; the decision-model trainers run ``sft`` and ``grpo``; no
+trainer runs ``distill``, ``gkd``, ``ppo`` or ``dpo`` yet.
 
 An algorithm has a default data contract. ``sft`` and ``grpo`` can also train a
 decision model on ``typed_decisions`` (:data:`DECISION_REQUIREMENTS`); a job

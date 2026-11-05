@@ -16,7 +16,9 @@ is the contract this package is built against. The planes it defines:
     with the plan each release records.
 ``train``
     Algorithm, update policy, numerics, rollout source, and teacher as
-    independent choices. Slime runs most algorithms; DPO runs in a local trainer.
+    independent choices. Slime runs SFT, on-policy distillation and GRPO for
+    language models; local trainers run SFT and GRPO for decision models.
+    Distillation, GKD, PPO and DPO are declared but not yet run by any trainer.
 ``data``
     Online feedback and offline datasets behind one batch type.
 ``harness``
