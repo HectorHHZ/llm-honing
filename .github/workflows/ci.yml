@@ -95,8 +95,8 @@ jobs:
         run: |
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy safetensors pytest
-      - name: Check generic editing and NanoJev compatibility
-        run: python -m pytest tests/test_weight_edit.py tests/test_direction_edit.py
+      - name: Check generic editing, NanoJev compatibility, and the shared decision-training loops
+        run: python -m pytest tests/test_weight_edit.py tests/test_direction_edit.py tests/test_decision_training.py
 
   griddly:
     runs-on: ubuntu-latest

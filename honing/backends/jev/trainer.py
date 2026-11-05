@@ -7,7 +7,9 @@ must agree on their label; examples from validation groups are held out and
 must not also appear in training; then full-weight cross-entropy over the
 option logits, AdamW with separate encoder and head learning rates, bf16
 autocast, gradient clipping at 1.0, and the checkpoint with the best validation
-loss is kept.
+loss is kept. The data handling, the losses and the loops are the ones every
+decision-model trainer shares (:mod:`honing.backends.jev.decision_training`);
+this module loads, encodes and saves Laya checkpoints.
 
 It sits behind :class:`~honing.core.Trainer`, so another trainer can replace it
 through configuration. The trained checkpoint's manifest is one
@@ -18,21 +20,30 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import random
 import re
-import statistics
 import subprocess
 import sys
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from honing.backends.jev.decision_training import (
+    Example,
+    Forward,
+    decision_examples,
+    deduplicated_split,
+    group_advantages,
+    policy_gradient_epochs,
+    policy_gradient_record,
+    record_start,
+    supervised_epochs,
+)
 from honing.backends.jev.laya import HEAD_MAX_LEN, gpu_lock
 from honing.backends.jev.token_budget import prepare_request
 from honing.core import (
@@ -94,50 +105,6 @@ def _sha256(path: Path) -> str:
     return checksum.hexdigest()
 
 
-def identity(item: Mapping[str, Any]) -> str:
-    """One encoded model input: its token ids and option markers."""
-    value = json.dumps([item["ids"], item["markers"]], separators=(",", ":"))
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def separate_unique(
-    training: Sequence[dict[str, Any]], validation: Sequence[dict[str, Any]]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
-    """Deduplicate inputs within each split, and keep only validation inputs training never saw."""
-
-    def unique(rows: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        result: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            key = identity(row)
-            if key in result and result[key]["label"] != row["label"]:
-                raise ContractError("Conflicting labels for the same complete model input")
-            result.setdefault(key, row)
-        return result
-
-    train, valid = unique(training), unique(validation)
-    overlap = set(train) & set(valid)
-    for key in overlap:
-        if train[key]["label"] != valid[key]["label"]:
-            raise ContractError("Conflicting labels across episode splits")
-    novel = [row for key, row in valid.items() if key not in train]
-    audit = {
-        "rawTraining": len(training),
-        "rawValidation": len(validation),
-        "uniqueTraining": len(train),
-        "uniqueValidation": len(valid),
-        "removedOverlap": len(overlap),
-        "novelValidation": len(novel),
-    }
-    return list(train.values()), novel, audit
-
-
-def laya_question(question: Any) -> dict[str, Any]:
-    """A DecisionQuestion as the question object Laya reads."""
-    if question.kind != "choice":
-        raise ContractError(f"the Laya trainer handles choice questions only, not {question.kind}")
-    return {"type": "choice", "instructions": question.instructions, "criteria": dict(question.options)}
-
-
 def collate(items: Sequence[Mapping[str, Any]], pad: int, torch: Any, device: str) -> tuple[Any, ...]:
     n, length, width = len(items), max(len(x["ids"]) for x in items), max(len(x["markers"]) for x in items)
     ids = torch.full((n, length), pad, dtype=torch.long, device=device)
@@ -168,7 +135,7 @@ class LocalJevTrainer:
 
     ``sft`` learns the chosen options (see the module docstring). ``grpo`` runs
     policy gradient on rollout decisions with a group baseline and a clipped
-    ratio (:mod:`honing.backends.jev.policy_gradient`); it keeps the final
+    ratio (:mod:`honing.backends.jev.decision_training`); it keeps the final
     weights, since it has no validation split.
     """
 
@@ -196,33 +163,71 @@ class LocalJevTrainer:
             raise
 
     def _examples(
-        self, decisions: Sequence[DecisionSample], tok: Any, agent: Any, qtypes: Mapping[str, int], helpers: Any
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+        self,
+        decisions: Sequence[DecisionSample],
+        tok: Any,
+        agent: Any,
+        qtypes: Mapping[str, int],
+        helpers: Any,
+        advantages: Sequence[float] | None = None,
+    ) -> tuple[list[Example], list[Example], dict[str, int]]:
+        """Every question of every decision as one Laya input, packed as inference packs it."""
         build_sequence, render_options = helpers
         formatter = SimpleNamespace(tok=tok, _to_internal=agent._to_internal)
-        held_out = re.compile(self._settings.validation_groups)
-        items: list[dict[str, Any]] = []
-        validation: list[dict[str, Any]] = []
-        packing = {"maxInputTokens": 0, "trimmedRequests": 0}
-        for decision in decisions:
-            parts = {name: list(lines) for name, lines in decision.parts}
-            questions = {key: laya_question(q) for key, q in decision.questions}
-            state, audit, trimmed = prepare_request(
-                formatter, parts, questions, MAX_LEN, HEAD_MAX_LEN, build_sequence, render_options
-            )
-            packing["maxInputTokens"] = max(packing["maxInputTokens"], max(v["inputTokens"] for v in audit.values()))
-            packing["trimmedRequests"] += bool(trimmed)
-            chosen = dict(decision.chosen)
-            target = validation if decision.group is not None and held_out.search(decision.group) else items
+
+        def pack(parts: dict[str, list[str]], questions: dict[str, dict[str, Any]]) -> tuple[Any, Any, Any]:
+            return prepare_request(formatter, parts, questions, MAX_LEN, HEAD_MAX_LEN, build_sequence, render_options)
+
+        def encode(
+            state: Any, questions: dict[str, dict[str, Any]], chosen: dict[str, str]
+        ) -> Iterator[tuple[str, Example]]:
             for key, q in questions.items():
                 ids, markers = build_sequence(tok, state, agent._to_internal(q), MAX_LEN, HEAD_MAX_LEN)
                 keys = list(q["criteria"])
                 if len(markers) != len(keys):
                     raise ContractError("Option marker loss")
-                target.append(
-                    {"ids": ids, "markers": markers, "label": keys.index(chosen[key]), "qtype": qtypes["choice"]}
-                )
-        return items, validation, packing
+                yield key, {
+                    "ids": ids,
+                    "markers": markers,
+                    "label": keys.index(chosen[key]),
+                    "qtype": qtypes["choice"],
+                }
+
+        return decision_examples(
+            decisions,
+            pack=pack,
+            encode=encode,
+            validation_groups=self._settings.validation_groups,
+            advantages=advantages,
+        )
+
+    @staticmethod
+    def _forward(torch: Any, model: Any, pad: int, device: str) -> Forward:
+        """A chunk's masked option logits, labels, and the head's auxiliary output, which stays in the graph."""
+
+        def forward(chunk: Sequence[Example]) -> tuple[Any, Any, Any]:
+            tensors = collate(chunk, pad, torch, device)
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                logits, aux = model(*tensors[:5])
+            return logits.float().masked_fill(~tensors[3], -1e4), tensors[5], aux
+
+        return forward
+
+    @staticmethod
+    def _save(checkpoint: Path, torch: Any, model: Any, tok: Any, cfg: dict[str, Any]) -> None:
+        """Laya's checkpoint layout, with the temperature reset to 1.0: raw probabilities."""
+        from safetensors.torch import save_file
+
+        checkpoint.mkdir(exist_ok=True)
+        save_file(
+            {k: v.detach().to(torch.bfloat16).contiguous().cpu() for k, v in model.state_dict().items()},
+            checkpoint / "model.safetensors",
+        )
+        model.encoder.config.save_pretrained(checkpoint / "encoder")
+        tok.save_pretrained(checkpoint / "tokenizer")
+        cfg["temperature"] = [1.0, 1.0, 1.0]
+        cfg.pop("temperature_by_options", None)
+        (checkpoint / "rl_agent_config.json").write_text(json.dumps(cfg, indent=2) + "\n")
 
     def _train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch, run: Path) -> TrainResult:
         settings = self._settings
@@ -240,7 +245,7 @@ class LocalJevTrainer:
         import torch
         from laya.agent import Agent
         from laya.common import QTYPES, build_model, build_sequence, render_options
-        from safetensors.torch import load_file, save_file
+        from safetensors.torch import load_file
         from transformers import AutoTokenizer
 
         torch.set_num_threads(4)
@@ -258,12 +263,7 @@ class LocalJevTrainer:
         items, validation, packing = self._examples(
             batch.decisions, tok, Agent, QTYPES, (build_sequence, render_options)
         )
-        items, validation, overlap = separate_unique(items, validation)
-        if not items or len(validation) < settings.min_validation:
-            raise ContractError(
-                f"need at least {settings.min_validation} novel validation examples after deduplication, "
-                f"got {len(validation)}"
-            )
+        items, validation, overlap = deduplicated_split(items, validation, settings.min_validation)
         device = "cuda"
         model = build_model(cfg, encoder_dir=str(parent / "encoder"))
         model.load_state_dict(load_file(parent / "model.safetensors"), strict=True)
@@ -285,68 +285,21 @@ class LocalJevTrainer:
             if params or job.update_policy.kind == "full"
         ]
         optimizer = torch.optim.AdamW(groups, weight_decay=0.01)
-        pad = tok.pad_token_id
-
-        def evaluate() -> tuple[float, float]:
-            model.eval()
-            losses: list[float] = []
-            correct = 0
-            with torch.no_grad():
-                for start in range(0, len(validation), settings.batch_size):
-                    tensors = collate(validation[start : start + settings.batch_size], pad, torch, device)
-                    with torch.autocast("cuda", dtype=torch.bfloat16):
-                        logits, _ = model(*tensors[:5])
-                    logits = logits.float().masked_fill(~tensors[3], -1e4)
-                    losses.extend(torch.nn.functional.cross_entropy(logits, tensors[5], reduction="none").tolist())
-                    correct += int((logits.argmax(-1) == tensors[5]).sum())
-            return sum(losses) / len(losses), correct / len(validation)
-
         started = time.time()
-        initial = evaluate()
-        best = float("inf")
-        history = []
         checkpoint = run / "checkpoint"
-        for epoch in range(job.steps):
-            random.Random(settings.seed + epoch).shuffle(items)
-            model.train()
-            total, steps = 0.0, 0
-            for start in range(0, len(items), settings.batch_size):
-                tensors = collate(items[start : start + settings.batch_size], pad, torch, device)
-                optimizer.zero_grad(set_to_none=True)
-                with torch.autocast("cuda", dtype=torch.bfloat16):
-                    logits, aux = model(*tensors[:5])
-                loss = (
-                    torch.nn.functional.cross_entropy(logits.float().masked_fill(~tensors[3], -1e4), tensors[5])
-                    + 0 * aux.float().sum()
-                )
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite training loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                total += float(loss.detach())
-                steps += 1
-            val, accuracy = evaluate()
-            history.append(
-                {
-                    "epoch": epoch + 1,
-                    "trainLoss": total / max(1, steps),
-                    "validationLoss": val,
-                    "validationAccuracy": accuracy,
-                }
-            )
-            if val < best:
-                best = val
-                checkpoint.mkdir(exist_ok=True)
-                save_file(
-                    {k: v.detach().to(torch.bfloat16).contiguous().cpu() for k, v in model.state_dict().items()},
-                    checkpoint / "model.safetensors",
-                )
-                model.encoder.config.save_pretrained(checkpoint / "encoder")
-                tok.save_pretrained(checkpoint / "tokenizer")
-                cfg["temperature"] = [1.0, 1.0, 1.0]
-                cfg.pop("temperature_by_options", None)
-                (checkpoint / "rl_agent_config.json").write_text(json.dumps(cfg, indent=2) + "\n")
+        result = supervised_epochs(
+            torch,
+            model,
+            optimizer,
+            items,
+            validation,
+            forward=self._forward(torch, model, tok.pad_token_id, device),
+            epochs=job.steps,
+            batch_size=settings.batch_size,
+            seed=settings.seed,
+            save=lambda: self._save(checkpoint, torch, model, tok, cfg),
+        )
+        fields, metrics = result.record(items, validation, overlap)
         weight_hash = _sha256(checkpoint / "model.safetensors")
         if weight_hash == base.checkpoint.checksum:
             raise ContractError("training did not change the weights")
@@ -362,11 +315,8 @@ class LocalJevTrainer:
             "batchId": batch.batch_id,
             "updatePolicy": job.update_policy.kind,
             "packing": packing,
-            "dataOverlapAudit": overlap,
-            "trainExamples": len(items),
-            "validationExamples": len(validation),
-            "initialValidation": initial,
-            "history": history,
+            **fields,
+            "history": result.history,
             "settings": {
                 "epochs": job.steps,
                 "batchSize": settings.batch_size,
@@ -379,7 +329,6 @@ class LocalJevTrainer:
             "elapsedSeconds": time.time() - started,
         }
         (run / "checkpoint.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        final = history[-1]
         return TrainResult(
             snapshot=ModelSnapshot(
                 checkpoint=CheckpointRef(
@@ -388,13 +337,7 @@ class LocalJevTrainer:
                 architecture=base.architecture,
                 parameters=base.parameters,
             ),
-            metrics={
-                "initial_validation_loss": initial[0],
-                "validation_loss": best,
-                "final_validation_accuracy": final["validationAccuracy"],
-                "train_examples": float(len(items)),
-                "validation_examples": float(len(validation)),
-            },
+            metrics=metrics,
         )
 
     # -------------------------------------------------------------- policy gradient
@@ -436,59 +379,14 @@ class LocalJevTrainer:
         return torch, Agent, QTYPES, build_sequence, render_options, tok, model, cfg, revision
 
     def _policy_gradient(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch, run: Path) -> TrainResult:
-        from honing.backends.jev.policy_gradient import group_advantages
-
         settings = self._settings
         torch, agent, qtypes, build_sequence, render_options, tok, model, cfg, revision = self._setup(base)
-        from safetensors.torch import save_file
-
         advantages = group_advantages(batch.decisions)
-        formatter = SimpleNamespace(tok=tok, _to_internal=agent._to_internal)
-        examples: list[dict[str, Any]] = []
-        for decision, advantage in zip(batch.decisions, advantages, strict=True):
-            if advantage == 0.0:
-                continue
-            parts = {name: list(lines) for name, lines in decision.parts}
-            questions = {key: laya_question(q) for key, q in decision.questions}
-            state, _, _ = prepare_request(
-                formatter, parts, questions, MAX_LEN, HEAD_MAX_LEN, build_sequence, render_options
-            )
-            chosen = dict(decision.chosen)
-            behavior = dict(decision.behavior_probs or ())
-            for key, q in questions.items():
-                ids, markers = build_sequence(tok, state, agent._to_internal(q), MAX_LEN, HEAD_MAX_LEN)
-                keys = list(q["criteria"])
-                label = keys.index(chosen[key])
-                examples.append(
-                    {
-                        "ids": ids,
-                        "markers": markers,
-                        "label": label,
-                        "qtype": qtypes["choice"],
-                        "advantage": advantage,
-                        "behavior": dict(behavior.get(key, ())).get(chosen[key]),
-                    }
-                )
-        if not examples:
-            raise ContractError("every group's rewards are equal; there is nothing to learn from this batch")
-        device, pad = "cuda", tok.pad_token_id
-
-        def chosen_log_probs(items: Sequence[dict[str, Any]]) -> Any:
-            tensors = collate(items, pad, torch, device)
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                logits, aux = model(*tensors[:5])
-            logits = logits.float().masked_fill(~tensors[3], -1e4)
-            log_probs = torch.log_softmax(logits, dim=-1).gather(1, tensors[5][:, None]).squeeze(1)
-            return log_probs, aux
-
-        model.eval()
-        with torch.no_grad():
-            for start in range(0, len(examples), settings.batch_size):
-                chunk = examples[start : start + settings.batch_size]
-                log_probs, _ = chosen_log_probs(chunk)
-                for item, value in zip(chunk, log_probs.tolist(), strict=True):
-                    item["old"] = value
-        behavior_gap = [abs(math.exp(x["old"]) - x["behavior"]) for x in examples if x["behavior"] is not None]
+        examples, _, _ = self._examples(
+            batch.decisions, tok, agent, qtypes, (build_sequence, render_options), advantages
+        )
+        forward = self._forward(torch, model, tok.pad_token_id, "cuda")
+        behavior_gap = record_start(torch, model, examples, forward=forward, batch_size=settings.batch_size)
         if job.update_policy.kind == "param_subset":
             patterns = [re.compile(p) for p in job.update_policy.trainable_patterns]
             for name, parameter in model.named_parameters():
@@ -497,47 +395,22 @@ class LocalJevTrainer:
         if not trainable:
             raise ContractError("no parameter matches the update policy")
         optimizer = torch.optim.AdamW(trainable, lr=settings.encoder_lr, weight_decay=0.0)
-        started, history = time.time(), []
-        eps = settings.clip_ratio
-        for epoch in range(job.steps):
-            random.Random(settings.seed + epoch).shuffle(examples)
-            model.train()
-            totals = {"loss": 0.0, "clipped": 0.0, "kl": 0.0, "ratio": 0.0}
-            count = 0
-            for start in range(0, len(examples), settings.batch_size):
-                chunk = examples[start : start + settings.batch_size]
-                optimizer.zero_grad(set_to_none=True)
-                log_probs, aux = chosen_log_probs(chunk)
-                old = torch.tensor([x["old"] for x in chunk], device=device)
-                advantage = torch.tensor([x["advantage"] for x in chunk], device=device)
-                ratio = torch.exp(log_probs - old)
-                surrogate = torch.minimum(ratio * advantage, torch.clamp(ratio, 1 - eps, 1 + eps) * advantage)
-                loss = -surrogate.mean() + 0 * aux.float().sum()
-                if not torch.isfinite(loss):
-                    raise ContractError("nonfinite policy-gradient loss")
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                n = len(chunk)
-                totals["loss"] += float(loss.detach()) * n
-                totals["clipped"] += float(((ratio - 1).abs() > eps).float().sum())
-                totals["kl"] += float((old - log_probs.detach()).sum())
-                totals["ratio"] += float(ratio.detach().sum())
-                count += n
-            history.append({"epoch": epoch + 1, **{k: v / count for k, v in totals.items()}})
-        checkpoint = run / "checkpoint"
-        checkpoint.mkdir()
-        save_file(
-            {k: v.detach().to(torch.bfloat16).contiguous().cpu() for k, v in model.state_dict().items()},
-            checkpoint / "model.safetensors",
+        started = time.time()
+        history = policy_gradient_epochs(
+            torch,
+            model,
+            optimizer,
+            examples,
+            forward=forward,
+            epochs=job.steps,
+            batch_size=settings.batch_size,
+            seed=settings.seed,
+            clip_ratio=settings.clip_ratio,
         )
-        model.encoder.config.save_pretrained(checkpoint / "encoder")
-        tok.save_pretrained(checkpoint / "tokenizer")
-        cfg["temperature"] = [1.0, 1.0, 1.0]
-        cfg.pop("temperature_by_options", None)
-        (checkpoint / "rl_agent_config.json").write_text(json.dumps(cfg, indent=2) + "\n")
+        checkpoint = run / "checkpoint"
+        self._save(checkpoint, torch, model, tok, cfg)
+        fields, metrics = policy_gradient_record(batch, advantages, examples, history, behavior_gap)
         weight_hash = _sha256(checkpoint / "model.safetensors")
-        skipped = sum(1 for a in advantages if a == 0.0)
         manifest = {
             "kind": "trained-laya",
             "repo": "local:honing-jev/" + run.name,
@@ -547,28 +420,21 @@ class LocalJevTrainer:
             "parent": json.loads(settings.model_record.read_text()),
             "base": {"location": base.checkpoint.location, "checksum": base.checkpoint.checksum},
             "sourceRevision": revision,
-            "algorithm": "grpo",
             "batchId": batch.batch_id,
-            "sourceReleases": sorted(batch.source_releases),
-            "sourceHarnesses": sorted(batch.source_harnesses),
             "updatePolicy": job.update_policy.kind,
-            "decisions": len(batch.decisions),
-            "decisionsWithoutSignal": skipped,
-            "examples": len(examples),
-            "meanBehaviorGap": statistics.fmean(behavior_gap) if behavior_gap else None,
+            **fields,
             "history": history,
             "settings": {
                 "epochs": job.steps,
                 "batchSize": settings.batch_size,
                 "seed": settings.seed,
                 "lr": settings.encoder_lr,
-                "clipRatio": eps,
+                "clipRatio": settings.clip_ratio,
                 "deterministic": settings.deterministic,
             },
             "elapsedSeconds": time.time() - started,
         }
         (run / "checkpoint.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        final = history[-1]
         return TrainResult(
             snapshot=ModelSnapshot(
                 checkpoint=CheckpointRef(
@@ -577,11 +443,5 @@ class LocalJevTrainer:
                 architecture=base.architecture,
                 parameters=base.parameters,
             ),
-            metrics={
-                "policy_loss": final["loss"],
-                "approx_kl": final["kl"],
-                "clipped_fraction": final["clipped"],
-                "examples": float(len(examples)),
-                "decisions_without_signal": float(skipped),
-            },
+            metrics=metrics,
         )

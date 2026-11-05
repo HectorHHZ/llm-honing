@@ -11,7 +11,7 @@ import pytest
 torch = pytest.importorskip("torch")
 st = pytest.importorskip("safetensors.torch")
 
-from honing.backends.sglang.checkpoint import hf_snapshot  # noqa: E402
+from honing.backends.hf_checkpoint import hf_snapshot  # noqa: E402
 from honing.backends.weight_edit import EditPlan, TensorEdit, WeightEditTrainer, weight_edit_trainer  # noqa: E402
 from honing.core import ContractError, EvaluationResult, TrainJobSpec, UpdatePolicy  # noqa: E402
 from honing.core.errors import CampaignRuleError  # noqa: E402

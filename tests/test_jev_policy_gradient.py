@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from honing.backends.jev.policy_gradient import group_advantages
+from honing.backends.jev.decision_training import group_advantages
 from honing.backends.ra2 import RA2RolloutProvider, decisions_from_log, load_suite
 from honing.backends.ra2.rollouts import ROLLOUT_CONTRACT
 from honing.campaign import rules

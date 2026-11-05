@@ -55,6 +55,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from honing.backends.hf_checkpoint import safetensors_parameters
 from honing.backends.jev.kev import QUESTION_OVERRUN, STATE_OVERRUN
 from honing.backends.jev.laya import gpu_lock
 from honing.backends.jev.token_budget import SECTIONS
@@ -529,8 +530,6 @@ class StartLuxDecisionModel:
 
 def startlux_snapshot(checkpoint: Path) -> ModelSnapshot:
     """A StartLux-Decision checkpoint as a ModelSnapshot: the text decoder's shape, parameters, and checksum."""
-    from honing.backends.jev.laya import safetensors_parameters
-
     config = json.loads((checkpoint / "config.json").read_text())
     text = config.get("text_config", config)
     layer = LayerShape(attention_heads=int(text["num_attention_heads"]), ffn_size=int(text["intermediate_size"]))

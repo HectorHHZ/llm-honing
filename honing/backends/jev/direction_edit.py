@@ -42,13 +42,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from honing.backends.jev.decision_training import laya_question
 from honing.backends.jev.nanojev import (
     import_nanojev,
     measure,
     pack_request,
     payload,
 )
-from honing.backends.jev.trainer import laya_question
 from honing.backends.jev.weight_edit import nanojev_layout
 from honing.backends.weight_edit import EditPlan, TensorEdit, WeightEditTrainer
 

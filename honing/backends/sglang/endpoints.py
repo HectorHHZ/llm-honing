@@ -4,7 +4,7 @@ has just trained.
 :meth:`SGLangPolicyEndpoints.resolve` maps a policy to a running server by its
 checkpoint checksum. The first time a checksum is asked for, the checkpoint
 at ``policy.checkpoint.location`` is checked against that checksum (Honing
-computes it from the files, :func:`~honing.backends.sglang.checkpoint.checkpoint_checksum`),
+computes it from the files, :func:`~honing.backends.hf_checkpoint.checkpoint_checksum`),
 then started on a free GPU from ``gpus``. When every GPU is serving, the
 server used least recently is stopped to make room. Later calls for the same
 checksum reuse the running server. :meth:`close` stops them all.
@@ -34,7 +34,8 @@ from pathlib import Path
 from typing import Any
 
 import honing
-from honing.backends.sglang.checkpoint import checkpoint_checksum, context_length
+from honing.backends.hf_checkpoint import checkpoint_checksum
+from honing.backends.sglang.checkpoint import context_length
 from honing.backends.sglang.engine import SGLangEngine, SGLangError, SGLangSettings, die_with_parent
 from honing.core import ContractError, EndpointRuntime, PolicyEndpoint, PolicyRef
 
@@ -198,7 +199,7 @@ def _stop_server(process: subprocess.Popen[str]) -> None:
 
 
 if __name__ == "__main__":  # python -m honing.backends.sglang.endpoints <sglang-python> <gpu> <checkpoint> [runtime]
-    from honing.backends.sglang.checkpoint import hf_snapshot
+    from honing.backends.hf_checkpoint import hf_snapshot
 
     snapshot = hf_snapshot(Path(sys.argv[3]))
     runtime = sys.argv[4] if len(sys.argv) > 4 else "sglang"

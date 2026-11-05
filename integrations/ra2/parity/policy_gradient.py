@@ -11,8 +11,9 @@ import random
 import sys
 from pathlib import Path
 
+from honing.backends.jev.decision_training import laya_question
 from honing.backends.jev.laya import laya_snapshot
-from honing.backends.jev.trainer import JevTrainerSettings, LocalJevTrainer, laya_question
+from honing.backends.jev.trainer import JevTrainerSettings, LocalJevTrainer
 from honing.core import DataContract, DecisionQuestion, DecisionSample, TrainingBatch, TrainJobSpec
 
 favored, gpu, work = sys.argv[1], sys.argv[2], Path(sys.argv[3])

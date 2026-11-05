@@ -45,6 +45,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from honing.backends.hf_checkpoint import safetensors_parameters
 from honing.backends.jev.kev import STATE_OVERRUN
 from honing.backends.jev.laya import gpu_lock
 from honing.backends.jev.nanojev_tree import (
@@ -506,8 +507,6 @@ class NanoJevTreeDecisionModel(NanoJevDecisionModel):
 
 def nanojev_snapshot(checkpoint: Path) -> ModelSnapshot:
     """A NanoJev checkpoint as a ModelSnapshot: the backbone's shape, parameter count, and weight checksum."""
-    from honing.backends.jev.laya import safetensors_parameters
-
     config = json.loads((checkpoint / "backbone_config" / "config.json").read_text())
     layer = LayerShape(attention_heads=int(config["num_attention_heads"]), ffn_size=int(config["intermediate_size"]))
     weights = checkpoint / "best.safetensors"

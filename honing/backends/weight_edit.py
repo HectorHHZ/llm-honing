@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from honing.backends.sglang.checkpoint import checkpoint_checksum, weight_shards
+from honing.backends.hf_checkpoint import checkpoint_checksum, weight_shards
 from honing.campaign import rules
 from honing.core import (
     BackendSupport,
@@ -60,7 +60,7 @@ Modifier = Callable[[ModelSnapshot, TrainingBatch | None], EditPlan]
 
 @dataclass(frozen=True)
 class CheckpointLayout:
-    """Storage adapters; defaults match Honing's HF/SGLang checkpoint identity.
+    """Storage adapters; the defaults are :mod:`honing.backends.hf_checkpoint`'s checkpoint identity.
 
     A model with another checksum convention supplies its existing checksum
     function and weight-file selector. ``manifest_fields`` adds serving metadata;

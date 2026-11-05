@@ -11,7 +11,10 @@ and :class:`JevEndpoints` lets a runner find the server for a policy;
 :mod:`honing.backends.jev.nanojev_serving` starts a NanoJev server per
 checkpoint on demand, and :mod:`honing.backends.jev.direction_edit` edits a
 NanoJev head along a direction read from the model (the ``direction_edit``
-algorithm), with no training.
+algorithm), with no training. :mod:`honing.backends.jev.trainer`,
+:mod:`honing.backends.jev.nanojev_trainer` and :mod:`honing.backends.jev.kev_trainer`
+train the Laya, NanoJev and Kev families on typed decisions, with the examples,
+validation split, losses and loops of :mod:`honing.backends.jev.decision_training`.
 """
 
 from honing.backends.jev.endpoints import JevEndpoints

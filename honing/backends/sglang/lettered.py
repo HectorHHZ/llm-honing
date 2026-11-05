@@ -42,8 +42,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from honing.backends.hf_checkpoint import checkpoint_checksum
 from honing.backends.jev.startlux import checked_answer, pack_request, validate_questions
-from honing.backends.sglang.checkpoint import checkpoint_checksum, checkpoint_identity, context_length
+from honing.backends.sglang.checkpoint import checkpoint_identity, context_length
 
 SYSTEM = "Read the state, then answer the question with the letter of exactly one listed option."
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

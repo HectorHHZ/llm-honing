@@ -66,7 +66,7 @@ match's score as its reward. Repeats of one task form a group: a decision's adva
 minus the group average, divided by the group spread, so decisions from won matches go up and
 decisions from lost ones go down. A group whose matches all ended the same way has no spread and is
 skipped. Each update is clipped so the model cannot move too far in one step
-(`honing/backends/jev/policy_gradient.py`).
+(`honing/backends/jev/decision_training.py`).
 
 The rollouts have to be sampled from the model's probabilities, because argmax play repeats exactly
 and gives a group no spread. The RA2 match controller does not sample its choices yet; the trainer

@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from honing.backends.hf_checkpoint import safetensors_parameters
 from honing.backends.jev.laya import gpu_lock
 from honing.backends.jev.token_budget import SECTIONS
 from honing.core import ArchitectureSpec, CheckpointRef, LayerShape, ModelSnapshot
@@ -254,8 +255,6 @@ def kev_snapshot(checkpoint: Path, base_config: Path) -> ModelSnapshot:
     ``base_config`` is the base model's ``config.json``. ``parameters`` counts
     the adapter's parameters, the part a trainer changes.
     """
-    from honing.backends.jev.laya import safetensors_parameters
-
     config = json.loads(base_config.read_text())
     text = config.get("text_config", config)
     layer = LayerShape(attention_heads=int(text["num_attention_heads"]), ffn_size=int(text["intermediate_size"]))

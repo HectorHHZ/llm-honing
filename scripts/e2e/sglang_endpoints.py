@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from honing.backends.sglang import hf_snapshot  # noqa: E402
+from honing.backends.hf_checkpoint import hf_snapshot  # noqa: E402
 from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints  # noqa: E402
 from honing.core import ChatMessage, CheckpointRef, ContractError, PolicyRef  # noqa: E402
 from honing.harness.models import LiteLLMChatModel  # noqa: E402

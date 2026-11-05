@@ -9,8 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from honing.backends.jev.laya import laya_snapshot, safetensors_parameters
-from honing.backends.jev.trainer import JevTrainerSettings, LocalJevTrainer, laya_question, separate_unique
+from honing.backends.hf_checkpoint import safetensors_parameters
+from honing.backends.jev.decision_training import laya_question, separate_unique
+from honing.backends.jev.laya import laya_snapshot
+from honing.backends.jev.trainer import JevTrainerSettings, LocalJevTrainer
 from honing.backends.ra2 import RA2DemonstrationProvider
 from honing.campaign import ScriptedScheduler
 from honing.core import (

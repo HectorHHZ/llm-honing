@@ -20,9 +20,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from honing.backends.jev.decision_training import laya_question
 from honing.backends.jev.nanojev import nanojev_snapshot
 from honing.backends.jev.nanojev_trainer import NanoJevTrainer, NanoJevTrainerSettings, release_path
-from honing.backends.jev.trainer import laya_question
 from honing.backends.ra2 import RA2DemonstrationProvider
 from honing.core import DataContract, DecisionQuestion, DecisionSample, TrainingBatch, TrainJobSpec, requirements_for
 
