@@ -36,10 +36,11 @@ def policy(checksum: str) -> PolicyRef:
 
 
 SGLANG = StaticEndpoint(base_url="http://127.0.0.1:30000", served_model="qwen", tokenizer_location="/tok/qwen")
-REMOTE = StaticEndpoint(
-    base_url="https://api.example.com/v1",
-    served_model="gpt-4.1-mini-2025-04-14",
-    tokenizer_location="remote",
+# An SGLang server started with --api-key.
+KEYED = StaticEndpoint(
+    base_url="http://127.0.0.1:30001",
+    served_model="qwen-keyed",
+    tokenizer_location="/tok/qwen",
     api_key_env="TEST_POLICY_KEY",
 )
 
@@ -53,11 +54,11 @@ def test_a_configured_checkpoint_resolves_to_its_endpoint() -> None:
 
 
 @pytest.mark.unit
-def test_a_jev_decision_entry_keeps_its_runtime() -> None:
-    entry = StaticEndpoint(
-        base_url="http://127.0.0.1:8100", served_model="jev", tokenizer_location="/tok/jev", runtime="jev_decision"
-    )
-    assert StaticPolicyEndpoints({"abc": entry}, environ={}).resolve(policy("abc")).runtime == "jev_decision"
+def test_every_entry_is_an_sglang_server() -> None:
+    endpoints = StaticPolicyEndpoints({"abc": SGLANG, "key": KEYED}, environ={"TEST_POLICY_KEY": SECRET})
+    assert {endpoints.resolve(policy(name)).runtime for name in ("abc", "key")} == {"sglang"}
+    with pytest.raises(TypeError, match="runtime"):
+        StaticEndpoint(base_url="http://h", served_model="m", tokenizer_location="t", runtime="jev_decision")  # type: ignore[call-arg]
 
 
 @pytest.mark.unit
@@ -68,29 +69,18 @@ def test_an_unknown_checkpoint_raises_naming_its_checksum() -> None:
 
 
 @pytest.mark.unit
-def test_the_default_serves_unknown_checkpoints_but_not_configured_ones() -> None:
-    endpoints = StaticPolicyEndpoints({"abc": SGLANG}, default=REMOTE, environ={"TEST_POLICY_KEY": SECRET})
-    assert endpoints.resolve(policy("other")).served_model == "gpt-4.1-mini-2025-04-14"
-    assert endpoints.resolve(policy("abc")).served_model == "qwen"
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("as_default", [False, True])
-def test_a_missing_key_variable_fails_at_construction_without_a_value(as_default: bool) -> None:
+def test_a_missing_key_variable_fails_at_construction_without_a_value() -> None:
     # The variable is set to an empty string, and another variable holds the secret.
     environ = {"TEST_POLICY_KEY": "", "OTHER": SECRET}
     with pytest.raises(ContractError, match="TEST_POLICY_KEY") as raised:
-        if as_default:
-            StaticPolicyEndpoints({}, default=REMOTE, environ=environ)
-        else:
-            StaticPolicyEndpoints({"abc": REMOTE}, environ=environ)
+        StaticPolicyEndpoints({"abc": KEYED}, environ=environ)
     assert SECRET not in str(raised.value)
 
 
 @pytest.mark.unit
 def test_a_key_variable_removed_after_construction_fails_on_resolve() -> None:
     environ = {"TEST_POLICY_KEY": SECRET}
-    endpoints = StaticPolicyEndpoints({"abc": REMOTE}, environ=environ)
+    endpoints = StaticPolicyEndpoints({"abc": KEYED}, environ=environ)
     del environ["TEST_POLICY_KEY"]
     with pytest.raises(ContractError, match="TEST_POLICY_KEY") as raised:
         endpoints.resolve(policy("abc"))
@@ -99,7 +89,7 @@ def test_a_key_variable_removed_after_construction_fails_on_resolve() -> None:
 
 @pytest.mark.unit
 def test_api_key_env_names_the_variable_and_never_the_value() -> None:
-    endpoints = StaticPolicyEndpoints({"abc": SGLANG, "key": REMOTE}, environ={"TEST_POLICY_KEY": SECRET})
+    endpoints = StaticPolicyEndpoints({"abc": SGLANG, "key": KEYED}, environ={"TEST_POLICY_KEY": SECRET})
     assert endpoints.api_key_env(policy("key")) == "TEST_POLICY_KEY"
     assert endpoints.api_key_env(policy("abc")) is None
     with pytest.raises(ContractError, match="'missing'"):
@@ -110,9 +100,9 @@ def test_api_key_env_names_the_variable_and_never_the_value() -> None:
 def test_the_environment_defaults_to_os_environ(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TEST_POLICY_KEY", raising=False)
     with pytest.raises(ContractError, match="TEST_POLICY_KEY"):
-        StaticPolicyEndpoints({"abc": REMOTE})
+        StaticPolicyEndpoints({"abc": KEYED})
     monkeypatch.setenv("TEST_POLICY_KEY", SECRET)
-    assert StaticPolicyEndpoints({"abc": REMOTE}).resolve(policy("abc")).base_url == "https://api.example.com/v1"
+    assert StaticPolicyEndpoints({"abc": KEYED}).resolve(policy("abc")).base_url == "http://127.0.0.1:30001"
 
 
 @pytest.mark.unit
@@ -129,15 +119,10 @@ def test_the_factory_builds_from_json_entries() -> None:
         endpoints={
             "abc": {"base_url": "http://127.0.0.1:30000", "served_model": "qwen", "tokenizer_location": "/tok"}
         },
-        default={
-            "base_url": "https://api.example.com/v1",
-            "served_model": "remote-model",
-            "tokenizer_location": "remote",
-            "api_key_env": None,
-        },
     )
-    assert endpoints.resolve(policy("abc")).base_url == "http://127.0.0.1:30000"
-    assert endpoints.resolve(policy("other")).served_model == "remote-model"
+    assert endpoints.resolve(policy("abc")) == PolicyEndpoint(
+        base_url="http://127.0.0.1:30000", tokenizer_location="/tok", served_model="qwen", runtime="sglang"
+    )
 
 
 @pytest.mark.unit
@@ -149,7 +134,10 @@ def test_the_factory_builds_from_json_entries() -> None:
         ({"base_url": "host:1", "served_model": "m", "tokenizer_location": "t"}, "base_url"),
         ({"base_url": "http://h", "served_model": "m"}, "missing"),
         ({"base_url": "http://h", "served_model": 3, "tokenizer_location": "t"}, "must be a string"),
-        ({"base_url": "http://h", "served_model": "m", "tokenizer_location": "t", "runtime": "vllm"}, "runtime"),
+        (
+            {"base_url": "http://h", "served_model": "m", "tokenizer_location": "t", "runtime": "sglang"},
+            "unknown keys",
+        ),
         ("http://h", "must be an object"),
     ],
 )
@@ -170,15 +158,17 @@ def test_the_factory_refuses_endpoints_that_are_not_an_object(endpoints: object)
 
 
 class FakeProbe:
-    """Answers health probes in place of HTTP: up unless ``up`` is False; records each call."""
+    """Answers health probes in place of HTTP: the queued ``answers`` first, then up unless ``up`` is False; records
+    each call."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, float]] = []
+        self.answers: list[bool] = []
         self.up = True
 
     def __call__(self, url: str, timeout_seconds: float) -> bool:
         self.calls.append((url, timeout_seconds))
-        return self.up
+        return self.answers.pop(0) if self.answers else self.up
 
 
 class FakeClock:
@@ -199,8 +189,7 @@ CHECKED = StaticEndpoint(
 
 def checked(**entries: StaticEndpoint) -> tuple[StaticPolicyEndpoints, FakeProbe, FakeClock]:
     probe, clock = FakeProbe(), FakeClock()
-    default = entries.pop("default", None)
-    return StaticPolicyEndpoints(entries, default=default, environ={}, probe=probe, clock=clock), probe, clock
+    return StaticPolicyEndpoints(entries, environ={}, probe=probe, clock=clock), probe, clock
 
 
 @pytest.mark.unit
@@ -232,9 +221,18 @@ def test_an_endpoint_that_is_down_fails_naming_it_and_is_probed_again_next_time(
     with pytest.raises(ContractError, match=r"the endpoint http://127.0.0.1:30000/v1 for checkpoint 'abc'") as raised:
         endpoints.resolve(policy("abc"))
     assert "http://127.0.0.1:30000/health" in str(raised.value) and "30 s" in str(raised.value)
+    assert len(probe.calls) == 2  # down only after two probes in a row fail
     probe.up = True  # Honing does not run it, so it may come back
     assert endpoints.resolve(policy("abc")).base_url == "http://127.0.0.1:30000/v1"
-    assert len(probe.calls) == 2
+    assert len(probe.calls) == 3
+
+
+@pytest.mark.unit
+def test_one_failed_probe_followed_by_an_answer_is_not_down() -> None:
+    endpoints, probe, _clock = checked(abc=CHECKED)
+    probe.answers = [False]
+    assert endpoints.resolve(policy("abc")).base_url == "http://127.0.0.1:30000/v1"
+    assert probe.calls == [("http://127.0.0.1:30000/health", 30.0)] * 2
 
 
 @pytest.mark.unit
@@ -248,8 +246,8 @@ def test_an_endpoint_that_passed_and_then_went_down_fails_after_the_ttl() -> Non
 
 
 @pytest.mark.unit
-def test_a_default_serving_many_checkpoints_is_probed_once_per_ttl() -> None:
-    endpoints, probe, _clock = checked(default=CHECKED)
+def test_one_server_declared_for_several_checkpoints_is_probed_once_per_ttl() -> None:
+    endpoints, probe, _clock = checked(a=CHECKED, b=CHECKED)
     endpoints.resolve(policy("a"))
     endpoints.resolve(policy("b"))
     assert len(probe.calls) == 1

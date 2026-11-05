@@ -52,7 +52,7 @@ import honing
 from honing.backends.sglang.checkpoint import checkpoint_checksum, context_length
 from honing.backends.sglang.engine import SGLangEngine, SGLangError, SGLangSettings, die_with_parent
 from honing.core import ContractError, EndpointRuntime, PolicyEndpoint, PolicyRef
-from honing.harness.endpoints import HEALTH_TIMEOUT_SECONDS, HEALTH_TTL_SECONDS, server_answers
+from honing.harness.endpoints import HEALTH_TIMEOUT_SECONDS, HEALTH_TTL_SECONDS, answers_twice, server_answers
 
 REPO = Path(honing.__file__).resolve().parents[1]
 
@@ -209,10 +209,7 @@ class SGLangPolicyEndpoints:
             return False
         if self._clock() - served.checked_at < self.settings.health_ttl_seconds:
             return True
-        # One immediate retry: a busy engine can leave a single probe waiting past the timeout, and a restart stops
-        # a server other episodes are using.
-        timeout = self.settings.health_timeout_seconds
-        if not (self._probe(served.health_url, timeout) or self._probe(served.health_url, timeout)):
+        if not answers_twice(self._probe, served.health_url, self.settings.health_timeout_seconds):
             return False
         served.checked_at = self._clock()
         return True
