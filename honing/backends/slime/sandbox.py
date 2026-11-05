@@ -433,7 +433,8 @@ class LocalContainerSandbox:
             result = await self._exec(
                 ["cat", "--", sandbox_path], user=user, env=None, stdin=None, timeout_seconds=_FILE_SECONDS
             )
-        except SandboxError:
+        except SandboxError as error:
+            _LOGGER.warning("read_file(%s) in sandbox %s returned nothing: %s", sandbox_path, self.sandbox_id, error)
             return ""
         if result is None or result[0] != 0:
             return ""

@@ -932,3 +932,23 @@ def test_the_container_keeps_only_the_capabilities_root_needs() -> None:
     assert dropped == ["ALL"]
     assert sorted(added) == sorted(CAPABILITIES)
 
+
+@pytest.mark.integration
+def test_a_file_that_cannot_be_read_for_dockers_failure_is_logged(
+    fake_docker: Callable[[dict[str, object]], Path], caplog: pytest.LogCaptureFixture
+) -> None:
+    # read_file returns "" like slime's E2B sandbox, which hides a dead daemon; the warning shows it.
+    cli = fake_docker({"exec": {"exit": 1, "stderr": "Error response from daemon: No such container: x\n"}})
+    sandbox = LocalContainerSandbox("image", docker=str(cli))
+
+    async def scenario() -> str:
+        async with sandbox:
+            return await sandbox.read_file("/tmp/transcript.jsonl")
+
+    with caplog.at_level(logging.WARNING, logger=sandbox_module.__name__):
+        assert asyncio.run(scenario()) == ""
+    [record] = caplog.records
+    assert record.levelno == logging.WARNING
+    message = record.getMessage()
+    assert message.startswith(f"read_file(/tmp/transcript.jsonl) in sandbox {sandbox.sandbox_id} returned nothing: ")
+    assert "No such container: x" in message
