@@ -345,7 +345,9 @@ their implementations live outside it. The `ChatModel` client is `LiteLLMChatMod
 (`honing/harness/models.py`, the `litellm` extra), which reaches hosted APIs and local
 servers alike. For an SGLang server Honing did not start, `StaticPolicyEndpoints`
 (`honing/harness/endpoints.py`) maps checkpoint checksums to servers declared up front; a
-hosted API goes through `GatewayEndpoints` (`honing/backends/llm_gateway`). A map whose server
+hosted API goes through `GatewayEndpoints` (`honing/backends/llm_gateway`). A declared server
+with a health route is probed on resolve at most once every 30 s, and a hung one takes up to
+about 60 s to detect (two 30 s probes). A map whose server
 needs a key names the key's variable through an optional `api_key_env(policy)` method, which
 runners find with `hasattr`; it is not part of `PolicyEndpoints`.
 A method whose proposer is a coding agent rather than one model call, as
@@ -495,6 +497,8 @@ campaign's runners call can be served by SGLang, pinned to one version.
   runner resolves a policy, after checking the checkpoint's weights against the policy's
   checksum, so a candidate a train move has just produced is served like a release. A
   running server is reused; when every GPU is serving, the least recently used one stops.
+  A running server is probed on resolve at most once every 30 s; a hung one takes up to
+  about 60 s to detect (two 30 s probes), and is then restarted once on the same GPU.
 - **Families that stay native.** Laya (an encoder) and djev (remote diffusion) cannot run
   on SGLang. Kev and NanoJev could (hidden states, with their heads in Honing) but are
   small and stay on their own loaders for now.
