@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import http.client
 import json
 import os
 import signal
@@ -64,6 +65,11 @@ PINNED = {
     "flashinfer-python": "0.6.18",
     "triton": "3.7.1",
 }
+
+# At 0.5.21 SGLang's /health runs a one-token generation by default and answers 503 by itself after
+# SGLANG_HEALTH_CHECK_TIMEOUT, 20 s by default (its http_server.py and environ.py); waiting a little longer reports
+# its own answer, and stays below a 30 s probe of the decision server.
+HEALTH_TIMEOUT_SECONDS = 25.0
 
 
 @dataclass(frozen=True)
@@ -277,6 +283,16 @@ class SGLangEngine:
         request = urllib.request.Request(f"{self.url}/flush_cache", data=b"", method="POST")
         with urllib.request.urlopen(request, timeout=60):
             pass
+
+    def healthy(self, timeout_seconds: float = HEALTH_TIMEOUT_SECONDS) -> bool:
+        """Whether the server process is still running and its ``/health`` answers 200 within ``timeout_seconds``."""
+        if self._process is not None and self._process.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen(f"{self.url}/health", timeout=timeout_seconds) as response:
+                return bool(response.status == 200)
+        except (OSError, http.client.HTTPException):  # refused, timed out, dropped, another status, or not HTTP
+            return False
 
     def next_token_logprobs(self, prompts: Sequence[Sequence[int]], token_ids: Sequence[int]) -> list[list[float]]:
         """For each prompt, the log-probability of each of ``token_ids`` as the next token, in that order.

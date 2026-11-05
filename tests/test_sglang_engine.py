@@ -6,10 +6,16 @@ with SGLang's request and response shapes; the GPU check is integrations/ra2/par
 from __future__ import annotations
 
 import json
+import os
+import signal
+import socket
+import subprocess
 import sys
 import textwrap
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +27,8 @@ from honing.backends.jev.server import DecisionServer
 from honing.backends.jev.server import main as server_main
 from honing.backends.sglang import SGLangEngine, SGLangError, SGLangSettings
 from honing.backends.sglang.engine import PINNED
+from honing.backends.sglang.lettered import LetteredDecisionModel, LetteredSettings
+from tests.test_sglang_serving import CharTokenizer
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -143,6 +151,108 @@ def test_a_server_that_exits_is_reported_with_its_log(tmp_path: Path) -> None:
     )
     with pytest.raises(SGLangError, match="exited"), SGLangEngine.launch(Path("/models/startlux"), settings):
         pass
+
+
+def _health(url: str) -> int:
+    try:
+        with urllib.request.urlopen(f"{url}/v1/health", timeout=30) as response:
+            return int(response.status)
+    except urllib.error.HTTPError as error:
+        return error.code
+
+
+def test_a_killed_engine_turns_the_lettered_server_s_health_to_503(stand_in_python: SGLangSettings) -> None:
+    with SGLangEngine.launch(Path("/models/any"), stand_in_python) as engine:
+        assert engine.healthy()
+        model = LetteredDecisionModel(engine, CharTokenizer(), LetteredSettings(), {"family": "lettered"})
+        server = DecisionServer(("127.0.0.1", 0), model)
+        serving = threading.Thread(target=server.serve, daemon=True)
+        serving.start()
+        try:
+            assert _health(server.url) == 200
+            assert engine._process is not None
+            os.killpg(engine._process.pid, signal.SIGKILL)
+            engine._process.wait()
+            assert not engine.healthy()
+            assert _health(server.url) == 503
+        finally:
+            server.stop()
+            serving.join()
+            server.server_close()
+
+
+class _Health(BaseHTTPRequestHandler):
+    """A /health that answers ``server.status`` after ``server.delay`` seconds."""
+
+    server: Any
+
+    def log_message(self, *args: Any) -> None:
+        return
+
+    def do_GET(self) -> None:
+        time.sleep(self.server.delay)
+        self.send_response(self.server.status)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+
+@pytest.fixture
+def health() -> Iterator[Any]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Health)
+    server.status, server.delay = 200, 0.0
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()
+    server.server_close()
+
+
+def _url(server: Any) -> str:
+    return f"http://127.0.0.1:{server.server_address[1]}"
+
+
+@pytest.mark.parametrize(("status", "healthy"), [(200, True), (204, False), (404, False), (503, False)])
+def test_the_engine_is_healthy_only_when_its_health_route_answers_200(health: Any, status: int, healthy: bool) -> None:
+    health.status = status
+    assert SGLangEngine(_url(health), None, {}).healthy() is healthy
+
+
+def test_an_engine_whose_health_route_is_slower_than_the_timeout_is_down(health: Any) -> None:
+    health.delay = 2.0
+    started = time.monotonic()
+    assert not SGLangEngine(_url(health), None, {}).healthy(timeout_seconds=0.2)
+    assert time.monotonic() - started < 1.5
+
+
+def test_an_engine_that_does_not_answer_is_down() -> None:
+    with socket.socket() as closed:
+        closed.bind(("127.0.0.1", 0))
+        port = closed.getsockname()[1]
+    assert not SGLangEngine(f"http://127.0.0.1:{port}", None, {}).healthy(timeout_seconds=1)
+
+
+def test_an_engine_that_answers_something_other_than_http_is_down() -> None:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+
+        def reply() -> None:
+            connection, _ = listener.accept()
+            with connection:
+                connection.recv(65536)
+                connection.sendall(b"NOT HTTP\r\n\r\n")  # a malformed status line: http.client's BadStatusLine
+
+        answering = threading.Thread(target=reply, daemon=True)
+        answering.start()
+        assert not SGLangEngine(f"http://127.0.0.1:{listener.getsockname()[1]}", None, {}).healthy(timeout_seconds=5)
+        answering.join(timeout=5)
+
+
+def test_an_engine_whose_process_exited_is_down_even_if_its_port_still_answers(health: Any) -> None:
+    exited = subprocess.Popen([sys.executable, "-c", "pass"])
+    exited.wait()
+    assert not SGLangEngine(_url(health), exited, {}).healthy()  # type: ignore[arg-type]
 
 
 class _Generate(BaseHTTPRequestHandler):

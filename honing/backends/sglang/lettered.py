@@ -204,6 +204,11 @@ class LetteredDecisionModel:
     def metadata(self) -> Mapping[str, object]:
         return self._metadata
 
+    def healthy(self) -> bool:
+        """Whether the scorer's engine still answers; a scorer without that check (in-process) always does."""
+        check = getattr(self._scorer, "healthy", None)
+        return bool(check()) if callable(check) else True
+
     @property
     def letters(self) -> list[int]:
         return self._prompts.letters
