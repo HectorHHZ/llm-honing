@@ -31,7 +31,7 @@ from typing import Any
 import honing
 from honing.backends.jev.nanojev import nanojev_snapshot, verify_published, weights_checksum
 from honing.backends.jev.nanojev_trainer import release_path
-from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints, _stop_server
+from honing.backends.sglang.endpoints import ServingSettings, SGLangPolicyEndpoints, StartedServer, _stop_server
 from honing.backends.sglang.engine import die_with_parent
 from honing.core import ContractError, ModelSnapshot
 
@@ -84,8 +84,10 @@ def trained_manifest(checkpoint: Path) -> Path | None:
     return manifest
 
 
-def start_nanojev_server(serving: NanoJevServing, checkpoint: Path, key: str, gpu: str, stack: ExitStack) -> str:
-    """Start the decision server for one checkpoint on one GPU; register its shutdown on ``stack``; return its URL."""
+def start_nanojev_server(
+    serving: NanoJevServing, checkpoint: Path, key: str, gpu: str, stack: ExitStack
+) -> StartedServer:
+    """Start the decision server for one checkpoint on one GPU; register its shutdown on ``stack``; return its URLs."""
     if weights_checksum(checkpoint) != key:
         raise ContractError(f"{checkpoint} does not hold the weights with checksum {key[:12]}")
     manifest = trained_manifest(checkpoint)
@@ -125,7 +127,7 @@ def start_nanojev_server(serving: NanoJevServing, checkpoint: Path, key: str, gp
     if process.stdout is not None:
         threading.Thread(target=_drain, args=(process.stdout, log), daemon=True).start()
     url: str = ready["url"]
-    return url
+    return StartedServer(url, f"{url}/v1/health", lambda: process.poll() is not None)
 
 
 def _drain(source: Any, log: Path | None) -> None:
