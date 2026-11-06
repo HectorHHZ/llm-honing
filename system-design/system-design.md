@@ -338,7 +338,8 @@ A harness is a set of files for one agent.
 
 The planned runner is built on Slime's agent layer: `BaseHarness.run` launches the agent
 in a sandbox after Honing writes the spec's files into its workspace; the `Sandbox`
-protocol lets a local container stand in for Slime's E2B sandbox; the agent's own
+protocol lets a local container stand in for Slime's E2B sandbox
+(`LocalContainerSandbox`, a Docker container, in `honing/backends/slime/sandbox.py`); the agent's own
 transcript (`{workdir}/.harness/trajectory.jsonl`) is what reflection methods read; and
 Slime's Anthropic and OpenAI adapters capture token-level samples when the episode is a
 training rollout. **Gate evaluations and training rollouts use the same runner**, so the
@@ -729,7 +730,8 @@ Gaps a reviewer should press on.
    a gain is worth it during method development; per deployment it is an operator choice.
 7. **`slime.agent` is not a declared extension point.** It is used by one Slime example
    and carries no stability promise; step 5 needs a contract test on `BaseHarness`,
-   `Sandbox`, and the adapters.
+   `Sandbox`, and the adapters. The `Sandbox` one exists
+   (`tests/contracts/test_slime_sandbox_protocol.py`).
 8. **Unverified details.** The Codex transcript format; whether transcripts show which
    skills an agent loaded; whether SGLang loads heterogeneous architectures (it loads the
    uniform Qwen2, Qwen3 and Qwen3.5 checkpoints Honing uses, #103; a non-uniform pruned
