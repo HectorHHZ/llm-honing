@@ -357,9 +357,16 @@ class StartLuxDecisionModel:
     """A loaded StartLux-Decision checkpoint. Create it with :meth:`load`, which holds the GPU lock while in use."""
 
     def __init__(
-        self, engine: Any, prompts: Any, metadata: Mapping[str, object], max_length: int, concurrent: bool = False
+        self,
+        engine: Any,
+        prompts: Any,
+        metadata: Mapping[str, object],
+        max_length: int,
+        concurrent: bool = False,
+        sglang: Any = None,
     ) -> None:
         self._engine = engine
+        self._sglang = sglang  # the SGLang engine running the forward pass, if any
         self._prompts = prompts
         self._metadata = dict(metadata)
         self._max_length = max_length
@@ -369,6 +376,10 @@ class StartLuxDecisionModel:
     @property
     def metadata(self) -> Mapping[str, object]:
         return self._metadata
+
+    def healthy(self) -> bool:
+        """Whether the SGLang engine still answers; the native model runs in this process and always does."""
+        return self._sglang is None or bool(self._sglang.healthy())
 
     @classmethod
     @contextlib.contextmanager
@@ -454,7 +465,7 @@ class StartLuxDecisionModel:
                     "maxLen": settings.max_length,
                     "python": sys.version.split()[0],
                 }
-                yield cls(decision, prompts, metadata, settings.max_length, concurrent=True)
+                yield cls(decision, prompts, metadata, settings.max_length, concurrent=True, sglang=engine)
 
     @staticmethod
     def _prepare(engine: Any) -> float:

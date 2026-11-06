@@ -2,7 +2,9 @@
 
 Routes:
 
-- ``GET /v1/health`` returns ``{"ready": true, "metadata": ..., "maxBranches": 16}``.
+- ``GET /v1/health`` returns ``{"ready": true, "metadata": ..., "maxBranches": 16}``. A model that offers
+  ``healthy()`` is asked first; when it returns False or raises, the route answers 503 with ``"ready": false``
+  and an ``error``.
 - ``POST /v1/decide`` takes ``{"parts": {...}, "questions": {...}}``, with an
   optional ``id`` echoed back, and returns the model's answers with the same
   fields the stdio worker emits. An optional ``branches`` object names up to
@@ -218,9 +220,21 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path != "/v1/health":
             self._send(HTTPStatus.NOT_FOUND, {"error": f"no route {self.path}"})
             return
-        self._send(
-            HTTPStatus.OK, {"ready": True, "metadata": dict(self.server.model.metadata), "maxBranches": MAX_BRANCHES}
-        )
+        metadata = dict(self.server.model.metadata)
+        # On this request's thread, never through the model queue, so a long decision does not delay the answer.
+        check = getattr(self.server.model, "healthy", None)
+        if callable(check):
+            try:
+                reason = None if check() else "the model reports that its engine is down"
+            except Exception as error:  # a check that fails is a model that is down, not a route that crashes
+                reason = f"{type(error).__name__}: {error}"
+            if reason is not None:
+                self._send(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"ready": False, "error": reason, "metadata": metadata, "maxBranches": MAX_BRANCHES},
+                )
+                return
+        self._send(HTTPStatus.OK, {"ready": True, "metadata": metadata, "maxBranches": MAX_BRANCHES})
 
     def do_POST(self) -> None:
         if self.path != "/v1/decide":
