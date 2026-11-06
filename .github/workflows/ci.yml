@@ -307,3 +307,41 @@ jobs:
             ${{ runner.temp }}/openhands-check/workspaces/*/agent.log
             ${{ runner.temp }}/openhands/summary.json
           if-no-files-found: ignore
+
+  pi:
+    # The pi runner with the real worker, on pi installed from its lock (integrations/pi/README.md). No model or key:
+    # every episode is a real pi session with the stand-in policy server, so this catches a lock that no longer
+    # installs or a worker that no longer runs against pi's SDK.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integrations/pi/package-lock.json
+      - name: Install Honing and pi
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          npm ci --ignore-scripts --prefix integrations/pi
+      - name: Harness runner contract with pi as the agent
+        run: python scripts/e2e/check_runner.py --config configs/e2e/pi.json --work-dir "$RUNNER_TEMP/pi-check"
+      - name: All planes with pi as the agent
+        run: python scripts/e2e/honing_pipeline.py --config configs/e2e/pi.json --work-dir "$RUNNER_TEMP/pi"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pi-output
+          path: |
+            ${{ runner.temp }}/pi-check/workspaces/*/agent.log
+            ${{ runner.temp }}/pi/summary.json
+          if-no-files-found: ignore

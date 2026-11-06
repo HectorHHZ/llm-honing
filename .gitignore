@@ -11,6 +11,7 @@ dist/
 .venv/
 venv/
 env/
+node_modules/
 
 # Tooling caches
 .pytest_cache/

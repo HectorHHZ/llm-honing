@@ -1,0 +1,206 @@
+{
+  "description": "Acceptance check for the pi runner (#139), free and on a CPU. Run: python scripts/e2e/check_runner.py --config configs/e2e/pi.json, then the same with honing_pipeline.py. This is all_planes.json with only the runner, conformance probe, and seed harness changed: each episode is a real pi session (integrations/pi/worker.mjs on pi's SDK) against the stand-in policy server, so no model or key is needed, only Node.js 22.19 or newer and pi installed from its lock (integrations/pi/README.md). tests/test_pi_runner.py runs it when pi is installed, and CI's pi job runs both scripts on every pull request.",
+  "work_dir": "runs/e2e-pi",
+  "requires": {
+    "env": [],
+    "commands": [
+      "node"
+    ],
+    "paths": [
+      "integrations/pi/node_modules/@earendil-works/pi-coding-agent/package.json"
+    ]
+  },
+  "tasks": {
+    "factory": "tests.fakes.pipeline:tasks"
+  },
+  "harness_seed": {
+    "factory": "honing.backends.pi.e2e:seed_harness",
+    "args": {
+      "instructions": "Solve the task.\n"
+    }
+  },
+  "components": {
+    "model_source": {
+      "factory": "tests.fakes.pipeline:model_source"
+    },
+    "endpoints": {
+      "factory": "tests.fakes.pipeline:endpoints"
+    },
+    "trainer": {
+      "factory": "tests.fakes.pipeline:trainer",
+      "args": {
+        "gain": 0.1
+      }
+    },
+    "data": {
+      "factory": "tests.fakes.pipeline:data"
+    },
+    "rollout": {
+      "factory": "tests.fakes.pipeline:rollout"
+    },
+    "scorer": {
+      "factory": "tests.fakes.pipeline:scorer"
+    },
+    "selector": {
+      "factory": "tests.fakes.pipeline:selector"
+    },
+    "editor": {
+      "factory": "tests.fakes.pipeline:editor"
+    },
+    "quantizer": {
+      "factory": "tests.fakes.pipeline:quantizer"
+    },
+    "telemetry": {
+      "factory": "tests.fakes.pipeline:telemetry"
+    },
+    "runner": {
+      "factory": "honing.backends.pi.e2e:runner",
+      "args": {
+        "concurrency": 4,
+        "timeout_seconds": 300
+      }
+    },
+    "grader": {
+      "factory": "tests.fakes.pipeline:grader"
+    },
+    "method": {
+      "factory": "tests.fakes.pipeline:method"
+    }
+  },
+  "conformance": {
+    "probe": {
+      "factory": "honing.backends.pi.e2e:probe"
+    },
+    "concurrent": 4
+  },
+  "trainer_check": {
+    "jobs": [
+      {
+        "algorithm": "sft",
+        "steps": 10
+      },
+      {
+        "algorithm": "grpo",
+        "steps": 10,
+        "rollout": "harness"
+      },
+      {
+        "algorithm": "distill",
+        "steps": 10,
+        "teacher": {
+          "kind": "lineage",
+          "ref": "parent",
+          "placement": "engine"
+        }
+      }
+    ],
+    "samples_per_task": 2
+  },
+  "selectors": {
+    "default": {
+      "win_loss": {}
+    },
+    "prune": {
+      "no_regression": {
+        "max_regression": 0.05
+      }
+    },
+    "quantize": {
+      "no_regression": {
+        "max_regression": 0.01
+      }
+    }
+  },
+  "defaults": {
+    "train": {
+      "algorithm": "sft",
+      "steps": 10
+    },
+    "budget": {
+      "keep_ratio": 0.75
+    },
+    "recovery": {
+      "algorithm": "distill",
+      "steps": 10,
+      "teacher": {
+        "kind": "lineage",
+        "ref": "parent",
+        "placement": "engine"
+      }
+    },
+    "scheme": {
+      "weight_format": "int4",
+      "granularity": "group",
+      "group_size": 128
+    }
+  },
+  "schedule": [
+    {
+      "kind": "train",
+      "algorithm": "sft",
+      "steps": 10
+    },
+    {
+      "kind": "prune",
+      "keep_ratio": 0.75
+    },
+    {
+      "kind": "quantize",
+      "scheme": {
+        "weight_format": "int4",
+        "granularity": "group",
+        "group_size": 128
+      }
+    },
+    {
+      "kind": "train",
+      "algorithm": "sft",
+      "steps": 10,
+      "numerics": {
+        "mode": "fake_quant_qat",
+        "scheme": {
+          "weight_format": "int4",
+          "granularity": "group",
+          "group_size": 128
+        }
+      }
+    },
+    {
+      "kind": "quantize",
+      "scheme": {
+        "weight_format": "int4",
+        "granularity": "group",
+        "group_size": 128
+      }
+    },
+    {
+      "kind": "harness",
+      "label": "verify"
+    },
+    {
+      "kind": "harness",
+      "label": "nothing-left"
+    },
+    {
+      "kind": "train",
+      "algorithm": "grpo",
+      "steps": 10,
+      "rollout": "harness"
+    },
+    {
+      "kind": "rollback",
+      "to": "r0001"
+    }
+  ],
+  "expect": [
+    "published",
+    "published",
+    "rolled back",
+    "published",
+    "published",
+    "published",
+    "skipped",
+    "published",
+    "restored"
+  ]
+}
