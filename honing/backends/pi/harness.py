@@ -140,8 +140,7 @@ def plan_agent(spec: HarnessSpec, policy: ToolPolicy) -> AgentPlan:
     system_prompt = SYSTEM_PROMPT if SYSTEM_PROMPT in instructions else None
     appended = tuple(path for path in instructions if path != SYSTEM_PROMPT)
     skills = _skills(spec, by_kind.get("skill", []))
-    settings = _settings(spec.get(SETTINGS), policy)
-    tools = tuple(settings.get("defaultTools", policy.default))  # type: ignore[arg-type]
+    settings, tools = _settings(spec.get(SETTINGS), policy)
     if skills and not _SKILL_READERS & set(tools):
         raise CampaignRuleError(
             "harness_well_formed",
@@ -226,9 +225,9 @@ def _description(path: str, content: str) -> str | None:
     return (first or f"Instructions from {path}")[:_MAX_DESCRIPTION]
 
 
-def _settings(file: HarnessFile | None, policy: ToolPolicy) -> dict[str, object]:
+def _settings(file: HarnessFile | None, policy: ToolPolicy) -> tuple[dict[str, object], tuple[str, ...]]:
     if file is None:
-        return {}
+        return {}, policy.default
     try:
         settings = json.loads(file.content)
     except json.JSONDecodeError as error:
@@ -253,4 +252,4 @@ def _settings(file: HarnessFile | None, policy: ToolPolicy) -> dict[str, object]
         raise CampaignRuleError(
             "harness_well_formed", f"{SETTINGS}: defaultThinkingLevel must be one of {THINKING_LEVELS}"
         )
-    return settings
+    return settings, tuple(tools)
