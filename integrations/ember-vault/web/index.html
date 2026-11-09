@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4ede2">
+  <meta name="description" content="Ember Vault, a playable top-down action roguelike.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <title>Ember Vault</title>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="identity">
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M24 4 43 15v19L24 45 5 34V15Z" fill="#2b2428"/>
+          <path d="M24 10 37 18v13l-13 8-13-8V18Z" fill="none" stroke="#e78c56" stroke-width="2"/>
+          <path d="m24 14 6 11-6 9-6-9Z" fill="#ffc08a"/>
+        </svg>
+        <div>
+          <p class="eyebrow">Honing arcade / 01</p>
+          <h1>Ember Vault</h1>
+        </div>
+      </div>
+      <span class="tag">Action roguelike</span>
+    </header>
+
+    <section class="playfield" aria-label="Ember Vault game">
+      <div class="arena">
+        <div class="arena-bar">
+          <div><span class="signal"></span><strong id="mode">Standby</strong></div>
+          <div class="arena-buttons">
+            <button id="takeover" class="small" hidden>Take control</button>
+            <button id="pause" class="small" hidden>Pause</button>
+            <button id="reset" class="small" hidden>New run</button>
+          </div>
+        </div>
+        <div class="viewport">
+          <canvas id="game" width="960" height="540" tabindex="0" aria-label="Top-down vault. WASD or arrows move. Mouse aims. Click or Space fires. Shift dashes."></canvas>
+          <div class="overlay" id="overlay">
+            <div id="brief" class="modal">
+              <p class="eyebrow">Mission briefing</p>
+              <h2>Reach the furnace.</h2>
+              <p>Clear each vault, upgrade your rover, and take down the Furnace.</p>
+              <div class="seed-row">
+                <label for="seed">Map seed</label>
+                <input id="seed" type="number" min="0" max="4294967295" step="1" required>
+                <button id="random-seed" class="plain" type="button">Shuffle</button>
+              </div>
+              <div class="modal-actions">
+                <button id="start" class="primary">Start run <span aria-hidden="true">↗</span></button>
+                <button id="demo" class="secondary">▶ Watch demo</button>
+              </div>
+            </div>
+            <div id="pause-card" class="modal compact" hidden>
+              <p class="eyebrow">Simulation paused</p>
+              <h2>Hold position.</h2>
+              <button id="resume" class="primary">Resume run</button>
+            </div>
+            <div id="upgrade-card" class="modal wide" hidden>
+              <p class="eyebrow" id="upgrade-label">Vault cleared</p>
+              <h2>Choose an upgrade.</h2>
+              <div id="upgrades" class="upgrade-options"></div>
+            </div>
+            <div id="finish" class="modal" hidden>
+              <p class="eyebrow">Run complete</p>
+              <h2 id="finish-title"></h2>
+              <p id="finish-summary"></p>
+              <div class="modal-actions">
+                <button id="retry" class="primary">Run it again</button>
+                <button id="briefing" class="secondary">Back to briefing</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="arena-footer">
+          <span><b class="rover-dot"></b> Your rover</span>
+          <span><b class="hostile-dot"></b> Hostile</span>
+          <span><b class="exit-dot"></b> Unlocked gate</span>
+        </div>
+      </div>
+
+      <aside class="console" aria-label="Run status">
+        <div class="card mission">
+          <p class="eyebrow">Current objective</p>
+          <h2 id="objective">Clear the intake</h2>
+          <p id="objective-detail"></p>
+          <ol id="route" class="route" aria-label="Vault route"></ol>
+        </div>
+        <div class="card instruments">
+          <p class="eyebrow">Rover status</p>
+          <div class="metric"><span>Hull</span><strong id="hull"></strong></div>
+          <progress id="health" aria-label="Hull health"></progress>
+          <div class="metric"><span>Dash</span><strong id="dash-state"></strong></div>
+          <progress id="dash-meter" aria-label="Dash charge"></progress>
+          <div class="run-meta"><span id="kills"></span><span id="timer"></span></div>
+        </div>
+        <div class="card controls">
+          <p class="eyebrow">Controls</p>
+          <dl>
+            <div><dt>Move</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dd></div>
+            <div><dt>Aim / fire</dt><dd>Mouse / click</dd></div>
+            <div><dt>Auto-aim fire</dt><dd><kbd>Space</kbd></dd></div>
+            <div><dt>Dash</dt><dd><kbd>Shift</kbd></dd></div>
+          </dl>
+          <button id="export" class="plain export" disabled>Save action trace</button>
+        </div>
+      </aside>
+    </section>
+    <div class="touch" aria-label="Touch controls">
+      <div class="pad">
+        <button data-hold="ArrowUp" aria-label="Move up">▲</button>
+        <button data-hold="ArrowLeft" aria-label="Move left">◀</button>
+        <button data-hold="ArrowDown" aria-label="Move down">▼</button>
+        <button data-hold="ArrowRight" aria-label="Move right">▶</button>
+      </div>
+      <button data-hold="Space">Fire</button>
+      <button data-hold="ShiftLeft">Dash</button>
+    </div>
+  </main>
+  <script src="engine.js"></script>
+  <script src="render.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

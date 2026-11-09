@@ -7,6 +7,7 @@ model requests, episode execution, grading and training data conversion.
 | Game | Runtime and resources | Honing adapter |
 | --- | --- | --- |
 | Craftax | `craftax/engine.py`, `craftax/catalog.py`; pinned upstream Craftax package | `../honing/backends/craftax/` |
+| Ember Vault | `ember-vault/web/engine.js` and browser resources | Integration-local demo |
 | Griddly Spiders | `griddly/engine.py`, `griddly/catalog.py`; pinned upstream Griddly package | `../honing/backends/griddly/` |
 | REA-Issac | `rea_issac/engine.py`, `source_facts.json`, `policy.py`, `ui.py` and `web/` | `../honing/backends/rea_issac/` |
 | Tank War | `tank-war/web/game/engine.js` and web resources | `../honing/backends/tank/` |
