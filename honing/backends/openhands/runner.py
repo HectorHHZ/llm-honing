@@ -62,10 +62,13 @@ class OpenHandsEpisodeRunner:
         python: The OpenHands environment's interpreter.
         worker: The worker script.
         workspaces: Where episode directories are created.
-        endpoints: Resolves a policy to its OpenAI-compatible endpoint. With
-            :class:`~honing.backends.llm_gateway.GatewayEndpoints`, the worker also
-            gets the model's API key (through the environment, never on disk)
-            and prices.
+        endpoints: Resolves a policy to its OpenAI-compatible endpoint. When it
+            has an ``api_key_env(policy)`` method, as
+            :class:`~honing.backends.llm_gateway.GatewayEndpoints` and
+            :class:`~honing.harness.endpoints.StaticPolicyEndpoints` do, the
+            worker also gets the key that variable holds (through the
+            environment, never on disk). With ``GatewayEndpoints`` it also gets
+            the model's prices.
         tools: What a harness may give the agent.
         mounts: Directories put into every working directory, by name.
         mount_mode: ``copy``, the default, gives each episode its own copy of
@@ -236,12 +239,14 @@ class OpenHandsEpisodeRunner:
         if endpoint.runtime not in _CHAT_RUNTIMES:
             raise ContractError(f"OpenHands needs an OpenAI-compatible endpoint, not a {endpoint.runtime} one")
         access: dict[str, object] = {"base_url": endpoint.base_url, "model": endpoint.served_model}
-        if isinstance(self._endpoints, GatewayEndpoints):
-            model = self._endpoints.model(policy)
-            key = model.api_key_env
+        # The key's name comes from an optional method, not the PolicyEndpoints protocol, so any map can offer it.
+        if hasattr(self._endpoints, "api_key_env"):
+            key = self._endpoints.api_key_env(policy)
             if key is not None and not (self._environment.get(key) or os.environ.get(key)):
-                raise ContractError(f"{model.model} needs its API key in the environment variable {key}")
+                raise ContractError(f"{endpoint.served_model} needs its API key in the environment variable {key}")
             access["api_key_env"] = key
+        if isinstance(self._endpoints, GatewayEndpoints):  # only a gateway model has prices
+            model = self._endpoints.model(policy)
             if model.input_usd_per_million is not None:
                 access["input_cost_per_token"] = model.input_usd_per_million / 1e6
             if model.output_usd_per_million is not None:

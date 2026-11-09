@@ -359,7 +359,17 @@ Methods that reflect or propose call a model through `ChatModel`, and runners fi
 engine behind a policy through `PolicyEndpoints`; both are protocols in `honing/core`, and
 their implementations live outside it. The `ChatModel` client is `LiteLLMChatModel`
 (`honing/harness/models.py`, the `litellm` extra), which reaches hosted APIs and local
-servers alike. A method whose proposer is a coding agent rather than one model call, as
+servers alike. For an SGLang server Honing did not start, `StaticPolicyEndpoints`
+(`honing/harness/endpoints.py`) maps checkpoint checksums to servers declared up front; a
+hosted API goes through `GatewayEndpoints` (`honing/backends/llm_gateway`). A declared server
+with a health route is probed on resolve at most once every 300 s, and a hung one takes up to
+about 60 s to detect (two 30 s probes). A failed check fails every resolve against that
+server until the 300 s have passed, without probing again. The interval is long because
+resolve runs on the runners' event loop until #154 moves it off, and a probe holds the loop:
+at least 1 s for a healthy SGLang server, about 60 s for a hung one. A map whose server
+needs a key names the key's variable through an optional `api_key_env(policy)` method, which
+runners find with `hasattr`; it is not part of `PolicyEndpoints`.
+A method whose proposer is a coding agent rather than one model call, as
 Meta-Harness's is, runs it through `ProposerAgent`: `run(prompt, workdir, *, instructions)`
 starts the agent in a working directory the method has written, with the method's skill
 as its instructions, and returns its exit code; the method then reads back the files the
@@ -506,6 +516,10 @@ campaign's runners call can be served by SGLang, pinned to one version.
   runner resolves a policy, after checking the checkpoint's weights against the policy's
   checksum, so a candidate a train move has just produced is served like a release. A
   running server is reused; when every GPU is serving, the least recently used one stops.
+  A running server is probed on resolve at most once every 300 s, for the same reason as a
+  declared one (resolve holds the runners' event loop until #154); a hung one takes up to
+  about 60 s to detect (two 30 s probes), and is then restarted once on the same GPU. One
+  whose process has exited is restarted on the next resolve, without waiting for a probe.
 - **Families that stay native.** Laya (an encoder) and djev (remote diffusion) cannot run
   on SGLang. Kev and NanoJev could (hidden states, with their heads in Honing) but are
   small and stay on their own loaders for now.
