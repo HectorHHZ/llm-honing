@@ -1,0 +1,90 @@
+{
+  "scope": "Author-side original native game plus actual decision model interface demonstration; no completion, training, independent rerun or deterministic replay claim.",
+  "sourceRepository": "https://github.com/TerryCavanagh/VVVVVV",
+  "sourceCommit": "40e1ec3bbf2a990a5c600564fe312c2121178a50",
+  "toolchain": {
+    "platform": "GNU/Linux x86_64",
+    "gcc": "11.3.0",
+    "cmake": "3.22.1",
+    "sdl": "3.4.0"
+  },
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+    "layaVersion": "0.3.20",
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "threads": 4
+  },
+  "modelRun": {
+    "decisions": 20,
+    "ticksPerDecision": 15,
+    "ticks": 300,
+    "simulationMilliseconds": 10200,
+    "wallSeconds": 33.75836968398653,
+    "actionCounts": {
+      "flip": 20
+    },
+    "nativeCorrespondencePairsChecked": 20,
+    "finalFlips": 20,
+    "deaths": 0,
+    "initialRoom": [
+      113,
+      105
+    ],
+    "finalRoom": [
+      113,
+      105
+    ],
+    "nativeGameExitCode": 0,
+    "heuristicFallback": false,
+    "training": false
+  },
+  "video": {
+    "sha256": "2dabc815d62abb8c5c5155a92b9c810162b74193efe95138f55e7bbdfc914d1c",
+    "frames": 300,
+    "width": 640,
+    "height": 480,
+    "framesPerSecond": "500/17",
+    "durationSeconds": 10.2,
+    "timeline": "Action ticks only; startup countdown and model inference waiting omitted. 34ms/tick from pinned original get_framerate."
+  },
+  "nativeChecks": {
+    "offeredActionsChecked": [
+      "wait",
+      "left",
+      "right",
+      "flip",
+      "flip_left",
+      "flip_right"
+    ],
+    "invalidCommandsRejected": 5,
+    "resetInitialPlayerRoomGravityCheckpointCountersMatched": true,
+    "invalidResponseFixtureNativeCalls": 0,
+    "invalidResponseFixturePausedStateUnchanged": true,
+    "watchdogInvalidCommandFlood": {
+      "timeoutMilliseconds": 500,
+      "invalidCommandsSent": 29,
+      "exitCode": 3,
+      "pausedStateUnchanged": true
+    },
+    "gameStopExitCode": 0,
+    "sharedModelModified": false
+  },
+  "portableChecks": {
+    "focused": "33 passed",
+    "full": "1331 passed,45 skipped,1 deselected,1 xfailed,6 subtests passed",
+    "fullCommand": "python -m pytest -m 'not gpu'",
+    "preCommitAllFiles": "passed"
+  },
+  "bridgeSourceSha256": {
+    "HoningBridge.h": "5fe9607c467294d025ee2c4cb3be0650f9c4aa30f63866a43b2af8c9fa15fe98",
+    "HoningBridge.inc": "f7ee01963d0f6dff8974ed7813d1ebf3b602db82305e2bb443a9fa5b1a553623",
+    "build.py": "61fdb5bbd296ca7e47857d3910e53cef5dadff9adc669399e6e7a1e3b6da9e44",
+    "run.py": "12d631ec6e3e39980c9535212af988f170f6b1466b553afe770471fe3c8c7272",
+    "decision.py": "52465a31e868ef2e58031288ac7ecc12b2933164b4abea790fc16ca28571059f",
+    "verify_native.py": "dbba4cb30a3decf06f92d8c449ec317d4ac1dc6fe6bef45fe3ec2c7586dd5728"
+  }
+}
