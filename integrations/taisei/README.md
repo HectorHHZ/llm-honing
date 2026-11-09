@@ -12,7 +12,17 @@ hitbox. This adapter offers nine movement choices while always holding shot
 and focus; it excludes bombs. A real Honing decision service supplies every
 movement choice. There is no heuristic fallback or training.
 
-Scope is a short Stage 1 Easy segment with Youmu A. The full native game has six
+Scope is a short Stage 1 Easy segment with Youmu A. The upstream developer
+stage CLI enables stage-practice setup: eight spare lives, three bombs and
+stored power 400 (4.00, the effective maximum). The clip retains the developer
+DPS/task HUD. This boosted starting setup follows the original game's practice
+rules. The adapter enables no invulnerability cheat; `player_init` initializes
+`iddqd` false, and no skip-to-bookmark/dialog or cheat key is used. Normal native
+spawn, recovery and bomb immunity rules remain in force. These initialization
+claims follow [`main.c`](https://github.com/taisei-project/taisei/blob/5bfc9b842fe6d9bb8d1610f76f442ba07c72c4cf/src/main.c),
+[`stage.c`](https://github.com/taisei-project/taisei/blob/5bfc9b842fe6d9bb8d1610f76f442ba07c72c4cf/src/stage.c),
+[`player.c`](https://github.com/taisei-project/taisei/blob/5bfc9b842fe6d9bb8d1610f76f442ba07c72c4cf/src/player.c)
+and the fresh run's `practice_power = 400` configuration. The full native game has six
 story stages, an extra stage and generated spell-practice entries in
 [`src/stageinfo.c`](https://github.com/taisei-project/taisei/blob/5bfc9b842fe6d9bb8d1610f76f442ba07c72c4cf/src/stageinfo.c).
 The demo duration is measured in `validation/author-smoke.json`; full-game and

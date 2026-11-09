@@ -129,5 +129,17 @@
     "portableTests": "32 passed",
     "fullPytest": "1330 passed, 46 skipped, 1 xfailed, 6 subtests passed",
     "preCommitAllFiles": "all hooks passed"
+  },
+  "startConditions": {
+    "mode": "native developer CLI stage practice",
+    "spareLives": 8,
+    "bombs": 3,
+    "storedPower": 400,
+    "effectivePowerMaximum": 400,
+    "powerDisplayScale": "100 = 1.00",
+    "invulnerabilityCheatEnabledByAdapter": false,
+    "invulnerabilityEvidence": "Source player_init zero-initializes iddqd; no cheat key or skip flag used. Not a per-decision observed field.",
+    "nativeSpawnRecoveryBombImmunityRulesUnchanged": true,
+    "developerDpsTaskHudVisible": true
   }
 }

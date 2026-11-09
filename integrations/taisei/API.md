@@ -13,7 +13,15 @@ builds the original game. Without `HONING_SESSION_DIR`, control and the random
 seed retain upstream behavior. In bridge mode, each new process begins Stage 1,
 Easy, Youmu A, game RNG seed 7, normal practice starting resources. No arbitrary
 savestate or model-controlled reset is implemented. Reset means a new process
-and fresh storage/cache directory. Identical full trajectories and visual RNG
+and fresh storage/cache directory. In the tested developer CLI stage-practice
+setup, the native game grants eight spare lives, three bombs and stored power
+400 (4.00, max effective power 400). Developer DPS/task statistics remain visible.
+The source initializes the invulnerability cheat `iddqd` false; this adapter
+uses no cheat keys or skip-to-dialog/bookmark flags. Ordinary native recovery,
+spawn and bomb invulnerability rules remain unchanged. `iddqd` and power are
+not included in the model sensor; these starting conditions are source/config
+evidence, not a claim of a separately read native field at each decision.
+Identical full trajectories and visual RNG
 replay have not been established.
 
 Only the controller writes the private session directory. It atomically renames
