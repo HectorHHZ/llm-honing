@@ -9,10 +9,9 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
+from honing.core import ContractError, EpisodeOutcome, Grade, Task, require
 from integrations.officeqa.fetch import SCORER_SHA256
 from integrations.officeqa.suite import OfficeQASuite
-
-from honing.core import ContractError, EpisodeOutcome, Grade, Task, require
 
 Scorer = Callable[[str, str, float], float]
 """``score(reference, prediction, tolerance)``: 1.0 when the prediction matches, else 0.0."""

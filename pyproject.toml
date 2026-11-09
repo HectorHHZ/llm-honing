@@ -66,17 +66,23 @@ serve-sglang = ["sglang==0.5.21", "cuda-tile==1.6.0rc5", "flash-attn-4==4.0.0b34
 [tool.setuptools_scm]
 fallback_version = "0.0.0.dev0"
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
-include = ["honing", "honing.*"]
+include = ["honing", "honing.*", "integrations", "integrations.craftax", "integrations.griddly", "integrations.rea_issac"]
 
 [tool.setuptools.package-data]
-"honing.backends.rea_issac" = ["source_facts.json"]
+"honing.harness.methods.meta_harness" = ["SKILL.md"]
+"integrations.rea_issac" = ["source_facts.json", "web/*", "config/*.json", "tasks/*.jsonl"]
+"integrations.craftax" = ["config/*.json", "tasks/*.jsonl"]
+"integrations.griddly" = ["config/*.json", "tasks/*.jsonl"]
 
 [tool.isort]
 profile = "black"          # black-compatible
 line_length = 119          # keep in sync with [tool.black] and [tool.ruff]
 py_version = 310
-known_first_party = ["honing"]
+known_first_party = ["honing", "integrations"]
 src_paths = ["honing", "tests"]
 
 [tool.black]
@@ -112,7 +118,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["honing"]
+files = ["honing", "integrations/craftax/engine.py", "integrations/griddly/engine.py", "integrations/rea_issac/engine.py"]
 strict_equality = true
 warn_unused_ignores = true
 warn_redundant_casts = true
@@ -155,7 +161,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["honing"]
+source = ["honing", "integrations.craftax", "integrations.griddly", "integrations.rea_issac"]
 branch = true
 
 [tool.coverage.report]

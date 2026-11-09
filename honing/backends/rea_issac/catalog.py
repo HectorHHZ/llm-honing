@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from honing.backends.rea_issac.engine import Action
+from integrations.rea_issac.engine import Action
 
 PROTOCOL = "rea-issac-typed-v1"
 DIRECTIONS = {

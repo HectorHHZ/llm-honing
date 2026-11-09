@@ -9,11 +9,10 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
+from honing.core import Task
 from integrations.officeqa.fetch import QUESTIONS, SCORER
 from integrations.officeqa.grader import OfficeQAGrader, load_scorer
 from integrations.officeqa.suite import OfficeQASuite, load_suite
-
-from honing.core import Task
 
 
 def tasks(context: object, data_dir: str, uids: Sequence[str]) -> tuple[Task, ...]:

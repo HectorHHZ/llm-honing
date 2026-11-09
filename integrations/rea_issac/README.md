@@ -1,5 +1,9 @@
 # REA-Issac
 
+Game code is in this directory. Honing runners, graders and model adapters are
+in `honing/backends/rea_issac/`. See [the directory layout](../README.md) for
+imports, installation and recording compatibility.
+
 REA-Issac is an independent Isaac-inspired room-combat scenario for Honing.
 It provides a deterministic CPU simulation, a real-time browser UI, action
 replay, a public state/action interface, seeded tasks, and a model episode
@@ -17,7 +21,7 @@ implementations. See [ANALYSIS.md](ANALYSIS.md) for the source and scope of that
 Run from the repository root on macOS or Linux (Python 3.10+):
 
 ```bash
-python3 integrations/rea-issac/scripts/play.py --port 4183 --seed 7
+python3 integrations/rea_issac/scripts/play.py --port 4183 --seed 7
 ```
 
 Open <http://127.0.0.1:4183/>. Use **WASD** to move, **arrow keys** to shoot,
@@ -32,16 +36,16 @@ through VS Code Remote SSH, then open the forwarded address on the host.
 ## Run and replay a baseline
 
 ```bash
-python3 integrations/rea-issac/scripts/match.py --policy baseline --seed 7 --max-ticks 6000
+python3 integrations/rea_issac/scripts/match.py --policy baseline --seed 7 --max-ticks 6000
 ```
 
-The last line prints the new run directory under `integrations/rea-issac/runs/`.
+The last line prints the new run directory under `integrations/rea_issac/runs/`.
 In the UI, select **Open replay** and choose that directory's `replay.json`.
 The UI verifies the final state hash before importing it, then reproduces the
 recorded actions. No video encoder is needed. To verify the full recording:
 
 ```bash
-python3 integrations/rea-issac/scripts/verify_replay.py /path/to/run-directory
+python3 integrations/rea_issac/scripts/verify_replay.py /path/to/run-directory
 ```
 
 Every run uses a unique directory; explicit `--out` refuses an existing path.
@@ -59,7 +63,7 @@ Serve a supported model with Honing's existing decision service (see the
 [RA2 guide](../ra2/README.md#using-a-decision-server)), then run:
 
 ```bash
-python3 integrations/rea-issac/scripts/match.py --policy model \
+python3 integrations/rea_issac/scripts/match.py --policy model \
   --decision-server http://127.0.0.1:8080 --seed 7 \
   --max-ticks 6000 --decision-frames 3
 ```

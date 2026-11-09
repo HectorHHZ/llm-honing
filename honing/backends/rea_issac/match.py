@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from honing.backends.rea_issac.catalog import OPTIONS, PROTOCOL
-from honing.backends.rea_issac.engine import VERSION, Engine
 from honing.backends.rea_issac.harness import load_harness, parse_harness, seed_harness
 from honing.backends.rea_issac.model import DecisionClient, make_request
-from honing.backends.rea_issac.policy import Baseline
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
 from honing.core import CampaignRuleError, HarnessSpec
+from integrations.rea_issac import engine as game_engine
+from integrations.rea_issac.engine import VERSION, Engine
+from integrations.rea_issac.policy import Baseline
 
 FORMAT = "rea-issac-match-v1"
 
@@ -32,11 +33,13 @@ def record(stream: TextIO, row: dict[str, Any]) -> None:
 
 
 def runtime_fingerprint() -> dict[str, str]:
-    root = Path(__file__).resolve().parent
-    return {
-        name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-        for name in ("engine.py", "source_facts.json", "policy.py")
+    game = Path(game_engine.__file__).resolve().parent
+    sources = {
+        "engine.py": game / "engine.py",
+        "source_facts.json": game / "source_facts.json",
+        "policy.py": game / "policy.py",
     }
+    return {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in sources.items()}
 
 
 def history_entry(action: dict[str, Any], observation: dict[str, Any]) -> dict[str, Any]:
@@ -196,7 +199,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--harness-dir", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    integration = Path(__file__).resolve().parents[3] / "integrations/rea-issac"
+    integration = Path(__file__).resolve().parents[3] / "integrations/rea_issac"
     spec = load_harness(args.harness_dir) if args.harness_dir else seed_harness(integration)
     scenario = ReaIssacScenario(args.seed, args.max_ticks, args.decision_frames)
     out = args.out or integration / "runs" / f"s{args.seed}-{args.policy}-{uuid.uuid4().hex[:12]}"

@@ -7,8 +7,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from honing.backends.craftax.catalog import ACHIEVEMENTS, DEFAULT_GOALS
 from honing.core import ContractError, Task, require
+from integrations.craftax.catalog import ACHIEVEMENTS, DEFAULT_GOALS
 
 Split = Literal["train", "val", "heldout"]
 SPLITS = ("train", "val", "heldout")

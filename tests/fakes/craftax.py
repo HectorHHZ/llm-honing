@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from honing.backends.craftax.engine import frame_hash
 from honing.backends.craftax.scenarios import CraftaxScenario
+from integrations.craftax.engine import frame_hash
 
 
 class FakeCraftaxEngine:

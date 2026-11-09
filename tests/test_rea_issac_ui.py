@@ -8,7 +8,7 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from honing.backends.rea_issac import ui as server
+from integrations.rea_issac import ui as server
 
 
 class HTTPContracts(unittest.TestCase):

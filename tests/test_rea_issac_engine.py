@@ -1,8 +1,8 @@
 import copy
 import unittest
 
-from honing.backends.rea_issac.engine import SOURCE, VERSION, Action, Engine, replay
-from honing.backends.rea_issac.policy import Baseline
+from integrations.rea_issac.engine import SOURCE, VERSION, Action, Engine, replay
+from integrations.rea_issac.policy import Baseline
 
 
 class EngineContracts(unittest.TestCase):

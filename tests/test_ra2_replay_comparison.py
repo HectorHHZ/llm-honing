@@ -7,6 +7,7 @@ import zlib
 from pathlib import Path
 
 import pytest
+
 from integrations.ra2.parity.replay_compare import canonical_replay, replay_comparison
 
 

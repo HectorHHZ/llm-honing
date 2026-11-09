@@ -89,6 +89,6 @@
     "boss_radius_scale": 0.65,
     "warning": "Movement speeds, attack patterns, projectile physics, drop probabilities, map generation and item effects are independent prototype rules, not recovered original behavior."
   },
-  "analysis_notes": "integrations/rea-issac/ANALYSIS.md",
+  "analysis_notes": "integrations/rea_issac/ANALYSIS.md",
   "extractor_sha256": "7d0b837bf3826915be1eb3f42cb117a0496ebb1c27aa765b841c61fa587e519b"
 }

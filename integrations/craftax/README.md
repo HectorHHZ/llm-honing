@@ -1,5 +1,9 @@
 # Craftax
 
+Game code is in this directory. Honing runners, graders and model adapters are
+in `honing/backends/craftax/`. See [the directory layout](../README.md) for
+imports, installation and recording compatibility.
+
 Full [Craftax](https://github.com/MichaelTMatthews/Craftax) as a Honing game
 scenario. The upstream game supplies the rules, procedural worlds and pixel
 art. This integration supplies public observations, action execution, typed

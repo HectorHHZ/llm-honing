@@ -27,7 +27,6 @@ from honing.backends.rea_issac import (
     seed_harness,
 )
 from honing.backends.rea_issac.catalog import OPTIONS
-from honing.backends.rea_issac.engine import replay as replay_game
 from honing.backends.rea_issac.harness import CONTROLLER_PATH, QUESTIONS_PATH, parse_harness
 from honing.backends.rea_issac.model import DecisionClient, make_request, validate_reply
 from honing.core import (
@@ -40,10 +39,11 @@ from honing.core import (
     TaskGrader,
     run_graded,
 )
+from integrations.rea_issac.engine import replay as replay_game
 from tests.fakes.model import FakeModelSource, FakeWorld
 
 ROOT = Path(__file__).resolve().parents[1]
-INTEGRATION = ROOT / "integrations/rea-issac"
+INTEGRATION = ROOT / "integrations/rea_issac"
 SEED = seed_harness(INTEGRATION)
 
 

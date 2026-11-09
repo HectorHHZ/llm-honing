@@ -6,6 +6,9 @@ infra it runs on is being built here.
 
 ## Game scenarios
 
+See [game runtime and adapter locations](integrations/README.md) for the
+Python import paths, package contents and replay compatibility.
+
 ### Red Alert 2
 
 https://github.com/user-attachments/assets/08a30342-5381-4f22-a8ae-6b438cff2994
@@ -69,7 +72,7 @@ model or claim a model performance result.
 
 ### REA-Issac
 
-[`integrations/rea-issac/`](integrations/rea-issac/README.md) adds an independent
+[`integrations/rea_issac/`](integrations/rea_issac/README.md) adds an independent
 Isaac-inspired room-combat simulation informed by REA resource analysis. It has
 a real-time browser UI, deterministic action replay, a rule baseline, and the
 same typed model interface with seeded tasks and boss-defeat grading. The CPU

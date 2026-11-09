@@ -11,12 +11,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from honing.backends.craftax.catalog import ACTIONS, DEFAULT_GOALS, PROTOCOL
-from honing.backends.craftax.engine import CraftaxEngine, runtime_versions
 from honing.backends.craftax.harness import load_harness, parse_harness, seed_harness
 from honing.backends.craftax.model import DecisionClient, make_request
 from honing.backends.craftax.scenarios import CraftaxScenario
 from honing.core import CampaignRuleError, HarnessSpec
+from integrations.craftax.catalog import ACTIONS, DEFAULT_GOALS, PROTOCOL
+from integrations.craftax.engine import CraftaxEngine, runtime_versions
 
 FORMAT = "craftax-match-v1"
 

@@ -26,7 +26,6 @@ from honing.backends.craftax import (
     replay,
     seed_harness,
 )
-from honing.backends.craftax.catalog import ACTIONS
 from honing.backends.craftax.harness import CONTROLLER_PATH, QUESTIONS_PATH, parse_harness
 from honing.backends.craftax.model import DecisionClient, make_request, validate_reply
 from honing.backends.jev import JevEndpoints
@@ -40,6 +39,7 @@ from honing.core import (
     TaskGrader,
     run_graded,
 )
+from integrations.craftax.catalog import ACTIONS
 from tests.fakes.craftax import FakeCraftaxEngine, fake_versions
 from tests.fakes.model import FakeModelSource, FakeWorld
 

@@ -28,7 +28,6 @@ from honing.backends.griddly import (
 )
 from honing.backends.griddly.decisions import decision_samples
 from honing.backends.griddly.demonstrations import GriddlyDemonstrationProvider
-from honing.backends.griddly.engine import GriddlyEngine, canonical, digest
 from honing.backends.griddly.harness import CONTROLLER_PATH, load_harness, parse_harness, write_harness
 from honing.backends.griddly.match import run_match
 from honing.backends.griddly.model import DecisionClient, baseline, make_request, validate_reply
@@ -45,6 +44,7 @@ from honing.core import (
     TaskGrader,
     run_graded,
 )
+from integrations.griddly.engine import GriddlyEngine, canonical, digest
 from tests.fakes.griddly import PublicStateModel, StandInEndpoints
 from tests.fakes.model import FakeModelSource, FakeWorld
 

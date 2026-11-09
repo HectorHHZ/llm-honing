@@ -11,12 +11,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from honing.backends.griddly.catalog import ACTIONS, FORMAT, GAME, GAME_SHA256, PROTOCOL
-from honing.backends.griddly.engine import GriddlyEngine, adapter_sha256, canonical, runtime_versions
 from honing.backends.griddly.harness import load_harness, parse_harness, seed_harness, write_harness
 from honing.backends.griddly.model import DecisionClient, baseline, make_request, validate_reply
 from honing.backends.griddly.scenarios import GriddlyScenario
+from honing.backends.griddly.source import adapter_sha256, source_files
 from honing.core import CampaignRuleError, HarnessSpec
+from integrations.griddly.catalog import ACTIONS, FORMAT, GAME, GAME_SHA256, PROTOCOL
+from integrations.griddly.engine import GriddlyEngine, canonical, runtime_versions
 
 
 def write_json(path: Path, value: object) -> None:
@@ -68,8 +69,10 @@ def run_match(
         write_harness(spec, out / "harness")
         source = out / "source"
         source.mkdir()
-        for path in Path(__file__).parent.glob("*.py"):
-            (source / path.name).write_bytes(path.read_bytes())
+        for name, path in source_files().items():
+            target = source / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(path.read_bytes())
         client = DecisionClient(decision_server) if decision_server is not None else None
         manifest = {
             "format": FORMAT,
