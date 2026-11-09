@@ -1,0 +1,133 @@
+{
+  "evidence": "Author-side native/model smoke; not independent rerun or gameplay proficiency",
+  "game": {
+    "repo": "taisei-project/taisei",
+    "tag": "v1.4.6",
+    "commit": "5bfc9b842fe6d9bb8d1610f76f442ba07c72c4cf",
+    "stage": 1,
+    "difficulty": "Easy",
+    "shotmode": "youmuA",
+    "initialGameRngSeed": 7
+  },
+  "platform": {
+    "os": "Ubuntu 22.04 x86-64",
+    "compiler": "GCC 11.3.0",
+    "meson": "1.12.1",
+    "sdl": "3.4.12",
+    "sdlCommit": "d6d146d4b69d1ec1acf9eec6e280abcad9a2925a",
+    "renderer": "OpenGL 4.5 Mesa llvmpipe",
+    "cpuModelThreads": 4
+  },
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+    "layaVersion": "0.3.20",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu",
+    "maxLen": 2048,
+    "headMaxLen": 512
+  },
+  "nativeSourceSha256": {
+    "src/stage.c": "4a270b089993621161c3ee846be53de1f6aed1dd91aef77cfae8c374b04134f3",
+    "src/renderer/gl33/gl33.c": "724d42ff5e3015be41f82dd29c693feb0d224dfb96d525e157432f67ace054aa",
+    "src/renderer/gl33/shader_program.c": "d010175c598e9c6947c7620ecbeba3ee6fe08b99d6e9101825642252e9a23131",
+    "src/renderer/gl33/shader_object.c": "2504ee6a8c8cb845ecc0c908872d80b3977cf9fcdecbed089ef1aa0f05fc3902",
+    "src/vfs/loadpacks.c": "a7ee3f5138e3bc0df91a9dd3a95ee339880067b853987126470b335ed7bb5859",
+    "src/honing_bridge.inc.h": "a810b6fee168136e9a67784678a7e817bde530e32d68cc1b917bb8b0c0d9b39a",
+    "src/honing_command.h": "efa5dd6c443e8ec670dbb199a38693ee2824468c54068da4124e46dcbdb452d0"
+  },
+  "binarySha256": "199d8016b65060ed991c8e51a634de70ea0c02e731cbec75cba8f4de364a84c8",
+  "cleanPinnedSourcePatchReproduced": true,
+  "run": {
+    "completedDecisions": 3,
+    "requestedFramesPerAction": 120,
+    "wallSeconds": 108.11724198004231,
+    "simulationSeconds": 6.0,
+    "nativeExitCode": 0,
+    "ownedDisplayExitCode": 0,
+    "trainingPerformed": false,
+    "heuristicFallback": false,
+    "controllerAssistance": "shot and focus are held by every offered movement action"
+  },
+  "observed": {
+    "startFrame": 0,
+    "finalFrame": 360,
+    "startPlayer": [
+      240,
+      496
+    ],
+    "finalPlayer": [
+      240,
+      16
+    ],
+    "spareLivesStart": 8,
+    "spareLivesFinal": 8,
+    "scoreFinal": 42104,
+    "chosenMovements": [
+      "up",
+      "up",
+      "up"
+    ]
+  },
+  "video": {
+    "nativePngFrames": 360,
+    "fps": 60,
+    "videoSeconds": 6.0,
+    "sha256": "9e8158e6985b4a9788985ca02ef243355451cedea7b35733bbeac4f7e81afeb1",
+    "decodeValidated": true,
+    "inferenceWaitOmitted": true,
+    "audio": false
+  },
+  "audit": {
+    "pairs": 3,
+    "correspondenceChecks": 15,
+    "allModelArgmax": true,
+    "allFramesAdvanced120": true,
+    "allRequiredContextRetained": true,
+    "actualActions": [
+      "up",
+      "up",
+      "up"
+    ]
+  },
+  "nativeFaults": {
+    "synthetic": true,
+    "modelRejectedBeforeNativeAction": [
+      "allZero",
+      "allTwo",
+      "allTrue",
+      "requiredContextMissing",
+      "requiredContextClipped"
+    ],
+    "zeroNativeStepCalls": true,
+    "pausedFrameUnchanged": true,
+    "nativeRejected": [
+      "staleCommand",
+      "embeddedNul"
+    ],
+    "validControlAdvancedTicks": 30
+  },
+  "limits": [
+    "six-second segment only",
+    "shot and focus held in every action",
+    "nearest-eight partial bullet sensor",
+    "no campaign runner or grader",
+    "full-game duration not measured",
+    "no completion or deterministic replay claim",
+    "all full traces and media remain author-local"
+  ],
+  "watchdog": {
+    "syntheticFaultInjection": true,
+    "staleCommandWrites": 2391,
+    "wallSeconds": 240.18830155895557,
+    "nativeExit": 74,
+    "pausedFrame": 0,
+    "simulationAdvanced": false
+  },
+  "verification": {
+    "portableTests": "32 passed",
+    "fullPytest": "1330 passed, 46 skipped, 1 xfailed, 6 subtests passed",
+    "preCommitAllFiles": "all hooks passed"
+  }
+}
