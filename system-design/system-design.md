@@ -363,7 +363,8 @@ servers alike. For an SGLang server Honing did not start, `StaticPolicyEndpoints
 (`honing/harness/endpoints.py`) maps checkpoint checksums to servers declared up front; a
 hosted API goes through `GatewayEndpoints` (`honing/backends/llm_gateway`). A declared server
 with a health route is probed on resolve at most once every 30 s, and a hung one takes up to
-about 60 s to detect (two 30 s probes). A map whose server
+about 60 s to detect (two 30 s probes). A failed check fails every resolve against that
+server until the 30 s have passed, without probing again. A map whose server
 needs a key names the key's variable through an optional `api_key_env(policy)` method, which
 runners find with `hasattr`; it is not part of `PolicyEndpoints`.
 A method whose proposer is a coding agent rather than one model call, as

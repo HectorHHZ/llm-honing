@@ -4,7 +4,8 @@ An SGLang server that is already running for a real checkpoint is declared up
 front as a fixed map from checkpoint checksum to endpoint. A hosted API goes
 through :class:`~honing.backends.llm_gateway.GatewayEndpoints` instead. An
 entry with a ``health_url`` is checked on resolve (:func:`answers_twice`), at
-most once per TTL; a server that fails two probes in a row fails the lookup.
+most once per TTL; a server that fails two probes in a row fails the lookup,
+and every lookup of it until the TTL has passed.
 Honing did not start these servers, so it never starts or stops them.
 
 A server that needs a key names its variable through ``api_key_env(policy)``,
@@ -24,8 +25,8 @@ from dataclasses import dataclass, fields
 
 from honing.core import ContractError, PolicyEndpoint, PolicyRef, require
 
-# How long a server that passed its health check is trusted without another, so a step resolving once per episode
-# does not probe once per episode.
+# How long a health check's result is kept: a server that passed is trusted without another probe, so a step
+# resolving once per episode does not probe once per episode, and one that failed fails again at once.
 HEALTH_TTL_SECONDS = 30.0
 # Above SGLang's own limit: at 0.5.21 its /health runs a one-token generation (SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION
 # is on by default), takes at least 1 s, and answers 503 by itself after SGLANG_HEALTH_CHECK_TIMEOUT (default 20 s)
@@ -117,12 +118,16 @@ class StaticPolicyEndpoints:
     and again on every resolve. Only ``environ`` (``os.environ`` unless given)
     is read.
 
-    An entry with a ``health_url`` is probed on resolve unless that URL passed
-    less than ``health_ttl_seconds`` ago; one that fails two probes in a row,
-    each given ``health_timeout_seconds`` to answer 200, raises
-    :class:`~honing.core.ContractError` naming the endpoint. A failure is not
-    remembered: Honing does not run the server, which may come back. ``probe``
-    and ``clock`` stand in for the network and the time in tests.
+    An entry with a ``health_url`` is probed on resolve unless that URL was
+    checked less than ``health_ttl_seconds`` ago, and the result is kept that
+    long. One that fails two probes in a row, each given
+    ``health_timeout_seconds`` to answer 200, raises
+    :class:`~honing.core.ContractError` naming the endpoint, and so does every
+    resolve against that URL until the TTL has passed, without probing again:
+    the episodes a runner gathers resolve one after another on its event loop,
+    and each would otherwise wait out two timeouts. After the TTL it is probed
+    again, since Honing does not run the server and it may have come back.
+    ``probe`` and ``clock`` stand in for the network and the time in tests.
     """
 
     def __init__(
@@ -143,8 +148,9 @@ class StaticPolicyEndpoints:
         self._timeout = health_timeout_seconds
         self._probe = probe
         self._clock = clock
-        # Keyed by health URL, so one server declared for several checkpoints is checked once per TTL.
-        self._checked: dict[str, float] = {}
+        # Health URL to when it was last checked and whether it answered. Keyed by URL, so one server declared for
+        # several checkpoints is checked once per TTL.
+        self._checked: dict[str, tuple[float, bool]] = {}
         for checksum, entry in self._endpoints.items():
             self._check_key(entry, f"the endpoint for checkpoint {checksum!r}")
 
@@ -169,15 +175,16 @@ class StaticPolicyEndpoints:
         return entry
 
     def _check_health(self, entry: StaticEndpoint, health_url: str, policy: PolicyRef) -> None:
-        checked = self._checked.get(health_url)
-        if checked is not None and self._clock() - checked < self._ttl:
-            return
-        if not answers_twice(self._probe, health_url, self._timeout):
+        last = self._checked.get(health_url)
+        if last is None or self._clock() - last[0] >= self._ttl:
+            answered = answers_twice(self._probe, health_url, self._timeout)
+            last = self._checked[health_url] = (self._clock(), answered)
+        if not last[1]:
             raise ContractError(
                 f"the endpoint {entry.base_url} for checkpoint {policy.checkpoint.checksum!r} did not answer "
-                f"{health_url} with 200 within {self._timeout:g} s, twice"
+                f"{health_url} with 200 within {self._timeout:g} s, twice, {self._clock() - last[0]:.0f} s ago "
+                f"(checked again {self._ttl:g} s after that)"
             )
-        self._checked[health_url] = self._clock()
 
     def _check_key(self, entry: StaticEndpoint, label: str) -> None:
         # The message names the variable only; the value never appears in an error.

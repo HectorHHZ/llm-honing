@@ -215,14 +215,22 @@ def test_an_entry_is_probed_on_first_resolve_then_trusted_for_the_ttl() -> None:
 
 
 @pytest.mark.unit
-def test_an_endpoint_that_is_down_fails_naming_it_and_is_probed_again_next_time() -> None:
-    endpoints, probe, _clock = checked(abc=CHECKED)
+def test_an_endpoint_that_is_down_fails_naming_it_and_fails_at_once_until_the_ttl_has_passed() -> None:
+    endpoints, probe, clock = checked(abc=CHECKED)
     probe.up = False
     with pytest.raises(ContractError, match=r"the endpoint http://127.0.0.1:30000/v1 for checkpoint 'abc'") as raised:
         endpoints.resolve(policy("abc"))
     assert "http://127.0.0.1:30000/health" in str(raised.value) and "30 s" in str(raised.value)
     assert len(probe.calls) == 2  # down only after two probes in a row fail
+    for _ in range(10):  # the episodes gathered with it fail at once, not after two more timeouts each
+        with pytest.raises(ContractError, match="did not answer"):
+            endpoints.resolve(policy("abc"))
+    clock.now += 29.9
+    with pytest.raises(ContractError, match=r"twice, 30 s ago"):
+        endpoints.resolve(policy("abc"))
+    assert len(probe.calls) == 2
     probe.up = True  # Honing does not run it, so it may come back
+    clock.now += 0.1
     assert endpoints.resolve(policy("abc")).base_url == "http://127.0.0.1:30000/v1"
     assert len(probe.calls) == 3
 
@@ -251,6 +259,17 @@ def test_one_server_declared_for_several_checkpoints_is_probed_once_per_ttl() ->
     endpoints.resolve(policy("a"))
     endpoints.resolve(policy("b"))
     assert len(probe.calls) == 1
+
+
+@pytest.mark.unit
+def test_a_failed_check_of_a_server_declared_for_several_checkpoints_fails_them_all() -> None:
+    endpoints, probe, _clock = checked(a=CHECKED, b=CHECKED)
+    probe.up = False
+    with pytest.raises(ContractError, match="for checkpoint 'a'"):
+        endpoints.resolve(policy("a"))
+    with pytest.raises(ContractError, match="for checkpoint 'b'"):
+        endpoints.resolve(policy("b"))
+    assert len(probe.calls) == 2
 
 
 @pytest.mark.unit
