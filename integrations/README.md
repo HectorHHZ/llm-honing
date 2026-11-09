@@ -6,6 +6,7 @@ model requests, episode execution, grading and training data conversion.
 
 | Game | Runtime and resources | Honing adapter |
 | --- | --- | --- |
+| Brogue CE | `brogue_ce/engine.py` and the pinned native WebBrogue build | Integration-local demo |
 | Craftax | `craftax/engine.py`, `craftax/catalog.py`; pinned upstream Craftax package | `../honing/backends/craftax/` |
 | Griddly Spiders | `griddly/engine.py`, `griddly/catalog.py`; pinned upstream Griddly package | `../honing/backends/griddly/` |
 | REA-Issac | `rea_issac/engine.py`, `source_facts.json`, `policy.py`, `ui.py` and `web/` | `../honing/backends/rea_issac/` |
@@ -44,11 +45,15 @@ The old REA-Issac UI import shares the runtime module, including assignments
 to `ROOT`. Removing these compatibility modules does not change recording
 source identities because no match or audit uses them.
 
-The `llm-honing` wheel includes only these three Python game packages, their
-runtime data, and default harness/task resources. It does not install every
-integration script as a Python package or bundle the upstream native engines.
-Install each game's documented requirements to run Craftax or Griddly.
-REA-Issac runs with the Python standard library.
+The `llm-honing` wheel includes the Brogue CE, Craftax, Griddly, and REA-Issac
+Python runtime packages with their runtime data and any default harness and
+task resources. Install the dependencies documented by each game. The
+Brogue Python runtime uses the standard library and launches a separately
+built native executable. REA-Issac uses the Python standard library.
+
+Use `integrations.brogue_ce.engine` or `python -m integrations.brogue_ce` for
+Brogue CE. Existing imports and commands under `honing.backends.brogue_ce`
+also work.
 
 The REA-Issac source directory is now `integrations/rea_issac/`. Use this path
 for script commands and web assets. Existing source checkouts can retain old

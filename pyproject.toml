@@ -70,7 +70,7 @@ fallback_version = "0.0.0.dev0"
 include-package-data = false
 
 [tool.setuptools.packages.find]
-include = ["honing", "honing.*", "integrations", "integrations.craftax", "integrations.griddly", "integrations.rea_issac"]
+include = ["honing", "honing.*", "integrations", "integrations.brogue_ce", "integrations.craftax", "integrations.griddly", "integrations.rea_issac"]
 
 [tool.setuptools.package-data]
 "honing.harness.methods.meta_harness" = ["SKILL.md"]
@@ -118,7 +118,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["honing", "integrations/craftax", "integrations/griddly", "integrations/rea_issac"]
+files = ["honing", "integrations/brogue_ce", "integrations/craftax", "integrations/griddly", "integrations/rea_issac"]
 strict_equality = true
 warn_unused_ignores = true
 warn_redundant_casts = true

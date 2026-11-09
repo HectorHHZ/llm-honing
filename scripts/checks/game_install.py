@@ -18,9 +18,12 @@ def main() -> None:
     assert files is not None
     game_files = [path.parts for path in files if path.parts[0] == "integrations"]
     assert game_files
-    assert all(parts[1] in {"__init__.py", "__pycache__", "craftax", "griddly", "rea_issac"} for parts in game_files)
+    assert all(
+        parts[1] in {"__init__.py", "__pycache__", "brogue_ce", "craftax", "griddly", "rea_issac"}
+        for parts in game_files
+    )
     assert any(str(path) == "honing/harness/methods/meta_harness/SKILL.md" for path in files)
-    for game in ("craftax", "griddly", "rea_issac"):
+    for game in ("brogue_ce", "craftax", "griddly", "rea_issac"):
         importlib.import_module(f"integrations.{game}.engine")
     assert "honing" not in sys.modules
     assert not {"jax", "craftax", "griddly"} & sys.modules.keys()
