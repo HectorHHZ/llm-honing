@@ -90,6 +90,11 @@ A standalone [Hollow Knight imitation demo](integrations/hollow-knight/README.md
 connects a caller-supplied Unity Mono build to those same routes and records the
 game's rendered frames. It is an input-adapter demo; it has no training or campaign runner.
 
+A standalone [Celeste Classic demo](integrations/celeste-classic/README.md) connects
+an existing C source port of the 2015 game to the same server and records bounded
+native inputs. Its first-room demo has paused observations and strict model
+response checks; it is a different game from commercial Celeste (2018).
+
 Try the hosted human-versus-model game at **[play.honinglab.com](https://play.honinglab.com/play/)**.
 We plan to open **Tank War Arena** for bring-your-own-model matches. Public
 model submission is not open yet. The current hosted game uses a configured
