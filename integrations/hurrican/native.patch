@@ -1,0 +1,85 @@
+diff --git a/Hurrican/CMakeLists.txt b/Hurrican/CMakeLists.txt
+index fdfbeac..2cda7c7 100644
+--- a/Hurrican/CMakeLists.txt
++++ b/Hurrican/CMakeLists.txt
+@@ -34,6 +34,7 @@ else()
+ endif()
+
+ set(HURRICAN_SOURCES
++        src/HoningBridge.cpp
+         src/bosses/Boss_BigFish.cpp
+         src/bosses/Boss_BigFish.hpp
+         src/bosses/Boss_Bratklops.cpp
+diff --git a/Hurrican/src/DX8Graphics.cpp b/Hurrican/src/DX8Graphics.cpp
+index cf2853a..08a5ce3 100644
+--- a/Hurrican/src/DX8Graphics.cpp
++++ b/Hurrican/src/DX8Graphics.cpp
+@@ -1,3 +1,4 @@
++#include "HoningBridge.hpp"
+ // Datei : DX8Graphics.cpp
+
+ // --------------------------------------------------------------------------------------
+@@ -797,6 +798,7 @@ void DirectGraphicsClass::ShowBackBuffer() {
+     }
+ #endif
+
++HoningCapture(Window);
+ #if defined(USE_EGL_SDL) || defined(USE_EGL_RAW) || defined(USE_EGL_RPI)
+     EGL_SwapBuffers();
+ #else
+diff --git a/Hurrican/src/Main.cpp b/Hurrican/src/Main.cpp
+index 1b434b3..857086a 100644
+--- a/Hurrican/src/Main.cpp
++++ b/Hurrican/src/Main.cpp
+@@ -1,3 +1,4 @@
++#include "HoningBridge.hpp"
+ // Datei : Main.cpp
+
+ // --------------------------------------------------------------------------------------
+@@ -401,6 +402,7 @@ int main(int argc, char *argv[]) {
+     //----- Main-Loop
+
+     while (GameRunning) {
++        if (!HoningBeforeTick()) break;
+         SDL_Event event;
+
+         while (SDL_PollEvent(&event)) {
+@@ -431,6 +433,7 @@ int main(int argc, char *argv[]) {
+             if (!GamePaused) {
+                 // Main Loop
+                 Heartbeat();
++                HoningAfterTick();
+
+                 // Eingabegeräte updaten
+                 DirectInput.UpdateTastatur();
+diff --git a/Hurrican/src/Player.cpp b/Hurrican/src/Player.cpp
+index 21aa384..ce63cf5 100644
+--- a/Hurrican/src/Player.cpp
++++ b/Hurrican/src/Player.cpp
+@@ -1,3 +1,4 @@
++#include "HoningBridge.hpp"
+ // Datei : Player.cpp
+
+ // --------------------------------------------------------------------------------------
+@@ -546,6 +547,9 @@ bool PlayerClass::GetPlayerInput() {
+             PlayDemo();
+
+         // oder feste Aktion?
++        else if (HoningEnabled()) {
++            Aktion = HoningActions();
++        }
+         else if (DoFesteAktion) {
+             if (FesteAktion >= 0)
+                 Aktion[FesteAktion] = true;
+diff --git a/Hurrican/src/Timer.cpp b/Hurrican/src/Timer.cpp
+index 9cd6d98..e3c36d9 100644
+--- a/Hurrican/src/Timer.cpp
++++ b/Hurrican/src/Timer.cpp
+@@ -55,6 +55,7 @@ void TimerClass::update() {
+     vergangeneZeit =
+         (std::max<std::int64_t>(0, aktuelleZeit - letzterFrame)) * ZeitFaktor;  // vergangene Zeit neu setzen
+     letzterFrame = aktuelleZeit;                                                // letzten Frame aktualisieren
++    if (std::getenv("HONING_HURRICAN_SESSION")) vergangeneZeit = 1.0 / 60.0;
+
+     aktuelleFramerate = 1 / vergangeneZeit;  // Framerate berechnen
+     if (aktuelleFramerate > FPSMaximum)      // neue Maximale Framerate ?
