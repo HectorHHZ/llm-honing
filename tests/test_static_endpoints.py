@@ -189,7 +189,7 @@ CHECKED = StaticEndpoint(
 
 def checked(**entries: StaticEndpoint) -> tuple[StaticPolicyEndpoints, FakeProbe, FakeClock]:
     probe, clock = FakeProbe(), FakeClock()
-    return StaticPolicyEndpoints(entries, environ={}, probe=probe, clock=clock), probe, clock
+    return StaticPolicyEndpoints(entries, environ={}, health_ttl_seconds=30.0, probe=probe, clock=clock), probe, clock
 
 
 @pytest.mark.unit
@@ -207,6 +207,20 @@ def test_an_entry_is_probed_on_first_resolve_then_trusted_for_the_ttl() -> None:
     endpoints.resolve(policy("abc"))
     assert probe.calls == [("http://127.0.0.1:30000/health", 30.0)]
     clock.now += 29.9
+    endpoints.resolve(policy("abc"))
+    assert len(probe.calls) == 1
+    clock.now += 0.1
+    endpoints.resolve(policy("abc"))
+    assert len(probe.calls) == 2
+
+
+@pytest.mark.unit
+def test_by_default_an_entry_is_probed_at_most_once_every_five_minutes() -> None:
+    # Resolve runs on the runners' event loop (#154), and a probe holds it at least 1 s.
+    probe, clock = FakeProbe(), FakeClock()
+    endpoints = StaticPolicyEndpoints({"abc": CHECKED}, environ={}, probe=probe, clock=clock)
+    endpoints.resolve(policy("abc"))
+    clock.now += 299.9
     endpoints.resolve(policy("abc"))
     assert len(probe.calls) == 1
     clock.now += 0.1

@@ -25,9 +25,12 @@ from dataclasses import dataclass, fields
 
 from honing.core import ContractError, PolicyEndpoint, PolicyRef, require
 
-# How long a health check's result is kept: a server that passed is trusted without another probe, so a step
-# resolving once per episode does not probe once per episode, and one that failed fails again at once.
-HEALTH_TTL_SECONDS = 30.0
+# How long a health check's result is kept: a server that passed is trusted without another probe, and one that
+# failed fails again at once. Resolve runs on the runners' event loop until #154 moves it off, and a probe holds that
+# loop for as long as the server takes to answer: at least 1 s from a healthy SGLang server, about two
+# HEALTH_TIMEOUT_SECONDS from a hung one. A server Honing started that crashes is still found on the next resolve, by
+# its exit (honing.backends.sglang.endpoints), so the long TTL only delays finding a hung one.
+HEALTH_TTL_SECONDS = 300.0
 # Above SGLang's own limit: at 0.5.21 its /health runs a one-token generation (SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION
 # is on by default), takes at least 1 s, and answers 503 by itself after SGLANG_HEALTH_CHECK_TIMEOUT (default 20 s)
 # without scheduler progress. A shorter client timeout would count a busy but healthy engine as down; this one leaves

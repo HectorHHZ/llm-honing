@@ -323,14 +323,21 @@ def watched(
     tmp_path: Path, starts: FakeStarts, runtime: str = "sglang", gpus: tuple[str, ...] = ("0",)
 ) -> tuple[SGLangPolicyEndpoints, FakeProbe, FakeClock, PolicyRef]:
     probe, clock = FakeProbe(), FakeClock()
-    settings = ServingSettings(python=Path("python"), gpus=gpus, runtime=runtime)  # type: ignore[arg-type]
+    settings = ServingSettings(
+        python=Path("python"), gpus=gpus, runtime=runtime, health_ttl_seconds=30.0  # type: ignore[arg-type]
+    )
     endpoints = SGLangPolicyEndpoints(settings, start=starts, probe=probe, clock=clock)
     return endpoints, probe, clock, policy(write_checkpoint(tmp_path / "m"))
 
 
 def test_the_default_health_timeout_leaves_slow_answers_to_sglang_s_own_20_s_limit() -> None:
     settings = ServingSettings(python=Path("python"), gpus=("0",))
-    assert settings.health_timeout_seconds > 20 and settings.health_ttl_seconds == 30.0
+    assert settings.health_timeout_seconds > 20
+
+
+def test_a_running_server_is_probed_at_most_once_every_five_minutes_by_default() -> None:
+    # Resolve runs on the runners' event loop (#154), and a probe holds it at least 1 s.
+    assert ServingSettings(python=Path("python"), gpus=("0",)).health_ttl_seconds == 300.0
 
 
 def test_a_server_that_passed_within_the_ttl_is_not_probed(tmp_path: Path) -> None:
