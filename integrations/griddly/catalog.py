@@ -1,7 +1,6 @@
 """Pinned Spiders rules and relative actions, without loading the optional engine."""
 
 PROTOCOL = "spiders-full-state-v1"
-FORMAT = "griddly-match-v1"
 GAME = "Single-Player/Mini-Grid/minigrid-spiders.yaml"
 # The Windows and Linux wheels use different line endings for the same GDY.
 GAME_SHA256 = "c33b12711b5b92ece3a8d9af835e57d9053bd66b7d1e3d5fd332bf2d845ddb01"

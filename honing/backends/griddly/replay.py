@@ -9,12 +9,13 @@ import random
 from pathlib import Path
 from typing import Any
 
+from honing.backends.griddly.catalog import FORMAT
 from honing.backends.griddly.harness import load_harness, parse_harness
 from honing.backends.griddly.match import history_entry, summary
 from honing.backends.griddly.model import baseline, make_request, validate_reply
 from honing.backends.griddly.scenarios import GriddlyScenario
 from honing.backends.griddly.source import adapter_sha256, source_files
-from integrations.griddly.catalog import ACTIONS, FORMAT, GAME, GAME_SHA256, PROTOCOL
+from integrations.griddly.catalog import ACTIONS, GAME, GAME_SHA256, PROTOCOL
 from integrations.griddly.engine import GriddlyEngine, digest, runtime_versions
 
 
