@@ -8,6 +8,7 @@ model requests, episode execution, grading and training data conversion.
 | --- | --- | --- |
 | Craftax | `craftax/engine.py`, `craftax/catalog.py`; pinned upstream Craftax package | `../honing/backends/craftax/` |
 | Griddly Spiders | `griddly/engine.py`, `griddly/catalog.py`; pinned upstream Griddly package | `../honing/backends/griddly/` |
+| Frost Circuit | `frost-circuit/web/engine.js` and browser resources | Integration-local demo |
 | REA-Issac | `rea_issac/engine.py`, `source_facts.json`, `policy.py`, `ui.py` and `web/` | `../honing/backends/rea_issac/` |
 | Tank War | `tank-war/web/game/engine.js` and web resources | `../honing/backends/tank/` |
 | RA2 | `ra2/` native bridge and runtime tools | `../honing/backends/ra2/` |
