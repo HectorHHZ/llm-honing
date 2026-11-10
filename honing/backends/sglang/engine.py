@@ -290,7 +290,7 @@ class SGLangEngine:
 
     def healthy(self, timeout_seconds: float = HEALTH_TIMEOUT_SECONDS) -> bool:
         """Whether the server process is still running and its ``/health`` answers 200 within ``timeout_seconds``."""
-        if self._process is not None and self._process.poll() is not None:
+        if self.exited():
             return False
         try:
             with urllib.request.urlopen(f"{self.url}/health", timeout=timeout_seconds) as response:
