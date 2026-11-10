@@ -20,8 +20,14 @@ On Linux it must listen on the bridge gateway's address, not only on 127.0.0.1.
 
 The container keeps four Linux capabilities, the ones root's work for the agent needs
 (``_CAPABILITIES``), and no process in it can gain more (``no-new-privileges``).
-What the container does not limit: outbound network (the default ``bridge`` network
-reaches the internet and the host's network) and disk use.
+What the container does not limit: outbound network and disk use. The default
+``bridge`` network reaches the internet and the host's network, and on a Mac that
+includes the Mac's loopback: ``host-gateway`` lands there, so anything listening on
+127.0.0.1 is reachable (``test_the_container_reaches_a_server_on_the_host`` binds
+there). With ``bypassPermissions`` the agent can reach any local service, an SSH tunnel
+to an SGLang engine for one, whose ``/update_weights_from_disk`` and ``/abort_request``
+take no key in 0.5.21 when it starts without one. Restricting egress is #152, limiting
+disk is #164.
 """
 
 from __future__ import annotations
