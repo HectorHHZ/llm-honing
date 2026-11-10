@@ -25,6 +25,7 @@ import pytest
 from honing.backends.slime import (
     AgentEpisodeSettings,
     AgentWorkerError,
+    HarnessRefusedError,
     Placement,
     SlimeAgentDeliveryProbe,
     SlimeEnvironment,
@@ -168,7 +169,6 @@ def test_several_instruction_files_become_one_claude_md_in_path_order() -> None:
     ("harness", "message"),
     [
         (spec(("hooks/pre.sh", "hook", "echo\n")), r"not \['hook'\]"),
-        (HarnessSpec("codex"), "not 'codex'"),
         (spec(("a.json", "settings", "{}"), ("b.json", "settings", "{}")), "one project settings file"),
         (spec(("s.json", "settings", "[1, 2]")), "must hold a JSON object"),
         (spec(("s.json", "settings", "not json")), "must hold a JSON object"),
@@ -177,8 +177,47 @@ def test_several_instruction_files_become_one_claude_md_in_path_order() -> None:
     ],
 )
 def test_a_harness_claude_code_cannot_take_is_refused(harness: HarnessSpec, message: str) -> None:
-    with pytest.raises(ContractError, match=message):
+    with pytest.raises(HarnessRefusedError, match=message):
         place_harness(harness)
+
+
+@pytest.mark.unit
+def test_a_spec_for_another_agent_is_a_contract_error_not_a_refusal(tmp_path: Path) -> None:
+    with pytest.raises(ContractError, match="not 'codex'") as raised:
+        run(make_runner(tmp_path), HarnessSpec("codex"))
+    assert not isinstance(raised.value, HarnessRefusedError)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("harness", "reason"),
+    [
+        (spec(("settings.json", "settings", "[1]")), "the settings file 'settings.json' must hold a JSON object"),
+        (
+            spec(("skills/my skill/SKILL.md", "skill", "x")),
+            "the skill at 'skills/my skill/SKILL.md' gives the name 'my skill', which Claude Code cannot load",
+        ),
+    ],
+)
+def test_run_returns_a_refused_outcome_for_a_harness_claude_code_cannot_take(
+    tmp_path: Path, docker_log: Path, harness: HarnessSpec, reason: str
+) -> None:
+    runner = make_runner(tmp_path)
+    outcome = run(runner, harness)
+    assert (outcome.exit_code, outcome.workspace_location, outcome.transcript_location) == (
+        runner_module.REFUSED,
+        None,
+        None,
+    )
+    assert outcome.failure == f"The harness was refused before the agent started: {reason}"
+    assert (outcome.task_id, outcome.spec_id, outcome.policy_checksum) == (
+        "t1",
+        harness.spec_id,
+        POLICY.checkpoint.checksum,
+    )
+    # No episode directory and no docker call: the image check and the worker never ran.
+    assert not (tmp_path / "episodes").exists()
+    assert not docker_log.exists()
 
 
 @pytest.mark.unit

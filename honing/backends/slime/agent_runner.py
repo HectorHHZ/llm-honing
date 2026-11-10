@@ -16,7 +16,10 @@ What the agent does is the episode's outcome, whatever it is: a nonzero exit, or
 outgrew the model's context ends the agent's call as if it hit its length limit. A
 workspace the agent left that cannot come back as it is (larger than the cap, or with
 paths that differ only in case or are not valid UTF-8) is the outcome's ``failure``,
-which graders score 0.
+which graders score 0. So is a harness Claude Code cannot take (a settings
+file that is not a JSON object, a skill name it cannot load): the runner refuses it
+before any worker starts, so one bad candidate is a rejected candidate, not an
+aborted campaign. A spec for another agent still raises :class:`~honing.core.ContractError`.
 What stops the episode from saying anything about the harness raises
 :class:`AgentWorkerError`: the
 policy server failing a call, Docker failing, the CLI not installing, or the worker
@@ -81,6 +84,8 @@ PASSTHROUGH = (
     "HF_HUB_OFFLINE",
 )
 WORKER_MODULE = "honing.backends.slime.agent_worker"
+# The exit code of an episode whose harness was refused before any worker started, as the OpenHands runner's.
+REFUSED = 2
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _REMOVE_SECONDS = 60.0
 _INSPECT_SECONDS = 60.0
@@ -88,6 +93,10 @@ _INSPECT_SECONDS = 60.0
 
 class AgentWorkerError(HoningError):
     """An episode's worker could not run it, for a reason that is not the agent's. The message names its log."""
+
+
+class HarnessRefusedError(ContractError):
+    """A ``claude_code`` harness Claude Code cannot take; :meth:`SlimeEpisodeRunner.run` returns it as a refusal."""
 
 
 @dataclass(frozen=True)
@@ -190,7 +199,7 @@ def _name(path: str, kind: str) -> str:
     posix = PurePosixPath(path)
     name = posix.parent.name if posix.name == "SKILL.md" and posix.parent.name else posix.stem
     if not _NAME.fullmatch(name):
-        raise ContractError(f"the {kind} at {path!r} gives the name {name!r}, which Claude Code cannot load")
+        raise HarnessRefusedError(f"the {kind} at {path!r} gives the name {name!r}, which Claude Code cannot load")
     return name
 
 
@@ -206,14 +215,16 @@ def place_harness(spec: HarnessSpec) -> tuple[Placement, ...]:
       and it must be a JSON object. Slime writes the user's own settings, under
       ``/home/agent``, and this does not touch them.
 
-    Other kinds, another agent, two files with one target, or settings that are not a
-    JSON object raise :class:`~honing.core.ContractError`.
+    A spec for another agent raises :class:`~honing.core.ContractError`. Other kinds,
+    two files with one target, more than one settings file, settings that are not a
+    JSON object, or a name Claude Code cannot load raise :class:`HarnessRefusedError`,
+    a ``ContractError`` that :meth:`SlimeEpisodeRunner.run` turns into a refused outcome.
     """
     if spec.agent != AGENT:
         raise ContractError(f"this runner runs {AGENT!r}, not {spec.agent!r}")
     unsupported = sorted(spec.kinds - SUPPORT.file_kinds)
     if unsupported:
-        raise ContractError(f"Claude Code on slime takes {sorted(SUPPORT.file_kinds)}, not {unsupported}")
+        raise HarnessRefusedError(f"Claude Code on slime takes {sorted(SUPPORT.file_kinds)}, not {unsupported}")
     files = sorted(spec.files, key=lambda item: item[0])
     placements: list[Placement] = []
     instructions = [(path, file) for path, file in files if file.kind == "instructions"]
@@ -224,14 +235,14 @@ def place_harness(spec: HarnessSpec) -> tuple[Placement, ...]:
         placements.append(Placement("CLAUDE.md", joined, tuple(path for path, _ in instructions)))
     settings = [(path, file) for path, file in files if file.kind == "settings"]
     if len(settings) > 1:
-        raise ContractError(f"Claude Code reads one project settings file, and the spec has {len(settings)}")
+        raise HarnessRefusedError(f"Claude Code reads one project settings file, and the spec has {len(settings)}")
     for path, file in settings:
         try:
             parsed = json.loads(file.content)
         except ValueError:
             parsed = None
         if not isinstance(parsed, dict):
-            raise ContractError(f"the settings file {path!r} must hold a JSON object")
+            raise HarnessRefusedError(f"the settings file {path!r} must hold a JSON object")
         placements.append(Placement(".claude/settings.json", file.content, (path,)))
     for path, file in files:
         if file.kind == "skill":
@@ -241,7 +252,7 @@ def place_harness(spec: HarnessSpec) -> tuple[Placement, ...]:
     targets = [placement.target for placement in placements]
     duplicated = sorted({target for target in targets if targets.count(target) > 1})
     if duplicated:
-        raise ContractError(f"several harness files go to {duplicated}")
+        raise HarnessRefusedError(f"several harness files go to {duplicated}")
     return tuple(placements)
 
 
@@ -381,8 +392,7 @@ class SlimeEpisodeRunner:
             weakref.WeakKeyDictionary()
         )
 
-    def _prepare(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> Path:
-        placements = place_harness(spec)
+    def _prepare(self, spec: HarnessSpec, task: Task, policy: PolicyRef, placements: Sequence[Placement]) -> Path:
         endpoint = self._endpoints.resolve(policy)
         source = self._suite.entry(task.task_id).workspace
         _check_workspace(source, placements)
@@ -436,8 +446,29 @@ class SlimeEpisodeRunner:
         self._image_checked = True
 
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        """Run one episode, or refuse a harness Claude Code cannot take.
+
+        A refused harness starts no worker and needs no image: the outcome's exit code
+        is :data:`REFUSED`, it names no workspace, and ``failure`` gives the reason, so
+        the gate scores it 0 and rejects it like any failed episode.
+
+        Raises:
+            ContractError: The spec is for another agent, the policy is not served by
+                SGLang, or the task's workspace already holds a placed file.
+            AgentWorkerError: The worker could not run the episode.
+        """
+        try:
+            placements = place_harness(spec)
+        except HarnessRefusedError as refusal:
+            return EpisodeOutcome(
+                task_id=task.task_id,
+                spec_id=spec.spec_id,
+                policy_checksum=policy.checkpoint.checksum,
+                exit_code=REFUSED,
+                failure=f"The harness was refused before the agent started: {refusal}",
+            )
         await self._check_image()
-        directory = self._prepare(spec, task, policy)
+        directory = self._prepare(spec, task, policy, placements)
         command = self._environment.command([self._environment.python, "-m", self._worker_module, str(directory)], {})
         # One semaphore per event loop: a campaign runs each gate in its own asyncio.run.
         slots = self._slots.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(self._concurrency))

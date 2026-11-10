@@ -13,6 +13,7 @@ in a worker in Slime's environment (:mod:`~honing.backends.slime.agent_worker`).
 from honing.backends.slime.agent_runner import (
     AgentEpisodeSettings,
     AgentWorkerError,
+    HarnessRefusedError,
     Placement,
     SlimeAgentDeliveryProbe,
     SlimeEpisodeRunner,
@@ -46,6 +47,7 @@ __all__ = [
     "ContainerLimits",
     "GrpoSettings",
     "HFModelSource",
+    "HarnessRefusedError",
     "JobSettings",
     "LocalContainerSandbox",
     "OpdSettings",
