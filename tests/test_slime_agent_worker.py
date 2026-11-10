@@ -38,7 +38,7 @@ from honing.backends.slime import (
 )
 from honing.backends.slime import agent_episode as files
 from honing.backends.slime import agent_worker as worker
-from honing.core import EpisodeOutcome, HarnessFile, HarnessSpec, PolicyEndpoint, PolicyRef, Task
+from honing.core import EpisodeOutcome, HarnessFile, HarnessSpec, PolicyEndpoint, PolicyRef, Task, run_graded
 from honing.harness.graders import CommandGrader
 from honing.harness.tasks import load_task_suite
 from tests.conftest import REPO_ROOT, require
@@ -442,11 +442,13 @@ def test_the_context_limit_also_caps_the_reply_so_the_request_fits(make_runner: 
 @pytest.mark.slow
 def test_a_workspace_over_the_cap_grades_zero_with_the_reason(make_runner: Make, tmp_path: Path) -> None:
     with FakeSGLang(SOLVES) as model:
-        outcome = run(make_runner(model.url, copy_out_max_bytes=2048))
+        record = asyncio.run(
+            run_graded(make_runner(model.url, copy_out_max_bytes=2048), CommandGrader(SUITE), HARNESS, TASK, POLICY)
+        )
+    outcome = record.outcome
     assert (outcome.exit_code, outcome.workspace_location) == (0, None)
     assert outcome.failure == "the agent left a workspace larger than 2048 bytes as a tar; it was not copied back"
-    grade = asyncio.run(CommandGrader(SUITE).grade(TASK, outcome))
-    assert (grade.score, grade.feedback) == (0.0, outcome.failure)
+    assert (record.score, record.feedback) == (0.0, outcome.failure)
     (directory,) = (tmp_path / "episodes").iterdir()
     result = json.loads((directory / files.RESULT_FILE).read_text())
     assert (result["status"], result["workspace"]) == ("completed", None)
@@ -457,10 +459,10 @@ def test_a_workspace_over_the_cap_grades_zero_with_the_reason(make_runner: Make,
 def test_files_that_differ_only_in_case_grade_zero_with_the_reason(make_runner: Make) -> None:
     # The task already has clamp.py; Clamp.py next to it would overwrite it on a case-insensitive disk.
     with FakeSGLang(agent_script(write_call("/workspace/Clamp.py", FIX), "Fixed.")) as model:
-        outcome = run(make_runner(model.url))
-    assert outcome.workspace_location is None
-    assert "('Clamp.py', 'clamp.py')" in str(outcome.failure)
-    assert asyncio.run(CommandGrader(SUITE).grade(TASK, outcome)).score == 0.0
+        record = asyncio.run(run_graded(make_runner(model.url), CommandGrader(SUITE), HARNESS, TASK, POLICY))
+    assert record.outcome.workspace_location is None
+    assert "('Clamp.py', 'clamp.py')" in str(record.outcome.failure)
+    assert (record.score, record.feedback) == (0.0, record.outcome.failure)
 
 
 @pytest.mark.integration

@@ -72,8 +72,6 @@ class FakeTaskGrader:
 
     async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
         self.grades += 1
-        if outcome.failure is not None:
-            return Grade(score=0.0, feedback=outcome.failure)
         fields = dict(part.split("=", 1) for part in outcome.final_output.split() if "=" in part)
         if "quality" not in fields or "verified" not in fields:
             # An agent that failed or was refused reports no score; that is a failed episode, not a crash.

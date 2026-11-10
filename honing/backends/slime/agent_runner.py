@@ -16,7 +16,7 @@ What the agent does is the episode's outcome, whatever it is: a nonzero exit, or
 outgrew the model's context ends the agent's call as if it hit its length limit. A
 workspace the agent left that cannot come back as it is (larger than the cap, or with
 paths that differ only in case or are not valid UTF-8) is the outcome's ``failure``,
-which graders score 0. So is a harness Claude Code cannot take (a settings
+which ``run_graded`` scores 0. So is a harness Claude Code cannot take (a settings
 file that is not a JSON object, a skill name it cannot load): the runner refuses it
 before any worker starts, so one bad candidate is a rejected candidate, not an
 aborted campaign. A spec for another agent still raises :class:`~honing.core.ContractError`.

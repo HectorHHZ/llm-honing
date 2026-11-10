@@ -17,12 +17,14 @@ from honing.core import (
     EpisodeOutcome,
     EvaluationResult,
     EvolveContext,
+    Grade,
     HarnessFile,
     HarnessMoveConfig,
     HarnessProposal,
     HarnessSpec,
     MethodRequirements,
     Move,
+    PolicyRef,
     ProposeResult,
     ReleaseError,
     SelectionDecision,
@@ -178,11 +180,85 @@ def test_an_outcome_carries_no_failure_unless_the_runner_names_one() -> None:
         EpisodeOutcome(task_id="t", spec_id="h", policy_checksum="x", exit_code=0, failure="")
 
 
+class FixedRunner:
+    """Returns one outcome for the episode it is asked to run, with ``failure`` and ``task_id`` as given."""
+
+    support = FakeEpisodeRunner(FakeWorld()).support
+
+    def __init__(self, failure: str | None, task_id: str | None = None) -> None:
+        self._failure = failure
+        self._task_id = task_id
+
+    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        return EpisodeOutcome(
+            task_id=self._task_id or task.task_id,
+            spec_id=spec.spec_id,
+            policy_checksum=policy.checkpoint.checksum,
+            exit_code=0,
+            final_output="solved",
+            failure=self._failure,
+        )
+
+
+@dataclass
+class AlwaysOneGrader:
+    """Scores everything 1.0, as a grader that ignores ``failure`` would."""
+
+    calls: int = 0
+
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
+        self.calls += 1
+        return Grade(score=1.0, feedback="looks solved")
+
+
+@dataclass
+class WorkspaceGrader:
+    """Raises on an outcome without a workspace, as the craftax and rea_issac graders do."""
+
+    calls: int = 0
+
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
+        self.calls += 1
+        if outcome.workspace_location is None:
+            raise ContractError(f"the outcome for {task.task_id} names no run directory")
+        return Grade(score=1.0)
+
+
+def _graded(runner: FixedRunner, grader: object):  # type: ignore[no-untyped-def]
+    return asyncio.run(run_graded(runner, grader, HarnessSpec("claude_code"), TASKS[0], build_policy(FakeWorld())))  # type: ignore[arg-type]
+
+
 @pytest.mark.unit
-def test_the_fake_grader_scores_a_failed_outcome_zero_with_its_reason() -> None:
-    failed = EpisodeOutcome(task_id="t", spec_id="h", policy_checksum="x", exit_code=0, failure="no workspace")
-    grade = asyncio.run(FakeTaskGrader().grade(TASKS[0], failed))
-    assert (grade.score, grade.feedback) == (0.0, "no workspace")
+def test_a_failed_outcome_scores_zero_with_its_reason_whatever_the_grader_would_say() -> None:
+    grader = AlwaysOneGrader()
+    record = _graded(FixedRunner(failure="the workspace is too big"), grader)
+    assert (record.score, record.feedback, record.outcome.failure) == (
+        0.0,
+        "the workspace is too big",
+        "the workspace is too big",
+    )
+    assert record.samples_location is None
+    assert grader.calls == 0
+
+
+@pytest.mark.unit
+def test_a_failed_outcome_never_reaches_a_grader_that_needs_a_workspace() -> None:
+    grader = WorkspaceGrader()
+    record = _graded(FixedRunner(failure="refused"), grader)
+    assert (record.score, record.feedback, grader.calls) == (0.0, "refused", 0)
+
+
+@pytest.mark.unit
+def test_an_outcome_without_a_failure_is_graded_as_before() -> None:
+    grader = AlwaysOneGrader()
+    record = _graded(FixedRunner(failure=None), grader)
+    assert (record.score, record.feedback, grader.calls) == (1.0, "looks solved", 1)
+
+
+@pytest.mark.unit
+def test_a_failed_outcome_for_a_different_episode_is_still_refused() -> None:
+    with pytest.raises(ContractError, match="asked to run on task"):
+        _graded(FixedRunner(failure="refused", task_id="other"), AlwaysOneGrader())
 
 
 def build_policy(world: FakeWorld):  # type: ignore[no-untyped-def]

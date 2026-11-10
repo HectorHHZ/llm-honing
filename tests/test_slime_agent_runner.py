@@ -35,7 +35,17 @@ from honing.backends.slime import agent_episode as files
 from honing.backends.slime import agent_runner as runner_module
 from honing.backends.slime import agent_worker as worker
 from honing.backends.slime import place_harness
-from honing.core import ContractError, HarnessFile, HarnessSpec, PolicyEndpoint, PolicyRef, Task
+from honing.core import (
+    ContractError,
+    EpisodeOutcome,
+    Grade,
+    HarnessFile,
+    HarnessSpec,
+    PolicyEndpoint,
+    PolicyRef,
+    Task,
+    run_graded,
+)
 from honing.e2e.conformance import check_runner
 from honing.harness.graders import CommandGrader
 from honing.harness.tasks import TaskSuite, load_task_suite
@@ -188,6 +198,11 @@ def test_a_spec_for_another_agent_is_a_contract_error_not_a_refusal(tmp_path: Pa
     assert not isinstance(raised.value, HarnessRefusedError)
 
 
+class NeverCalledGrader:
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
+        raise AssertionError("a refused outcome reached the grader")
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("harness", "reason"),
@@ -218,6 +233,8 @@ def test_run_returns_a_refused_outcome_for_a_harness_claude_code_cannot_take(
     # No episode directory and no docker call: the image check and the worker never ran.
     assert not (tmp_path / "episodes").exists()
     assert not docker_log.exists()
+    record = asyncio.run(run_graded(runner, NeverCalledGrader(), harness, Task("t1", "fix main.py"), POLICY))
+    assert (record.score, record.feedback) == (0.0, outcome.failure)
 
 
 @pytest.mark.unit
@@ -395,10 +412,12 @@ def test_a_worker_that_could_not_run_the_episode_raises(
 
 @pytest.mark.unit
 def test_a_workspace_the_agent_could_not_hand_back_is_an_outcome_that_grades_zero(tmp_path: Path) -> None:
-    outcome = run(make_runner(tmp_path, knobs={"failure": "the workspace is too big", "workspace": None}))
+    runner = make_runner(tmp_path, knobs={"failure": "the workspace is too big", "workspace": None})
+    grader = CommandGrader(suite(tmp_path / "grading"))
+    record = asyncio.run(run_graded(runner, grader, EVERY_KIND, Task("t1", "fix main.py"), POLICY))
+    outcome = record.outcome
     assert (outcome.exit_code, outcome.workspace_location, outcome.failure) == (0, None, "the workspace is too big")
-    grade = asyncio.run(CommandGrader(suite(tmp_path / "grading")).grade(Task("t1", "fix main.py"), outcome))
-    assert (grade.score, grade.feedback) == (0.0, "the workspace is too big")
+    assert (record.score, record.feedback) == (0.0, "the workspace is too big")
 
 
 @pytest.mark.unit

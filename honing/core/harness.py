@@ -103,11 +103,12 @@ class EpisodeOutcome:
     at the agent's own readable transcript, and ``workspace_location`` at the
     files it left behind, which a grader may inspect.
 
-    ``failure`` is set when the agent ran but left nothing a grader can judge,
-    for a reason that is the agent's (a workspace too large to copy back, for
-    example). Every grader scores such an outcome 0 with ``failure`` as its
-    feedback, without looking at the workspace. A fault that is not the agent's
-    is not a failure: the runner raises instead.
+    ``failure`` is set when there is nothing a grader can judge, for a reason
+    that is the agent's or its harness's (a workspace too large to copy back, or
+    a harness the agent cannot take, for example).
+    :func:`~honing.core.protocols.run_graded` records such an outcome with score
+    0 and ``failure`` as its feedback, and never passes it to the grader. A fault
+    that is neither is not a failure: the runner raises instead.
     """
 
     task_id: str
