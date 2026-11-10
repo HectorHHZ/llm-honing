@@ -357,3 +357,14 @@ def test_native_engine_with_http_decisions(tmp_path: Path, decision_server: Any)
     )
     assert result["steps"] == len(requests) == 2
     assert replay.verify_replay(out)["verified"]
+
+
+@pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")
+@pytest.mark.integration
+def test_native_match_cli_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    match.main(["--max-steps", "1", "--no-video"])
+    report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    out = Path(report["out"])
+    assert out.parent == tmp_path / "runs/craftax"
+    assert replay.verify_replay(out)["verified"]

@@ -195,14 +195,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File integrations\griddly\run.ps1
 
 Run these commands from the repository root. The launcher also supports
 `server`, `model` and `replay` modes. Game output is written to a fresh
-`integrations/griddly/runs` directory.
+`./runs/griddly/` in the current working directory directory.
 
 ```bash
 integrations/griddly/.venv/bin/python integrations/griddly/scripts/match.py \
   --policy baseline --level 0 --seed 7 --max-steps 100
 ```
 
-The last JSON line gives a new directory under `integrations/griddly/runs/`.
+The last JSON line gives a new directory under `./runs/griddly/` in the current working directory.
 `--out DIR` can name another new directory; existing directories are refused.
 Controllers are:
 

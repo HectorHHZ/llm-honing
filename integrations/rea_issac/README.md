@@ -39,7 +39,7 @@ through VS Code Remote SSH, then open the forwarded address on the host.
 python3 integrations/rea_issac/scripts/match.py --policy baseline --seed 7 --max-ticks 6000
 ```
 
-The last line prints the new run directory under `integrations/rea_issac/runs/`.
+The last line prints the new run directory under `./runs/rea_issac/` in the current working directory.
 In the UI, select **Open replay** and choose that directory's `replay.json`.
 The UI verifies the final state hash before importing it, then reproduces the
 recorded actions. No video encoder is needed. To verify the full recording:

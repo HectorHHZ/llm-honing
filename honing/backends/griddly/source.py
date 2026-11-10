@@ -11,9 +11,11 @@ def source_files() -> dict[str, Path]:
     adapter = Path(__file__).parent
     runtime = Path(engine.__file__).parent
     return {
-        **{path.name: path for path in sorted(adapter.glob("*.py"))},
-        **{f"integration/{path.name}": path for path in sorted(runtime.glob("*.py"))},
-        "integration_namespace.py": runtime.parent / "__init__.py",
+        **{
+            name: adapter / name
+            for name in ("harness.py", "match.py", "model.py", "replay.py", "scenarios.py", "source.py")
+        },
+        **{f"integration/{name}": runtime / name for name in ("catalog.py", "engine.py")},
     }
 
 

@@ -728,3 +728,16 @@ def test_upstream_vector_video_finishes_and_replays(tmp_path: Path, successful_s
         frame = video.get_data(0)
         assert frame.shape[-1] == 3 and frame.std() > 0
     assert verify_replay(out)["verified"]
+
+
+@native
+@pytest.mark.integration
+def test_native_match_cli_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    from honing.backends.griddly.match import main
+
+    monkeypatch.chdir(tmp_path)
+    main(["--max-steps", "1", "--policy", "baseline"])
+    report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    out = Path(report["out"])
+    assert out.parent == tmp_path / "runs/griddly"
+    assert verify_replay(out)["verified"]
