@@ -8,11 +8,11 @@ import json
 from pathlib import Path
 
 import pytest
+
+from honing.core import ContractError, EpisodeOutcome, Grade, protocols
 from integrations.officeqa.fetch import SCORER, neighbors
 from integrations.officeqa.grader import OfficeQAGrader, load_scorer
 from integrations.officeqa.suite import load_suite
-
-from honing.core import ContractError, EpisodeOutcome, Grade, protocols
 
 FETCHED = Path(__file__).resolve().parents[1] / "integrations/officeqa/.cache"
 

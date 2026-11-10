@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from honing.backends.rea_issac.catalog import OPTIONS, PROTOCOL
-from honing.backends.rea_issac.engine import VERSION, Engine
 from honing.backends.rea_issac.harness import load_harness, parse_harness
 from honing.backends.rea_issac.match import FORMAT, history_entry, replay_record, runtime_fingerprint
 from honing.backends.rea_issac.model import make_request, validate_reply
-from honing.backends.rea_issac.policy import Baseline
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
+from integrations.rea_issac.engine import VERSION, Engine
+from integrations.rea_issac.policy import Baseline
 
 
 def audit_run(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:

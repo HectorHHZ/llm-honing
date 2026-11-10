@@ -20,10 +20,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 
-from integrations.ra2.parity.replay_compare import replay_comparison  # noqa: E402
-
 from honing.backends.jev.laya import LayaDecisionModel, LayaSettings, _resolve_model  # noqa: E402
 from honing.backends.jev.server import DecisionServer  # noqa: E402
+from integrations.ra2.parity.replay_compare import replay_comparison  # noqa: E402
 
 BRIDGE = """#!/usr/bin/env python3
 import json, os, sys, urllib.request

@@ -11,12 +11,16 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from honing.backends.griddly.catalog import ACTIONS, FORMAT, GAME, GAME_SHA256, PROTOCOL
-from honing.backends.griddly.engine import GriddlyEngine, adapter_sha256, canonical, runtime_versions
 from honing.backends.griddly.harness import load_harness, parse_harness, seed_harness, write_harness
 from honing.backends.griddly.model import DecisionClient, baseline, make_request, validate_reply
 from honing.backends.griddly.scenarios import GriddlyScenario
+from honing.backends.griddly.source import adapter_sha256, source_files
 from honing.core import CampaignRuleError, HarnessSpec
+from integrations.griddly import engine as game_engine
+from integrations.griddly.catalog import ACTIONS, GAME, GAME_SHA256, PROTOCOL
+from integrations.griddly.engine import GriddlyEngine, canonical, runtime_versions
+
+FORMAT = "griddly-match-v1"
 
 
 def write_json(path: Path, value: object) -> None:
@@ -68,8 +72,10 @@ def run_match(
         write_harness(spec, out / "harness")
         source = out / "source"
         source.mkdir()
-        for path in Path(__file__).parent.glob("*.py"):
-            (source / path.name).write_bytes(path.read_bytes())
+        for name, path in source_files().items():
+            target = source / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(path.read_bytes())
         client = DecisionClient(decision_server) if decision_server is not None else None
         manifest = {
             "format": FORMAT,
@@ -193,12 +199,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--record-video", action="store_true")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    integration = Path(__file__).resolve().parents[3] / "integrations/griddly"
+    integration = Path(game_engine.__file__).resolve().parent
     actions = json.loads(args.actions.read_text(encoding="utf-8")) if args.actions else []
     if not isinstance(actions, list) or any(not isinstance(a, str) for a in actions):
         parser.error("actions must be a JSON list of native names")
     spec = load_harness(args.harness_dir) if args.harness_dir else seed_harness(integration)
-    out = args.out or integration / "runs" / f"spiders-{args.policy}-{uuid.uuid4().hex[:12]}"
+    out = args.out or Path.cwd() / "runs" / "griddly" / f"spiders-{args.policy}-{uuid.uuid4().hex[:12]}"
     result = run_match(
         GriddlyScenario(args.seed, args.level, args.max_steps),
         out,

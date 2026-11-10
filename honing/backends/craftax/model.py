@@ -9,9 +9,9 @@ import urllib.request
 from typing import Any
 from urllib.parse import urlsplit
 
-from honing.backends.craftax.catalog import ACTIONS, action_description
 from honing.backends.craftax.harness import CraftaxHarness
 from honing.backends.craftax.scenarios import CraftaxScenario
+from integrations.craftax.catalog import ACTIONS, action_description
 
 
 def make_request(

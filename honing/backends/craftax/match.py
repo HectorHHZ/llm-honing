@@ -11,12 +11,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from honing.backends.craftax.catalog import ACTIONS, DEFAULT_GOALS, PROTOCOL
-from honing.backends.craftax.engine import CraftaxEngine, runtime_versions
 from honing.backends.craftax.harness import load_harness, parse_harness, seed_harness
 from honing.backends.craftax.model import DecisionClient, make_request
 from honing.backends.craftax.scenarios import CraftaxScenario
 from honing.core import CampaignRuleError, HarnessSpec
+from integrations.craftax import engine as game_engine
+from integrations.craftax.catalog import ACTIONS, DEFAULT_GOALS, PROTOCOL
+from integrations.craftax.engine import CraftaxEngine, runtime_versions
 
 FORMAT = "craftax-match-v1"
 
@@ -210,7 +211,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-video", action="store_true")
     parser.add_argument("--video-fps", type=int, default=10)
     args = parser.parse_args(argv)
-    integration = Path(__file__).resolve().parents[3] / "integrations/craftax"
+    integration = Path(game_engine.__file__).resolve().parent
     actions = json.loads(args.actions.read_text()) if args.actions else []
     if not isinstance(actions, list) or any(not isinstance(a, str) for a in actions):
         parser.error("actions must be a JSON list of action names")
@@ -222,7 +223,7 @@ def main(argv: list[str] | None = None) -> None:
         tuple(args.goals.split(",")),
     )
     spec = load_harness(args.harness_dir) if args.harness_dir else seed_harness(integration)
-    out = args.out or integration / "runs" / f"full-s{args.seed}-{args.policy}-{uuid.uuid4().hex[:12]}"
+    out = args.out or Path.cwd() / "runs" / "craftax" / f"full-s{args.seed}-{args.policy}-{uuid.uuid4().hex[:12]}"
     result = run_match(
         scenario,
         out,

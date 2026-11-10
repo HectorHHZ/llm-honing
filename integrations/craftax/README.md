@@ -1,5 +1,9 @@
 # Craftax
 
+Game code is in this directory. Honing runners, graders and model adapters are
+in `honing/backends/craftax/`. See [the directory layout](../README.md) for
+imports, installation and recording compatibility.
+
 Full [Craftax](https://github.com/MichaelTMatthews/Craftax) as a Honing game
 scenario. The upstream game supplies the rules, procedural worlds and pixel
 art. This integration supplies public observations, action execution, typed
@@ -34,7 +38,7 @@ integrations/craftax/.venv/bin/python integrations/craftax/scripts/match.py \
   --policy random --seed 1 --policy-seed 1 --max-steps 300
 ```
 
-The last JSON line names the new run directory under `integrations/craftax/runs`.
+The last JSON line names the new run directory under `./runs/craftax/` in the current working directory.
 Open its `replay.mp4` in a video player to watch the game, pause and seek. It
 includes the upstream character, terrain, enemies and inventory HUD. No custom
 graphics replace the game. Rendering and recording work on a headless Linux VM;

@@ -8,11 +8,11 @@ import math
 from pathlib import Path
 from typing import Any
 
-from honing.backends.craftax.catalog import ACHIEVEMENTS, ACTIONS, PROTOCOL
-from honing.backends.craftax.engine import CraftaxEngine, frame_hash, runtime_versions
 from honing.backends.craftax.match import FORMAT, summary
 from honing.backends.craftax.model import validate_reply
 from honing.backends.craftax.scenarios import CraftaxScenario
+from integrations.craftax.catalog import ACHIEVEMENTS, ACTIONS, PROTOCOL
+from integrations.craftax.engine import CraftaxEngine, frame_hash, runtime_versions
 
 
 def audit_run(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:

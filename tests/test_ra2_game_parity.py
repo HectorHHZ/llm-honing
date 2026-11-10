@@ -7,8 +7,8 @@ import json
 import urllib.request
 
 import pytest
-from integrations.ra2.parity.game_parity import serving_cpu_model
 
+from integrations.ra2.parity.game_parity import serving_cpu_model
 from tests.test_jev_server import QUESTION, FakeDecisionModel
 
 

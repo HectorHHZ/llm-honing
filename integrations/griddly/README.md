@@ -1,5 +1,9 @@
 # Griddly Spiders
 
+Game code is in this directory. Honing runners, graders and model adapters are
+in `honing/backends/griddly/`. See [the directory layout](../README.md) for
+imports, installation and recording compatibility.
+
 The native Spiders game from Griddly 1.6.7 as a Honing task environment. Move
 the gnome to the gem while avoiding moving spiders. The upstream engine owns
 movement, collision, random enemies, rewards and termination. This integration
@@ -46,7 +50,7 @@ mapping. It implements the 1.6.7 four-return-value step API, not develop's API.
 
 ## Python engine API
 
-Import `GriddlyEngine` from `honing.backends.griddly.engine` and
+Import `GriddlyEngine` from `integrations.griddly.engine` and
 `GriddlyScenario` from `honing.backends.griddly.scenarios`. Run this API in the
 separate game environment. Construction loads the native engine but does not
 start an episode. Call `reset()` before reading or advancing it. One instance
@@ -137,7 +141,7 @@ no model server. The rule controller selects from public state; the reported
 outcome remains a native game outcome, not a learned-model result.
 
 ```python
-from honing.backends.griddly.engine import GriddlyEngine
+from integrations.griddly.engine import GriddlyEngine
 from honing.backends.griddly.model import baseline
 from honing.backends.griddly.scenarios import GriddlyScenario
 
@@ -154,7 +158,7 @@ This error sequence catches the expected exceptions, then resets and closes
 normally. It shows that a budget ending does not allow another action:
 
 ```python
-from honing.backends.griddly.engine import GriddlyEngine
+from integrations.griddly.engine import GriddlyEngine
 from honing.backends.griddly.scenarios import GriddlyScenario
 
 engine = GriddlyEngine(GriddlyScenario(seed=7, max_steps=1))
@@ -191,14 +195,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File integrations\griddly\run.ps1
 
 Run these commands from the repository root. The launcher also supports
 `server`, `model` and `replay` modes. Game output is written to a fresh
-`integrations/griddly/runs` directory.
+`./runs/griddly/` in the current working directory directory.
 
 ```bash
 integrations/griddly/.venv/bin/python integrations/griddly/scripts/match.py \
   --policy baseline --level 0 --seed 7 --max-steps 100
 ```
 
-The last JSON line gives a new directory under `integrations/griddly/runs/`.
+The last JSON line gives a new directory under `./runs/griddly/` in the current working directory.
 `--out DIR` can name another new directory; existing directories are refused.
 Controllers are:
 

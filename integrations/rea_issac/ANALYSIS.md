@@ -18,7 +18,7 @@ analysis workspace. The installed game files were not modified.
 Extractor SHA-256:
 `7d0b837bf3826915be1eb3f42cb117a0496ebb1c27aa765b841c61fa587e519b`.
 Selected factual values and original configuration hashes are retained in
-`honing/backends/rea_issac/source_facts.json`. REA, Ghidra, the extractor and raw
+`integrations/rea_issac/source_facts.json`. REA, Ghidra, the extractor and raw
 analysis outputs remain outside this repository and are not runtime dependencies.
 
 The extracted player defaults provide health 6, one bomb and radius 10. Selected

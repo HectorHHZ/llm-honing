@@ -28,7 +28,6 @@ from honing.backends.griddly import (
 )
 from honing.backends.griddly.decisions import decision_samples
 from honing.backends.griddly.demonstrations import GriddlyDemonstrationProvider
-from honing.backends.griddly.engine import GriddlyEngine, canonical, digest
 from honing.backends.griddly.harness import CONTROLLER_PATH, load_harness, parse_harness, write_harness
 from honing.backends.griddly.match import run_match
 from honing.backends.griddly.model import DecisionClient, baseline, make_request, validate_reply
@@ -45,6 +44,7 @@ from honing.core import (
     TaskGrader,
     run_graded,
 )
+from integrations.griddly.engine import GriddlyEngine, canonical, digest
 from tests.fakes.griddly import PublicStateModel, StandInEndpoints
 from tests.fakes.model import FakeModelSource, FakeWorld
 
@@ -727,4 +727,17 @@ def test_upstream_vector_video_finishes_and_replays(tmp_path: Path, successful_s
         assert video.count_frames() == summary["steps"] + 1
         frame = video.get_data(0)
         assert frame.shape[-1] == 3 and frame.std() > 0
+    assert verify_replay(out)["verified"]
+
+
+@native
+@pytest.mark.integration
+def test_native_match_cli_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    from honing.backends.griddly.match import main
+
+    monkeypatch.chdir(tmp_path)
+    main(["--max-steps", "1", "--policy", "baseline"])
+    report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    out = Path(report["out"])
+    assert out.parent == tmp_path / "runs/griddly"
     assert verify_replay(out)["verified"]

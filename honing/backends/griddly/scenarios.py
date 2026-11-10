@@ -7,8 +7,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from honing.backends.griddly.catalog import PROTOCOL
 from honing.core import ContractError, Task, require
+from integrations.griddly.catalog import PROTOCOL
 
 Split = Literal["train", "val", "heldout"]
 SPLITS = ("train", "val", "heldout")

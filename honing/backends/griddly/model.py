@@ -10,10 +10,10 @@ from collections import deque
 from typing import Any
 from urllib.parse import urlsplit
 
-from honing.backends.griddly.catalog import DESCRIPTIONS
-from honing.backends.griddly.engine import canonical
 from honing.backends.griddly.harness import GriddlyHarness
 from honing.backends.griddly.scenarios import GriddlyScenario
+from integrations.griddly.catalog import DESCRIPTIONS
+from integrations.griddly.engine import canonical
 
 
 def make_request(

@@ -26,7 +26,6 @@ from honing.backends.craftax import (
     replay,
     seed_harness,
 )
-from honing.backends.craftax.catalog import ACTIONS
 from honing.backends.craftax.harness import CONTROLLER_PATH, QUESTIONS_PATH, parse_harness
 from honing.backends.craftax.model import DecisionClient, make_request, validate_reply
 from honing.backends.jev import JevEndpoints
@@ -40,6 +39,7 @@ from honing.core import (
     TaskGrader,
     run_graded,
 )
+from integrations.craftax.catalog import ACTIONS
 from tests.fakes.craftax import FakeCraftaxEngine, fake_versions
 from tests.fakes.model import FakeModelSource, FakeWorld
 
@@ -356,4 +356,15 @@ def test_native_engine_with_http_decisions(tmp_path: Path, decision_server: Any)
         CraftaxScenario(seed=2, max_steps=2), out, SEED, policy="model", decision_server=url, record_video=False
     )
     assert result["steps"] == len(requests) == 2
+    assert replay.verify_replay(out)["verified"]
+
+
+@pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")
+@pytest.mark.integration
+def test_native_match_cli_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    match.main(["--max-steps", "1", "--no-video"])
+    report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    out = Path(report["out"])
+    assert out.parent == tmp_path / "runs/craftax"
     assert replay.verify_replay(out)["verified"]

@@ -60,6 +60,12 @@ the release that applied it.
 [`tests/contracts/test_boundaries.py`](../tests/contracts/test_boundaries.py) enforces
 all three.
 
+The Craftax, Griddly and REA-Issac game runtimes live in `integrations/`.
+Their Honing adapters in `honing/backends/` own tasks, harnesses, model requests,
+runners and graders. The runtime modules import no Honing code.
+[`integrations/README.md`](../integrations/README.md) lists the locations,
+Python package contents and source checks used by replay.
+
 ---
 
 ## 2. The subsystems

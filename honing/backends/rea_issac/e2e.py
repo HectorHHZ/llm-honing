@@ -17,7 +17,7 @@ from honing.core import HarnessSpec, Task
 
 
 def _integration(context: Any) -> Path:
-    return Path(context.root) / "integrations/rea-issac"
+    return Path(context.root) / "integrations/rea_issac"
 
 
 def _suite(context: Any) -> ReaIssacSuite:
