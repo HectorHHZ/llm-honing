@@ -5,6 +5,11 @@ Each call appends its arguments and pid to ``$FAKE_DOCKER_LOG`` (one JSON line) 
 is a JSON object keyed by subcommand (``run``, ``exec``, ``rm``) whose values set
 ``seconds`` to sleep, then ``stdout``, ``stderr`` and ``exit``. A ``done`` line is
 logged once the sleep is over, so a test can tell a finished call from a killed one.
+
+An ``exec`` stands for one whose command ran: before ``stderr`` it prints what the
+sandbox's wrapper prints, the argument after the wrapper's ``-c`` script, unless
+``started`` is false (Docker failed before the command ran). ``warning`` is the CLI's
+own stderr, printed before either.
 """
 
 from __future__ import annotations
@@ -32,6 +37,9 @@ def main() -> int:
     with open(log, "a", encoding="utf-8") as handle:
         handle.write(json.dumps({"done": command}) + "\n")
     sys.stdout.write(behaviour.get("stdout", ""))
+    sys.stderr.write(behaviour.get("warning", ""))
+    if command == "exec" and behaviour.get("started", True):
+        sys.stderr.write(argv[argv.index("-c") + 2] + "\n")
     sys.stderr.write(behaviour.get("stderr", ""))
     return int(behaviour.get("exit", 0))
 

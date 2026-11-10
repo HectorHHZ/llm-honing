@@ -397,6 +397,65 @@ def test_exec_as_a_missing_user_is_dockers_failure(make_sandbox: Factory) -> Non
         asyncio.run(scenario())
 
 
+@pytest.mark.integration
+def test_a_command_that_prints_dockers_wording_is_the_commands_failure(make_sandbox: Factory) -> None:
+    async def scenario() -> tuple[int, str, str]:
+        async with make_sandbox() as sandbox:
+            return await sandbox.exec("echo 'Error response from daemon: x' >&2 && false")
+
+    assert asyncio.run(scenario()) == (1, "", "Error response from daemon: x\n")
+
+
+@pytest.mark.integration
+def test_exec_in_a_removed_container_is_dockers_failure(make_sandbox: Factory) -> None:
+    async def scenario() -> tuple[str, str]:
+        async with make_sandbox() as sandbox:
+            docker("rm", "--force", sandbox.sandbox_id)
+            with pytest.raises(SandboxError, match="No such container") as raised:
+                await sandbox.exec("true")
+            with pytest.raises(SandboxError, match="No such container") as write_raised:
+                await sandbox.write_file("/tmp/x", "x")
+            return str(raised.value), str(write_raised.value)
+
+    exec_error, write_error = asyncio.run(scenario())
+    assert sandbox_module._STARTED not in exec_error
+    assert sandbox_module._STARTED not in write_error
+
+
+@pytest.mark.integration
+def test_the_wrappers_line_never_comes_back(make_sandbox: Factory) -> None:
+    async def scenario() -> list[object]:
+        async with make_sandbox() as sandbox:
+            results: list[object] = [
+                await sandbox.exec("echo out; echo err >&2"),
+                await sandbox.exec("true"),
+                await sandbox.exec("echo err >&2; exit 7"),
+                await sandbox.exec("cat /nonexistent"),
+            ]
+            await sandbox.write_file("/tmp/dir/file", "content\n")
+            results.append(await sandbox.read_file("/tmp/dir/file"))
+            return results
+
+    results = asyncio.run(scenario())
+    assert results[:3] == [(0, "out\n", "err\n"), (0, "", ""), (7, "", "err\n")]
+    code, out, err = results[3]  # type: ignore[misc]
+    assert (code, out) == (1, "")
+    assert "No such file" in err
+    assert results[4] == "content\n"
+    assert all(sandbox_module._STARTED not in str(result) for result in results)
+
+
+@pytest.mark.integration
+def test_a_command_that_prints_the_wrappers_line_gets_its_own_output_back(make_sandbox: Factory) -> None:
+    started = sandbox_module._STARTED
+
+    async def scenario() -> tuple[int, str, str]:
+        async with make_sandbox() as sandbox:
+            return await sandbox.exec(f"echo {started}; echo {started} >&2; exit 3")
+
+    assert asyncio.run(scenario()) == (3, f"{started}\n", f"{started}\n")
+
+
 # --- the container ----------------------------------------------------------------------------------------------
 
 
@@ -629,7 +688,10 @@ def test_the_env_goes_through_a_private_file_and_not_the_command_line(
     assert isinstance(argv, list)
     assert not any("s3cret" in part for part in argv)
     assert not Path(argv[argv.index("--env-file") + 1]).exists()
-    assert argv[argv.index(sandbox.sandbox_id) + 1 :] == ["timeout", "--kill-after", "5", "120", "bash", "-c", "true"]
+    assert argv[argv.index(sandbox.sandbox_id) + 1 :] == [
+        *sandbox_module._WRAPPER,
+        *["timeout", "--kill-after", "5", "120", "bash", "-c", "true"],
+    ]
 
 
 @pytest.mark.integration
@@ -840,7 +902,9 @@ def test_the_commands_own_exit_codes_come_back(
 
 @pytest.mark.integration
 def test_a_daemon_error_is_the_sandboxs_failure(fake_docker: Callable[[dict[str, object]], Path]) -> None:
-    cli = fake_docker({"exec": {"exit": 1, "stderr": "Error response from daemon: No such container: x\n"}})
+    cli = fake_docker(
+        {"exec": {"exit": 1, "stderr": "Error response from daemon: No such container: x\n", "started": False}}
+    )
 
     async def scenario() -> None:
         async with LocalContainerSandbox("image", docker=str(cli)) as sandbox:
@@ -855,12 +919,17 @@ def test_a_daemon_error_is_the_sandboxs_failure(fake_docker: Callable[[dict[str,
     "behaviour",
     [
         # Docker 28.0.4 (CI): exit 126, the bare message on stdout.
-        {"exit": 126, "stdout": "unable to find user nosuchuser: no matching entries in passwd file\n"},
+        {
+            "exit": 126,
+            "stdout": "unable to find user nosuchuser: no matching entries in passwd file\n",
+            "started": False,
+        },
         # Docker 29.5.2: exit 1, the daemon's prefix on stderr.
         {
             "exit": 1,
             "stderr": "Error response from daemon: unable to find user nosuchuser:"
             " no matching entries in passwd file\n",
+            "started": False,
         },
     ],
     ids=["docker-28", "docker-29"],
@@ -876,6 +945,62 @@ def test_a_missing_exec_user_is_the_sandboxs_failure_in_either_wording(
 
     with pytest.raises(SandboxError, match="unable to find user nosuchuser"):
         asyncio.run(scenario())
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("behaviour", "expected"),
+    [
+        # The command ran and printed Docker's wording itself: its failure, not Docker's.
+        ({"exit": 1, "stderr": "Error response from daemon: x\n"}, (1, "", "Error response from daemon: x\n")),
+        # The CLI warned before the container's output; the command's exit code still comes back.
+        (
+            {"exit": 3, "warning": "WARNING: the CLI's own notice\n", "stderr": "own\n"},
+            (3, "", "WARNING: the CLI's own notice\nown\n"),
+        ),
+    ],
+    ids=["dockers-wording", "cli-warning-first"],
+)
+def test_a_command_that_ran_returns_its_exit_code_whatever_stderr_holds(
+    fake_docker: Callable[[dict[str, object]], Path], behaviour: dict[str, object], expected: tuple[int, str, str]
+) -> None:
+    cli = fake_docker({"exec": behaviour})
+
+    async def scenario() -> tuple[int, str, str]:
+        async with LocalContainerSandbox("image", docker=str(cli)) as sandbox:
+            return await sandbox.exec("anything")
+
+    assert asyncio.run(scenario()) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("err", "expected"),
+    [
+        ("", None),
+        ("Error response from daemon: x\n", None),
+        # Only a whole line counts.
+        (f"x{sandbox_module._STARTED}\n", None),
+        (f"{sandbox_module._STARTED}x\n", None),
+        (f"{sandbox_module._STARTED}\n", ""),
+        (f"warn\n{sandbox_module._STARTED}\nown\n", "warn\nown\n"),
+        (f"x{sandbox_module._STARTED}\n{sandbox_module._STARTED}\n", f"x{sandbox_module._STARTED}\n"),
+        # The wrapper's line comes first; the command's copy after it stays.
+        (f"{sandbox_module._STARTED}\n{sandbox_module._STARTED}\n", f"{sandbox_module._STARTED}\n"),
+    ],
+    ids=[
+        "empty",
+        "dockers-wording",
+        "line-suffix",
+        "line-prefix",
+        "alone",
+        "after-a-warning",
+        "after-a-partial",
+        "twice",
+    ],
+)
+def test_only_the_wrappers_line_is_taken_out_of_stderr(err: str, expected: str | None) -> None:
+    assert sandbox_module._without_started(err) == expected
 
 
 # --- arguments --------------------------------------------------------------------------------------------------
@@ -938,7 +1063,9 @@ def test_a_file_that_cannot_be_read_for_dockers_failure_is_logged(
     fake_docker: Callable[[dict[str, object]], Path], caplog: pytest.LogCaptureFixture
 ) -> None:
     # read_file returns "" like slime's E2B sandbox, which hides a dead daemon; the warning shows it.
-    cli = fake_docker({"exec": {"exit": 1, "stderr": "Error response from daemon: No such container: x\n"}})
+    cli = fake_docker(
+        {"exec": {"exit": 1, "stderr": "Error response from daemon: No such container: x\n", "started": False}}
+    )
     sandbox = LocalContainerSandbox("image", docker=str(cli))
 
     async def scenario() -> str:

@@ -62,16 +62,13 @@ _FILE_SECONDS = 600.0
 _REAP_SECONDS = 5.0
 # coreutils ``timeout`` exits 124 when it stopped the command, 137 when it had to KILL it.
 _TIMED_OUT_CODES = frozenset({124, 137})
-# Docker's own failures, as opposed to the command's: the daemon refused the exec (no
-# such container or user), the CLI could not reach the daemon, or the runtime could not
-# start the program. The wording varies by version: Docker 29 reports a missing exec user
-# as exit 1 with "Error response from daemon: unable to find user ..." on stderr, Docker 28
-# as exit 126 with a bare "unable to find user ..." on stdout.
-_DOCKER_FAILURE = re.compile(
-    r"^(Error response from daemon:|Cannot connect to the Docker daemon|failed to connect to the docker API"
-    r"|OCI runtime exec failed)"
-)
-_DOCKER_28_MISSING_USER = re.compile(r"^unable to find user ")
+# Every ``docker exec`` runs its argv behind this wrapper, which prints ``_STARTED`` on
+# stderr and then becomes the command. A stderr without that line means the command never
+# ran: Docker failed (no such container or user, no daemon, a runtime error), whatever its
+# wording and whatever the command would have printed. ``exec`` keeps the command's pid.
+_STARTED = "honing-sandbox-exec-started"
+_STARTED_LINE = _STARTED + "\n"
+_WRAPPER = ("sh", "-c", 'printf "%s\\n" "$0" >&2 && exec "$@"', _STARTED)
 # The only capabilities the container keeps. Root needs them for slime's helpers and the
 # episode worker: CHOWN for useradd's home and the chowns to the agent user, DAC_OVERRIDE
 # to read and write in the agent's files when its home is private, FOWNER for tar restoring
@@ -172,11 +169,21 @@ async def _kill(process: asyncio.subprocess.Process) -> None:
         await asyncio.wait_for(process.wait(), _REAP_SECONDS)
 
 
-def _docker_failed(code: int, out: str, err: str) -> bool:
-    """Whether a ``docker exec`` exit came from Docker rather than from the command, judged by Docker's wording."""
-    if code in (1, 126, 127) and (_DOCKER_FAILURE.match(err) or _DOCKER_FAILURE.match(out)):
-        return True
-    return code == 126 and bool(_DOCKER_28_MISSING_USER.match(err) or _DOCKER_28_MISSING_USER.match(out))
+def _without_started(err: str) -> str | None:
+    """``err`` without the wrapper's line, or ``None`` if it has none and the command never ran.
+
+    The first line equal to ``_STARTED`` is the wrapper's, wherever it falls: the CLI may
+    print a warning of its own before the container's output, and the command, which
+    starts after the wrapper, can print the same text only later.
+    """
+    start = 0
+    while True:
+        found = err.find(_STARTED_LINE, start)
+        if found < 0:
+            return None
+        if found == 0 or err[found - 1] == "\n":
+            return err[:found] + err[found + len(_STARTED_LINE) :]
+        start = found + 1
 
 
 def _decode(data: bytes) -> str:
@@ -217,6 +224,8 @@ class LocalContainerSandbox:
     :class:`SandboxTimeoutError`, as slime's E2B sandbox raises. A command that
     detaches with ``setsid`` (``exec_and_wait``) leaves the group and runs on until
     the container goes. ``idempotent`` is accepted and ignored: nothing is retried.
+    A command that ran returns its own exit code and output, whatever it prints;
+    :class:`SandboxError` means Docker could not run it.
     """
 
     def __init__(
@@ -376,7 +385,9 @@ class LocalContainerSandbox:
                 command.append("--interactive")
             if env_path is not None:
                 command += ["--env-file", env_path]
-            result = await _run([*command, self.sandbox_id, *argv], stdin=stdin, timeout_seconds=timeout_seconds)
+            result = await _run(
+                [*command, self.sandbox_id, *_WRAPPER, *argv], stdin=stdin, timeout_seconds=timeout_seconds
+            )
         finally:
             if env_path is not None:
                 os.unlink(env_path)
@@ -384,9 +395,10 @@ class LocalContainerSandbox:
             return None
         code, stdout, stderr = result
         out, err = _decode(stdout), _decode(stderr)
-        if _docker_failed(code, out, err):
+        command_err = _without_started(err)
+        if command_err is None:
             raise SandboxError(f"docker exec failed in {self.sandbox_id} (exit={code}): {(err or out)[-1000:]}")
-        return code, out, err
+        return code, out, command_err
 
     async def exec(
         self,
