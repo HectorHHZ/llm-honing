@@ -42,7 +42,7 @@ from tests.conftest import REPO_ROOT
 from tests.fakes.harness import StaticPolicyEndpoints
 from tests.fakes.model import FakeModelSource, FakeWorld
 
-EXAMPLE_SUITE = REPO_ROOT / "examples" / "tasks" / "python-bugfix" / "manifest.jsonl"
+EXAMPLE_SUITE = REPO_ROOT / "integrations" / "python-bugfix" / "tasks" / "suite.jsonl"
 FAKE_DOCKER = REPO_ROOT / "tests" / "fakes" / "docker_cli.py"
 SNAPSHOT = FakeModelSource(FakeWorld()).materialize(Path("unused"))
 POLICY = PolicyRef(SNAPSHOT.checkpoint, SNAPSHOT.architecture, "master")

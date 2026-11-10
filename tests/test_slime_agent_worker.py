@@ -49,8 +49,8 @@ from tests.fakes.sglang_generate import FakeSGLang, agent_script, write_call
 SANDBOX_DOCKERFILE = REPO_ROOT / "honing" / "backends" / "slime" / "sandbox.Dockerfile"
 CLI_DIR = REPO_ROOT / "tests" / "fakes" / "claude_code"
 TOKENIZER = REPO_ROOT / "tests" / "fakes" / "byte_tokenizer"
-SUITE = load_task_suite(REPO_ROOT / "examples" / "tasks" / "python-bugfix" / "manifest.jsonl")
-FIX = (REPO_ROOT / "examples" / "tasks" / "python-bugfix" / "clamp" / "reference" / "clamp.py").read_text()
+SUITE = load_task_suite(REPO_ROOT / "integrations" / "python-bugfix" / "tasks" / "suite.jsonl")
+FIX = (REPO_ROOT / "integrations" / "python-bugfix" / "tasks" / "clamp" / "reference" / "clamp.py").read_text()
 SNAPSHOT = FakeModelSource(FakeWorld()).materialize(Path("unused"))
 POLICY = PolicyRef(SNAPSHOT.checkpoint, SNAPSHOT.architecture, "master")
 TASK = Task("clamp", SUITE.entry("clamp").prompt)
