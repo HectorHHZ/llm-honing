@@ -33,7 +33,7 @@ def test_each_kind_takes_its_route() -> None:
         (SETTINGS, settings_file(["read", "grep"], "low")),
     )
 
-    plan = plan_agent(spec, POLICY)
+    plan = plan_agent(spec, POLICY, reasoning=True)
 
     assert (plan.system_prompt, plan.append_system_prompt) == ("SYSTEM.md", ("AGENTS.md", "b.md"))
     assert [(s.name, s.path, s.resources, s.description) for s in plan.skills] == [
@@ -87,6 +87,12 @@ def test_a_skill_file_with_no_frontmatter_is_described_by_its_first_line_or_its_
         (((SETTINGS, HarnessFile("settings", '{"defaultTools": "read"}')),), "harness_well_formed", "list of tool"),
         (((SETTINGS, settings_file(thinking_level="huge")),), "harness_well_formed", "defaultThinkingLevel"),
         ((("s/SKILL.md", _skill("---\nname: s\n---\nbody\n")),), "harness_well_formed", "no description"),
+        (
+            (("s/SKILL.md", _skill('---\nname: s\ndescription: ""\n---\nbody\n')),),
+            "harness_well_formed",
+            "no description",
+        ),
+        (((SETTINGS, settings_file(thinking_level="high")),), "harness_well_formed", "not a reasoning model"),
         ((("a/x/SKILL.md", _skill()), ("b/x/SKILL.md", _skill())), "harness_well_formed", "two skills"),
         ((("s/SKILL.md", _skill()), (SETTINGS, settings_file(["edit"]))), "harness_well_formed", "read or bash"),
     ],
@@ -110,3 +116,10 @@ def test_a_harness_for_another_agent_is_a_contract_error() -> None:
 def test_default_tools_must_be_allowed() -> None:
     with pytest.raises(ContractError, match="must be allowed"):
         ToolPolicy(allowed=frozenset({"read"}), default=("read", "bash"))
+
+
+@pytest.mark.unit
+def test_a_thinking_level_of_off_needs_no_reasoning_model() -> None:
+    plan = plan_agent(_spec((SETTINGS, settings_file(thinking_level="off"))), POLICY)
+
+    assert plan.settings == {"defaultThinkingLevel": "off"}

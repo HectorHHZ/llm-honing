@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -45,10 +46,12 @@ from honing.core import (
 from honing.e2e.components import PipelineContext
 from honing.release import EpisodeEvaluator, Gate, WinLossSelector
 from tests.fakes.harness import FakeTaskGrader
+from tests.fakes.tool_policy import ToolCallingPolicy
 
 REPO = Path(__file__).resolve().parents[1]
 FAKE_WORKER = REPO / "tests/fakes/pi_worker.py"
 PI = REPO / "integrations/pi/node_modules/@earendil-works/pi-coding-agent/package.json"
+needs_pi = pytest.mark.skipif(not PI.exists() or shutil.which("node") is None, reason="pi is not installed")
 MODEL = GatewayModel(
     base_url="https://example.invalid/api/v1",
     model="vendor/cheap-model",
@@ -149,7 +152,7 @@ def test_an_episode_directory_holds_the_harness_the_plan_the_models_and_the_moun
         }
     }
     episode = json.loads((root / "episode.json").read_text())
-    assert episode["model"] == {"provider": "honing", "id": "vendor/cheap-model"}
+    assert episode["model"] == {"provider": "honing", "id": "vendor/cheap-model", "api_key_env": "HONING_TEST_KEY"}
     assert episode["agent"]["routes"]["skills/search/SKILL.md"] == "skill:search"
 
 
@@ -372,9 +375,114 @@ def test_the_factory_refuses_a_node_it_cannot_find(tmp_path: Path) -> None:
         runner_factory(context, node="no-such-node-executable")
 
 
+# The real worker, with pi, against a stand-in model that has the agent run one shell command.
+
+
+def _real_runner(tmp_path: Path, server: ToolCallingPolicy, **overrides: object) -> tuple[PiEpisodeRunner, PolicyRef]:
+    model = GatewayModel(base_url=server.url, model="stand-in", api_key_env="HONING_TEST_KEY")
+    settings: dict[str, object] = {
+        "node": Path(shutil.which("node") or "node"),
+        # Relative on purpose: the worker starts in the episode's working directory.
+        "worker": Path(os.path.relpath(REPO / "integrations/pi/worker.mjs")),
+        "workspaces": tmp_path / "workspaces",
+        "endpoints": GatewayEndpoints(model),
+        "timeout_seconds": 60,
+        **overrides,
+    }
+    return PiEpisodeRunner(**settings), _policy(model)  # type: ignore[arg-type]
+
+
+def _alive(pid: int) -> bool:
+    return not _gone(pid)
+
+
+@pytest.mark.integration
+@needs_pi
+@pytest.mark.parametrize("stop", ["timeout", "cancel"])
+def test_stopping_the_real_worker_stops_the_agents_shell_commands(tmp_path: Path, stop: str) -> None:
+    # pi starts each shell command in a process group of its own, which a signal to the worker's group misses.
+    with ToolCallingPolicy("echo $$ > ../sleeper.pid; exec sleep 613") as server:
+        runner, policy = _real_runner(tmp_path, server, timeout_seconds=4 if stop == "timeout" else 60)
+
+        async def episode() -> None:
+            running = asyncio.ensure_future(runner.run(SEED, TASK, policy))
+            if stop == "timeout":
+                assert (await running).exit_code == TIMED_OUT
+                return
+            pid_file = await _appears(tmp_path, "sleeper.pid")
+            assert _alive(int(pid_file.read_text()))
+            running.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await running
+
+        asyncio.run(episode())
+
+    (root,) = (tmp_path / "workspaces").iterdir()
+    assert _gone(int((root / "sleeper.pid").read_text()))
+
+
+async def _appears(tmp_path: Path, name: str) -> Path:
+    for _ in range(300):
+        found = list((tmp_path / "workspaces").glob(f"*/{name}"))
+        if found and found[0].read_text().strip():
+            return found[0]
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"no {name} appeared")
+
+
+@pytest.mark.integration
+@needs_pi
+def test_the_api_key_reaches_the_model_but_not_the_agents_shell(tmp_path: Path) -> None:
+    with ToolCallingPolicy("env") as server:
+        runner, policy = _real_runner(tmp_path, server)
+        outcome = asyncio.run(runner.run(SEED, TASK, policy))
+
+    assert outcome.exit_code == 0
+    assert server.requests[0]["headers"]["authorization"] == "Bearer secret-value-123"
+    root = Path(outcome.workspace_location or "")
+    transcript = (root / "transcript.jsonl").read_text()
+    assert "PI_CODING_AGENT_DIR" in transcript  # the command's output, the environment, is in the transcript
+    assert [p for p in root.rglob("*") if p.is_file() and "secret-value-123" in p.read_text(errors="ignore")] == []
+
+
+@pytest.mark.integration
+@needs_pi
+def test_a_harness_that_does_not_reach_pi_stops_before_the_model_is_called(tmp_path: Path) -> None:
+    # The frontmatter passes Honing's check but is not YAML, so pi drops the skill.
+    spec = SEED.with_file("s/SKILL.md", HarnessFile("skill", "---\nname: s\ndescription: [unclosed\n---\nbody\n"))
+    with ToolCallingPolicy("true") as server:
+        runner, policy = _real_runner(tmp_path, server)
+        record = asyncio.run(run_graded(runner, FakeTaskGrader(), spec, TASK, policy))
+
+    assert server.requests == []
+    assert record.outcome.exit_code == 2
+    assert record.outcome.final_output.startswith(
+        "The agent stopped before finishing (undelivered): "
+        "the harness did not reach pi: s/SKILL.md (skill:s); pi said:"
+    )
+    assert record.grade.score == 0.0
+    assert PiDeliveryProbe().delivered(record.outcome, spec)["s/SKILL.md"] is False
+
+
+@pytest.mark.integration
+@needs_pi
+def test_a_thinking_level_reaches_a_reasoning_model(tmp_path: Path) -> None:
+    spec = SEED.with_file(SETTINGS, settings_file(["read", "bash"], "high"))
+    with ToolCallingPolicy("true") as server:
+        runner, policy = _real_runner(tmp_path, server, model_settings={"reasoning": True})
+        outcome = asyncio.run(runner.run(spec, TASK, policy))
+
+    assert outcome.exit_code == 0
+    assert (
+        json.loads((Path(outcome.workspace_location or "") / "delivery.json").read_text())["thinking_level"] == "high"
+    )
+    assert PiDeliveryProbe().delivered(outcome, spec)[SETTINGS] is True
+    assert outcome.final_output == "done"
+
+
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.skipif(not PI.exists() or shutil.which("node") is None, reason="pi is not installed")
+@needs_pi
 def test_the_real_worker_passes_the_runner_checks_against_the_stand_in_policy(tmp_path: Path) -> None:
     result = subprocess.run(
         [

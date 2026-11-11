@@ -53,24 +53,24 @@ What a harness file means is decided on Honing's side, in `honing/backends/pi/ha
 | `instructions` | any other, e.g. `AGENTS.md` | appended, in path order, to the system prompt |
 | `skill` | `<dir>/<name>/SKILL.md` | a pi skill named `<name>`; every other skill file under `<dir>/<name>/` is its resource |
 | `skill` | any other path | a skill of its own, named after its path |
-| `settings` | `pi/settings.json` | `{"defaultTools": [...], "defaultThinkingLevel": "..."}`, tools from the operator's policy |
+| `settings` | `pi/settings.json` | `{"defaultTools": [...], "defaultThinkingLevel": "..."}`, tools from the operator's policy; a thinking level other than `off` only for a model the runner's `model_settings` marks `"reasoning": true`, since pi turns thinking off for any other |
 | `settings` | any other path | a file in `work/.harness/` |
 
 pi lists a skill to the model by its description and loads it only when it has one. A skill file with no frontmatter is described by its first line; one whose frontmatter has no `description` is refused. Skills need the `read` or `bash` tool, which pi uses to open them.
 
 The worker builds the session itself, so pi's own discovery is off: no extensions, MCP servers, prompt templates, `AGENTS.md` or `CLAUDE.md` from the working directory or its parents, skills from `~/.pi` or `~/.agents`, or settings from disk. The agent sees what the harness says.
 
-`agent/models.json` defines one provider, `honing`, for the policy's OpenAI-compatible endpoint (`api: openai-completions`), so a local model served by SGLang (the `sglang` runtime) and a model behind an API (the `openai_chat` runtime, through `honing.backends.llm_gateway`) both work. A Jev decision server (`jev_decision`) is refused. The model's API key is written as `"$NAME"`, which pi reads from the environment, so it is never on disk. With gateway prices, pi reports each episode's cost.
+`agent/models.json` defines one provider, `honing`, for the policy's OpenAI-compatible endpoint (`api: openai-completions`), so a local model served by SGLang (the `sglang` runtime) and a model behind an API (the `openai_chat` runtime, through `honing.backends.llm_gateway`) both work. A Jev decision server (`jev_decision`) is refused. The model's API key is written as `"$NAME"`, never as its value. The worker hands the key to pi in memory and removes it from its own environment before the session starts, so the shell commands the agent runs cannot print it into the transcript. With gateway prices, pi reports each episode's cost.
 
-The worker does not inherit Honing's environment. It gets `PATH`, `HOME`, `LANG`, `TMPDIR`, `TERM`, `LC_*`, the policy's API key, pi's own settings (`PI_CODING_AGENT_DIR` for the episode, offline, no version check, no telemetry), and whatever the runner's `environment` adds. A proxy or a custom CA bundle is not inherited either; name the variables in the runner's `inherit_environment`.
+The worker does not inherit Honing's environment. It gets `PATH`, `HOME`, `LANG`, `TMPDIR`, `TERM`, `LC_*`, the policy's API key (which the agent's shell does not), pi's own settings (`PI_CODING_AGENT_DIR` for the episode, offline, no version check, no telemetry), and whatever the runner's `environment` adds. A proxy or a custom CA bundle is not inherited either; name the variables in the runner's `inherit_environment`.
 
 ## What the runner reports
 
-`delivery.json` lists each harness file that reached pi, with its route and the SHA-256 of the content read. The worker checks pi's own session before the first model call: an instruction file's text must be in pi's system prompt, a skill must be listed there, and the tools from `pi/settings.json` must be the session's. `PiDeliveryProbe` counts a file as delivered only when that hash matches.
+`delivery.json` lists each harness file that reached pi, with its route and the SHA-256 of the content read. The worker checks pi's own session before the first model call: an instruction file's text must be in pi's system prompt, a skill must be listed there, and the tools and thinking level from `pi/settings.json` must be the session's. `PiDeliveryProbe` counts a file as delivered only when that hash matches. If any file did not reach pi (for example a skill whose frontmatter pi cannot parse), the worker stops before calling the model: the episode would otherwise be scored as if the harness had been tried. `delivery.json` then lists what is missing and pi's diagnostics.
 
 `transcript.jsonl` has every pi session event, as `pi --mode json` writes them: the system message pi sent, messages, tool calls and results, retries. `result.json` has the final answer, the status, and the tokens and cost.
 
-An episode that does not finish scores 0 instead of stopping the campaign. A timeout kills the worker and the processes its tools started (exit code -9). A session pi aborted, or one whose provider kept failing after pi's retries, ends with exit code 2. Either way `final_output` starts with the reason, so the grader's feedback says what went wrong. The runner does no scoring; the task's `TaskGrader` does.
+An episode that does not finish scores 0 instead of stopping the campaign. On a timeout (exit code -9) or a cancelled episode, the runner sends the worker SIGTERM, and the worker aborts its session, which kills every shell command the agent is running: pi starts each in a process group of its own, out of reach of a signal to the worker. A worker still running after `STOP_GRACE_SECONDS` (10) is killed with its process group. A harness that did not reach pi, a session pi aborted, or one whose provider kept failing after pi's retries ends with exit code 2. Either way `final_output` starts with the reason, so the grader's feedback says what went wrong. The runner does no scoring; the task's `TaskGrader` does.
 
 ## Known gaps
 

@@ -35,6 +35,8 @@ from honing.core import (
 )
 
 TIMED_OUT = -9
+# How long a worker asked to stop may take to abort its session, which stops the agent's shell commands.
+STOP_GRACE_SECONDS = 10.0
 REFUSED = 2
 
 MountMode = Literal["copy", "link"]
@@ -84,9 +86,11 @@ class PiEpisodeRunner:
             such as ``contextWindow`` and ``maxTokens`` for a local model with a
             short context.
         concurrency: How many agents run at once.
-        timeout_seconds: An agent still running after this is killed with its
-            child processes, and the outcome's exit code is -9. pi has no step
-            limit of its own, so this is the only one.
+        timeout_seconds: An agent still running after this is stopped, and the
+            outcome's exit code is -9. The worker gets SIGTERM and aborts its
+            session, which kills the agent's running shell commands; after
+            ``STOP_GRACE_SECONDS`` its process group gets SIGKILL. pi has no
+            step limit of its own, so this is the only one.
 
     Raises:
         ContractError: A limit is not positive, a mount is not a directory,
@@ -119,7 +123,8 @@ class PiEpisodeRunner:
     ) -> None:
         require(concurrency > 0 and timeout_seconds > 0, "concurrency and timeout_seconds must be positive")
         self._node = node
-        self._worker = worker
+        # Resolved here: the worker starts in the episode's working directory.
+        self._worker = worker.resolve()
         self._workspaces = workspaces
         self._endpoints = endpoints
         self._tools = tools or ToolPolicy()
@@ -155,7 +160,7 @@ class PiEpisodeRunner:
             CampaignRuleError: The harness asks for something the policy forbids,
                 or is malformed (see :func:`~honing.backends.pi.harness.plan_agent`).
         """
-        return plan_agent(spec, self._tools)
+        return plan_agent(spec, self._tools, reasoning=self._model_settings.get("reasoning") is True)
 
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
         """Runs one pi session on ``task`` under ``spec`` against ``policy``.
@@ -296,7 +301,7 @@ class PiEpisodeRunner:
         episode = {
             "task": {"task_id": task.task_id, "prompt": task.prompt},
             "spec_id": spec.spec_id,
-            "model": {"provider": PROVIDER, "id": access["model"]},
+            "model": {"provider": PROVIDER, "id": access["model"], "api_key_env": access.get("api_key_env")},
             "agent": plan.to_json(),
         }
         (root / "episode.json").write_text(json.dumps(episode, indent=2) + "\n", encoding="utf-8")
@@ -313,18 +318,16 @@ class PiEpisodeRunner:
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=log,
                 stderr=asyncio.subprocess.STDOUT,
-                # Its own process group, so stopping it also stops the shells the agent's tools started.
+                # Its own process group, so a worker that does not stop in time is killed with what it started.
                 start_new_session=True,
             )
             try:
                 return await asyncio.wait_for(process.wait(), self._timeout)
             except asyncio.TimeoutError:  # the builtin TimeoutError only from Python 3.11
-                _kill_group(process.pid)
-                await process.wait()
+                await _stop(process)
                 return TIMED_OUT
             except asyncio.CancelledError:
-                _kill_group(process.pid)
-                await asyncio.shield(process.wait())
+                await asyncio.shield(_stop(process))
                 raise
 
 
@@ -357,6 +360,19 @@ class PiDeliveryProbe:
         }
 
 
-def _kill_group(pid: int) -> None:
+async def _stop(process: asyncio.subprocess.Process) -> None:
+    """Asks the worker to stop, then kills its process group if it has not within the grace period.
+
+    pi starts each shell command in a process group of its own, out of reach of
+    a signal to the worker's group; only the worker aborting its session stops them.
+    """
+    _signal_group(process.pid, signal.SIGTERM)
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(process.wait(), STOP_GRACE_SECONDS)
+    _signal_group(process.pid, signal.SIGKILL)
+    await process.wait()
+
+
+def _signal_group(pid: int, number: signal.Signals) -> None:
     with contextlib.suppress(ProcessLookupError):
-        os.killpg(pid, signal.SIGKILL)
+        os.killpg(pid, number)

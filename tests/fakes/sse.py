@@ -1,7 +1,8 @@
 """Chat completions as server-sent events, for the stand-in policy servers when a client asks to stream.
 
 pi always sends ``"stream": true``; the stand-ins build a whole reply and send it here as the chunks an
-OpenAI-compatible server streams: the message as one delta, then the finish reason, then usage, then ``[DONE]``.
+OpenAI-compatible server streams: the message as one delta (with its tool calls, if any), then the finish reason,
+then usage, then ``[DONE]``.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ def stream_chunks(reply: Mapping[str, Any]) -> list[dict[str, Any]]:
     chunks = []
     for choice in reply["choices"]:
         delta = {"role": "assistant", "content": choice["message"].get("content") or ""}
+        calls = choice["message"].get("tool_calls")
+        if calls:
+            delta["tool_calls"] = [{"index": index, **call} for index, call in enumerate(calls)]
         chunks.append({**base, "choices": [{"index": choice["index"], "delta": delta, "finish_reason": None}]})
         finish = {"index": choice["index"], "delta": {}, "finish_reason": choice.get("finish_reason", "stop")}
         chunks.append({**base, "choices": [finish]})

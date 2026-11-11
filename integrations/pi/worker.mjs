@@ -5,8 +5,9 @@
 // discovered: no extensions, context files, prompt templates, or skills beyond the plan's, and settings come
 // only from the harness.
 //
-// Exit code: 0 when the session finished, 2 when it stopped for another reason (aborted, or the model's
-// provider kept failing), 1 when it could not run.
+// Exit code: 0 when the session finished, 2 when it stopped for another reason (part of the harness did not reach
+// pi, the runner stopped it, pi aborted it, or the model's provider kept failing), 1 when it could not run. The key
+// named in episode.json is handed to pi in memory and removed from the environment the agent's shells inherit.
 
 import { createHash } from "node:crypto";
 import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -71,6 +72,7 @@ function planLoader(plan, harness, skills) {
 function delivered(plan, harness, session, skills) {
 	const prompt = session.systemPrompt;
 	const tools = [...session.getActiveToolNames()].sort();
+	const thinking = plan.settings.defaultThinkingLevel;
 	const listed = new Set(
 		skills.skills.filter((skill) => prompt.includes(skill.filePath)).map((skill) => skill.name),
 	);
@@ -78,17 +80,25 @@ function delivered(plan, harness, session, skills) {
 		const [kind, name] = route.split(":");
 		if (kind === "system_prompt" || kind === "append_system_prompt") return prompt.includes(content.trim());
 		if (kind === "skill" || kind === "skill_resource") return listed.has(name);
-		if (kind === "settings") return JSON.stringify(tools) === JSON.stringify([...plan.tools].sort());
+		if (kind === "settings") {
+			const sameTools = JSON.stringify(tools) === JSON.stringify([...plan.tools].sort());
+			// pi clamps a level the model cannot use, so a level counts only if the session kept it.
+			return sameTools && (thinking === undefined || session.thinkingLevel === thinking);
+		}
 		return kind === "workspace_file";
 	};
 	const files = {};
+	const missing = [];
 	for (const [path, route] of Object.entries(plan.routes)) {
 		const content = readFileSync(join(harness, path), "utf8");
 		if (reached(route, content)) {
 			files[path] = { route, sha256: createHash("sha256").update(content).digest("hex") };
+		} else {
+			missing.push(`${path} (${route})`);
 		}
 	}
-	return { files, skills: [...listed].sort(), tools, diagnostics: skills.diagnostics };
+	const report = { files, skills: [...listed].sort(), tools, thinking_level: session.thinkingLevel };
+	return { ...report, missing, diagnostics: skills.diagnostics.map((d) => `${d.path ?? ""}: ${d.message}`) };
 }
 
 /** Why the session stopped, from its last assistant message and its settled event. */
@@ -111,7 +121,7 @@ function usage(session) {
 	return total;
 }
 
-async function run(root) {
+async function run(root, stop) {
 	const episode = JSON.parse(readFileSync(join(root, "episode.json"), "utf8"));
 	const plan = episode.agent;
 	const harness = join(root, "harness");
@@ -128,8 +138,14 @@ async function run(root) {
 		authPath: join(agentDir, "auth.json"),
 		modelsPath: join(agentDir, "models.json"),
 	});
-	const model = modelRuntime.getModel(episode.model.provider, episode.model.id);
-	if (!model) throw new Error(`models.json defines no model ${episode.model.provider}/${episode.model.id}`);
+	const { provider, id, api_key_env: keyEnv } = episode.model;
+	if (keyEnv) {
+		// pi holds the key in memory; the shells the agent's tools start inherit process.env, so it must not be there.
+		await modelRuntime.setRuntimeApiKey(provider, process.env[keyEnv] ?? "");
+		delete process.env[keyEnv];
+	}
+	const model = modelRuntime.getModel(provider, id);
+	if (!model) throw new Error(`models.json defines no model ${provider}/${id}`);
 	const { session } = await createAgentSession({
 		cwd,
 		agentDir,
@@ -140,8 +156,21 @@ async function run(root) {
 		sessionManager: SessionManager.inMemory(cwd),
 		settingsManager: SettingsManager.inMemory(plan.settings),
 	});
+	stop.session = session;
 	// Before the first model call, so an episode that is stopped still says what reached pi.
-	writeJson(join(root, "delivery.json"), delivered(plan, harness, session, skills));
+	const delivery = delivered(plan, harness, session, skills);
+	writeJson(join(root, "delivery.json"), delivery);
+	if (delivery.missing.length > 0) {
+		// An episode without its harness would be scored as if the harness had been tried.
+		const said = delivery.diagnostics.length > 0 ? `; pi said: ${delivery.diagnostics.join("; ")}` : "";
+		writeJson(join(root, "result.json"), {
+			final_output: "",
+			status: "undelivered",
+			error: `the harness did not reach pi: ${delivery.missing.join(", ")}${said}`,
+		});
+		session.dispose();
+		return 2;
+	}
 
 	const transcript = createWriteStream(join(root, "transcript.jsonl"));
 	let settled;
@@ -157,9 +186,9 @@ async function run(root) {
 	});
 	let stopped = { status: "failed" };
 	try {
-		await session.prompt(episode.task.prompt);
+		if (!stop.requested) await session.prompt(episode.task.prompt);
 	} finally {
-		stopped = outcome(session, settled);
+		stopped = stop.requested ? { status: "aborted", error: "stopped by the runner" } : outcome(session, settled);
 		writeJson(join(root, "result.json"), {
 			final_output: session.getLastAssistantText() ?? "",
 			...stopped,
@@ -173,9 +202,17 @@ async function run(root) {
 }
 
 const root = resolve(process.argv[2]);
+// The runner asks the worker to stop with SIGTERM. pi starts each shell command in its own process group, so
+// only aborting the session reaches them: it kills every running command's process tree.
+const stop = { requested: false, session: undefined };
+process.once("SIGTERM", () => {
+	stop.requested = true;
+	if (stop.session === undefined) process.exit(143);
+	stop.session.abort().catch((error) => console.error(error));
+});
 let code;
 try {
-	code = await run(root);
+	code = await run(root, stop);
 } catch (error) {
 	try {
 		readFileSync(join(root, "result.json"));

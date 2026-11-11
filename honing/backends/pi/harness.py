@@ -27,7 +27,8 @@ _SETTINGS_KEYS = frozenset({"defaultTools", "defaultThinkingLevel"})
 # pi lists skills to the model only when it has a tool that can read a skill's file.
 _SKILL_READERS = frozenset({"read", "bash"})
 _FRONTMATTER = re.compile(r"\A---\r?\n(?P<body>.*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL)
-_DESCRIPTION = re.compile(r"^description:[ \t]*\S", re.MULTILINE)
+# A description with a value; an empty quoted one ("" or '') is no description.
+_DESCRIPTION = re.compile(r"^description:[ \t]*(?![\"']{2}[ \t]*$)\S", re.MULTILINE)
 _MAX_DESCRIPTION = 1024
 
 
@@ -101,7 +102,7 @@ class AgentPlan:
         }
 
 
-def plan_agent(spec: HarnessSpec, policy: ToolPolicy) -> AgentPlan:
+def plan_agent(spec: HarnessSpec, policy: ToolPolicy, reasoning: bool = False) -> AgentPlan:
     """Resolves a harness into the agent the worker builds.
 
     ``SYSTEM.md`` replaces pi's system prompt; every other instruction file is
@@ -111,12 +112,15 @@ def plan_agent(spec: HarnessSpec, policy: ToolPolicy) -> AgentPlan:
     its own, named after its path. pi loads a skill only with a description: a
     skill file with no frontmatter is described by its first line, and one
     whose frontmatter has no description is refused. ``pi/settings.json`` sets
-    tools from ``policy`` and the thinking level; other settings files are
+    tools from ``policy`` and, for a reasoning model, the thinking level; other settings files are
     passed to the agent as files.
 
     Args:
         spec: The harness.
         policy: What the operator allows.
+        reasoning: Whether the operator marked the model as a reasoning model.
+            pi turns thinking off for any other, so a harness may then set
+            no thinking level but ``off``.
 
     Returns:
         The resolved plan.
@@ -140,7 +144,7 @@ def plan_agent(spec: HarnessSpec, policy: ToolPolicy) -> AgentPlan:
     system_prompt = SYSTEM_PROMPT if SYSTEM_PROMPT in instructions else None
     appended = tuple(path for path in instructions if path != SYSTEM_PROMPT)
     skills = _skills(spec, by_kind.get("skill", []))
-    settings, tools = _settings(spec.get(SETTINGS), policy)
+    settings, tools = _settings(spec.get(SETTINGS), policy, reasoning)
     if skills and not _SKILL_READERS & set(tools):
         raise CampaignRuleError(
             "harness_well_formed",
@@ -225,7 +229,9 @@ def _description(path: str, content: str) -> str | None:
     return (first or f"Instructions from {path}")[:_MAX_DESCRIPTION]
 
 
-def _settings(file: HarnessFile | None, policy: ToolPolicy) -> tuple[dict[str, object], tuple[str, ...]]:
+def _settings(
+    file: HarnessFile | None, policy: ToolPolicy, reasoning: bool
+) -> tuple[dict[str, object], tuple[str, ...]]:
     if file is None:
         return {}, policy.default
     try:
@@ -251,5 +257,11 @@ def _settings(file: HarnessFile | None, policy: ToolPolicy) -> tuple[dict[str, o
     if level not in THINKING_LEVELS:
         raise CampaignRuleError(
             "harness_well_formed", f"{SETTINGS}: defaultThinkingLevel must be one of {THINKING_LEVELS}"
+        )
+    if level != "off" and not reasoning:
+        raise CampaignRuleError(
+            "harness_well_formed",
+            f"{SETTINGS} sets defaultThinkingLevel {level!r}, but the model is not a reasoning model, so pi would "
+            "turn thinking off; the operator marks one with reasoning: true in the runner's model_settings",
         )
     return settings, tuple(tools)
