@@ -45,7 +45,13 @@ from honing.core import (
     protocols,
 )
 from honing.harness import endpoints
-from honing.release import AcceptAll, EpisodeEvaluator, NoRegressionSelector, WinLossSelector
+from honing.release import (
+    AcceptAll,
+    EpisodeEvaluator,
+    NoRegressionSelector,
+    PairedIntervalSelector,
+    WinLossSelector,
+)
 from tests.fakes.builder import INT4_G128, TASKS
 from tests.fakes.compression import (
     ActivationCountScorer,
@@ -90,6 +96,7 @@ def implementations() -> list[tuple[object, type]]:
         (AppendInstructionMethod(), protocols.EvolveMethod),
         (WinLossSelector(), protocols.CandidateSelector),
         (NoRegressionSelector(0.1), protocols.CandidateSelector),
+        (PairedIntervalSelector(), protocols.CandidateSelector),
         (AcceptAll(), protocols.CandidateSelector),
         (EpisodeEvaluator(runner, grader, TASKS), protocols.Evaluator),
         (ScriptedScheduler([]), protocols.CoAdaptScheduler),
