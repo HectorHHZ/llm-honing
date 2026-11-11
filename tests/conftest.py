@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 from types import ModuleType
 
@@ -30,3 +31,10 @@ def load_script(relative_path: str) -> ModuleType:
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
     return REPO_ROOT
+
+
+def require(name: str, reason: str) -> None:
+    """Skip, or fail when ``HONING_REQUIRE_<NAME>=1``: a CI job that exists to run the test cannot skip it silently."""
+    if os.environ.get(f"HONING_REQUIRE_{name.upper()}") == "1":
+        pytest.fail(f"HONING_REQUIRE_{name.upper()}=1, but {reason}")
+    pytest.skip(reason)
