@@ -469,8 +469,13 @@ through.
 **The gate scores what ships.** A candidate with serving weights is evaluated on them; the
 gate refuses an evaluation that scored the master instead, because that would hide exactly
 the regression quantization can cause. Selection policies: `WinLossSelector` for changes
-meant to improve quality (training, harness), `NoRegressionSelector` for changes made for
-cost (prune, quantize), `AcceptAll`, or a method's own selector.
+meant to improve quality (training, harness), `PairedIntervalSelector` for the same changes
+when a gain must be told apart from noise, `NoRegressionSelector` for changes made for
+cost (prune, quantize), `AcceptAll`, or a method's own selector. `PairedIntervalSelector`
+selects when the interval on the mean paired difference lies above a minimum effect. It
+decides once, or after each block of a gate that plays in blocks and stops when the result
+is clear, with the confidence split across the looks so stopping early does not raise the
+false-accept rate.
 
 **Comparisons are paired.** Every score is in `[0, 1]`, and selectors compare candidate and
 incumbent task by task. Every gated candidate, published or rejected, records

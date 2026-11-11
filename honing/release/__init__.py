@@ -3,8 +3,14 @@
 from honing.release.chain import CurvePoint, ReleaseChain
 from honing.release.evaluation import EpisodeEvaluator
 from honing.release.gate import Gate
-from honing.release.selectors import AcceptAll, NoRegressionSelector, WinLossSelector
-from honing.release.statistics import GATE_METRIC_NAMES, PairedDifference, gate_metrics, paired_difference
+from honing.release.selectors import AcceptAll, NoRegressionSelector, PairedIntervalSelector, WinLossSelector
+from honing.release.statistics import (
+    GATE_METRIC_NAMES,
+    PairedDifference,
+    gate_metrics,
+    normal_paired_difference,
+    paired_difference,
+)
 
 __all__ = [
     "GATE_METRIC_NAMES",
@@ -14,8 +20,10 @@ __all__ = [
     "Gate",
     "NoRegressionSelector",
     "PairedDifference",
+    "PairedIntervalSelector",
     "ReleaseChain",
     "WinLossSelector",
     "gate_metrics",
+    "normal_paired_difference",
     "paired_difference",
 ]
