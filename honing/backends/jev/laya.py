@@ -65,12 +65,16 @@ def _gpu_uuid(gpu: str) -> str:
 
 
 @contextlib.contextmanager
-def gpu_lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
+def gpu_lock(
+    gpu: str, lock_dir: Path | None = None, *, allow_existing_processes: bool = False, minimum_free_mib: int = 0
+) -> Iterator[str]:
     """Hold one GPU for this process: an exclusive per-user lock, and no other compute process on it.
 
     Sets ``CUDA_VISIBLE_DEVICES`` to the GPU's UUID for the duration, so the
     caller sees it as device 0, and restores it afterwards. Yields the UUID.
     """
+    if allow_existing_processes and minimum_free_mib <= 0:
+        raise ValueError("shared GPU use requires a positive minimum_free_mib")
     uuid = _gpu_uuid(gpu)
     directory = lock_dir or Path(tempfile.gettempdir()) / f"laya-{os.getuid()}"
     directory.mkdir(parents=True, exist_ok=True)
@@ -79,8 +83,16 @@ def gpu_lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
         used = subprocess.check_output(
             ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"], text=True
         )
-        if uuid in used:
+        if uuid in used and not allow_existing_processes:
             raise RuntimeError(f"GPU {gpu} already has a compute process")
+        if allow_existing_processes:
+            free_mib = int(
+                subprocess.check_output(
+                    ["nvidia-smi", "-i", gpu, "--query-gpu=memory.free", "--format=csv,noheader,nounits"], text=True
+                ).strip()
+            )
+            if free_mib < minimum_free_mib:
+                raise RuntimeError(f"GPU {gpu} has {free_mib} MiB free; need {minimum_free_mib} MiB")
         previous = os.environ.get("CUDA_VISIBLE_DEVICES")
         os.environ["CUDA_VISIBLE_DEVICES"] = uuid
         try:

@@ -285,6 +285,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--djev-steps", type=int, default=1)
     parser.add_argument("--dtype", choices=("bf16", "fp32"), default="bf16", help="kev: serving precision")
     parser.add_argument("--gpu", default="0")
+    parser.add_argument("--share-gpu", action="store_true", help="nanojev: share a GPU when at least 16 GiB is free")
     parser.add_argument("--checkpoint-manifest", type=Path, help="a trained checkpoint to serve instead")
     parser.add_argument(
         "--max-len",
@@ -299,6 +300,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
+    if args.share_gpu and args.family != "nanojev":
+        parser.error("--share-gpu is supported only for --family nanojev")
     # A launcher stops the server with SIGTERM; exit through the loading context so an engine it started stops too.
     if threading.current_thread() is threading.main_thread():
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
@@ -388,6 +391,7 @@ def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:
                 checkpoint_manifest=args.checkpoint_manifest,
                 max_length=args.max_len or 2048,
                 inference=args.nanojev_inference,
+                allow_shared_gpu=args.share_gpu,
             )
         )
     if args.family == "kev":

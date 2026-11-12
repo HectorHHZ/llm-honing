@@ -92,10 +92,14 @@ class NanoJevSettings:
     max_length: int = 2048
     precision: str = "bf16"
     inference: str = "reference"
+    allow_shared_gpu: bool = False
+    minimum_free_mib: int = 16384
 
     def __post_init__(self) -> None:
         if self.max_length <= 0:
             raise ValueError("max_length must be positive")
+        if self.allow_shared_gpu and self.minimum_free_mib <= 0:
+            raise ValueError("shared GPU use requires a positive minimum_free_mib")
         if self.precision not in ("bf16", "fp32"):
             raise ValueError("precision must be bf16 or fp32")
         if self.inference not in INFERENCE_MODES:
@@ -331,7 +335,12 @@ class NanoJevDecisionModel:
         )
         pins = json.loads(settings.pins_path.read_text())
         upstream, revision = import_nanojev(settings.source_dir, pins)
-        with gpu_lock(settings.gpu, settings.lock_dir) as uuid:
+        with gpu_lock(
+            settings.gpu,
+            settings.lock_dir,
+            allow_existing_processes=settings.allow_shared_gpu,
+            minimum_free_mib=settings.minimum_free_mib if settings.allow_shared_gpu else 0,
+        ) as uuid:
             model_record = resolve_checkpoint(settings, pins, revision)
             with contextlib.redirect_stdout(sys.stderr):
                 import torch

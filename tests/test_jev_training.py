@@ -205,3 +205,31 @@ def test_the_gpu_lock_restores_the_visible_devices(tmp_path: Path, monkeypatch: 
     with laya.gpu_lock("0", tmp_path):
         pass
     assert "CUDA_VISIBLE_DEVICES" not in os.environ
+
+
+@pytest.mark.unit
+def test_shared_gpu_requires_free_memory_and_explicit_opt_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from honing.backends.jev import laya
+
+    free_mib = 20000
+
+    def nvidia_smi(command: list[str], text: bool) -> str:
+        if "--query-gpu=index,uuid" in command:
+            return "0, GPU-aaa\n"
+        if "--query-compute-apps=gpu_uuid" in command:
+            return "GPU-aaa\n"
+        return str(free_mib)
+
+    monkeypatch.setattr(laya.subprocess, "check_output", nvidia_smi)
+    with pytest.raises(RuntimeError, match="already has a compute process"):
+        with laya.gpu_lock("0", tmp_path):
+            pass
+    with pytest.raises(ValueError, match="positive minimum_free_mib"):
+        with laya.gpu_lock("0", tmp_path, allow_existing_processes=True):
+            pass
+    with laya.gpu_lock("0", tmp_path, allow_existing_processes=True, minimum_free_mib=16384):
+        assert os.environ["CUDA_VISIBLE_DEVICES"] == "GPU-aaa"
+    free_mib = 12000
+    with pytest.raises(RuntimeError, match="need 16384 MiB"):
+        with laya.gpu_lock("0", tmp_path, allow_existing_processes=True, minimum_free_mib=16384):
+            pass
