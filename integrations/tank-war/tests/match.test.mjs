@@ -13,6 +13,14 @@ import {
     QUESTIONS_PATH,
 } from "../scripts/match.mjs";
 import { DEFAULT_QUESTIONS } from "../model-bridge.mjs";
+import {
+    restoreGame,
+    snapshotGame,
+    stateHash,
+} from "../scripts/state-replay.mjs";
+import { adapter } from "../web/game/adapter.js";
+import { labelRecordedStates } from "../scripts/label-recorded-states.mjs";
+import { parseControllerFault } from "../scripts/controller-faults.mjs";
 
 const SECONDS = 6;
 const lines = async (file) =>
@@ -104,6 +112,13 @@ test("a teacher round is recorded and replays exactly", async () => {
         await readFile(join(runs[0].out, "manifest.json"), "utf8"),
     );
     assert.equal(manifest.kind, "teacher-demonstration");
+    assert.match(manifest.harness_sha256, /^[0-9a-f]{64}$/);
+    assert.match(manifest.controller_sha256, /^[0-9a-f]{64}$/);
+    assert.match(manifest.code_commit, /^[0-9a-f]{40}$/);
+    assert.match(
+        manifest.sources["scripts/state-replay.mjs"],
+        /^[0-9a-f]{64}$/,
+    );
     assert.deepEqual(
         manifest.harness.map((h) => h.role),
         ["controller", "questions"],
@@ -124,6 +139,106 @@ test("a teacher round is recorded and replays exactly", async () => {
             DEFAULT_QUESTIONS.motion,
         );
     }
+    const labels = await labelRecordedStates(runs[0].out);
+    assert.equal(labels.length, result.decisions.blue);
+    for (const label of labels) {
+        assert.equal(label.source, "planner-teacher");
+        assert.ok(
+            decisions.some(
+                (row) =>
+                    row.decision_index === label.decision_index &&
+                    row.chosen.motion === label.reference_action.motion,
+            ),
+        );
+    }
+});
+
+test("a recorded model round re-renders and replays every decision without a server", async (t) => {
+    const { url } = await stubServer(t);
+    const original = await outDir();
+    const replayed = await outDir();
+    const options = { seed: 2031, seat: "red", seconds: SECONDS };
+    const first = await playMatch({
+        ...options,
+        out: original,
+        decisionServer: url,
+    });
+    const again = await playMatch({
+        ...options,
+        out: replayed,
+        replayDir: original,
+    });
+    assert.deepEqual(again, first);
+    const firstStates = await lines(join(original, "states.jsonl"));
+    assert.ok(firstStates.length > 0);
+    assert.deepEqual(await lines(join(replayed, "states.jsonl")), firstStates);
+    assert.deepEqual(
+        await lines(join(replayed, "decisions.jsonl")),
+        await lines(join(original, "decisions.jsonl")),
+    );
+    assert.deepEqual(
+        await lines(join(replayed, "model_calls.jsonl")),
+        await lines(join(original, "model_calls.jsonl")),
+    );
+    assert.deepEqual(
+        await lines(join(replayed, "execution.jsonl")),
+        await lines(join(original, "execution.jsonl")),
+    );
+    for (const state of firstStates) {
+        assert.equal(stateHash(state.raw_state), state.state_hash);
+        const restored = restoreGame(state.raw_state);
+        assert.deepEqual(snapshotGame(restored), state.raw_state);
+        const settings = {
+            ...JSON.parse(
+                await readFile(join(original, "manifest.json"), "utf8"),
+            ).agent_seat,
+            interval: 200,
+            rtt: 0,
+        };
+        assert.deepEqual(
+            adapter.observe(restored, state.player, settings),
+            state.observation,
+        );
+    }
+});
+
+test("controller fault changes execution only and keeps a private trigger record", async () => {
+    const faultDir = await mkdtemp(join(tmpdir(), "tank-exp0-fault-"));
+    const faultFile = join(faultDir, "fault.json");
+    await writeFile(
+        faultFile,
+        JSON.stringify({
+            layer: "controller",
+            kind: "swap_selected_turn",
+            instance: "swap_turn_v1",
+        }),
+    );
+    const out = await outDir();
+    await playMatch({
+        seed: 2001,
+        seat: "blue",
+        out,
+        teacher: true,
+        seconds: SECONDS,
+        controllerFaultFile: faultFile,
+    });
+    const triggers = await lines(join(out, "private_fault_events.jsonl"));
+    assert.ok(triggers.length > 0);
+    for (const trigger of triggers) {
+        assert.notEqual(trigger.before.turn, trigger.after.turn);
+        assert.equal(trigger.kind, "swap_selected_turn");
+    }
+    const publicEvents = await lines(join(out, "events.jsonl"));
+    assert.ok(
+        publicEvents.every(
+            (event) => !JSON.stringify(event).includes("swap_selected_turn"),
+        ),
+    );
+    assert.throws(() =>
+        parseControllerFault(
+            '{"layer":"weights","kind":"swap_selected_turn","instance":"bad"}',
+        ),
+    );
 });
 
 test("every harness file reaches the model: question text, controller, and operating notes", async (t) => {
