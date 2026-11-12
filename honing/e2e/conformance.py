@@ -23,6 +23,7 @@ config names.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, get_args, runtime_checkable
@@ -65,11 +66,17 @@ class RunnerCheck:
 
 
 def probe_harness(seed: HarnessSpec, support: RunnerSupport) -> HarnessSpec:
-    """The seed plus one file of every kind the runner declares, each with content no other file has."""
+    """The seed plus one file of every kind the runner declares, each with content no other file has.
+
+    A settings file holds a JSON object, as agent settings files are JSON, so a runner
+    that checks its settings can take the probe.
+    """
     spec = seed
     for kind in sorted(support.file_kinds):
         if kind in get_args(HarnessFileKind):
             content = f"honing conformance probe: a {kind} file\n"
+            if kind == "settings":
+                content = json.dumps({"honingConformanceProbe": "a settings file"}) + "\n"
             spec = spec.with_file(f"honing-probe/{kind}.md", HarnessFile(kind=kind, content=content))
     return spec
 

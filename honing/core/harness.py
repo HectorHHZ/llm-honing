@@ -102,6 +102,13 @@ class EpisodeOutcome:
     :class:`~honing.core.protocols.TaskGrader`. ``transcript_location`` points
     at the agent's own readable transcript, and ``workspace_location`` at the
     files it left behind, which a grader may inspect.
+
+    ``failure`` is set when there is nothing a grader can judge, for a reason
+    that is the agent's or its harness's (a workspace too large to copy back, or
+    a harness the agent cannot take, for example).
+    :func:`~honing.core.protocols.run_graded` records such an outcome with score
+    0 and ``failure`` as its feedback, and never passes it to the grader. A fault
+    that is neither is not a failure: the runner raises instead.
     """
 
     task_id: str
@@ -111,9 +118,11 @@ class EpisodeOutcome:
     final_output: str = ""
     transcript_location: str | None = None
     workspace_location: str | None = None
+    failure: str | None = None
 
     def __post_init__(self) -> None:
         require(bool(self.task_id), "EpisodeOutcome.task_id must be set")
+        require(self.failure is None or bool(self.failure), "EpisodeOutcome.failure must be None or a reason")
 
 
 @dataclass(frozen=True)

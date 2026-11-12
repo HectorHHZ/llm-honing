@@ -338,7 +338,10 @@ task and the same grader serves the gate, a method's own minibatches, and traini
 rollouts. An `EpisodeRecord` is an outcome plus its grade, and `run_graded` is the one
 place that pairs them. A task suite is a JSON Lines manifest (`honing/harness/tasks.py`)
 whose lines name a workspace, a grader command, and a split; `CommandGrader` runs that
-command over a copy of the episode's workspace and reads its score and feedback.
+command over a copy of the episode's workspace and reads its score and feedback. An
+outcome's `failure` says there is nothing a grader can judge, for a reason that is the
+agent's or its harness's; `run_graded` records it with score 0 and that reason as feedback,
+without calling the grader.
 
 A harness is a set of files for one agent.
 
@@ -349,7 +352,11 @@ protocol lets a local container stand in for Slime's E2B sandbox
 transcript (`{workdir}/.harness/trajectory.jsonl`) is what reflection methods read; and
 Slime's Anthropic and OpenAI adapters capture token-level samples when the episode is a
 training rollout. **Gate evaluations and training rollouts use the same runner**, so the
-harness that wins the gate is exactly the harness trained under.
+harness that wins the gate is exactly the harness trained under. Slime's adapter and harness
+import torch, so `SlimeEpisodeRunner` (`honing/backends/slime/agent_runner.py`) runs each Claude
+Code episode as a worker in Slime's environment, and only files cross: the task, the placed
+harness files and the policy's SGLang URL go in; `result.json`, the transcript and the workspace
+come back.
 
 ```python
 class EvolveMethod(Protocol):
