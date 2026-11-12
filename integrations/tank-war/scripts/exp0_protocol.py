@@ -101,20 +101,69 @@ def paired_interval(block_effects: list[float]) -> tuple[float, float]:
     return _percentile(means, 0.025), _percentile(means, 0.975)
 
 
-def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int]) -> dict[str, Any]:
+def _validate_single_layer(clean: dict[str, Any], fault: dict[str, Any], layer: str, run: str) -> None:
+    """Reject a candidate if its recorded build changed more than its named layer."""
+    if layer not in {"harness", "weights", "controller"}:
+        raise ValueError(f"invalid fault layer: {layer}")
+    for key in ("sources", "code_commit", "opponent_seat", "sample_seed"):
+        if clean.get(key) != fault.get(key):
+            raise ValueError(f"changed {key} in {run}")
+    clean_weights = clean.get("model", {}).get("weights_sha256")
+    fault_weights = fault.get("model", {}).get("weights_sha256")
+    if not clean_weights or not fault_weights:
+        raise ValueError(f"missing checkpoint digest in {run}")
+    changed = {
+        "harness": clean.get("harness_sha256") != fault.get("harness_sha256"),
+        "weights": clean_weights != fault_weights,
+        "controller": clean.get("controller_sha256") != fault.get("controller_sha256"),
+    }
+    if not changed[layer]:
+        raise ValueError(f"candidate did not change {layer} in {run}")
+    if layer == "harness":
+        if changed["weights"] or clean.get("decision_server") != fault.get("decision_server"):
+            raise ValueError(f"harness fault also changed model in {run}")
+        # Controller hash includes harness settings, so it can change for this layer.
+    elif layer == "controller":
+        if changed["harness"] or changed["weights"] or clean.get("decision_server") != fault.get("decision_server"):
+            raise ValueError(f"controller fault also changed another layer in {run}")
+    elif changed["harness"] or changed["controller"]:
+        raise ValueError(f"weights fault also changed another layer in {run}")
+
+
+def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int], layer: str | None = None) -> dict[str, Any]:
     """Validate one fixed candidate without optional stopping or silent exclusions."""
     if len(seeds) != 128 or len(set(seeds)) != 128:
         raise ValueError("fault validation requires exactly 128 distinct seed blocks")
     effects: list[float] = []
     observations: list[dict[str, Any]] = []
+    frozen: dict[str, dict[str, Any]] = {}
     for seed in seeds:
         seat_effects = []
         for seat in SEATS:
             clean_manifest, clean_result = _read_match(clean_root, seed, seat)
             fault_manifest, fault_result = _read_match(fault_root, seed, seat)
+            for arm, manifest in (("clean", clean_manifest), ("fault", fault_manifest)):
+                signature = {
+                    key: manifest.get(key)
+                    for key in (
+                        "sources",
+                        "code_commit",
+                        "model",
+                        "harness_sha256",
+                        "controller_sha256",
+                        "agent_seat",
+                        "opponent_seat",
+                        "decision_server",
+                    )
+                }
+                if arm in frozen and signature != frozen[arm]:
+                    raise ValueError(f"{arm} build or configuration changed across seed blocks")
+                frozen[arm] = signature
             for key in ("opponent", "seconds", "interval_ms", "opponent_interval_ms", "opponent_seat"):
                 if clean_manifest.get(key) != fault_manifest.get(key):
                     raise ValueError(f"unpaired {key} for seed {seed}, seat {seat}")
+            if layer:
+                _validate_single_layer(clean_manifest, fault_manifest, layer, f"seed {seed}, seat {seat}")
             effect = _score(fault_result, seat) - _score(clean_result, seat)
             seat_effects.append(effect)
             observations.append(
@@ -139,6 +188,7 @@ def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int]) -> dict
         "retained": mean <= -MIN_MEAN_DEGRADATION and upper < 0,
         "bootstrap_samples": BOOTSTRAP_SAMPLES,
         "bootstrap_seed": BOOTSTRAP_SEED,
+        "layer": layer,
         "observations": observations,
     }
 
@@ -153,13 +203,14 @@ def main() -> None:
     fault_parser.add_argument("--seed-plan", type=Path, required=True)
     fault_parser.add_argument("--clean-root", type=Path, required=True)
     fault_parser.add_argument("--fault-root", type=Path, required=True)
+    fault_parser.add_argument("--layer", choices=("harness", "weights", "controller"))
     fault_parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "seed-plan":
         result = seed_plan(args.version)
     else:
         plan = json.loads(args.seed_plan.read_text(encoding="utf-8"))
-        result = validate_fault(args.clean_root, args.fault_root, plan["groups"]["fault_validation"])
+        result = validate_fault(args.clean_root, args.fault_root, plan["groups"]["fault_validation"], args.layer)
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({"out": str(args.out), "retained": result.get("retained")}))
 

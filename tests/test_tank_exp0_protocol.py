@@ -27,6 +27,13 @@ def _run(root: Path, seed: int, seat: str, outcome: int) -> None:
         "interval_ms": 200,
         "opponent_interval_ms": 300,
         "opponent_seat": {"controllerMode": "plans"},
+        "sample_seed": None,
+        "code_commit": "clean-build",
+        "sources": {"engine": "clean-build"},
+        "decision_server": "http://localhost:18731",
+        "model": {"weights_sha256": "clean-weights"},
+        "harness_sha256": "clean-harness",
+        "controller_sha256": "clean-controller",
     }
     (run / "manifest.json").write_text(json.dumps(manifest))
     (run / "result.json").write_text(json.dumps({"seed": seed, "seat": seat, "outcome": {seat: outcome}}))
@@ -54,3 +61,45 @@ def test_fault_screen_uses_both_seats_and_rejects_missing_pairs(tmp_path: Path) 
     (fault / f"s{seeds[0]}-red" / "result.json").unlink()
     with pytest.raises(FileNotFoundError):
         exp0.validate_fault(clean, fault, seeds)
+
+
+def test_fault_screen_rejects_build_change_between_seed_blocks(tmp_path: Path) -> None:
+    clean, fault = tmp_path / "clean", tmp_path / "fault"
+    seeds = exp0.seed_plan()["groups"]["fault_validation"]
+    for seed in seeds:
+        for seat in exp0.SEATS:
+            _run(clean, seed, seat, 1)
+            _run(fault, seed, seat, -1)
+    changed = fault / f"s{seeds[1]}-red" / "manifest.json"
+    manifest = json.loads(changed.read_text())
+    manifest["sources"]["engine"] = "changed-mid-screen"
+    changed.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="changed across seed blocks"):
+        exp0.validate_fault(clean, fault, seeds)
+
+
+@pytest.mark.parametrize(
+    "layer,digest",
+    [("harness", "harness_sha256"), ("weights", "weights_sha256"), ("controller", "controller_sha256")],
+)
+def test_single_layer_provenance_accepts_only_named_change(layer: str, digest: str) -> None:
+    clean = {
+        "sources": {"engine": "build"},
+        "code_commit": "build",
+        "opponent_seat": {"controllerMode": "plans"},
+        "sample_seed": None,
+        "decision_server": "http://localhost:18731",
+        "model": {"weights_sha256": "clean-weights"},
+        "harness_sha256": "clean-harness",
+        "controller_sha256": "clean-controller",
+    }
+    fault = json.loads(json.dumps(clean))
+    if digest == "weights_sha256":
+        fault["model"][digest] = "fault-weights"
+        fault["decision_server"] = "http://localhost:18732"
+    else:
+        fault[digest] = "fault-" + digest
+    exp0._validate_single_layer(clean, fault, layer, "synthetic")
+    fault["sources"]["engine"] = "other-build"
+    with pytest.raises(ValueError, match="changed sources"):
+        exp0._validate_single_layer(clean, fault, layer, "synthetic")
