@@ -5,12 +5,14 @@ for with what Honing calls; the GPU check against StartLux's own server is integ
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import types
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -454,3 +456,51 @@ def test_the_startlux_check_accepts_the_seed_harness_and_refuses_an_option_over_
     spec = seed_harness(INTEGRATION).with_file("ra2/questions.json", HarnessFile("instructions", json.dumps(long)))
     with pytest.raises(CampaignRuleError, match=r"intent.group.recruit \(option\) is 257 tokens; the limit is 256"):
         check.check(spec)
+
+
+class _Engine:
+    """An SGLang engine reduced to what the StartLux loader and the health route read."""
+
+    versions: ClassVar[dict[str, str]] = {"sglang": "test"}
+
+    def __init__(self) -> None:
+        self.up = True
+
+    def healthy(self) -> bool:
+        return self.up
+
+
+def test_a_startlux_model_reports_its_sglang_engine_s_health() -> None:
+    engine = _Engine()
+    model = StartLuxDecisionModel(FakeEngine({}), PROMPTS, {}, 100, concurrent=True, sglang=engine)
+    assert model.healthy()
+    engine.up = False
+    assert not model.healthy()
+    assert StartLuxDecisionModel(FakeEngine({}), PROMPTS, {}, 100).healthy()  # native: no engine to lose
+
+
+def test_the_sglang_loader_hands_its_engine_to_the_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from honing.backends.sglang import engine as sglang_engine
+    from honing.backends.sglang import startlux as sglang_startlux
+
+    engine = _Engine()
+
+    @contextlib.contextmanager
+    def lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
+        yield "GPU-test"
+
+    @contextlib.contextmanager
+    def launch(checkpoint: Path, settings: Any) -> Iterator[_Engine]:
+        yield engine
+
+    monkeypatch.setattr(startlux, "gpu_lock", lock)
+    monkeypatch.setattr(startlux, "resolve_checkpoint", lambda settings, pins: {"path": str(tmp_path)})
+    monkeypatch.setattr(sglang_engine.SGLangEngine, "launch", launch)
+    monkeypatch.setattr(sglang_startlux, "sglang_startlux", lambda *args: types.SimpleNamespace(temperature={}))
+    settings = StartLuxSettings(
+        pins_path=tmp_path / "pins.json", source_dir=tmp_path, engine="sglang", sglang_python=Path("python")
+    )
+    with StartLuxDecisionModel._load_sglang(settings, {}, None, PROMPTS, "rev") as model:
+        assert model.concurrent and model.healthy()
+        engine.up = False
+        assert not model.healthy()

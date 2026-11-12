@@ -66,11 +66,11 @@ def serve() -> Iterator[object]:
         server.server_close()
 
 
-def call(url: str, path: str, body: object | None = None) -> tuple[int, dict[str, object]]:
+def call(url: str, path: str, body: object | None = None, timeout: float = 10) -> tuple[int, dict[str, object]]:
     data = None if body is None else json.dumps(body).encode()
     request = urllib.request.Request(url + path, data=data, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, json.loads(response.read())
     except urllib.error.HTTPError as error:
         return error.code, json.loads(error.read())
@@ -86,6 +86,69 @@ def test_health_reports_what_is_loaded(serve) -> None:  # type: ignore[no-untype
         200,
         {"ready": True, "metadata": {"revision": "fake", "dtype": "none"}, "maxBranches": 16},
     )
+
+
+class CheckedModel(FakeDecisionModel):
+    """A fake whose ``healthy`` answers what the test sets, or raises it."""
+
+    def __init__(self, healthy: bool | Exception = True, delay: float = 0.0, concurrent: bool = False) -> None:
+        super().__init__(delay=delay)
+        self.state = healthy
+        self.concurrent = concurrent
+
+    def healthy(self) -> bool:
+        if isinstance(self.state, Exception):
+            raise self.state
+        return self.state
+
+
+@pytest.mark.unit
+def test_a_healthy_model_answers_health_as_before(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(CheckedModel())
+    assert call(url, "/v1/health") == (
+        200,
+        {"ready": True, "metadata": {"revision": "fake", "dtype": "none"}, "maxBranches": 16},
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("state", "error"),
+    [
+        (False, "the model reports that its engine is down"),
+        (ConnectionRefusedError("engine gone"), "ConnectionRefusedError: engine gone"),
+    ],
+)
+def test_a_model_that_is_down_or_whose_check_fails_is_a_503(serve, state, error) -> None:  # type: ignore[no-untyped-def]
+    url = serve(CheckedModel(state))
+    assert call(url, "/v1/health") == (
+        503,
+        {"ready": False, "error": error, "metadata": {"revision": "fake", "dtype": "none"}, "maxBranches": 16},
+    )
+
+
+@pytest.mark.unit
+def test_a_healthy_attribute_that_is_not_callable_is_ignored(serve) -> None:  # type: ignore[no-untyped-def]
+    model = FakeDecisionModel()
+    model.healthy = True  # type: ignore[attr-defined]  # a flag, not a check
+    assert call(serve(model), "/v1/health")[0] == 200
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("concurrent", [False, True])
+def test_health_answers_while_a_long_decision_runs(serve, concurrent: bool) -> None:  # type: ignore[no-untyped-def]
+    # Model calls run one at a time on the serving thread; the check must not wait its turn behind them.
+    model = CheckedModel(delay=2.0, concurrent=concurrent)
+    url = serve(model)
+    deciding = threading.Thread(target=call, args=(url, "/v1/decide", {"parts": {}, "questions": QUESTION}))
+    deciding.start()
+    deadline = time.monotonic() + 2
+    while model.active == 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert model.active == 1
+    assert call(url, "/v1/health", timeout=1)[0] == 200
+    assert model.active == 1  # the decision was still running when health answered
+    deciding.join()
 
 
 @pytest.mark.unit
