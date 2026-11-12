@@ -350,7 +350,9 @@ class SlimeEpisodeRunner:
     """Satisfies :class:`~honing.core.EpisodeRunner` with Claude Code, run by slime's agent layer in a container.
 
     ``suite`` gives each task's workspace by ``task_id``; ``endpoints`` resolves the
-    policy to an SGLang server; ``environment`` says how to start a Python with Slime
+    policy to an SGLang server, which must not need an API key: an episode whose
+    ``endpoints.api_key_env(policy)`` names one raises, because slime's adapter at the
+    pinned commit cannot send it. ``environment`` says how to start a Python with Slime
     on its path. ``episodes`` holds one directory per episode, with the files the
     worker read and wrote and its ``worker.log``. ``concurrency`` caps how many run at
     once. The worker sees only the variables in ``passthrough`` that are set here, and
@@ -394,6 +396,16 @@ class SlimeEpisodeRunner:
 
     def _prepare(self, spec: HarnessSpec, task: Task, policy: PolicyRef, placements: Sequence[Placement]) -> Path:
         endpoint = self._endpoints.resolve(policy)
+        # The key's name comes from an optional method, not the PolicyEndpoints protocol (honing.harness.endpoints).
+        # Slime's adapter at the pinned commit posts to SGLang with no key and has no way to add one
+        # (adapters/common.py: BaseAdapter.__init__, call_sglang_generate), so a server that needs one is refused.
+        if hasattr(self._endpoints, "api_key_env"):
+            key = self._endpoints.api_key_env(policy)
+            if key is not None:
+                raise ContractError(
+                    f"{endpoint.served_model} needs an API key ({key}), and slime's adapter at 41014d1 cannot send "
+                    "one to SGLang"
+                )
         source = self._suite.entry(task.task_id).workspace
         _check_workspace(source, placements)
         record = episode_record(task, spec, policy, endpoint, self._settings, placements)
@@ -454,7 +466,8 @@ class SlimeEpisodeRunner:
 
         Raises:
             ContractError: The spec is for another agent, the policy is not served by
-                SGLang, or the task's workspace already holds a placed file.
+                SGLang, its server needs an API key (``api_key_env`` names one), or the
+                task's workspace already holds a placed file.
             AgentWorkerError: The worker could not run the episode.
         """
         try:

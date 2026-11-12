@@ -42,11 +42,13 @@ from honing.core import (
     HarnessFile,
     HarnessSpec,
     PolicyEndpoint,
+    PolicyEndpoints,
     PolicyRef,
     Task,
     run_graded,
 )
 from honing.e2e.conformance import check_runner
+from honing.harness import endpoints as harness_endpoints
 from honing.harness.graders import CommandGrader
 from honing.harness.tasks import TaskSuite, load_task_suite
 from tests.conftest import REPO_ROOT
@@ -104,6 +106,7 @@ def make_runner(
     environ: Mapping[str, str] = ENVIRON,
     episodes: Path | None = None,
     docker: Mapping[str, object] | None = None,
+    endpoints: PolicyEndpoints | None = None,
 ) -> SlimeEpisodeRunner:
     """A runner whose worker is the fake one and whose ``docker``, first on the worker's ``PATH``, is the fake CLI.
 
@@ -121,7 +124,7 @@ def make_runner(
     }
     return SlimeEpisodeRunner(
         suite=task_suite or suite(tmp_path),
-        endpoints=StaticPolicyEndpoints({POLICY.checkpoint.checksum: ENDPOINT}),
+        endpoints=endpoints or StaticPolicyEndpoints({POLICY.checkpoint.checksum: ENDPOINT}),
         environment=SlimeEnvironment(honing_root=REPO_ROOT, python=sys.executable, python_path=()),
         settings=settings or AgentEpisodeSettings(image="honing-agent:test"),
         episodes=tmp_path / "episodes" if episodes is None else episodes,
@@ -245,6 +248,72 @@ def test_the_native_sglang_root_drops_the_openai_suffix() -> None:
     decisions = PolicyEndpoint(base_url="http://h:1", tokenizer_location="t", served_model="m", runtime="jev_decision")
     with pytest.raises(ContractError, match="needs an SGLang server"):
         runner_module.sglang_root(decisions)
+
+
+class KeyedEndpoints:
+    """A map whose server needs a key, like :class:`honing.harness.endpoints.StaticPolicyEndpoints`, but which does
+    not check the variable itself, so only the runner can refuse it."""
+
+    def __init__(self, key: str | None) -> None:
+        self.key = key
+
+    def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
+        return ENDPOINT
+
+    def api_key_env(self, policy: PolicyRef) -> str | None:
+        return self.key
+
+
+KEY_VALUE = "sk-must-not-leave-the-runner"
+
+
+def assert_nothing_started(tmp_path: Path) -> None:
+    episodes = tmp_path / "episodes"
+    assert not episodes.exists() or not any(episodes.iterdir())
+    leaked = [path for path in tmp_path.rglob("*") if path.is_file() and KEY_VALUE.encode() in path.read_bytes()]
+    assert leaked == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("environ", [{**ENVIRON, "SGLANG_KEY": KEY_VALUE}, ENVIRON], ids=["set", "unset"])
+def test_a_server_that_needs_a_key_is_refused_before_the_episode(tmp_path: Path, environ: Mapping[str, str]) -> None:
+    runner = make_runner(tmp_path, environ=environ, endpoints=KeyedEndpoints("SGLANG_KEY"))
+    with pytest.raises(ContractError, match=r"m needs an API key \(SGLANG_KEY\), and slime's adapter at 41014d1"):
+        run(runner)
+    assert_nothing_started(tmp_path)
+
+
+@pytest.mark.unit
+def test_a_keyed_static_endpoint_is_refused(tmp_path: Path) -> None:
+    keyed = harness_endpoints.StaticPolicyEndpoints(
+        {
+            POLICY.checkpoint.checksum: harness_endpoints.StaticEndpoint(
+                base_url="http://sglang.test:30000",
+                tokenizer_location="/models/tok",
+                served_model="m",
+                api_key_env="SGLANG_KEY",
+            )
+        },
+        environ={"SGLANG_KEY": KEY_VALUE},
+    )
+    runner = make_runner(tmp_path, environ={**ENVIRON, "SGLANG_KEY": KEY_VALUE}, endpoints=keyed)
+    with pytest.raises(ContractError, match="cannot send one to SGLang"):
+        run(runner)
+    assert_nothing_started(tmp_path)
+
+
+@pytest.mark.unit
+def test_a_map_that_names_no_key_runs_the_episode(tmp_path: Path) -> None:
+    outcome = run(make_runner(tmp_path, endpoints=KeyedEndpoints(None)))
+    assert (outcome.exit_code, outcome.final_output) == (0, "done")
+
+
+@pytest.mark.unit
+def test_a_map_without_api_key_env_runs_the_episode(tmp_path: Path) -> None:
+    endpoints = StaticPolicyEndpoints({POLICY.checkpoint.checksum: ENDPOINT})
+    assert not hasattr(endpoints, "api_key_env")
+    outcome = run(make_runner(tmp_path, endpoints=endpoints))
+    assert (outcome.exit_code, outcome.final_output) == (0, "done")
 
 
 @pytest.mark.unit
