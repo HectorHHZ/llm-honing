@@ -29,12 +29,14 @@ from honing.core import (
     ContractError,
     EpisodeOutcome,
     HarnessSpec,
+    PolicyEndpoint,
     PolicyEndpoints,
     PolicyRef,
     RunnerSupport,
     Task,
     require,
 )
+from honing.harness.endpoints import resolve_endpoint
 
 TIMED_OUT = -9
 REFUSED = 2
@@ -190,7 +192,7 @@ class OpenHandsEpisodeRunner:
             plan = self.check_spec(spec)
         except CampaignRuleError as refusal:
             return self._refused(spec, task, policy, refusal)
-        access = self._access(policy)
+        access = self._access(policy, await resolve_endpoint(self._endpoints, policy))
         slots = self._slots.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(self._concurrency))
         async with slots:
             # Off the event loop: copying a mount can take a while, and other episodes are running.
@@ -234,8 +236,7 @@ class OpenHandsEpisodeRunner:
         }
         return {**inherited, **self._environment, "OPENHANDS_SUPPRESS_BANNER": "1"}
 
-    def _access(self, policy: PolicyRef) -> dict[str, object]:
-        endpoint = self._endpoints.resolve(policy)
+    def _access(self, policy: PolicyRef, endpoint: PolicyEndpoint) -> dict[str, object]:
         if endpoint.runtime not in _CHAT_RUNTIMES:
             raise ContractError(f"OpenHands needs an OpenAI-compatible endpoint, not a {endpoint.runtime} one")
         access: dict[str, object] = {"base_url": endpoint.base_url, "model": endpoint.served_model}

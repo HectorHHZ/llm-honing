@@ -22,6 +22,7 @@ from honing.core import (
     RunnerSupport,
     Task,
 )
+from honing.harness.endpoints import resolve_endpoint
 
 
 class CraftaxEpisodeRunner:
@@ -61,7 +62,7 @@ class CraftaxEpisodeRunner:
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
         self.check_spec(spec)
         scenario = self.suite.scenario(task.task_id)
-        endpoint = self._endpoints.resolve(policy)
+        endpoint = await resolve_endpoint(self._endpoints, policy)
         if endpoint.runtime != "jev_decision":
             raise ContractError("Craftax needs a typed Jev decision endpoint")
         # Do not use externally supplied task/checkpoint names as file paths.

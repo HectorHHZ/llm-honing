@@ -22,6 +22,7 @@ from honing.core import (
     RunnerSupport,
     Task,
 )
+from honing.harness.endpoints import resolve_endpoint
 
 RESULT_FIELDS = ("outcome", "tick", "ended", "truncated", "hash")
 
@@ -107,7 +108,7 @@ class RA2EpisodeRunner:
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
         self.check_spec(spec)
         scenario = self._suite.scenario(task.task_id)
-        endpoint = self._endpoints.resolve(policy)
+        endpoint = await resolve_endpoint(self._endpoints, policy)
         if endpoint.runtime != "jev_decision":
             raise ContractError(f"RA2 matches need a Jev decision server, not a {endpoint.runtime} endpoint")
         name = f"{task.task_id}--{spec.spec_id}--{policy.checkpoint.checksum[:12]}--{uuid.uuid4().hex[:8]}"

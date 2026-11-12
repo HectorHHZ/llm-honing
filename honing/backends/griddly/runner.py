@@ -23,6 +23,7 @@ from honing.core import (
     RunnerSupport,
     Task,
 )
+from honing.harness.endpoints import resolve_endpoint
 
 
 def runtime_python(integration_dir: Path) -> str:
@@ -76,7 +77,7 @@ class GriddlyEpisodeRunner:
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
         self.check_spec(spec)
         scenario = self.suite.scenario(task.task_id)
-        endpoint = self._endpoints.resolve(policy)
+        endpoint = await resolve_endpoint(self._endpoints, policy)
         if endpoint.runtime != "jev_decision":
             raise ContractError("Griddly needs a typed Jev decision endpoint")
         name = "spiders-" + uuid.uuid4().hex[:16]
