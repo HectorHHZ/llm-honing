@@ -124,6 +124,7 @@
   let index = 0;
   let reviewer = "";
   let answers = {};
+  let lastTick = performance.now();
   const words = {forward:"前进", reverse:"后退", stop:"停住", left:"左转", right:"右转", none:"不转", fire:"开火", hold:"不开火"};
   const layerWords = {harness:"输入与辅助设置", weights:"模型权重", controller:"动作执行"};
   function action(a) { const parts = (a.motion || "").split("_"); return `${words[parts[0]] || parts[0]}、${words[parts[1]] || parts[1]}；${words[a.weapon] || a.weapon}`; }
@@ -148,11 +149,12 @@
     for(const [value,label] of [["yes","是"],["no","否"],["unsure","不确定"]]) {
       const button=document.createElement("button"); button.type="button"; button.textContent=label;
       button.className="choice"+(record[field]===value?" selected":"");
-      button.onclick=()=>{ if(!reviewer){alert("请先选择复核人");return;} record[field]=value; save(); render(); };
+      button.onclick=()=>{ if(!reviewer){alert("请先选择复核人");return;} tick(); record[field]=value; save(); render(); };
       target.append(button);
     }
   }
   function save() { if(reviewer) { try { localStorage.setItem("tank183-review-"+reviewer,JSON.stringify(answers)); } catch { byId("progress").textContent="浏览器无法自动保存，请及时导出 CSV"; } } }
+  function tick(force=false) {const now=performance.now();if(reviewer&&(force||document.visibilityState==="visible")){const a=answers[samples[index].id] ||= {};if(!(a.window&&a.cause))a.seconds=(a.seconds||0)+(now-lastTick)/1000;}lastTick=now;}
   function render() {
     const s=samples[index], record=answers[s.id] || (answers[s.id]={});
     byId("sample-number").textContent=`样本 ${index+1} / ${samples.length}`;
@@ -187,15 +189,18 @@
     const list=byId("sample-list"); list.replaceChildren();
     samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);b.className=(i===index?"active ":"")+(answers[x.id]?.window&&answers[x.id]?.cause?"done":"");b.title=`样本 ${i+1}`;b.onclick=()=>{index=i;render();};list.append(b);});
   }
-  byId("reviewer").onchange=e=>{reviewer=e.target.value;try{answers=reviewer?JSON.parse(localStorage.getItem("tank183-review-"+reviewer)||"{}"):{};}catch{answers={};}render();};
-  byId("note").oninput=e=>{if(!reviewer)return; (answers[samples[index].id] ||= {}).note=e.target.value;save();};
-  byId("prev").onclick=()=>{index=Math.max(0,index-1);render();};
-  byId("next").onclick=()=>{index=Math.min(samples.length-1,index+1);render();};
+  byId("reviewer").onchange=e=>{tick();save();reviewer=e.target.value;try{answers=reviewer?JSON.parse(localStorage.getItem("tank183-review-"+reviewer)||"{}"):{};}catch{answers={};}lastTick=performance.now();render();};
+  byId("note").oninput=e=>{if(!reviewer)return;tick(); (answers[samples[index].id] ||= {}).note=e.target.value;save();};
+  byId("prev").onclick=()=>{tick();save();index=Math.max(0,index-1);render();};
+  byId("next").onclick=()=>{tick();save();index=Math.min(samples.length-1,index+1);render();};
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")tick(true);else lastTick=performance.now();save();});
+  window.addEventListener("pagehide",()=>{tick(true);save();});
   byId("export").onclick=()=>{
     if(!reviewer){alert("请先选择复核人");return;}
+    tick();save();
     const escape=x=>'"'+String(x??"").replaceAll('"','""')+'"';
-    const rows=[["sample_id","reviewer","seed","seat","decision_index","injected_layer","window_ok","cause_ok","notes"]];
-    for(const s of samples){const a=answers[s.id]||{};rows.push([s.id,reviewer,s.seed,s.seat,s.decision,s.layer,a.window||"",a.cause||"",a.note||""]);}
+    const rows=[["sample_id","reviewer","seed","seat","decision_index","injected_layer","window_ok","cause_ok","seconds_spent","notes"]];
+    for(const s of samples){const a=answers[s.id]||{};rows.push([s.id,reviewer,s.seed,s.seat,s.decision,s.layer,a.window||"",a.cause||"",Math.round(a.seconds||0),a.note||""]);}
     const csv="\uFEFF"+rows.map(r=>r.map(escape).join(",")).join("\r\n")+"\r\n";
     const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
     const link=document.createElement("a");link.href=url;link.download=`tank-war-183-review-${reviewer}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
