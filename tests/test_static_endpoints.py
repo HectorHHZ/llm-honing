@@ -216,7 +216,7 @@ def test_an_entry_is_probed_on_first_resolve_then_trusted_for_the_ttl() -> None:
 
 @pytest.mark.unit
 def test_by_default_an_entry_is_probed_at_most_once_every_five_minutes() -> None:
-    # Resolve runs on the runners' event loop (#154), and a probe holds it at least 1 s.
+    # The episodes that resolve while a probe runs wait for it, at least 1 s.
     probe, clock = FakeProbe(), FakeClock()
     endpoints = StaticPolicyEndpoints({"abc": CHECKED}, environ={}, probe=probe, clock=clock)
     endpoints.resolve(policy("abc"))

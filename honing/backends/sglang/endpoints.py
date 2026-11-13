@@ -23,6 +23,17 @@ later call for it. The one restart belongs to a started server, not to the
 checkpoint: a server stopped to make room and started again later gets a new
 one.
 
+Every start, probe, restart and stop runs on one long-lived thread the map
+owns, and :meth:`~SGLangPolicyEndpoints.resolve` waits for its answer; calls
+for the same checkpoint share one answer, so one start. A server dies with the
+thread that started it (:func:`~honing.backends.sglang.engine.die_with_parent`),
+so it outlives the event loop of the runner that asked for it, and lives until
+:meth:`~SGLangPolicyEndpoints.close` or the end of the process. A call that finds its server
+running, and passed within the TTL, returns at once without that thread, so a
+start or probe for one checkpoint never holds up the others' running servers.
+Runners call it off their event loop, through
+:func:`~honing.harness.endpoints.resolve_endpoint`.
+
 The ``runtime`` the runners speak decides what is started:
 
 - ``"sglang"``: the engine itself with its tokenizer, answering
@@ -35,14 +46,17 @@ The ``runtime`` the runners speak decides what is started:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from concurrent.futures import Future, InvalidStateError
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
@@ -129,12 +143,24 @@ class SGLangPolicyEndpoints:
         self._start = start or self._start_server
         self._probe = probe
         self._clock = clock
-        self._served: OrderedDict[str, _Served] = OrderedDict()
+        # Guards the fields below. Never held across a start, a stop or a probe, so a call whose server is running
+        # and fresh returns while the owner thread works on another checkpoint.
         self._lock = threading.Lock()
+        self._served: OrderedDict[str, _Served] = OrderedDict()
         # A checkpoint whose server failed to start, or went down past its one restart, fails again at once, with
         # the first error: a campaign's runner resolves once per episode, and every retry would load the model
         # again before failing.
         self._failed: dict[str, str] = {}
+        # One job per checksum at a time: a call that finds one pending waits for its answer, so one start.
+        self._pending: dict[str, Future[PolicyEndpoint]] = {}
+        self._working: str | None = None  # the checksum the owner thread is serving now
+        self._closed = False
+        self._jobs: queue.SimpleQueue[tuple[PolicyRef, Future[PolicyEndpoint]] | None] = queue.SimpleQueue()
+        # Every server is started from this thread, so it lives as long as the map (die_with_parent). A daemon, so
+        # a process that exits, on a Ctrl-C too, does not wait for a start in progress; on Linux its server then dies
+        # with the process.
+        self._owner = threading.Thread(target=self._serve, name="sglang-endpoints", daemon=True)
+        self._owner.start()
 
     def __enter__(self) -> SGLangPolicyEndpoints:
         return self
@@ -145,49 +171,104 @@ class SGLangPolicyEndpoints:
     @property
     def serving(self) -> dict[str, str]:
         """Checksum to GPU of every running server, least recently used first."""
-        return {key: served.gpu for key, served in self._served.items()}
+        with self._lock:
+            return {key: served.gpu for key, served in self._served.items()}
 
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
         """The endpoint serving ``policy``, starting, probing or restarting its server as needed.
 
-        The health probe and a restart run under the lock on purpose, as a cold start does: runners resolve on one
-        event-loop thread, and holding it stops two threads from restarting the same server. A call for any other
-        checkpoint waits meanwhile.
+        A server whose process is running and that passed its health check within the TTL is returned at once, on
+        the calling thread. Anything else waits for the owner thread, which does one job at a time: a call for
+        another checkpoint that needs a start or a probe waits for the job ahead of it.
         """
         key = policy.checkpoint.checksum
         with self._lock:
-            if key in self._served:
-                served = self._served[key]
+            if self._closed:
+                raise ContractError(f"the SGLang endpoints are closed; {policy.checkpoint.location} is not served")
+            served = self._served.get(key)
+            if served is not None and not served.exited() and self._within_ttl(served):
                 self._served.move_to_end(key)
-                if self._up(served):
-                    return served.endpoint
-                return self._restart(key, served)
+                return served.endpoint
             if key in self._failed:
-                raise ContractError(
-                    f"the server for {policy.checkpoint.location} ({key[:12]}) failed earlier: {self._failed[key]}"
-                )
-            checkpoint = Path(policy.checkpoint.location)
-            if policy.checkpoint.weight_format != "hf_safetensors" or not (checkpoint / "config.json").exists():
-                raise ContractError(f"{checkpoint} is not a Hugging Face checkpoint an SGLang engine can load")
-            if self.settings.verify and checkpoint_checksum(checkpoint) != key:
-                raise ContractError(f"{checkpoint} does not hold the weights with checksum {key[:12]}")
+                raise self._failed_earlier(policy, key)
+            future = self._pending.get(key)
+            if future is None:
+                future = self._pending[key] = Future()
+                self._jobs.put((policy, future))
+        return future.result()
+
+    def _within_ttl(self, served: _Served) -> bool:
+        return self._clock() - served.checked_at < self.settings.health_ttl_seconds
+
+    def _failed_earlier(self, policy: PolicyRef, key: str) -> ContractError:
+        return ContractError(
+            f"the server for {policy.checkpoint.location} ({key[:12]}) failed earlier: {self._failed[key]}"
+        )
+
+    def _serve(self) -> None:
+        """The owner thread: answer each job in turn until :meth:`close`."""
+        while (job := self._jobs.get()) is not None:
+            policy, future = job
+            key = policy.checkpoint.checksum
+            with self._lock:
+                closed = self._closed
+                self._working = None if closed else key
+            answer: PolicyEndpoint | BaseException
+            try:
+                if closed:
+                    raise ContractError(f"the SGLang endpoints are closed; {policy.checkpoint.location} is not served")
+                answer = self._serve_one(policy)
+            except BaseException as error:  # handed to the waiting callers; the thread goes on
+                answer = error
+            with self._lock:
+                self._pending.pop(key, None)
+                self._working = None
+            _settle(future, answer)
+
+    def _serve_one(self, policy: PolicyRef) -> PolicyEndpoint:
+        key = policy.checkpoint.checksum
+        with self._lock:
+            served = self._served.get(key)
+            if served is not None:
+                self._served.move_to_end(key)
+            elif key in self._failed:
+                raise self._failed_earlier(policy, key)
+        if served is not None:
+            if self._up(served):
+                return served.endpoint
+            return self._restart(key, served)
+        checkpoint = Path(policy.checkpoint.location)
+        if policy.checkpoint.weight_format != "hf_safetensors" or not (checkpoint / "config.json").exists():
+            raise ContractError(f"{checkpoint} is not a Hugging Face checkpoint an SGLang engine can load")
+        if self.settings.verify and checkpoint_checksum(checkpoint) != key:
+            raise ContractError(f"{checkpoint} does not hold the weights with checksum {key[:12]}")
+        oldest = None
+        with self._lock:
+            self._refuse_if_closed(checkpoint)
             used = {served.gpu for served in self._served.values()}
             free = [gpu for gpu in self.settings.gpus if gpu not in used]
             if not free:  # stop the server used least recently
                 _, oldest = self._served.popitem(last=False)
-                oldest.stack.close()
                 free = [oldest.gpu]
-            stack = ExitStack()
-            try:
-                started = self._start(checkpoint, key, free[0], stack)
-            except Exception as error:
-                stack.close()
+        if oldest is not None:
+            oldest.stack.close()
+        stack = ExitStack()
+        try:
+            started = self._start(checkpoint, key, free[0], stack)
+        except Exception as error:
+            stack.close()
+            with self._lock:
                 self._failed[key] = f"{type(error).__name__}: {error}"
-                raise
-            except BaseException:
-                stack.close()
-                raise
-            return self._register(key, checkpoint, free[0], stack, started, restarts=0)
+            raise
+        except BaseException:
+            stack.close()
+            raise
+        return self._register(key, checkpoint, free[0], stack, started, restarts=0)
+
+    def _refuse_if_closed(self, checkpoint: Path) -> None:
+        """With the lock held, before a start: after :meth:`close`, nothing new is started."""
+        if self._closed:
+            raise ContractError(f"the SGLang endpoints were closed; {checkpoint} was not started")
 
     def _register(
         self, key: str, checkpoint: Path, gpu: str, stack: ExitStack, started: StartedServer, restarts: int
@@ -198,37 +279,48 @@ class SGLangPolicyEndpoints:
             served_model=key[:16],
             runtime=self.settings.runtime,
         )
-        # The start answered its health route moments ago (the engine's launch loop, the decision server's ready
-        # line), so the first check is due one TTL from now.
-        self._served[key] = _Served(
-            endpoint, gpu, stack, checkpoint, started.health_url, started.exited, self._clock(), restarts
-        )
+        with self._lock:
+            closed = self._closed
+            if not closed:
+                # The start answered its health route moments ago (the engine's launch loop, the decision server's
+                # ready line), so the first check is due one TTL from now.
+                self._served[key] = _Served(
+                    endpoint, gpu, stack, checkpoint, started.health_url, started.exited, self._clock(), restarts
+                )
+        if closed:  # close() ran during the start and did not wait for it, so the server is stopped here
+            stack.close()
+            raise ContractError(f"the SGLang endpoints were closed while {checkpoint} started; it was stopped")
         return endpoint
 
     def _up(self, served: _Served) -> bool:
         if served.exited():  # down, no need to ask
             return False
-        if self._clock() - served.checked_at < self.settings.health_ttl_seconds:
+        if self._within_ttl(served):
             return True
         if not answers_twice(self._probe, served.health_url, self.settings.health_timeout_seconds):
             return False
-        served.checked_at = self._clock()
+        with self._lock:
+            served.checked_at = self._clock()
         return True
 
     def _restart(self, key: str, served: _Served) -> PolicyEndpoint:
         """Stop a server that is down and start it again on the same GPU, once; past that, fail the checkpoint."""
-        del self._served[key]
+        with self._lock:
+            self._served.pop(key, None)
         served.stack.close()  # stop the old server before starting its replacement on the same GPU
         named = f"{served.checkpoint} ({key[:12]})"
-        if served.restarts >= 1:
-            self._failed[key] = "it went down again after its one restart"
-            raise ContractError(f"the server for {named} {self._failed[key]}")
+        with self._lock:
+            if served.restarts >= 1:
+                self._failed[key] = "it went down again after its one restart"
+                raise ContractError(f"the server for {named} {self._failed[key]}")
+            self._refuse_if_closed(served.checkpoint)
         stack = ExitStack()
         try:
             started = self._start(served.checkpoint, key, served.gpu, stack)
         except Exception as error:
             stack.close()
-            self._failed[key] = f"it went down and did not restart: {type(error).__name__}: {error}"
+            with self._lock:
+                self._failed[key] = f"it went down and did not restart: {type(error).__name__}: {error}"
             raise ContractError(f"the server for {named} {self._failed[key]}") from error
         except BaseException:
             stack.close()
@@ -236,10 +328,27 @@ class SGLangPolicyEndpoints:
         return self._register(key, served.checkpoint, served.gpu, stack, started, restarts=served.restarts + 1)
 
     def close(self) -> None:
+        """Stop every running server and refuse later calls; any thread may call it, the owner thread too.
+
+        A start in progress is not waited for: the owner thread stops its server when the start returns, and the
+        end of the process stops it before that. Calls waiting for other checkpoints fail at once. When nothing is
+        starting, the owner thread has exited by the time this returns.
+        """
         with self._lock:
-            while self._served:
-                _, served = self._served.popitem(last=False)
-                served.stack.close()
+            if self._closed:
+                return
+            self._closed = True
+            working = self._working
+            servers = list(self._served.values())
+            self._served.clear()
+            waiting = [future for key, future in self._pending.items() if key != working]
+        self._jobs.put(None)
+        for future in waiting:
+            _settle(future, ContractError("the SGLang endpoints were closed before this checkpoint was served"))
+        for served in servers:
+            served.stack.close()
+        if working is None and threading.current_thread() is not self._owner:
+            self._owner.join()
 
     def _log(self, key: str, what: str) -> Path | None:
         if self.settings.log_dir is None:
@@ -285,6 +394,16 @@ class SGLangPolicyEndpoints:
             raise SGLangError(f"the decision server for {key[:12]} did not start; see {log}") from None
         url: str = ready["url"]
         return StartedServer(url, f"{url}/v1/health", lambda: process.poll() is not None)
+
+
+def _settle(future: Future[PolicyEndpoint], answer: PolicyEndpoint | BaseException) -> None:
+    """Hand ``answer`` to the callers waiting on ``future``, unless :meth:`SGLangPolicyEndpoints.close` failed it
+    first."""
+    with contextlib.suppress(InvalidStateError):
+        if isinstance(answer, BaseException):
+            future.set_exception(answer)
+        else:
+            future.set_result(answer)
 
 
 def _stop_server(process: subprocess.Popen[str]) -> None:

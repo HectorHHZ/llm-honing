@@ -11,25 +11,33 @@ Honing did not start these servers, so it never starts or stops them.
 A server that needs a key names its variable through ``api_key_env(policy)``,
 a method a runner finds with ``hasattr``: it is not part of
 :class:`~honing.core.PolicyEndpoints`.
+
+A runner resolves through :func:`resolve_endpoint`, which calls ``resolve`` on a
+thread, so a probe or a server start never holds up the episodes on its event
+loop.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import http.client
 import os
+import threading
 import time
 import urllib.parse
 import urllib.request
+import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields
 
-from honing.core import ContractError, PolicyEndpoint, PolicyRef, require
+from honing.core import ContractError, PolicyEndpoint, PolicyEndpoints, PolicyRef, require
 
 # How long a health check's result is kept: a server that passed is trusted without another probe, and one that
-# failed fails again at once. Resolve runs on the runners' event loop until #154 moves it off, and a probe holds that
-# loop for as long as the server takes to answer: at least 1 s from a healthy SGLang server, about two
-# HEALTH_TIMEOUT_SECONDS from a hung one. A server Honing started that crashes is still found on the next resolve, by
-# its exit (honing.backends.sglang.endpoints), so the long TTL only delays finding a hung one.
+# failed fails again at once. A probe takes at least 1 s from a healthy SGLang server and about two
+# HEALTH_TIMEOUT_SECONDS from a hung one; it runs off the event loop (resolve_endpoint), but the episodes that ask
+# while it runs wait for it. A server Honing started that crashes is still found on the next resolve, by its exit
+# (honing.backends.sglang.endpoints), so the long TTL only delays finding a hung one.
 HEALTH_TTL_SECONDS = 300.0
 # Above SGLang's own limit: at 0.5.21 its /health runs a one-token generation (SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION
 # is on by default), takes at least 1 s, and answers 503 by itself after SGLANG_HEALTH_CHECK_TIMEOUT (default 20 s)
@@ -57,6 +65,75 @@ def answers_twice(probe: Callable[[str, float], bool], url: str, timeout_seconds
     timeout, and counting it down stops or fails a server other episodes are using. A hung server is therefore found
     within about twice ``timeout_seconds``."""
     return probe(url, timeout_seconds) or probe(url, timeout_seconds)
+
+
+async def resolve_endpoint(endpoints: PolicyEndpoints, policy: PolicyRef) -> PolicyEndpoint:
+    """``endpoints.resolve(policy)`` off the running event loop: what a runner calls instead of ``resolve``.
+
+    A resolve can start, probe or restart a server, minutes for a cold start, so it runs on a thread while the
+    loop goes on with the other episodes. Calls on one loop for the same map and policy while one runs share it,
+    so a gate's gathered episodes take one thread per policy, not one each. The thread is a daemon: a process that
+    exits, on a Ctrl-C too, does not wait for a start in progress, as it would for a pool's worker (joined at
+    exit) or the loop's default executor (joined when ``asyncio.run`` ends). A caller cancelled meanwhile stops
+    waiting, but the resolve runs on, and whatever it starts stays with the map, which stops it on close.
+    """
+    loop = asyncio.get_running_loop()
+    with _IN_FLIGHT_LOCK:
+        in_flight = _IN_FLIGHT.setdefault(loop, {})
+    # The map's id is stable while the call is in flight: the thread holds a reference to it.
+    key = (id(endpoints), policy)
+    future = in_flight.get(key)
+    if future is None:
+        future = in_flight[key] = loop.create_future()
+        future.add_done_callback(_retrieve)
+        threading.Thread(
+            target=_resolve_on_thread,
+            args=(endpoints, policy, loop, future, in_flight, key),
+            name="honing-resolve",
+            daemon=True,
+        ).start()
+    return await asyncio.shield(future)
+
+
+_InFlight = dict[tuple[int, PolicyRef], "asyncio.Future[PolicyEndpoint]"]
+# Per event loop, the resolves running now: a campaign runs each gate in its own asyncio.run, and a future belongs
+# to one loop.
+_IN_FLIGHT: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _InFlight] = weakref.WeakKeyDictionary()
+_IN_FLIGHT_LOCK = threading.Lock()
+
+
+def _resolve_on_thread(
+    endpoints: PolicyEndpoints,
+    policy: PolicyRef,
+    loop: asyncio.AbstractEventLoop,
+    future: asyncio.Future[PolicyEndpoint],
+    in_flight: _InFlight,
+    key: tuple[int, PolicyRef],
+) -> None:
+    answer: PolicyEndpoint | BaseException
+    try:
+        answer = endpoints.resolve(policy)
+    except BaseException as error:  # handed to the callers on the loop
+        answer = error
+
+    def settle() -> None:
+        in_flight.pop(key, None)
+        if future.done():
+            return
+        if isinstance(answer, BaseException):
+            future.set_exception(answer)
+        else:
+            future.set_result(answer)
+
+    # A loop that has closed (its asyncio.run ended with every caller cancelled) has no one left to tell.
+    with contextlib.suppress(RuntimeError):
+        loop.call_soon_threadsafe(settle)
+
+
+def _retrieve(future: asyncio.Future[PolicyEndpoint]) -> None:
+    """Mark a failure retrieved, so a resolve whose callers were all cancelled logs nothing when it fails."""
+    if not future.cancelled():
+        future.exception()
 
 
 def _is_http_url(url: str) -> bool:
@@ -127,8 +204,9 @@ class StaticPolicyEndpoints:
     ``health_timeout_seconds`` to answer 200, raises
     :class:`~honing.core.ContractError` naming the endpoint, and so does every
     resolve against that URL until the TTL has passed, without probing again:
-    the episodes a runner gathers resolve one after another on its event loop,
-    and each would otherwise wait out two timeouts. After the TTL it is probed
+    each of the episodes a runner gathers would otherwise wait out two
+    timeouts. One URL is probed by one thread at a time; a resolve that comes
+    meanwhile waits and takes its result. After the TTL it is probed
     again, since Honing does not run the server and it may have come back.
     ``probe`` and ``clock`` stand in for the network and the time in tests.
     """
@@ -154,6 +232,8 @@ class StaticPolicyEndpoints:
         # Health URL to when it was last checked and whether it answered. Keyed by URL, so one server declared for
         # several checkpoints is checked once per TTL.
         self._checked: dict[str, tuple[float, bool]] = {}
+        # One lock per health URL: runners resolve on threads, and two checks of one URL at once would probe it twice.
+        self._probing = {entry.health_url: threading.Lock() for entry in self._endpoints.values() if entry.health_url}
         for checksum, entry in self._endpoints.items():
             self._check_key(entry, f"the endpoint for checkpoint {checksum!r}")
 
@@ -178,10 +258,11 @@ class StaticPolicyEndpoints:
         return entry
 
     def _check_health(self, entry: StaticEndpoint, health_url: str, policy: PolicyRef) -> None:
-        last = self._checked.get(health_url)
-        if last is None or self._clock() - last[0] >= self._ttl:
-            answered = answers_twice(self._probe, health_url, self._timeout)
-            last = self._checked[health_url] = (self._clock(), answered)
+        with self._probing[health_url]:
+            last = self._checked.get(health_url)
+            if last is None or self._clock() - last[0] >= self._ttl:
+                answered = answers_twice(self._probe, health_url, self._timeout)
+                last = self._checked[health_url] = (self._clock(), answered)
         if not last[1]:
             raise ContractError(
                 f"the endpoint {entry.base_url} for checkpoint {policy.checkpoint.checksum!r} did not answer "

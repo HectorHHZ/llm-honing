@@ -127,6 +127,44 @@ def test_honing_never_imports_openhands(repo_root: Path) -> None:
     assert offenders == []
 
 
+def resolve_calls(path: Path) -> list[str]:
+    """The function around each ``x.resolve(...)`` call with an argument in ``path`` (``Path.resolve()`` takes
+    none), or ``<module>``."""
+    found: list[str] = []
+
+    def visit(node: ast.AST, function: str) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function = node.name
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "resolve"
+            and node.args
+        ):
+            found.append(function)
+        for child in ast.iter_child_nodes(node):
+            visit(child, function)
+
+    visit(ast.parse(path.read_text(encoding="utf-8")), "<module>")
+    return found
+
+
+@pytest.mark.unit
+def test_runners_resolve_a_policy_only_through_resolve_endpoint(repo_root: Path) -> None:
+    """A resolve can start a server for minutes, so a runner on an event loop calls it through
+    ``resolve_endpoint``, on a thread (#154). The other calls run on no loop."""
+    calls = sorted(
+        f"{path.relative_to(repo_root)}:{function}"
+        for path in (repo_root / "honing").rglob("*.py")
+        for function in resolve_calls(path)
+    )
+    assert calls == [
+        "honing/backends/ra2/duel.py:_url",  # in the synchronous evaluate, before its asyncio.run
+        "honing/backends/sglang/endpoints.py:<module>",  # the command-line entry point
+        "honing/harness/endpoints.py:_resolve_on_thread",  # resolve_endpoint's thread
+    ]
+
+
 @pytest.mark.unit
 def test_retired_terms_stay_out_of_code_and_the_specification(repo_root: Path) -> None:
     scanned = [
