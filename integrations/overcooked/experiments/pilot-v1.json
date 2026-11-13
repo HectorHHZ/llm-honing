@@ -1,0 +1,17 @@
+{
+  "id": "overcooked-system0-pilot-v1",
+  "suite": "tasks/benchmark-v1.jsonl",
+  "grading": "native-score-softsign-v1",
+  "grade_formula": "native_score / (native_score + score_scale)",
+  "score_scale": 40.0,
+  "inference": "reference",
+  "model_evaluation": "argmax, no action assistance or model-error fallback",
+  "clock": "400 joint-action ticks; inference does not advance simulation",
+  "pilot_tasks": {
+    "train": ["oc-train-cramped_room-p0-role", "oc-train-cramped_room-p0-solo", "oc-train-cramped_room-p0-stay"],
+    "val": ["oc-val-asymmetric_advantages-p0-role", "oc-val-asymmetric_advantages-p0-solo"],
+    "heldout": ["oc-heldout-coordination_ring-p0-role", "oc-heldout-coordination_ring-p0-solo_slow"]
+  },
+  "selection": "Choose at most one training candidate using only train demonstrations and an internal train-episode validation split. Compare candidate and incumbent on the two fixed validation tasks; accept only more paired wins than losses. Run heldout once after selection, without further tuning.",
+  "limits": "Small deterministic pilot, one episode per condition; not a statistically powered generalization benchmark. Stationary streaks include legitimate cooking waits."
+}

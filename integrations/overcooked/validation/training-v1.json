@@ -1,0 +1,425 @@
+{
+  "base": {
+    "architecture": {
+      "hidden_size": 1024,
+      "layers": [
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        }
+      ]
+    },
+    "checkpoint": {
+      "checksum": "f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b",
+      "location": "/opt/honing/cache/huggingface/hub/models--C-Tianyu--NanoJev/snapshots/047b927b30882a1138fc504821b82ac145a4b81a",
+      "weight_format": "hf_safetensors"
+    },
+    "parameters": 596250498
+  },
+  "batch_questions": 1,
+  "checkpoint_manifest": "/mnt/d/llm-honing/integrations/overcooked/runs/pilot-v1/training-retry/train-0ed02277a1fe/checkpoint.json",
+  "code_status": "New integration directory untracked; no existing repository file changed.",
+  "dataset_sha256": "cd35379fe4b99ee62bcb4a16bb2c7f6a80b9c3ae586243296ab7ebc7cb7254e8",
+  "elapsed_seconds": 594.374326221,
+  "epochs": 2,
+  "failure_and_fix": "First attempt completed both epochs but copytree failed on a read-only tokenizer on NTFS. Retry clears read-only modes only in its checkpoint output and uses identical config/data/seed.",
+  "git_head": "10576610c019b7810c073907f538e5443bd02d7f",
+  "head_lr": 0.0001,
+  "logging": {
+    "local": "training-events.jsonl records every forward loss and phase",
+    "reason": "No W&B run configured; local losses and epoch metrics retained.",
+    "wandb_cloud": false,
+    "wandb_installed": false
+  },
+  "method": "Honing NanoJevTrainer SFT, heads only",
+  "metrics": {
+    "final_validation_accuracy": 0.20833333333333334,
+    "initial_validation_loss": 1.9038477391004562,
+    "train_examples": 184.0,
+    "validation_examples": 48.0,
+    "validation_loss": 1.8412045761942863
+  },
+  "native_training_manifest": {
+    "base": {
+      "checksum": "f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b",
+      "location": "/opt/honing/cache/huggingface/hub/models--C-Tianyu--NanoJev/snapshots/047b927b30882a1138fc504821b82ac145a4b81a"
+    },
+    "batchId": "overcooked-pilot-sft-v1",
+    "dataOverlapAudit": {
+      "novelValidation": 48,
+      "rawTraining": 184,
+      "rawValidation": 48,
+      "removedOverlap": 0,
+      "uniqueTraining": 184,
+      "uniqueValidation": 48
+    },
+    "elapsedSeconds": 572.1905002593994,
+    "history": [
+      {
+        "epoch": 1,
+        "trainLoss": 1.845094054289486,
+        "validationAccuracy": 0.1875,
+        "validationLoss": 1.856415073076884
+      },
+      {
+        "epoch": 2,
+        "trainLoss": 1.8184231519699097,
+        "validationAccuracy": 0.20833333333333334,
+        "validationLoss": 1.8412045761942863
+      }
+    ],
+    "initialValidation": [
+      1.9038477391004562,
+      0.16666666666666666
+    ],
+    "kind": "trained-nanojev",
+    "packing": {
+      "maxInputTokens": 796,
+      "trimmedRequests": 0
+    },
+    "parent": {
+      "repo": "C-Tianyu/NanoJev",
+      "revision": "047b927b30882a1138fc504821b82ac145a4b81a"
+    },
+    "path": "/mnt/d/llm-honing/integrations/overcooked/runs/pilot-v1/training-retry/train-0ed02277a1fe/checkpoint",
+    "repo": "local:honing-nanojev/train-0ed02277a1fe",
+    "revision": "b67988c346f8816be40bb9f1e6e1a2d310220ccc161c6867759d23cf847d72da",
+    "settings": {
+      "backboneLr": 1e-05,
+      "batchQuestions": 1,
+      "clipRatio": 0.2,
+      "deterministic": false,
+      "epochs": 2,
+      "headLr": 0.0001,
+      "maxLength": 2048,
+      "seed": 7,
+      "validationGroups": "^internal-val:",
+      "weightDecay": 0.01
+    },
+    "sourceRevision": "76fdfc9ecdca45a9bcef17991a07d3041a87685a",
+    "trainExamples": 184,
+    "updatePolicy": "param_subset",
+    "validationExamples": 48,
+    "weightsSha256": "b67988c346f8816be40bb9f1e6e1a2d310220ccc161c6867759d23cf847d72da"
+  },
+  "retry_integrity": {
+    "compared_forwards": 512,
+    "failed_final_weights_sha256": "b67988c346f8816be40bb9f1e6e1a2d310220ccc161c6867759d23cf847d72da",
+    "identical_complete_losses": true,
+    "identical_final_weights": true,
+    "identical_loss_prefix": true
+  },
+  "seed": 7,
+  "snapshot": {
+    "architecture": {
+      "hidden_size": 1024,
+      "layers": [
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        },
+        {
+          "attention_heads": 16,
+          "ffn_size": 3072,
+          "num_experts": 0
+        }
+      ]
+    },
+    "checkpoint": {
+      "checksum": "b67988c346f8816be40bb9f1e6e1a2d310220ccc161c6867759d23cf847d72da",
+      "location": "/mnt/d/llm-honing/integrations/overcooked/runs/pilot-v1/training-retry/train-0ed02277a1fe/checkpoint",
+      "weight_format": "hf_safetensors"
+    },
+    "parameters": 596250498
+  },
+  "source_sha256": {
+    "honing/backends/jev/decision_training.py": "4c54da4dfe959f4f851c6fc0dbd0f5d6eebaeb79e88fe51404a63c81d37efc6d",
+    "honing/backends/jev/nanojev.py": "6200bbf5bcd1c7510c4d2104c6926b559799380cd9b5e2cb05d305c761671ebd",
+    "honing/backends/jev/nanojev_trainer.py": "ac17df0ccbedf5d44a234320b207d08374ca0c9f63a75c9df3624233c73e53cd",
+    "integrations/overcooked/data.py": "4ec1044f0a0e637832755d0a157126861ecf6070f5661a4016cf2d45eed22ab0",
+    "integrations/overcooked/model_env.py": "45185689a6b36710349ba63bb8b9591cccfacd6536f8ee78fc32282053ac1ca5",
+    "integrations/overcooked/train.py": "99380fb417f01fd83e374a04bdcf9145d443da0926349592354e40de3c73d2b6",
+    "integrations/ra2/pins.json": "c469ade4d18b618fbc587caccd400d43b133876b3d8057b60cf8ff3959bc27de"
+  },
+  "trainable_parameters": {
+    "norm.bias": 1024,
+    "norm.weight": 1024,
+    "scalar.bias": 1,
+    "scalar.weight": 1024,
+    "set_attention.in_proj_bias": 384,
+    "set_attention.in_proj_weight": 49152,
+    "set_attention.out_proj.bias": 128,
+    "set_attention.out_proj.weight": 16384,
+    "set_output.bias": 1,
+    "set_output.weight": 128,
+    "set_project.bias": 128,
+    "set_project.weight": 131200
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "browser": {
+    "browser": "Microsoft Edge headless",
+    "checks": [
+      "native PNG",
+      "single step",
+      "autoplay delivery",
+      "pause",
+      "state/map/rules panels",
+      "export",
+      "dynamics reset",
+      "keyboard input",
+      "layout switch",
+      "mobile layout",
+      "verified replay seek",
+      "replay reset"
+    ],
+    "exported_run": "D:\\llm-honing\\integrations\\overcooked\\runs\\export-833731ae6317",
+    "passed": true,
+    "screenshots": "D:\\llm-honing\\integrations\\overcooked\\.cache\\browser-qa"
+  },
+  "model_validation": "Local HTTP protocol stand-in only; no real model weights, training or performance claim.",
+  "native_baseline": {
+    "complete": true,
+    "deliveries": 10,
+    "final_frame_hash": "ab5f614628347d3e0d6221b0144ac61c3c1301b3001838285d7175b0068347ac",
+    "grade": 1.0,
+    "run": "D:\\llm-honing\\integrations\\overcooked\\runs\\match-5400135bc870",
+    "score": 200.0,
+    "steps": 400,
+    "success": true,
+    "verified": true
+  },
+  "platform": "win32",
+  "python": "3.10.22",
+  "runtime": {
+    "native_sha256": "b80c1bd80f10725ae5354152f52ea0eefc21c3e5a2862e7b3f88f9255526a94a",
+    "packages": {
+      "gymnasium": "1.1.1",
+      "numpy": "1.26.4",
+      "overcooked-ai": "2.0.0",
+      "pygame": "2.6.1",
+      "scipy": "1.15.3"
+    },
+    "revision": "739950a079cdaed5a44fcc662efc40244c205d06"
+  },
+  "setup_script": "Completed successfully with isolated D: prefix and caches.",
+  "tests": {
+    "combined_regression": {
+      "failed": 2,
+      "passed": 114
+    },
+    "existing_windows_failures": [
+      "tests/contracts/test_boundaries.py::test_only_the_chat_client_imports_litellm",
+      "tests/contracts/test_boundaries.py::test_only_the_run_tracker_imports_wandb"
+    ],
+    "new_integration": {
+      "failed": 0,
+      "passed": 28
+    },
+    "reason": "Existing assertions compare Windows backslash paths with slash strings; files unchanged."
+  }
+}
