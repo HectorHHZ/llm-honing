@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -38,3 +41,28 @@ def require(name: str, reason: str) -> None:
     if os.environ.get(f"HONING_REQUIRE_{name.upper()}") == "1":
         pytest.fail(f"HONING_REQUIRE_{name.upper()}=1, but {reason}")
     pytest.skip(reason)
+
+
+@pytest.fixture(autouse=True)
+def close_sglang_endpoints(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Close every ``SGLangPolicyEndpoints`` a test leaves open (#154).
+
+    The map's owner thread is a daemon so that a process exits without waiting for it. If it were not, the maps
+    tests leave open would hang the run at exit rather than fail the test that checks it. Patches only when a test
+    module has imported the map already, so no test gains an import.
+    """
+    module = sys.modules.get("honing.backends.sglang.endpoints")
+    if module is None:
+        yield
+        return
+    opened: list[Any] = []
+    init = module.SGLangPolicyEndpoints.__init__
+
+    def recording_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        init(self, *args, **kwargs)
+        opened.append(self)
+
+    monkeypatch.setattr(module.SGLangPolicyEndpoints, "__init__", recording_init)
+    yield
+    for endpoints in opened:
+        endpoints.close()

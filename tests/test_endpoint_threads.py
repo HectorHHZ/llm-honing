@@ -73,9 +73,10 @@ def serving(
     starts: Starts,
     probe: Callable[[str, float], bool] = lambda url, timeout: True,
     gpus: tuple[str, ...] = ("0", "1"),
+    health_ttl_seconds: float = 30.0,
 ) -> tuple[SGLangPolicyEndpoints, FakeClock]:
     clock = FakeClock()
-    settings = ServingSettings(python=Path("python"), gpus=gpus, health_ttl_seconds=30.0)
+    settings = ServingSettings(python=Path("python"), gpus=gpus, health_ttl_seconds=health_ttl_seconds)
     return SGLangPolicyEndpoints(settings, start=starts, probe=probe, clock=clock), clock
 
 
@@ -187,6 +188,30 @@ def test_two_threads_resolving_one_checkpoint_at_once_start_one_server(tmp_path:
     second.join(WAIT_SECONDS)
     assert first_out == second_out and isinstance(first_out[0], PolicyEndpoint)
     assert starts.started == ["m"]
+    endpoints.close()
+
+
+def test_a_call_that_arrives_during_a_start_takes_its_answer_without_a_probe(tmp_path: Path) -> None:
+    # With a TTL of 0 every check of a running server probes it, so a second job for the checkpoint, run after the
+    # start, would probe the server the start just registered; joining the pending call does not.
+    probes: list[str] = []
+
+    def probe(url: str, timeout: float) -> bool:
+        probes.append(url)
+        return True
+
+    starts = Starts(block=frozenset({0}))
+    endpoints, _ = serving(starts, probe, health_ttl_seconds=0.0)
+    p = policy(write_checkpoint(tmp_path / "m"))
+    first, first_out = in_thread(lambda: endpoints.resolve(p))
+    assert starts.gate.entered.wait(WAIT_SECONDS)
+    second, second_out = in_thread(lambda: endpoints.resolve(p))
+    time.sleep(0.1)  # the second call is waiting now
+    starts.gate.opened.set()
+    first.join(WAIT_SECONDS)
+    second.join(WAIT_SECONDS)
+    assert first_out == second_out and isinstance(first_out[0], PolicyEndpoint)
+    assert (starts.started, probes) == (["m"], [])
     endpoints.close()
 
 
@@ -537,12 +562,13 @@ with SGLangPolicyEndpoints(ServingSettings(python=Path("python"), gpus=("0",)), 
 
 
 def test_a_ctrl_c_during_a_cold_start_exits_without_waiting_for_it(tmp_path: Path) -> None:
-    began = time.monotonic()
-    done = subprocess.run(
-        [sys.executable, "-c", CTRL_C, str(tmp_path)], cwd=REPO, capture_output=True, text=True, timeout=50
-    )
+    try:
+        done = subprocess.run(
+            [sys.executable, "-c", CTRL_C, str(tmp_path)], cwd=REPO, capture_output=True, text=True, timeout=15
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail("the process waited for the start")
     assert "starting" in done.stdout and "KeyboardInterrupt" in done.stderr, done.stderr
-    assert time.monotonic() - began < 15.0, "the process waited for the start"
 
 
 # A server outlives the event loop that resolved it (acceptance 2). die_with_parent works on Linux only.
