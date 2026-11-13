@@ -41,8 +41,9 @@ def build(root: Path, template: Path, out: Path) -> dict[str, Any]:
                 for row in _lines(source / "states.jsonl")
                 if packet["window"][0] <= row["decision_index"] <= packet["window"][1]
             ]
+            all_states = _lines(source / "states.jsonl")
             executions = {row["decision_index"]: row for row in _lines(source / "execution.jsonl")}
-            if not nearby_states or any(row["decision_index"] not in executions for row in nearby_states):
+            if not nearby_states or any(row["decision_index"] not in executions for row in all_states):
                 raise ValueError(f"incomplete nearby decisions for {packet['sample_id']}")
             if state["state_hash"] != packet["state_hash"]:
                 raise ValueError(f"state hash differs for {packet['sample_id']}")
@@ -51,6 +52,15 @@ def build(root: Path, template: Path, out: Path) -> dict[str, Any]:
             if reference["state_hash"] != packet["state_hash"]:
                 raise ValueError(f"planner state differs for {packet['sample_id']}")
             raw = state["raw_state"]
+            result = _json(source / "result.json")
+            episode_end = result["sim_seconds"]
+            clip_start = 0 if episode_end <= 12 else max(0, min(state["time"] - 5, episode_end - 10))
+            clip_end = episode_end if episode_end <= 12 else clip_start + 10
+            playback_states = [row for row in all_states if clip_start <= row["time"] <= clip_end]
+            if not playback_states or not any(
+                row["decision_index"] == packet["decision_index"] for row in playback_states
+            ):
+                raise ValueError(f"playback misses candidate window for {packet['sample_id']}")
             samples.append(
                 {
                     "id": packet["sample_id"],
@@ -74,10 +84,35 @@ def build(root: Path, template: Path, out: Path) -> dict[str, Any]:
                     "state_hash": packet["state_hash"],
                     "scene": {
                         "walls": raw["maze"]["walls"],
-                        "tanks": raw["tanks"],
-                        "bullets": raw["bullets"],
                         "player": state["player"],
-                        "time_left": raw["timeLeft"],
+                    },
+                    "playback": {
+                        "start": clip_start,
+                        "end": clip_end,
+                        "episode_end": episode_end,
+                        "frames": [
+                            {
+                                "time": row["time"],
+                                "decision": row["decision_index"],
+                                "tanks": [
+                                    {key: tank[key] for key in ("x", "y", "angle", "alive")}
+                                    for tank in row["raw_state"]["tanks"]
+                                ],
+                                "bullets": [
+                                    {key: bullet[key] for key in ("id", "x", "y", "owner", "bounces")}
+                                    for bullet in row["raw_state"]["bullets"]
+                                ],
+                                "selected": executions[row["decision_index"]]["selected_action"],
+                                "executed": executions[row["decision_index"]]["executed_action"],
+                            }
+                            for row in playback_states
+                        ],
+                        "events": [
+                            {key: event[key] for key in ("type", "time", "player") if key in event}
+                            | {key: event[key] for key in ("victim", "self") if key in event}
+                            for event in _lines(source / "events.jsonl")
+                            if event["type"] in {"shot", "kill", "assist"} and clip_start <= event["time"] <= clip_end
+                        ],
                     },
                     "faulty": comparison["faulty"],
                     "clean": comparison["clean"],

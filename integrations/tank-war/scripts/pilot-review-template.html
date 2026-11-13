@@ -41,7 +41,15 @@
   .row { margin: 7px 0; }
   .row b { display: inline-block; min-width: 70px; }
   .flag { margin-top: 12px; padding: 10px 12px; background: #edf4fc; border-radius: 8px; }
-  .scene { width: 100%; max-height: 420px; background: #f8fafc; border: 1px solid #d9e0e9; border-radius: 8px; margin-top: 10px; }
+  .scene { display: block; width: 100%; max-width: 800px; height: auto; background: #f8fafc; border: 1px solid #d9e0e9; border-radius: 8px; margin-top: 10px; }
+  .play-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .play-controls input[type=range] { flex: 1 1 250px; accent-color: #215fb3; cursor: pointer; }
+  .play-controls select { padding: 6px 8px; }
+  .play-controls #play { background: #215fb3; border-color: #215fb3; color: #fff; min-width: 88px; }
+  .play-time { min-width: 125px; font-variant-numeric: tabular-nums; }
+  .frame-action { min-height: 24px; margin-top: 6px; }
+  .event-strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+  .event-strip button { font-size: 13px; padding: 4px 8px; }
   .question { border-top: 1px solid #d9e0e9; margin-top: 18px; padding-top: 18px; }
   .question h3 { margin: 0 0 8px; font-size: 16px; }
   .choices { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -60,7 +68,7 @@
 </style>
 <header>
   <h1>Tank War · 15 个样本复核</h1>
-  <p class="muted">每例只看两件事：窗口有没有找对？这处差异能不能归因于标出的改动？</p>
+  <p class="muted">每例先看整局回放，再判断窗口有没有找对、差异能不能归因于标出的改动。</p>
 </header>
 <div class="shell">
   <div class="toolbar">
@@ -80,8 +88,17 @@
         <div class="topline"><span id="sample-number" class="eyebrow"></span><span id="sample-id" class="muted"></span></div>
         <div id="claim" class="claim"></div>
         <div id="context" class="muted"></div>
-        <svg id="scene" class="scene" viewBox="0 0 900 630" role="img" aria-label="选定决策时的坦克、墙和炮弹位置"></svg>
-        <p class="muted" style="font-size:13px">蓝色是模型坦克，橙色是对手；灰色是墙。箭头表示坦克朝向。</p>
+        <canvas id="scene" class="scene" width="900" height="630" role="img" aria-label="本局对战回放：模型坦克、对手、墙和炮弹随时间移动"></canvas>
+        <div class="play-controls">
+          <button id="play" type="button">▶ 播放</button>
+          <input id="scrub" type="range" min="0" max="10" step="0.01" value="0" aria-label="拖动回放时间">
+          <span id="play-time" class="play-time">0.00 / 0.00 秒</span>
+          <button id="jump" type="button">跳到复核点</button>
+          <select id="speed" aria-label="播放速度"><option value="0.25">0.25×</option><option value="0.5" selected>0.5× 慢速</option><option value="1">1×</option><option value="2">2×</option></select>
+        </div>
+        <p id="frame-action" class="frame-action"></p>
+        <div id="event-strip" class="event-strip" aria-label="本局关键事件，可点击跳转"></div>
+        <p class="muted" style="font-size:13px">蓝色是模型，橙色是对手；圆点是炮弹。画面按保存的游戏状态播放，两次记录之间平滑移动。标记点下方的两列是同一状态的对照。</p>
         <div class="columns">
           <div class="panel fault"><h3>这局：改动后的版本</h3><div id="faulty"></div></div>
           <div class="panel clean"><h3>同一状态：正常版本</h3><div id="clean"></div></div>
@@ -125,25 +142,33 @@
   let reviewer = "";
   let answers = {};
   let lastTick = performance.now();
+  const playback = {sampleId:null, time:0, playing:false, frame:null, lastFrame:null};
   const words = {forward:"前进", reverse:"后退", stop:"停住", left:"左转", right:"右转", none:"不转", fire:"开火", hold:"不开火"};
   const layerWords = {harness:"输入与辅助设置", weights:"模型权重", controller:"动作执行"};
   function action(a) { const parts = (a.motion || "").split("_"); return `${words[parts[0]] || parts[0]}、${words[parts[1]] || parts[1]}；${words[a.weapon] || a.weapon}`; }
   function command(c) { const x = c.controls; return `${words[x.drive] || x.drive}、${words[x.turn] || x.turn}；${x.fire ? "请求开火" : "未请求开火"}`; }
   function execution(x) { return `${words[x.drive] || x.drive}、${words[x.turn] || x.turn}；${x.shot_fired ? "实际开火" : "未实际开火"}`; }
+  function eventLabel(event,player) {if(event.type==="shot")return event.player===player?"我方开火":"对手开火";if(event.type==="assist")return event.player===player?"我方辅助改向":"对手辅助改向";if(event.type==="kill")return event.self?"误伤自己":event.victim===player?"我方被击中":"对手被击中";return event.type;}
   function addRow(parent, label, value) { const p=document.createElement("p"); p.className="row"; const b=document.createElement("b"); b.textContent=label; p.append(b, document.createTextNode(value)); parent.append(p); }
-  function svgElement(name, attrs) { const x=document.createElementNS("http://www.w3.org/2000/svg",name); for(const [k,v] of Object.entries(attrs)) x.setAttribute(k,String(v)); return x; }
-  function scene(s) {
-    const svg=byId("scene"); svg.replaceChildren();
-    svg.append(svgElement("rect",{x:0,y:0,width:900,height:630,fill:"#f8fafc"}));
-    for(const wall of s.scene.walls) svg.append(svgElement("rect",{x:wall.x,y:wall.y,width:wall.w,height:wall.h,fill:"#8996a3"}));
-    for(const bullet of s.scene.bullets) svg.append(svgElement("circle",{cx:bullet.x,cy:bullet.y,r:5,fill:"#d14747"}));
-    s.scene.tanks.forEach((tank,i)=>{
-      const mine=i===s.scene.player, color=mine?"#245db6":"#e38b28";
-      svg.append(svgElement("circle",{cx:tank.x,cy:tank.y,r:21,fill:color,stroke:"#17212e","stroke-width":2}));
-      svg.append(svgElement("line",{x1:tank.x,y1:tank.y,x2:tank.x+32*Math.cos(tank.angle),y2:tank.y+32*Math.sin(tank.angle),stroke:"#17212e","stroke-width":5,"stroke-linecap":"round"}));
-      const t=svgElement("text",{x:tank.x,y:tank.y+5,"text-anchor":"middle",fill:"#fff","font-weight":"bold","font-size":13}); t.textContent=mine?"我":"敌"; svg.append(t);
-    });
+  function lerp(a,b,f) { return a+(b-a)*f; }
+  function lerpAngle(a,b,f) { const tau=2*Math.PI, delta=((b-a+Math.PI)%tau+tau)%tau-Math.PI; return a+delta*f; }
+  function pause() { if(playback.frame!==null) cancelAnimationFrame(playback.frame); playback.frame=null; playback.playing=false; playback.lastFrame=null; byId("play").textContent="▶ 播放"; }
+  function drawScene(s,time) {
+    const canvas=byId("scene"),ctx=canvas.getContext("2d"),frames=s.playback.frames;
+    let i=0; while(i+1<frames.length && frames[i+1].time<=time) i++;
+    const a=frames[i],b=frames[Math.min(i+1,frames.length-1)];
+    const f=b.time>a.time?Math.max(0,Math.min(1,(time-a.time)/(b.time-a.time))):0;
+    ctx.fillStyle="#f8fafc";ctx.fillRect(0,0,900,630);
+    ctx.fillStyle="#8996a3";for(const wall of s.scene.walls)ctx.fillRect(wall.x,wall.y,wall.w,wall.h);
+    const bullets=f<0.5?a.bullets:b.bullets;
+    for(const bullet of bullets){const left=a.bullets.find(x=>x.id===bullet.id),right=b.bullets.find(x=>x.id===bullet.id),straight=left&&right&&left.bounces===right.bounces;const x=straight?lerp(left.x,right.x,f):bullet.x,y=straight?lerp(left.y,right.y,f):bullet.y;ctx.beginPath();ctx.arc(x,y,6,0,2*Math.PI);ctx.fillStyle=bullet.owner===s.scene.player?"#245db6":"#e38b28";ctx.fill();ctx.strokeStyle="#17212e";ctx.lineWidth=2;ctx.stroke();}
+    a.tanks.forEach((tank,j)=>{const next=b.tanks[j],x=lerp(tank.x,next.x,f),y=lerp(tank.y,next.y,f),angle=lerpAngle(tank.angle,next.angle,f),mine=j===s.scene.player;ctx.globalAlpha=tank.alive?1:0.35;ctx.beginPath();ctx.arc(x,y,21,0,2*Math.PI);ctx.fillStyle=mine?"#245db6":"#e38b28";ctx.fill();ctx.strokeStyle="#17212e";ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+32*Math.cos(angle),y+32*Math.sin(angle));ctx.lineWidth=5;ctx.lineCap="round";ctx.stroke();ctx.fillStyle="#fff";ctx.font="bold 13px sans-serif";ctx.textAlign="center";ctx.fillText(mine?"我":"敌",x,y+5);ctx.globalAlpha=1;});
+    if(Math.abs(time-s.time)<0.11){ctx.strokeStyle="#215fb3";ctx.lineWidth=6;ctx.strokeRect(3,3,894,624);}
+    if(time>=s.playback.episode_end-0.02){ctx.fillStyle="rgba(23,33,46,0.85)";ctx.fillRect(660,20,210,46);ctx.fillStyle="#fff";ctx.font="bold 22px sans-serif";ctx.textAlign="center";ctx.fillText("本局结束 · 失败",765,51);}
+    byId("frame-action").textContent=time>=s.playback.episode_end-0.02?"本局结束：失败。最后一帧画面是结束前保存的状态。":`画面第 ${a.decision+1} 次决策：模型选 ${action(a.selected)}；实际 ${execution(a.executed)}。${Math.abs(time-s.time)<0.11?" ← 复核点":""}`;
   }
+  function setTime(value) {const s=samples[index];playback.time=Math.max(s.playback.start,Math.min(value,s.playback.end));byId("scrub").value=String(playback.time);byId("play-time").textContent=`${playback.time.toFixed(2)} / ${s.playback.end.toFixed(2)} 秒`;drawScene(s,playback.time);}
+  function step(now) {if(!playback.playing)return;if(playback.lastFrame!==null)setTime(playback.time+(now-playback.lastFrame)/1000*Number(byId("speed").value));playback.lastFrame=now;if(playback.time>=samples[index].playback.end){pause();return;}playback.frame=requestAnimationFrame(step);}
   function selectChoices(container,field,record) {
     const target=byId(container); target.replaceChildren();
     for(const [value,label] of [["yes","是"],["no","否"],["unsure","不确定"]]) {
@@ -157,11 +182,15 @@
   function tick(force=false) {const now=performance.now();if(reviewer&&(force||document.visibilityState==="visible")){const a=answers[samples[index].id] ||= {};if(!(a.window&&a.cause))a.seconds=(a.seconds||0)+(now-lastTick)/1000;}lastTick=now;}
   function render() {
     const s=samples[index], record=answers[s.id] || (answers[s.id]={});
+    if(playback.sampleId!==s.id){pause();playback.sampleId=s.id;playback.time=s.playback.start;}
     byId("sample-number").textContent=`样本 ${index+1} / ${samples.length}`;
     byId("sample-id").textContent=s.id;
     byId("claim").textContent=`要核对：${s.claim}（${layerWords[s.layer]}）`;
-    byId("context").textContent=`第 ${s.decision+1} 次决策 · 对局时间 ${Number(s.time).toFixed(2)} 秒 · 模型在${s.seat==="blue"?"蓝":"红"}方 · 本局失败`;
-    scene(s);
+    byId("context").textContent=`本局 ${s.playback.episode_end.toFixed(2)} 秒，已放入全程 · 第 ${s.decision+1} 次决策是复核点（${Number(s.time).toFixed(2)} 秒） · 模型在${s.seat==="blue"?"蓝":"红"}方 · 本局失败`;
+    byId("scrub").min=String(s.playback.start);byId("scrub").max=String(s.playback.end);
+    setTime(playback.time);
+    const eventStrip=byId("event-strip");eventStrip.replaceChildren();
+    for(const event of s.playback.events){const b=document.createElement("button");b.type="button";b.textContent=`${event.time.toFixed(2)} 秒 · ${eventLabel(event,s.scene.player)}`;b.onclick=()=>{pause();setTime(event.time);};eventStrip.append(b);}
     for(const [id,side] of [["faulty",s.faulty],["clean",s.clean]]) {
       const box=byId(id); box.replaceChildren();
       addRow(box,"模型选择",action(side.selected_action));
@@ -187,8 +216,11 @@
     const done=samples.filter(x=>answers[x.id]?.window&&answers[x.id]?.cause).length;
     byId("progress").textContent=reviewer?`已完成 ${done} / ${samples.length}`:"选定复核人后开始";
     const list=byId("sample-list"); list.replaceChildren();
-    samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);b.className=(i===index?"active ":"")+(answers[x.id]?.window&&answers[x.id]?.cause?"done":"");b.title=`样本 ${i+1}`;b.onclick=()=>{index=i;render();};list.append(b);});
+    samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);b.className=(i===index?"active ":"")+(answers[x.id]?.window&&answers[x.id]?.cause?"done":"");b.title=`样本 ${i+1}`;b.onclick=()=>{tick();save();index=i;render();};list.append(b);});
   }
+  byId("play").onclick=()=>{if(playback.playing){pause();return;}if(playback.time>=samples[index].playback.end)setTime(samples[index].playback.start);playback.playing=true;playback.lastFrame=null;byId("play").textContent="Ⅱ 暂停";playback.frame=requestAnimationFrame(step);};
+  byId("scrub").oninput=e=>{pause();setTime(Number(e.target.value));};
+  byId("jump").onclick=()=>{pause();setTime(samples[index].time);};
   byId("reviewer").onchange=e=>{tick();save();reviewer=e.target.value;try{answers=reviewer?JSON.parse(localStorage.getItem("tank183-review-"+reviewer)||"{}"):{};}catch{answers={};}lastTick=performance.now();render();};
   byId("note").oninput=e=>{if(!reviewer)return;tick(); (answers[samples[index].id] ||= {}).note=e.target.value;save();};
   byId("prev").onclick=()=>{tick();save();index=Math.max(0,index-1);render();};
