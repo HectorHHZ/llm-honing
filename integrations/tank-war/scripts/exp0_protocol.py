@@ -130,6 +130,11 @@ def _validate_single_layer(clean: dict[str, Any], fault: dict[str, Any], layer: 
         raise ValueError(f"weights fault also changed another layer in {run}")
 
 
+def _frozen_model(model: dict[str, Any]) -> dict[str, Any]:
+    """Keep model identity fixed while allowing equivalent servers on different GPUs."""
+    return {key: value for key, value in model.items() if key not in {"gpu", "gpuUuid"}}
+
+
 def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int], layer: str | None = None) -> dict[str, Any]:
     """Validate one fixed candidate without optional stopping or silent exclusions."""
     if len(seeds) != 128 or len(set(seeds)) != 128:
@@ -139,6 +144,7 @@ def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int], layer: 
     frozen: dict[str, dict[str, Any]] = {}
     for seed in seeds:
         seat_effects = []
+        routes: dict[str, str] = {}
         for seat in SEATS:
             clean_manifest, clean_result = _read_match(clean_root, seed, seat)
             fault_manifest, fault_result = _read_match(fault_root, seed, seat)
@@ -148,17 +154,22 @@ def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int], layer: 
                     for key in (
                         "sources",
                         "code_commit",
-                        "model",
                         "harness_sha256",
                         "controller_sha256",
                         "agent_seat",
                         "opponent_seat",
-                        "decision_server",
                     )
                 }
+                signature["model"] = _frozen_model(manifest.get("model", {}))
                 if arm in frozen and signature != frozen[arm]:
                     raise ValueError(f"{arm} build or configuration changed across seed blocks")
                 frozen[arm] = signature
+                route = manifest.get("decision_server")
+                if not isinstance(route, str) or not route:
+                    raise ValueError(f"missing {arm} decision server for seed {seed}, seat {seat}")
+                if arm in routes and route != routes[arm]:
+                    raise ValueError(f"{arm} seat pair used different servers for seed {seed}")
+                routes[arm] = route
             for key in ("opponent", "seconds", "interval_ms", "opponent_interval_ms", "opponent_seat"):
                 if clean_manifest.get(key) != fault_manifest.get(key):
                     raise ValueError(f"unpaired {key} for seed {seed}, seat {seat}")
@@ -173,6 +184,8 @@ def validate_fault(clean_root: Path, fault_root: Path, seeds: list[int], layer: 
                     "clean": _score(clean_result, seat),
                     "fault": _score(fault_result, seat),
                     "effect": effect,
+                    "clean_server": clean_manifest["decision_server"],
+                    "fault_server": fault_manifest["decision_server"],
                 }
             )
         effects.append(sum(seat_effects) / len(SEATS))

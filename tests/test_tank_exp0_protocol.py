@@ -78,6 +78,29 @@ def test_fault_screen_rejects_build_change_between_seed_blocks(tmp_path: Path) -
         exp0.validate_fault(clean, fault, seeds)
 
 
+def test_fault_screen_accepts_equivalent_servers_on_different_gpus(tmp_path: Path) -> None:
+    clean, fault = tmp_path / "clean", tmp_path / "fault"
+    seeds = exp0.seed_plan()["groups"]["fault_validation"]
+    for index, seed in enumerate(seeds):
+        gpu = index % 2
+        for seat in exp0.SEATS:
+            _run(clean, seed, seat, 1)
+            _run(fault, seed, seat, -1)
+            for root in (clean, fault):
+                path = root / f"s{seed}-{seat}" / "manifest.json"
+                manifest = json.loads(path.read_text())
+                manifest["decision_server"] = f"http://localhost:{18731 + gpu}"
+                manifest["model"].update(gpu=str(gpu), gpuUuid=f"gpu-{gpu}")
+                path.write_text(json.dumps(manifest))
+    assert exp0.validate_fault(clean, fault, seeds)["retained"] is True
+    changed = fault / f"s{seeds[0]}-blue" / "manifest.json"
+    manifest = json.loads(changed.read_text())
+    manifest["model"]["weights_sha256"] = "different-weights"
+    changed.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="changed across seed blocks"):
+        exp0.validate_fault(clean, fault, seeds)
+
+
 @pytest.mark.parametrize(
     "layer,digest",
     [("harness", "harness_sha256"), ("weights", "weights_sha256"), ("controller", "controller_sha256")],
