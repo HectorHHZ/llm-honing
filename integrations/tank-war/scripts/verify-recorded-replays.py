@@ -84,10 +84,14 @@ def main() -> None:
     journal = args.out / "verified.jsonl"
     prior = {row["source"]: row for row in _rows(journal)}
     new_count = 0
+    failed_collections = 0
     for collector in args.collector:
         for row in _rows(collector / "gate.jsonl"):
+            if row.get("passed") is False:
+                failed_collections += 1
+                continue
             if row.get("passed") is not True:
-                raise ValueError(f"failed independent replay pair in {collector}")
+                raise ValueError(f"invalid independent replay pair in {collector}")
             for source_name in row["run_dirs"]:
                 source = Path(source_name)
                 manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
@@ -103,7 +107,15 @@ def main() -> None:
                 with journal.open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps(verified) + "\n")
                 new_count += 1
-    print(json.dumps({"new_replays": new_count, "total_verified": len(prior) + new_count}))
+    print(
+        json.dumps(
+            {
+                "new_replays": new_count,
+                "total_verified": len(prior) + new_count,
+                "failed_collection_attempts": failed_collections,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

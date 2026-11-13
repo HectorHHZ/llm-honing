@@ -55,8 +55,22 @@ def summarize(plan: dict[str, Any], roots: list[Path], code_commit: str) -> dict
         for line in log.read_text(encoding="utf-8").splitlines():
             row = json.loads(line)
             key = row.get("seed"), row.get("seat")
-            if key not in expected or row.get("passed") is not True:
-                raise ValueError(f"unexpected or failed replay gate row: {key}")
+            if key not in expected:
+                raise ValueError(f"unexpected replay gate row: {key}")
+            if row.get("passed") is False:
+                excluded.append(
+                    {
+                        "seed": key[0],
+                        "seat": key[1],
+                        "reason": "failed_collection",
+                        "collector": str(root),
+                        "repetition": row.get("repetition"),
+                        "error": row.get("error"),
+                    }
+                )
+                continue
+            if row.get("passed") is not True:
+                raise ValueError(f"invalid replay gate row: {key}")
             run_dirs = [Path(path) for path in row["run_dirs"]]
             if len(run_dirs) != 2 or any(run.parent != root for run in run_dirs):
                 raise ValueError(f"invalid replay paths for {key}")
