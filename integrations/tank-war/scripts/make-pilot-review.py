@@ -36,6 +36,14 @@ def build(root: Path, template: Path, out: Path) -> dict[str, Any]:
             state = next(
                 row for row in _lines(source / "states.jsonl") if row["decision_index"] == packet["decision_index"]
             )
+            nearby_states = [
+                row
+                for row in _lines(source / "states.jsonl")
+                if packet["window"][0] <= row["decision_index"] <= packet["window"][1]
+            ]
+            executions = {row["decision_index"]: row for row in _lines(source / "execution.jsonl")}
+            if not nearby_states or any(row["decision_index"] not in executions for row in nearby_states):
+                raise ValueError(f"incomplete nearby decisions for {packet['sample_id']}")
             if state["state_hash"] != packet["state_hash"]:
                 raise ValueError(f"state hash differs for {packet['sample_id']}")
             manifest = _json(source / "manifest.json")
@@ -53,6 +61,15 @@ def build(root: Path, template: Path, out: Path) -> dict[str, Any]:
                     "decision": packet["decision_index"],
                     "time": state["time"],
                     "window": packet["window"],
+                    "nearby": [
+                        {
+                            "decision": row["decision_index"],
+                            "time": row["time"],
+                            "selected": executions[row["decision_index"]]["selected_action"],
+                            "executed": executions[row["decision_index"]]["executed_action"],
+                        }
+                        for row in nearby_states
+                    ],
                     "stratum": packet["task_stratum"],
                     "state_hash": packet["state_hash"],
                     "scene": {

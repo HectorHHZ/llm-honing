@@ -50,6 +50,10 @@
   details { margin-top: 16px; border-top: 1px solid #e0e5ec; padding-top: 12px; }
   summary { cursor: pointer; font-weight: 600; }
   pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow-y: auto; background: #f3f5f7; padding: 12px; border-radius: 7px; font-size: 12px; }
+  .timeline { overflow-x: auto; margin-top: 10px; }
+  .timeline table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .timeline th, .timeline td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e0e5ec; white-space: nowrap; }
+  .timeline tr.current { background: #e8f0fa; font-weight: 700; }
   .nav { display: flex; justify-content: space-between; gap: 10px; padding: 12px; margin-top: 16px; }
   .notice { color: #8a4c0a; font-size: 14px; }
   @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .side { position: static; } .sample-list { grid-template-columns: repeat(5, 1fr); } .columns { grid-template-columns: 1fr; } .card { padding: 15px; } }
@@ -83,6 +87,10 @@
           <div class="panel clean"><h3>同一状态：正常版本</h3><div id="clean"></div></div>
         </div>
         <div id="difference" class="flag"></div>
+        <details>
+          <summary>看这个窗口前后几步</summary>
+          <div id="nearby" class="timeline"></div>
+        </details>
         <div class="question">
           <h3>① 这个决策窗口找对了吗？</h3>
           <div id="window-choices" class="choices"></div>
@@ -163,6 +171,10 @@
     if(s.changed.command)changed.push("发给游戏的命令");
     if(s.changed.execution)changed.push("实际执行");
     byId("difference").textContent=`程序找到的差异：${changed.join("、")}。${!s.changed.execution?" 这一帧的实际执行没有变化。":""}`;
+    const table=document.createElement("table");
+    const head=document.createElement("tr"); for(const name of ["第几次","时间","模型选择","实际执行"]) {const th=document.createElement("th");th.textContent=name;head.append(th);} table.append(head);
+    for(const step of s.nearby) {const tr=document.createElement("tr");if(step.decision===s.decision)tr.className="current";for(const value of [String(step.decision+1),Number(step.time).toFixed(2)+" 秒",action(step.selected),execution(step.executed)]){const td=document.createElement("td");td.textContent=value;tr.append(td);}table.append(tr);}
+    byId("nearby").replaceChildren(table);
     selectChoices("window-choices","window",record); selectChoices("cause-choices","cause",record);
     byId("note").value=record.note||"";
     byId("note").disabled=!reviewer;
