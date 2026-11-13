@@ -68,7 +68,7 @@
 </style>
 <header>
   <h1>Tank War · 15 个样本复核</h1>
-  <p class="muted">每例先看整局回放，再判断窗口有没有找对、差异能不能归因于标出的改动。</p>
+  <p class="muted">① 点播放，看它怎么输。② 点“跳到复核点”，读蓝框里两版动作。③ 选“有关 / 无关 / 看不清”。</p>
 </header>
 <div class="shell">
   <div class="toolbar">
@@ -88,6 +88,7 @@
         <div class="topline"><span id="sample-number" class="eyebrow"></span><span id="sample-id" class="muted"></span></div>
         <div id="claim" class="claim"></div>
         <div id="context" class="muted"></div>
+        <div id="evidence-summary" class="flag"></div>
         <canvas id="scene" class="scene" width="900" height="630" role="img" aria-label="本局对战回放：模型坦克、对手、墙和炮弹随时间移动"></canvas>
         <div class="play-controls">
           <button id="play" type="button">▶ 播放</button>
@@ -99,30 +100,26 @@
         <p id="frame-action" class="frame-action"></p>
         <div id="event-strip" class="event-strip" aria-label="本局关键事件，可点击跳转"></div>
         <p class="muted" style="font-size:13px">蓝色是模型，橙色是对手；圆点是炮弹。画面按保存的游戏状态播放，两次记录之间平滑移动。标记点下方的两列是同一状态的对照。</p>
-        <div class="columns">
-          <div class="panel fault"><h3>这局：改动后的版本</h3><div id="faulty"></div></div>
-          <div class="panel clean"><h3>同一状态：正常版本</h3><div id="clean"></div></div>
-        </div>
-        <div id="difference" class="flag"></div>
         <details>
           <summary>看这个窗口前后几步</summary>
           <div id="nearby" class="timeline"></div>
         </details>
         <div class="question">
-          <h3>① 这个决策窗口找对了吗？</h3>
-          <div id="window-choices" class="choices"></div>
-        </div>
-        <div class="question">
-          <h3>② 这里的差异能归因于标出的改动吗？</h3>
-          <div id="cause-choices" class="choices"></div>
-          <p class="muted" style="font-size:13px">动作不同不等于整局失败由它造成；只判断这一处局部差异。</p>
+          <h3>看完回放，这个动作变化与后来的失败有关吗？</h3>
+          <div id="judgment-choices" class="choices"></div>
+          <p class="muted" style="font-size:13px">“有关”表示它可能使局面变差；“无关”表示这处变化没有影响；无法判断就选“看不清”。不需要自己计算坦克轨迹。</p>
         </div>
         <div class="question">
           <label for="note"><b>备注</b> <span class="muted">（可选：写下疑点或其他可接受动作）</span></label>
           <textarea id="note" placeholder="例如：选择变了，但游戏实际没有开火"></textarea>
         </div>
         <details>
-          <summary>需要时再看：规划器参考、模型输入和记录编号</summary>
+          <summary>需要时再看：两版动作、规划器参考和原始记录</summary>
+          <div class="columns">
+            <div class="panel fault"><h3>这局：改动后的版本</h3><div id="faulty"></div></div>
+            <div class="panel clean"><h3>同一状态：正常版本</h3><div id="clean"></div></div>
+          </div>
+          <p id="difference"></p>
           <p id="planner"></p>
           <p id="hashes" class="muted"></p>
           <b>模型在该窗口看到的内容</b>
@@ -130,7 +127,7 @@
         </details>
       </section>
       <div class="nav"><button id="prev">← 上一个</button><button id="next">下一个 →</button></div>
-      <p class="notice">这是已知注入内容的证据复核，不是盲测。15 例仍需两人独立判断；128 seed 的故障筛选另行进行。</p>
+      <p class="notice">这是已知注入内容的证据复核，不是盲测。两人独立判断；128 seed 的故障筛选另行进行。</p>
     </main>
   </div>
 </div>
@@ -169,24 +166,25 @@
   }
   function setTime(value) {const s=samples[index];playback.time=Math.max(s.playback.start,Math.min(value,s.playback.end));byId("scrub").value=String(playback.time);byId("play-time").textContent=`${playback.time.toFixed(2)} / ${s.playback.end.toFixed(2)} 秒`;drawScene(s,playback.time);}
   function step(now) {if(!playback.playing)return;if(playback.lastFrame!==null)setTime(playback.time+(now-playback.lastFrame)/1000*Number(byId("speed").value));playback.lastFrame=now;if(playback.time>=samples[index].playback.end){pause();return;}playback.frame=requestAnimationFrame(step);}
-  function selectChoices(container,field,record) {
-    const target=byId(container); target.replaceChildren();
-    for(const [value,label] of [["yes","是"],["no","否"],["unsure","不确定"]]) {
+  function selectChoices(record) {
+    const target=byId("judgment-choices"); target.replaceChildren();
+    for(const [value,label] of [["relevant","有关"],["irrelevant","无关"],["uncertain","看不清"]]) {
       const button=document.createElement("button"); button.type="button"; button.textContent=label;
-      button.className="choice"+(record[field]===value?" selected":"");
-      button.onclick=()=>{ if(!reviewer){alert("请先选择复核人");return;} tick(); record[field]=value; save(); render(); };
+      button.className="choice"+(record.judgment===value?" selected":"");
+      button.onclick=()=>{ if(!reviewer){alert("请先选择复核人");return;} tick(); record.judgment=value; save(); render(); };
       target.append(button);
     }
   }
-  function save() { if(reviewer) { try { localStorage.setItem("tank183-review-"+reviewer,JSON.stringify(answers)); } catch { byId("progress").textContent="浏览器无法自动保存，请及时导出 CSV"; } } }
-  function tick(force=false) {const now=performance.now();if(reviewer&&(force||document.visibilityState==="visible")){const a=answers[samples[index].id] ||= {};if(!(a.window&&a.cause))a.seconds=(a.seconds||0)+(now-lastTick)/1000;}lastTick=now;}
+  function save() { if(reviewer) { try { localStorage.setItem("tank183-review-v2-"+reviewer,JSON.stringify(answers)); } catch { byId("progress").textContent="浏览器无法自动保存，请及时导出 CSV"; } } }
+  function tick(force=false) {const now=performance.now();if(reviewer&&(force||document.visibilityState==="visible")){const a=answers[samples[index].id] ||= {};if(!a.judgment)a.seconds=(a.seconds||0)+(now-lastTick)/1000;}lastTick=now;}
   function render() {
     const s=samples[index], record=answers[s.id] || (answers[s.id]={});
     if(playback.sampleId!==s.id){pause();playback.sampleId=s.id;playback.time=s.playback.start;}
     byId("sample-number").textContent=`样本 ${index+1} / ${samples.length}`;
     byId("sample-id").textContent=s.id;
-    byId("claim").textContent=`要核对：${s.claim}（${layerWords[s.layer]}）`;
+    byId("claim").textContent=`第 ${s.decision+1} 次决策：实际动作变了`;
     byId("context").textContent=`本局 ${s.playback.episode_end.toFixed(2)} 秒，已放入全程 · 第 ${s.decision+1} 次决策是复核点（${Number(s.time).toFixed(2)} 秒） · 模型在${s.seat==="blue"?"蓝":"红"}方 · 本局失败`;
+    byId("evidence-summary").textContent=`已知只改了${layerWords[s.layer]}（${s.claim}）。同一场面下，正常版会${execution(s.clean.executed_action)}；这局却${execution(s.faulty.executed_action)}。你只需看回放，判断这个变化是否可能促成失败。`;
     byId("scrub").min=String(s.playback.start);byId("scrub").max=String(s.playback.end);
     setTime(playback.time);
     const eventStrip=byId("event-strip");eventStrip.replaceChildren();
@@ -206,22 +204,22 @@
     const head=document.createElement("tr"); for(const name of ["第几次","时间","模型选择","实际执行"]) {const th=document.createElement("th");th.textContent=name;head.append(th);} table.append(head);
     for(const step of s.nearby) {const tr=document.createElement("tr");if(step.decision===s.decision)tr.className="current";for(const value of [String(step.decision+1),Number(step.time).toFixed(2)+" 秒",action(step.selected),execution(step.executed)]){const td=document.createElement("td");td.textContent=value;tr.append(td);}table.append(tr);}
     byId("nearby").replaceChildren(table);
-    selectChoices("window-choices","window",record); selectChoices("cause-choices","cause",record);
+    selectChoices(record);
     byId("note").value=record.note||"";
     byId("note").disabled=!reviewer;
     byId("planner").textContent="规划器可接受动作："+s.planner.map(action).join("；")+"。参考动作不直接决定故障原因。";
     byId("hashes").textContent=`seed ${s.seed} · 决策窗口 ${s.window[0]}–${s.window[1]} · 状态校验 ${s.state_hash.slice(0,16)}…`;
     byId("model-input").textContent=s.model_input;
     byId("prev").disabled=index===0; byId("next").disabled=index===samples.length-1;
-    const done=samples.filter(x=>answers[x.id]?.window&&answers[x.id]?.cause).length;
+    const done=samples.filter(x=>answers[x.id]?.judgment).length;
     byId("progress").textContent=reviewer?`已完成 ${done} / ${samples.length}`:"选定复核人后开始";
     const list=byId("sample-list"); list.replaceChildren();
-    samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);b.className=(i===index?"active ":"")+(answers[x.id]?.window&&answers[x.id]?.cause?"done":"");b.title=`样本 ${i+1}`;b.onclick=()=>{tick();save();index=i;render();};list.append(b);});
+    samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);b.className=(i===index?"active ":"")+(answers[x.id]?.judgment?"done":"");b.title=`样本 ${i+1}`;b.onclick=()=>{tick();save();index=i;render();};list.append(b);});
   }
   byId("play").onclick=()=>{if(playback.playing){pause();return;}if(playback.time>=samples[index].playback.end)setTime(samples[index].playback.start);playback.playing=true;playback.lastFrame=null;byId("play").textContent="Ⅱ 暂停";playback.frame=requestAnimationFrame(step);};
   byId("scrub").oninput=e=>{pause();setTime(Number(e.target.value));};
   byId("jump").onclick=()=>{pause();setTime(samples[index].time);};
-  byId("reviewer").onchange=e=>{tick();save();reviewer=e.target.value;try{answers=reviewer?JSON.parse(localStorage.getItem("tank183-review-"+reviewer)||"{}"):{};}catch{answers={};}lastTick=performance.now();render();};
+  byId("reviewer").onchange=e=>{tick();save();reviewer=e.target.value;try{answers=reviewer?JSON.parse(localStorage.getItem("tank183-review-v2-"+reviewer)||"{}"):{};}catch{answers={};}lastTick=performance.now();render();};
   byId("note").oninput=e=>{if(!reviewer)return;tick(); (answers[samples[index].id] ||= {}).note=e.target.value;save();};
   byId("prev").onclick=()=>{tick();save();index=Math.max(0,index-1);render();};
   byId("next").onclick=()=>{tick();save();index=Math.min(samples.length-1,index+1);render();};
@@ -231,8 +229,8 @@
     if(!reviewer){alert("请先选择复核人");return;}
     tick();save();
     const escape=x=>'"'+String(x??"").replaceAll('"','""')+'"';
-    const rows=[["sample_id","reviewer","seed","seat","decision_index","injected_layer","window_ok","cause_ok","seconds_spent","notes"]];
-    for(const s of samples){const a=answers[s.id]||{};rows.push([s.id,reviewer,s.seed,s.seat,s.decision,s.layer,a.window||"",a.cause||"",Math.round(a.seconds||0),a.note||""]);}
+    const rows=[["sample_id","reviewer","seed","seat","decision_index","injected_layer","judgment","seconds_spent","notes"]];
+    for(const s of samples){const a=answers[s.id]||{};rows.push([s.id,reviewer,s.seed,s.seat,s.decision,s.layer,a.judgment||"",Math.round(a.seconds||0),a.note||""]);}
     const csv="\uFEFF"+rows.map(r=>r.map(escape).join(",")).join("\r\n")+"\r\n";
     const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
     const link=document.createElement("a");link.href=url;link.download=`tank-war-183-review-${reviewer}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);

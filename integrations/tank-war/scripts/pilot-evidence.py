@@ -103,12 +103,22 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
             ]
             if args.layer in ("harness", "weights"):
                 command.append(f"--clean-decision-server={args.clean_url}")
+            if args.require_effective:
+                command.append("--require-effective=true")
+            if args.require_execution:
+                command.append("--require-execution=true")
             if not _run(command, args.repo, attempts):
                 continue
             comparisons = _rows(scan)
             if not comparisons or not comparisons[-1]["locally_verified"]:
                 continue
             comparison = comparisons[-1]
+            if args.require_effective and not (
+                comparison["local_command_changed"] or comparison["local_execution_changed"]
+            ):
+                continue
+            if args.require_execution and not comparison["local_execution_changed"]:
+                continue
             replay = directory / "replayed"
             manifest = fault_manifest
             replay_command = [
@@ -180,6 +190,8 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         "instance": fault["instance"],
         "machine_supported": accepted,
         "target": args.target,
+        "require_effective": args.require_effective,
+        "require_execution": args.require_execution,
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
@@ -191,6 +203,8 @@ def main() -> None:
     parser.add_argument("--start-index", type=int, required=True)
     parser.add_argument("--seed-count", type=int, required=True)
     parser.add_argument("--target", type=int, default=5)
+    parser.add_argument("--require-effective", action="store_true")
+    parser.add_argument("--require-execution", action="store_true")
     parser.add_argument("--layer", choices=("harness", "weights", "controller"), required=True)
     parser.add_argument("--fault-manifest", type=Path, required=True)
     parser.add_argument("--fault-root", type=Path, required=True)

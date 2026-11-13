@@ -44,7 +44,10 @@ export async function cleanCounterfactual({
         throw Error("Exp 0 requires planned steering");
     const game = restoreGame(state.raw_state);
     const player = state.player;
-    game.setPlayerSettings(player, {
+    // Change only the clean harness setting in this saved state. Calling
+    // setPlayerSettings here also clears an active dodge and rewrites the
+    // executed controls, creating a fake difference even for weights faults.
+    Object.assign(game.playerSettings[player], {
         assistEnabled: harness.seat.assistEnabled,
         assistProfile: harness.seat.assistProfile,
         fireGuardEnabled: harness.seat.fireGuardEnabled,

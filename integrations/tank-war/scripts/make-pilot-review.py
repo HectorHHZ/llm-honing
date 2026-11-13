@@ -22,15 +22,19 @@ def _lines(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
-def build(root: Path, template: Path, out: Path) -> dict[str, Any]:
+def build(root: Path, template: Path, out: Path, evidence_set: str) -> dict[str, Any]:
     samples: list[dict[str, Any]] = []
+    if evidence_set not in {"evidence", "effective-evidence"}:
+        raise ValueError("unknown evidence set")
     for arm in ("harness-disable-assistance", "weights-reverse-edit", "controller-wrong-projection"):
-        for packet in _lines(root / "private" / "evidence" / arm / "samples.jsonl"):
+        for packet in _lines(root / "private" / evidence_set / arm / "samples.jsonl"):
             source = Path(packet["source_run"])
             comparisons = _lines(Path(packet["same_state_evidence"]))
             if not comparisons or not comparisons[-1]["locally_verified"]:
                 raise ValueError(f"no local difference for {packet['sample_id']}")
             comparison = comparisons[-1]
+            if evidence_set == "effective-evidence" and not comparison["local_execution_changed"]:
+                raise ValueError(f"no actual execution change for {packet['sample_id']}")
             if comparison["decision_index"] != packet["decision_index"]:
                 raise ValueError(f"window differs for {packet['sample_id']}")
             state = next(
@@ -144,8 +148,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--evidence-set", choices=("evidence", "effective-evidence"), default="effective-evidence")
     args = parser.parse_args()
-    print(json.dumps(build(args.root, Path(__file__).with_name("pilot-review-template.html"), args.out)))
+    print(
+        json.dumps(
+            build(args.root, Path(__file__).with_name("pilot-review-template.html"), args.out, args.evidence_set)
+        )
+    )
 
 
 if __name__ == "__main__":

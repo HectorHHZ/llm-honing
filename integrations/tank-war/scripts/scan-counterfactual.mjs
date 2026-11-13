@@ -8,7 +8,7 @@ function argsFrom(argv) {
     const args = Object.fromEntries(
         argv.map((argument) => {
             const match =
-                /^--(run|out|clean-decision-server|clean-harness-dir|limit)=(.+)$/.exec(
+                /^--(run|out|clean-decision-server|clean-harness-dir|limit|require-effective|require-execution)=(.+)$/.exec(
                     argument,
                 );
             if (!match) throw Error(`Unknown argument ${argument}`);
@@ -40,6 +40,12 @@ try {
 candidates = [...new Set(candidates)].sort((a, b) => a - b);
 const limit = args.limit === undefined ? candidates.length : Number(args.limit);
 if (!Number.isInteger(limit) || limit < 1) throw Error("--limit must be a positive integer");
+const requireEffective = args["require-effective"] === "true";
+if (args["require-effective"] !== undefined && !["true", "false"].includes(args["require-effective"]))
+    throw Error("--require-effective must be true or false");
+const requireExecution = args["require-execution"] === "true";
+if (args["require-execution"] !== undefined && !["true", "false"].includes(args["require-execution"]))
+    throw Error("--require-execution must be true or false");
 await writeFile(out, "", { flag: "wx" });
 let first = null;
 let scanned = 0;
@@ -53,7 +59,7 @@ for (const decisionIndex of candidates.slice(0, limit)) {
     });
     await appendFile(out, JSON.stringify(result) + "\n");
     scanned++;
-    if (result.locally_verified) {
+    if (requireExecution ? result.local_execution_changed : requireEffective ? result.local_command_changed || result.local_execution_changed : result.locally_verified) {
         first = decisionIndex;
         break;
     }
