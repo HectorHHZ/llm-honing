@@ -26,8 +26,11 @@
   .side { padding: 12px; align-self: start; position: sticky; top: 12px; }
   .sample-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .sample-list button { padding: 6px 3px; font-size: 13px; }
-  .sample-list button.active { background: #215fb3; color: #fff; border-color: #215fb3; }
-  .sample-list button.done::after { content: " ✓"; }
+  .sample-list button.relevant { background: #b42318; color: #fff; border-color: #b42318; }
+  .sample-list button.irrelevant { background: #237a4b; color: #fff; border-color: #237a4b; }
+  .sample-list button.uncertain { background: transparent; }
+  .sample-list button.active { outline: 3px solid #215fb3; outline-offset: 1px; }
+  .sample-list button.uncertain::after { content: " ?"; }
   .card { padding: 20px; }
   .eyebrow { font-weight: 700; color: #315b86; }
   .topline { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
@@ -48,12 +51,19 @@
   .play-controls #play { background: #215fb3; border-color: #215fb3; color: #fff; min-width: 88px; }
   .play-time { min-width: 125px; font-variant-numeric: tabular-nums; }
   .frame-action { min-height: 24px; margin-top: 6px; }
+  .key-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; }
+  .keys { display: flex; gap: 6px; flex-wrap: wrap; }
+  .key { display: inline-flex; align-items: center; gap: 4px; min-width: 43px; padding: 3px 7px; border: 1px solid #bac6d4; border-radius: 6px; background: #fff; font-variant-numeric: tabular-nums; }
+  .key.pressed { background: #215fb3; border-color: #215fb3; color: #fff; }
+  .key .mark { font-size: 15px; line-height: 1; }
   .event-strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
   .event-strip button { font-size: 13px; padding: 4px 8px; }
   .question { border-top: 1px solid #d9e0e9; margin-top: 18px; padding-top: 18px; }
   .question h3 { margin: 0 0 8px; font-size: 16px; }
   .choices { display: flex; flex-wrap: wrap; gap: 8px; }
-  .choice.selected { background: #215fb3; border-color: #215fb3; color: #fff; }
+  .choice.selected.relevant { background: #b42318; border-color: #b42318; color: #fff; }
+  .choice.selected.irrelevant { background: #237a4b; border-color: #237a4b; color: #fff; }
+  .choice.selected.uncertain { background: transparent; border: 2px solid #215fb3; }
   textarea { width: 100%; min-height: 68px; resize: vertical; }
   details { margin-top: 16px; border-top: 1px solid #e0e5ec; padding-top: 12px; }
   summary { cursor: pointer; font-weight: 600; }
@@ -72,16 +82,15 @@
 </header>
 <div class="shell">
   <div class="toolbar">
-    <label for="reviewer"><b>复核人</b></label>
-    <select id="reviewer"><option value="">请选择</option><option value="zhuohang">Zhuohang</option><option value="nick">Nick</option></select>
-    <span id="progress" class="muted">选定复核人后开始</span>
+    <b>复核人：Zhuohang</b>
+    <span id="progress" class="muted">已载入你的判断</span>
     <button id="export" class="primary">导出我的结果 CSV</button>
   </div>
   <div class="layout">
     <aside class="side">
       <b>样本</b>
       <div id="sample-list" class="sample-list"></div>
-      <p class="muted" style="font-size:13px">两人请各自填写。答案自动存在当前浏览器，并可导出。</p>
+      <p class="muted" style="font-size:13px">红色：有关；绿色：无关；无背景：看不清。蓝框是当前样本。修改会保存在当前浏览器，也可导出。</p>
     </aside>
     <main>
       <section class="card">
@@ -97,9 +106,13 @@
           <button id="jump" type="button">跳到复核点</button>
           <select id="speed" aria-label="播放速度"><option value="0.25">0.25×</option><option value="0.5" selected>0.5× 慢速</option><option value="1">1×</option><option value="2">2×</option></select>
         </div>
+        <div class="key-status" aria-label="模型坦克当前实际动作">
+          <b>我方动作</b><div class="keys"><span id="key-up" class="key"></span><span id="key-down" class="key"></span><span id="key-left" class="key"></span><span id="key-right" class="key"></span><span id="key-space" class="key"></span></div>
+          <span class="muted">● 按下　○ 未按下</span>
+        </div>
         <p id="frame-action" class="frame-action"></p>
         <div id="event-strip" class="event-strip" aria-label="本局关键事件，可点击跳转"></div>
-        <p class="muted" style="font-size:13px">蓝色是模型，橙色是对手；圆点是炮弹。画面按保存的游戏状态播放，两次记录之间平滑移动。标记点下方的两列是同一状态的对照。</p>
+        <p class="muted" style="font-size:13px">蓝色是模型，橙色是对手；圆点是炮弹。虚线是双方当前枪口朝向的假想弹道，按游戏规则计算反弹，最长 400 像素；它不表示已经开火。枪线在每次保存的决策状态更新。画面在两次记录之间平滑移动。</p>
         <details>
           <summary>看这个窗口前后几步</summary>
           <div id="nearby" class="timeline"></div>
@@ -127,7 +140,7 @@
         </details>
       </section>
       <div class="nav"><button id="prev">← 上一个</button><button id="next">下一个 →</button></div>
-      <p class="notice">这是已知注入内容的证据复核，不是盲测。两人独立判断；128 seed 的故障筛选另行进行。</p>
+      <p class="notice">这是已知注入内容的证据复核，不是盲测。以 Zhuohang 的判断为准；128 seed 的故障筛选另行进行。</p>
     </main>
   </div>
 </div>
@@ -136,8 +149,10 @@
   const samples = JSON.parse(document.getElementById("sample-data").textContent);
   const byId = id => document.getElementById(id);
   let index = 0;
-  let reviewer = "";
-  let answers = {};
+  const reviewer = "zhuohang";
+  let storedAnswers = {};
+  try { storedAnswers = JSON.parse(localStorage.getItem("tank183-review-v3-zhuohang") || "{}"); } catch { storedAnswers = {}; }
+  const answers = {...Object.fromEntries(samples.filter(s=>s.submitted_review).map(s=>[s.id,s.submitted_review])), ...storedAnswers};
   let lastTick = performance.now();
   const playback = {sampleId:null, time:0, playing:false, frame:null, lastFrame:null};
   const words = {forward:"前进", reverse:"后退", stop:"停住", left:"左转", right:"右转", none:"不转", fire:"开火", hold:"不开火"};
@@ -150,6 +165,7 @@
   function lerp(a,b,f) { return a+(b-a)*f; }
   function lerpAngle(a,b,f) { const tau=2*Math.PI, delta=((b-a+Math.PI)%tau+tau)%tau-Math.PI; return a+delta*f; }
   function pause() { if(playback.frame!==null) cancelAnimationFrame(playback.frame); playback.frame=null; playback.playing=false; playback.lastFrame=null; byId("play").textContent="▶ 播放"; }
+  function setKey(id,label,pressed) { const key=byId(id);key.className="key"+(pressed?" pressed":"");key.replaceChildren();const mark=document.createElement("span");mark.className="mark";mark.textContent=pressed?"●":"○";key.append(mark,document.createTextNode(label)); }
   function drawScene(s,time) {
     const canvas=byId("scene"),ctx=canvas.getContext("2d"),frames=s.playback.frames;
     let i=0; while(i+1<frames.length && frames[i+1].time<=time) i++;
@@ -157,12 +173,21 @@
     const f=b.time>a.time?Math.max(0,Math.min(1,(time-a.time)/(b.time-a.time))):0;
     ctx.fillStyle="#f8fafc";ctx.fillRect(0,0,900,630);
     ctx.fillStyle="#8996a3";for(const wall of s.scene.walls)ctx.fillRect(wall.x,wall.y,wall.w,wall.h);
+    const gunlines=f<0.5?a.gunlines:b.gunlines;
+    ctx.save();ctx.setLineDash([9,7]);ctx.lineWidth=2.5;ctx.globalAlpha=0.85;
+    gunlines.forEach((line,j)=>{if(line.points.length<2)return;ctx.strokeStyle=j===s.scene.player?"#245db6":"#c46610";ctx.beginPath();line.points.forEach(([x,y],k)=>k?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();});
+    ctx.restore();
     const bullets=f<0.5?a.bullets:b.bullets;
     for(const bullet of bullets){const left=a.bullets.find(x=>x.id===bullet.id),right=b.bullets.find(x=>x.id===bullet.id),straight=left&&right&&left.bounces===right.bounces;const x=straight?lerp(left.x,right.x,f):bullet.x,y=straight?lerp(left.y,right.y,f):bullet.y;ctx.beginPath();ctx.arc(x,y,6,0,2*Math.PI);ctx.fillStyle=bullet.owner===s.scene.player?"#245db6":"#e38b28";ctx.fill();ctx.strokeStyle="#17212e";ctx.lineWidth=2;ctx.stroke();}
     a.tanks.forEach((tank,j)=>{const next=b.tanks[j],x=lerp(tank.x,next.x,f),y=lerp(tank.y,next.y,f),angle=lerpAngle(tank.angle,next.angle,f),mine=j===s.scene.player;ctx.globalAlpha=tank.alive?1:0.35;ctx.beginPath();ctx.arc(x,y,21,0,2*Math.PI);ctx.fillStyle=mine?"#245db6":"#e38b28";ctx.fill();ctx.strokeStyle="#17212e";ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+32*Math.cos(angle),y+32*Math.sin(angle));ctx.lineWidth=5;ctx.lineCap="round";ctx.stroke();ctx.fillStyle="#fff";ctx.font="bold 13px sans-serif";ctx.textAlign="center";ctx.fillText(mine?"我":"敌",x,y+5);ctx.globalAlpha=1;});
     if(Math.abs(time-s.time)<0.11){ctx.strokeStyle="#215fb3";ctx.lineWidth=6;ctx.strokeRect(3,3,894,624);}
     if(time>=s.playback.episode_end-0.02){ctx.fillStyle="rgba(23,33,46,0.85)";ctx.fillRect(660,20,210,46);ctx.fillStyle="#fff";ctx.font="bold 22px sans-serif";ctx.textAlign="center";ctx.fillText("本局结束 · 失败",765,51);}
     byId("frame-action").textContent=time>=s.playback.episode_end-0.02?"本局结束：失败。最后一帧画面是结束前保存的状态。":`画面第 ${a.decision+1} 次决策：模型选 ${action(a.selected)}；实际 ${execution(a.executed)}。${Math.abs(time-s.time)<0.11?" ← 复核点":""}`;
+    const moving=a.executed;
+    setKey("key-up","↑",moving.drive==="forward");setKey("key-down","↓",moving.drive==="reverse");
+    setKey("key-left","←",moving.turn==="left");setKey("key-right","→",moving.turn==="right");
+    const shot=s.playback.events.some(event=>event.type==="shot"&&event.player===s.scene.player&&Math.abs(time-event.time)<0.11);
+    setKey("key-space","SPACE",shot);
   }
   function setTime(value) {const s=samples[index];playback.time=Math.max(s.playback.start,Math.min(value,s.playback.end));byId("scrub").value=String(playback.time);byId("play-time").textContent=`${playback.time.toFixed(2)} / ${s.playback.end.toFixed(2)} 秒`;drawScene(s,playback.time);}
   function step(now) {if(!playback.playing)return;if(playback.lastFrame!==null)setTime(playback.time+(now-playback.lastFrame)/1000*Number(byId("speed").value));playback.lastFrame=now;if(playback.time>=samples[index].playback.end){pause();return;}playback.frame=requestAnimationFrame(step);}
@@ -170,12 +195,12 @@
     const target=byId("judgment-choices"); target.replaceChildren();
     for(const [value,label] of [["relevant","有关"],["irrelevant","无关"],["uncertain","看不清"]]) {
       const button=document.createElement("button"); button.type="button"; button.textContent=label;
-      button.className="choice"+(record.judgment===value?" selected":"");
-      button.onclick=()=>{ if(!reviewer){alert("请先选择复核人");return;} tick(); record.judgment=value; save(); render(); };
+      button.className="choice"+(record.judgment===value?" selected "+value:"");
+      button.onclick=()=>{ tick(); record.judgment=value; save(); render(); };
       target.append(button);
     }
   }
-  function save() { if(reviewer) { try { localStorage.setItem("tank183-review-v2-"+reviewer,JSON.stringify(answers)); } catch { byId("progress").textContent="浏览器无法自动保存，请及时导出 CSV"; } } }
+  function save() { try { localStorage.setItem("tank183-review-v3-zhuohang",JSON.stringify(answers)); } catch { byId("progress").textContent="浏览器无法自动保存，请及时导出 CSV"; } }
   function tick(force=false) {const now=performance.now();if(reviewer&&(force||document.visibilityState==="visible")){const a=answers[samples[index].id] ||= {};if(!a.judgment)a.seconds=(a.seconds||0)+(now-lastTick)/1000;}lastTick=now;}
   function render() {
     const s=samples[index], record=answers[s.id] || (answers[s.id]={});
@@ -212,14 +237,13 @@
     byId("model-input").textContent=s.model_input;
     byId("prev").disabled=index===0; byId("next").disabled=index===samples.length-1;
     const done=samples.filter(x=>answers[x.id]?.judgment).length;
-    byId("progress").textContent=reviewer?`已完成 ${done} / ${samples.length}`:"选定复核人后开始";
+    byId("progress").textContent=`已完成 ${done} / ${samples.length}`;
     const list=byId("sample-list"); list.replaceChildren();
-    samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);b.className=(i===index?"active ":"")+(answers[x.id]?.judgment?"done":"");b.title=`样本 ${i+1}`;b.onclick=()=>{tick();save();index=i;render();};list.append(b);});
+    samples.forEach((x,i)=>{const b=document.createElement("button");b.textContent=String(i+1);const judgment=answers[x.id]?.judgment||"";b.className=(i===index?"active ":"")+judgment;b.title=`样本 ${i+1}：${{relevant:"有关",irrelevant:"无关",uncertain:"看不清"}[judgment]||"未复核"}`;b.onclick=()=>{tick();save();index=i;render();};list.append(b);});
   }
   byId("play").onclick=()=>{if(playback.playing){pause();return;}if(playback.time>=samples[index].playback.end)setTime(samples[index].playback.start);playback.playing=true;playback.lastFrame=null;byId("play").textContent="Ⅱ 暂停";playback.frame=requestAnimationFrame(step);};
   byId("scrub").oninput=e=>{pause();setTime(Number(e.target.value));};
   byId("jump").onclick=()=>{pause();setTime(samples[index].time);};
-  byId("reviewer").onchange=e=>{tick();save();reviewer=e.target.value;try{answers=reviewer?JSON.parse(localStorage.getItem("tank183-review-v2-"+reviewer)||"{}"):{};}catch{answers={};}lastTick=performance.now();render();};
   byId("note").oninput=e=>{if(!reviewer)return;tick(); (answers[samples[index].id] ||= {}).note=e.target.value;save();};
   byId("prev").onclick=()=>{tick();save();index=Math.max(0,index-1);render();};
   byId("next").onclick=()=>{tick();save();index=Math.min(samples.length-1,index+1);render();};

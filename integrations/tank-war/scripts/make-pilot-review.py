@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -22,8 +24,15 @@ def _lines(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
-def build(root: Path, template: Path, out: Path, evidence_set: str) -> dict[str, Any]:
+def build(root: Path, template: Path, out: Path, evidence_set: str, review_file: Path | None = None) -> dict[str, Any]:
     samples: list[dict[str, Any]] = []
+    reviews: dict[str, dict[str, str]] = {}
+    if review_file:
+        with review_file.open(encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        reviews = {row["sample_id"]: row for row in rows}
+        if len(reviews) != len(rows) or any(row["reviewer"] != "zhuohang" for row in rows):
+            raise ValueError("expected distinct samples reviewed by Zhuohang")
     if evidence_set not in {"evidence", "effective-evidence"}:
         raise ValueError("unknown evidence set")
     for arm in ("harness-disable-assistance", "weights-reverse-edit", "controller-wrong-projection"):
@@ -52,6 +61,32 @@ def build(root: Path, template: Path, out: Path, evidence_set: str) -> dict[str,
             if state["state_hash"] != packet["state_hash"]:
                 raise ValueError(f"state hash differs for {packet['sample_id']}")
             manifest = _json(source / "manifest.json")
+            gunlines = _json(root / "private" / evidence_set / arm / packet["sample_id"] / "gunlines.json")
+            if (
+                gunlines["source_run"] != packet["source_run"]
+                or gunlines["engine_sha256"] != manifest["sources"]["web/game/engine.js"]
+                or gunlines["max_distance_px"] != 400
+            ):
+                raise ValueError(f"gunline source or physics differs for {packet['sample_id']}")
+            line_by_index = {row["decision_index"]: row for row in gunlines["rows"]}
+            if len(line_by_index) != len(all_states) or any(
+                row["decision_index"] not in line_by_index
+                or row["state_hash"] != line_by_index[row["decision_index"]]["state_hash"]
+                or len(line_by_index[row["decision_index"]]["lines"]) != 2
+                for row in all_states
+            ):
+                raise ValueError(f"gunlines do not match recorded states for {packet['sample_id']}")
+            review = reviews.get(packet["sample_id"])
+            if review_file:
+                if not review or (
+                    int(review["seed"]),
+                    review["seat"],
+                    int(review["decision_index"]),
+                    review["injected_layer"],
+                ) != (packet["seed"], packet["seat"], packet["decision_index"], packet["injected_layer"]):
+                    raise ValueError(f"submitted review does not match {packet['sample_id']}")
+                if review["judgment"] not in {"relevant", "irrelevant", "uncertain"}:
+                    raise ValueError(f"invalid review judgment for {packet['sample_id']}")
             reference = _json(Path(packet["reference_action"]))
             if reference["state_hash"] != packet["state_hash"]:
                 raise ValueError(f"planner state differs for {packet['sample_id']}")
@@ -86,6 +121,15 @@ def build(root: Path, template: Path, out: Path, evidence_set: str) -> dict[str,
                     ],
                     "stratum": packet["task_stratum"],
                     "state_hash": packet["state_hash"],
+                    "submitted_review": (
+                        {
+                            "judgment": review["judgment"],
+                            "seconds": int(review["seconds_spent"]),
+                            "note": review["notes"],
+                        }
+                        if review
+                        else None
+                    ),
                     "scene": {
                         "walls": raw["maze"]["walls"],
                         "player": state["player"],
@@ -108,6 +152,7 @@ def build(root: Path, template: Path, out: Path, evidence_set: str) -> dict[str,
                                 ],
                                 "selected": executions[row["decision_index"]]["selected_action"],
                                 "executed": executions[row["decision_index"]]["executed_action"],
+                                "gunlines": line_by_index[row["decision_index"]]["lines"],
                             }
                             for row in playback_states
                         ],
@@ -136,12 +181,19 @@ def build(root: Path, template: Path, out: Path, evidence_set: str) -> dict[str,
             )
     if len(samples) != 15 or len({item["id"] for item in samples}) != 15:
         raise ValueError("expected 15 distinct samples")
+    if review_file and set(reviews) != {item["id"] for item in samples}:
+        raise ValueError("submitted review does not cover the selected samples exactly")
     html = template.read_text(encoding="utf-8").replace(
         "__SAMPLE_DATA__", json.dumps(samples, ensure_ascii=False).replace("<", "\\u003c")
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    return {"samples": len(samples), "out": str(out), "bytes": out.stat().st_size}
+    return {
+        "samples": len(samples),
+        "out": str(out),
+        "bytes": out.stat().st_size,
+        "review_sha256": hashlib.sha256(review_file.read_bytes()).hexdigest() if review_file else None,
+    }
 
 
 def main() -> None:
@@ -149,10 +201,17 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--evidence-set", choices=("evidence", "effective-evidence"), default="effective-evidence")
+    parser.add_argument("--review-file", type=Path)
     args = parser.parse_args()
     print(
         json.dumps(
-            build(args.root, Path(__file__).with_name("pilot-review-template.html"), args.out, args.evidence_set)
+            build(
+                args.root,
+                Path(__file__).with_name("pilot-review-template.html"),
+                args.out,
+                args.evidence_set,
+                args.review_file,
+            )
         )
     )
 
