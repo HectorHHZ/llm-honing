@@ -1,5 +1,28 @@
 {
+  "purpose": "Integration acceptance, not a training or generalization result",
+  "generated_at": "2026-11-14T18:11:49.314287+00:00",
+  "platform": "Windows x86-64, Python 3.10.22; NanoJev in Linux/WSL on NVIDIA GPU",
+  "source_identity": "1590e8ffcaf6ab47ff4ab6e0856b2ad50c79f53ca565373ea98063a7f3ac3409",
+  "native_tests": {
+    "tests": 51,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "runner_conformance": {
+    "passed": true,
+    "checks": [
+      "support",
+      "episodes",
+      "delivery",
+      "concurrent",
+      "repeat",
+      "gate"
+    ],
+    "model": "Explicit STAY protocol stand-in behind the real Honing HTTP DecisionServer"
+  },
   "browser": {
+    "passed": true,
     "browser": "Microsoft Edge headless",
     "checks": [
       "native PNG",
@@ -15,49 +38,89 @@
       "verified replay seek",
       "replay reset"
     ],
-    "exported_run": "D:\\llm-honing\\integrations\\overcooked\\runs\\export-833731ae6317",
-    "passed": true,
-    "screenshots": "D:\\llm-honing\\integrations\\overcooked\\.cache\\browser-qa"
+    "model_gui_decisions": 3
   },
-  "model_validation": "Local HTTP protocol stand-in only; no real model weights, training or performance claim.",
-  "native_baseline": {
-    "complete": true,
-    "deliveries": 10,
-    "final_frame_hash": "ab5f614628347d3e0d6221b0144ac61c3c1301b3001838285d7175b0068347ac",
-    "grade": 1.0,
-    "run": "D:\\llm-honing\\integrations\\overcooked\\runs\\match-5400135bc870",
-    "score": 200.0,
-    "steps": 400,
-    "success": true,
-    "verified": true
+  "real_model": {
+    "family": "nanojev",
+    "revision": "047b927b30882a1138fc504821b82ac145a4b81a",
+    "weights_sha256": "f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b",
+    "source_commit": "76fdfc9ecdca45a9bcef17991a07d3041a87685a",
+    "inference": "reference",
+    "scenario": {
+      "controlled_player": 0,
+      "layout": "cramped_room",
+      "max_steps": 400,
+      "old_dynamics": false,
+      "partner": "solo",
+      "score_scale": 40.0,
+      "target_deliveries": 2
+    },
+    "source_identity": "1590e8ffcaf6ab47ff4ab6e0856b2ad50c79f53ca565373ea98063a7f3ac3409",
+    "result": {
+      "complete": true,
+      "deliveries": 0,
+      "final_frame_hash": "82018443916483f7d8889a3da89c6ad0649c5c49e91ebfbe68ceab6c8d0d52e3",
+      "grade": 0.0,
+      "grading": "native-score-softsign-v1",
+      "score": 0.0,
+      "steps": 400,
+      "success": false
+    },
+    "native_replay_verified": true,
+    "controlled_actions": {
+      "STAY": 398,
+      "INTERACT": 2
+    },
+    "model_requests": 400
   },
-  "platform": "win32",
-  "python": "3.10.22",
-  "runtime": {
-    "native_sha256": "b80c1bd80f10725ae5354152f52ea0eefc21c3e5a2862e7b3f88f9255526a94a",
-    "packages": {
-      "gymnasium": "1.1.1",
-      "numpy": "1.26.4",
-      "overcooked-ai": "2.0.0",
-      "pygame": "2.6.1",
-      "scipy": "1.15.3"
+  "rule_smoke": {
+    "scenario": {
+      "controlled_player": 0,
+      "layout": "cramped_room",
+      "max_steps": 400,
+      "old_dynamics": false,
+      "partner": "solo",
+      "score_scale": 40.0,
+      "target_deliveries": 2
     },
-    "revision": "739950a079cdaed5a44fcc662efc40244c205d06"
+    "source_identity": "1590e8ffcaf6ab47ff4ab6e0856b2ad50c79f53ca565373ea98063a7f3ac3409",
+    "result": {
+      "complete": true,
+      "deliveries": 2,
+      "final_frame_hash": "a9012f716ba0b9f035bfcdd847c905705b6b5d85bba459a2c5044cd19abe652f",
+      "grade": 0.5,
+      "grading": "native-score-softsign-v1",
+      "score": 40.0,
+      "steps": 400,
+      "success": true
+    },
+    "native_replay_verified": true,
+    "controlled_actions": {
+      "NORTH": 12,
+      "WEST": 5,
+      "INTERACT": 17,
+      "EAST": 315,
+      "STAY": 48,
+      "SOUTH": 3
+    },
+    "model_requests": 0
   },
-  "setup_script": "Completed successfully with isolated D: prefix and caches.",
-  "tests": {
-    "combined_regression": {
-      "failed": 2,
-      "passed": 114
-    },
-    "existing_windows_failures": [
-      "tests/contracts/test_boundaries.py::test_only_the_chat_client_imports_litellm",
-      "tests/contracts/test_boundaries.py::test_only_the_run_tracker_imports_wandb"
-    ],
-    "new_integration": {
-      "failed": 0,
-      "passed": 28
-    },
-    "reason": "Existing assertions compare Windows backslash paths with slash strings; files unchanged."
-  }
+  "readme_python_examples": {
+    "executed": 2,
+    "passed": 2
+  },
+  "language_check": {
+    "CJK_text_occurrences": 0,
+    "scope": "All files in this integration PR final tree"
+  },
+  "training_performed_for_this_pr": false,
+  "experiments_excluded_from_feature_branch": {
+    "experiment/overcook_meta-harness": "6a297998745183e3005a31dde97db3fc8f9f9ff8",
+    "experiment/overcook_gepa": "7d53724e089d87bab060eaa3225bad95974dad91"
+  },
+  "limits": [
+    "This one model smoke scored zero and establishes connectivity only.",
+    "Linux game installation and cross-platform bitwise replay are unvalidated.",
+    "The three-task suite is not a broad capability benchmark."
+  ]
 }

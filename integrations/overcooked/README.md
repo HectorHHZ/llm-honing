@@ -1,401 +1,316 @@
 # Overcooked-AI
 
-Native [Overcooked-AI](https://github.com/HumanCompatibleAI/overcooked_ai) as a
-cooperative Honing environment. The pinned upstream engine owns movement,
-collisions, interactions, recipes and rewards. Its own sprites render every
-GUI frame. This directory contains the complete integration: runtime wrapper,
-browser observer, typed model client, recordings, replay, tasks and Honing
-runner/grader adapters. No new code lives in `honing/`.
+Run native [Overcooked-AI](https://github.com/HumanCompatibleAI/overcooked_ai)
+through Honing's existing typed decision interface. Two chefs collect
+ingredients, fill pots, cook, plate soup and serve it for a shared score.
+The pinned upstream engine owns movement, collisions, interactions, recipes,
+rewards and rendering. The GUI displays its official PNG sprites.
+All integration code lives here; the root wheel and core protocols are unchanged.
 
-最新真实模型验收见 [validation/pilot-v1.md](validation/pilot-v1.md)：已复用本地
-NanoJev，完成 9 局模型评估、一次 SFT 及验证选择。SFT 验证成绩持平被拒绝，
-GUI 继续使用原始模型。本轮未测得超过固定等待对照的最终分数收益。
+## Why this game and what comes next
 
-## 本机验收
+This adds cooperative spatial coordination and multi-stage resource handling
+alongside the repository's adversarial combat, navigation and survival games.
+Narrow passages, shared stations, held objects and cooking delays make useful
+coordination depend on the map and both chefs' states. This can test transfer
+to another task category. Integration success alone proves no generalization.
 
-在仓库根目录的 PowerShell 运行：
+The first post-training objective is:
+
+> With chef 1 fixed to the autonomous greedy (`solo`) rule policy, can NanoJev
+> control chef 0 from the map and current state to maximize team score over
+> 400 native ticks?
+
+Only chef 0 is model-controlled. Chef 1 is an independent, fixed rule teammate.
+One game step applies **both chefs' actions together**. Inference consumes no
+game ticks. Use manual cooking (`old_dynamics=false`) and compare candidates
+under the same teammate, budget, layout and rules. Report raw team scores and
+a matched chef-0 `STAY` control: the teammate can score alone. Compare a
+rule-controlled chef 0 separately; do not attribute all team reward to the model.
+
+First improve this fixed-teammate setting through post-training. Then extend
+to other teammate strategies, seats and layouts. Keep training, validation
+selection and heldout evaluation separate. The three-layout suite here is an
+integration smoke suite, not a sufficient generalization benchmark.
+
+GEPA and Meta-Harness code, protocols and results remain on
+`experiment/overcook_gepa` and `experiment/overcook_meta-harness`. Earlier pilot
+and SFT artifacts also remain in those branches and are excluded here.
+This feature PR makes no training-improvement claim.
+
+## Setup and play
+
+The verified game runtime is Windows x86-64 with Python 3.10, the version
+declared by the pinned upstream revision. From the repository root:
 
 ```powershell
+.\integrations\overcooked\setup.ps1 -Conda 'D:\anaconda3\Scripts\conda.exe'
 .\integrations\overcooked\run.ps1 -Mode play -Open
 ```
 
-浏览器打开 <http://127.0.0.1:4185/>。默认是 `cramped_room`，400 个游戏步，
-手动开火规则。选择“观看规则基线”后点击“开始”，可观看两名厨师取料、
-烹饪、装盘和交付；“暂停”和“前进一步”用于检查每个动作。
+Substitute your conda executable. Setup creates an isolated prefix at
+`integrations/overcooked/.venv`, installs `requirements-lock.txt`, downloads the
+Git revision in `pins.json`, and checks its native code/resource hash. The
+native package is editable with `--no-deps --no-build-isolation`. Environments,
+upstream downloads, caches and runs stay in this directory and are ignored.
+Existing conda environments are unchanged. `requirements.txt` lists direct
+dependencies; the lock records the tested Windows environment. Linux game
+setup has not been validated. This is a source-checkout integration.
 
-- 选择“人工单步”：WASD / 方向键移动，空格与面前的设施交互，也可点击按钮。
-- “动态状态”“地图”“完整观察”显示与画面对应的原生数据。
-- 可切换五个厨房、操控厨师、队友策略，以及手动／自动开火，再点击“新开一局”。
-- “保存当前轨迹”显示导出目录。部分轨迹也可回放，但不能作为完成的评估成绩。
-- Ctrl+C 停止前台服务。端口冲突时传 `-Port 4186`。
+Open <http://127.0.0.1:4185/>. Defaults: `cramped_room`, chef 0, `solo` teammate,
+400 ticks, manual cooking. Select **Rule baseline** and **Start** for scripted
+play; select **Human control** for WASD/arrows and Space to interact. Use
+**Pause**, **Single step**, the state/map/rules tabs and **Export recording**
+to inspect play. Scenario settings take effect on **New game**. Ctrl+C stops
+the foreground service. Use `-Port 4186` if needed. Rule play is a runtime
+check, not a learned-model result.
 
-The GUI serves official native PNGs. It does not implement a second game engine
-in JavaScript. A frame hash ties the displayed image to its public state;
-reading the GUI, map, rules or image never advances simulation time.
+Five layouts are supported: `cramped_room`, `asymmetric_advantages`,
+`coordination_ring`, `forced_coordination`, `counter_circuit_o_1order`.
 
-## Installation and local environment
+## Python observation and control API
 
-The author machine's D: conda base was Python 3.13 and `rag_env` was Python 3.11.
-The upstream revision declares Python 3.10, so a separate conda prefix is used:
-`integrations/overcooked/.venv`. Existing environments are left intact.
+Import `Engine` and `Scenario` from `integrations.overcooked.engine` in the game
+environment. Module import needs only the standard library; construction loads
+native dependencies. `Engine()` uses `Scenario()` and resets immediately to
+tick 0. Each instance owns one episode. `with Engine(...) as game:` closes it
+on exit. A finished engine can reset; a closed instance cannot reopen.
 
-```powershell
-.\integrations\overcooked\setup.ps1
-# If conda is installed elsewhere:
-.\integrations\overcooked\setup.ps1 -Conda 'D:\path\to\conda.exe'
+| Scenario argument | Default | Accepted values |
+| --- | --- | --- |
+| `layout` | `"cramped_room"` | One of the five names above |
+| `max_steps` | `400` | Integer `1..10000` |
+| `old_dynamics` | `False` | Boolean; false requires manual start, true starts at three ingredients |
+| `controlled_player` | `0` | Integer `0` or `1` |
+| `partner` | `"solo"` | `solo`, `role`, `stay`, `solo_slow` |
+| `target_deliveries` | `2` | Integer `1..100`; diagnostic success target, no early stop |
+| `score_scale` | `40.0` | Finite positive number; fixed task grading scale |
+
+Booleans are refused for integer/number settings. Invalid settings raise
+`ValueError`. Missing dependencies propagate import errors. Changed native
+code/resources raise `RuntimeError` with a setup instruction.
+
+| Method | Return and effects | Errors |
+| --- | --- | --- |
+| `reset()` | Frame dictionary at tick 0; clears score/events | Closed: `RuntimeError` |
+| `observe()` | Detached JSON-compatible frame dictionary; no tick advancement | Closed: `RuntimeError` |
+| `game_map()` | Detached map dictionary; read-only, including after close | Native errors propagate |
+| `rules()` | Resolved rules dictionary; read-only, including after close | Native errors propagate |
+| `step(actions)` | List/tuple of exactly two action names in chef-0, chef-1 order; advances one native tick and returns its frame | Bad pair/action: `ValueError` without stepping; closed/finished: `RuntimeError` |
+| `png(frame=None)` | Official PNG `bytes` for live or supplied historical frame; no tick advancement | Live read after close: `RuntimeError`; invalid historical data/rendering errors propagate |
+| `close()` | `None`; marks the instance closed; repeated calls are harmless | None on repeated close |
+
+Supply only unmodified frames from the same engine/layout to historical
+rendering. Observation, rendering and model inference never advance time.
+
+```python
+from integrations.overcooked.engine import Engine, Scenario
+from integrations.overcooked.policy import joint_baseline
+
+with Engine(Scenario(partner="solo", max_steps=400)) as game:
+    frame = game.observe()
+    kitchen, rules = game.game_map(), game.rules()
+    assert game.observe() == frame
+    while frame["status"] == "running":
+        frame = game.step(joint_baseline(frame, partner="solo"))
+    print(frame["step"], frame["score"], len(game.png()))
 ```
 
-The script downloads the source revision in `pins.json`, checks out its native
-package with Git sparse checkout, installs `requirements-lock.txt`, then checks
-the native code/resource hash. Environment, downloads, pip/conda caches and
-installation temporary files stay in this directory on D:. These directories
-are ignored by Git. `requirements.txt` lists direct dependencies;
-`requirements-lock.txt` records the Windows Python 3.10 acceptance environment.
-
-The native package is installed editable with `--no-deps --no-build-isolation`.
-No Ray, TensorFlow, upstream web server or pretrained agent is needed.
-The source/resources are unchanged. The upstream environment may create its
-own motion-planner cache under `upstream/`; those generated files are ignored.
-
-This integration is currently a source-checkout integration, like OfficeQA.
-The root wheel's package list is unchanged. The verified platform is Windows
-x86-64; other platforms need separate dependency and rendering validation.
-
-## Headless episodes and replay
-
-```powershell
-.\integrations\overcooked\run.ps1 -Mode demo
-```
-
-The last JSON line gives a new directory under `integrations/overcooked/runs/`.
-It records both chefs' actions and verifies the complete native trajectory.
-An explicit `-RunDir` must name a new directory; existing runs are not overwritten.
-
-```powershell
-.\integrations\overcooked\run.ps1 -Mode replay -RunDir 'D:\path\to\run' -Open
-.\integrations\overcooked\run.ps1 -Mode verify -RunDir 'D:\path\to\run'
-```
-
-The replay GUI verifies the run first and has a seek slider. Verification
-creates a fresh native engine and checks every frame, action, score, event,
-runtime identity and final result. Model runs additionally reconstruct each
-exact input from the saved harness and check the response and executed choice.
-It makes no model calls. It requires the recorded integration source and native
-runtime; retain the code revision with recordings. Verification does not modify
-the recording. Browser rendering alone is not replay verification.
-
-| File | Contents |
-|---|---|
-| `manifest.json` | Scenario, engine/resources/dependency identity, adapter source hash, controller and policy/harness identity |
-| `steps.jsonl` | Initial frame and every native joint action/result, including both chefs |
-| `decisions.jsonl` | Pre-action frame identity, exact model request/reply when applicable, choice and latency |
-| `harness/files.json` | Exact delivered instruction/settings files for match runs |
-| `result.json` | Steps, deliveries, native reward, completion, bounded task grade and final frame hash |
-| `first-frame.png`, `last-frame.png` | Native stills for CLI matches, unless disabled |
-| `error.json` | Failure; failed episodes have no completed result |
-
-Interactive GUI recordings are labeled `interactive`, even when a model is
-selected. They are demonstrations, and the grader refuses them. Model request
-and response are retained separately in these UI traces. Export freezes a copy
-of the current trajectory; the live game can continue independently.
-
-## Map, state, rules and controls
-
-The protocol is `overcooked-full-kitchen-v1`: the entire kitchen is public.
-Neither chef sees the teammate's pending action. Coordinates are `[x,y]`, with
-upper-left origin, x right and y down. Terrain is indexed as `terrain[y][x]`.
-The model is explicitly told this information condition.
-
-Python imports need only the standard library until an engine is constructed:
+Minimum error/lifecycle sequence:
 
 ```python
 from integrations.overcooked.engine import Engine, Scenario
 
-with Engine(Scenario(layout="cramped_room", max_steps=400)) as game:
-    frame = game.observe()       # Read-only JSON snapshot; no clock advancement.
-    kitchen = game.game_map()    # Terrain, legend, dimensions and walkable cells.
-    rules = game.rules()         # Resolved recipes, times, values and dynamics.
-    png = game.png()             # Official renderer, offscreen PNG bytes.
-    frame = game.step(["NORTH", "STAY"])  # Chef 0, chef 1; exactly one native tick.
+game = Engine(Scenario(max_steps=1))
+try:
+    before = game.observe()
+    try:
+        game.step(["INVALID", "STAY"])
+    except ValueError:
+        assert game.observe() == before
+    game.step(["STAY", "STAY"])
+    try:
+        game.step(["STAY", "STAY"])
+    except RuntimeError:
+        pass
+    assert game.reset()["step"] == 0
+finally:
+    game.close()
+    game.close()
 ```
 
-`reset()` resets that instance to the layout's standard start. `close()` is
-idempotent; reads/steps on a closed engine fail. A finished engine rejects more
-steps until reset. Use separate processes for isolated evaluation episodes.
+### Observation fields and units
 
-| Frame field | Meaning |
-|---|---|
-| `map` | Layout, terrain, dimensions, legend, walkable cells and start positions |
-| `state.players` | Position, orientation and held object for each chef |
-| `state.objects` | Objects on counters/in pots, including ingredients and cooking progress |
-| `state.all_orders`, `state.bonus_orders` | Allowed and bonus recipes |
-| `pots` | Pot positions grouped by empty, ingredient count, cooking and ready |
-| `rules` | Resolved recipes, cook ticks, rewards, dynamics flag and action semantics |
-| `score`, `deliveries`, `reward`, `events` | Native team reward, rewarded delivery count and latest transition diagnostics |
-| `delivery_attempts` | All native delivery events, including disallowed recipes that earn zero |
-| `step`, `max_steps`, `status` | Native tick and adapter budget |
-| `terminated`, `truncated` | Budget expiry is truncation, not native victory |
-| `legal_actions` | All six native options while running; empty at the budget |
-| `frame_hash` | SHA-256 of the canonical JSON for all other frame fields |
+The condition is `overcooked-full-kitchen-v1`: the entire public kitchen is
+visible; the teammate's pending action is hidden. Coordinates are integer
+cells `[x,y]`, origin upper-left, positive right/down; `terrain[y][x]`.
+Time is in native ticks, not seconds. Every frame has:
 
-The native actions are `NORTH`, `SOUTH`, `EAST`, `WEST`, `STAY`, `INTERACT`.
-Blocked moves may still rotate the chef. An ineffective interaction is a legal
-native no-op; the adapter does not mask it or replace the chosen action.
+| Field | Type and meaning |
+| --- | --- |
+| `protocol` | String `overcooked-full-kitchen-v1` |
+| `map` | Dictionary: layout string, integer width/height, terrain character lists, string legend, coordinate description, walkable/start `[x,y]` lists |
+| `rules` | Dictionary: Boolean dynamics flag, integer max ingredients, recipes (ingredients, integer cook ticks, numeric values), order bonus, six actions and English instructions |
+| `state` | Native JSON snapshot: `players`, `objects`, `all_orders`, `bonus_orders`, integer `timestep` |
+| `state.players` | Two dictionaries: integer position/facing pairs and held-object dictionary or null |
+| `state.objects` | Object dictionaries with name/position; soup includes `_ingredients`, `_cooking_tick`, `cook_time`, `is_idle`, `is_cooking`, `is_ready` |
+| `pots` | Native category mapping to lists of pot `[x,y]` positions |
+| `score`, `reward` | Numbers: cumulative team sparse reward and latest joint reward |
+| `deliveries`, `delivery_attempts` | Integers: rewarded soups and all native deliveries, including zero-reward disallowed recipes |
+| `events` | Latest native event-name mapping to two per-chef Booleans; diagnostic |
+| `step`, `max_steps` | Integers: elapsed joint ticks and episode budget |
+| `status` | String `running` or `step_limit` |
+| `terminated`, `truncated` | Both false while running; false/true at the budget |
+| `legal_actions` | Six action-name strings while running; empty at the budget |
+| `frame_hash` | SHA-256 hex string of canonical JSON for all other fields |
 
-`old_dynamics=False` requires an empty-handed interaction to start an idle pot;
-`True` starts a three-ingredient pot automatically. Current selectable layouts
-all use three-onion recipes. All resolved cook times are game ticks, not seconds.
-The fixed budget always runs to its end; reaching the delivery target does not
-stop the episode early. Inference waits do not advance game time.
+There is no native win/lose ending in these fixed-horizon kitchens. Budget
+expiry is truncation, not victory. Two deliveries never end an episode early.
+Nested native object and order details belong to the pinned upstream schema.
 
-| Local GUI route | Behavior |
-|---|---|
-| `GET /api/state` | Current frame, scenario and UI status |
-| `GET /api/map` | Public kitchen geometry |
-| `GET /api/rules` | Rules and recipe configuration |
-| `GET /frame.png?hash=HASH` | Native rendering of the matching recent frame |
-| `POST /api/step` | One human/baseline/model step, or seek in replay mode |
-| `POST /api/reset` | Save the previous session and start the selected scenario |
-| `POST /api/export` | Export a stable trajectory snapshot to a new directory |
+Actions: `NORTH`, `SOUTH`, `EAST`, `WEST`, `STAY`, `INTERACT`. Directions move
+one floor cell and set facing; blocked moves can still turn. `INTERACT` affects
+the adjacent tile being faced. Ineffective interactions are legal no-ops.
+There is no dynamic action mask or fallback for model failures.
 
-Example command body:
+### HTTP and GUI interfaces
 
-```json
-{"policy":"human","action":"INTERACT","frame_hash":"CURRENT_FRAME_HASH"}
-```
+`ui.py` serves a loopback-only observer. These GET routes are read-only:
 
-The HTTP server binds only to `127.0.0.1`, rejects stale observations and
-cross-origin browser commands, and serializes state changes. One tab should
-control a session. A pending model request leaves observation reads available
-while simulation stays frozen. These routes are local tools, not hosted APIs.
+| Route | Response |
+| --- | --- |
+| `/api/state` | Envelope with full `frame`, scenario, layout choices, replay position and model availability |
+| `/api/map` | Same dictionary as `game_map()` |
+| `/api/rules` | Same dictionary as `rules()` |
+| `/frame.png?hash=HASH` | Official PNG tied to a retained frame hash |
 
-## Connect a decision model
+POST `/api/step` accepts `{"policy":"human","action":"NORTH",
+"frame_hash":"CURRENT_HASH"}`; stale actions are refused. `policy` also accepts
+`baseline` or `model`. POST `/api/reset` accepts scenario settings. POST
+`/api/export` freezes a recording copy and returns its `out` directory. Replay
+accepts `/api/step` with integer `index` to seek. Cross-origin browser commands
+are refused. Reads remain at the pre-action frame during model inference.
+Interactive recordings are labelled `interactive` even with a selected model;
+the grader refuses them as completed evaluations.
 
-Start an existing Honing decision server separately, then:
+## Model input, actions and teammates
+
+NanoJev receives **text, not the GUI image**: controlled chef index; full map
+and legend; both chefs' positions, facing and held objects; counter/pot objects,
+ingredients and cooking progress; allowed orders and resolved rules; score,
+deliveries and tick budget; recent joint actions/rewards (four by default).
+`decisions.make_request()` puts these in `parts.essential`. One `action`
+question offers all six native primitives. The model returns probabilities
+and an argmax; the controller validates and applies its choice for chef 0.
+The native engine changes the game state. Chef 1 chooses independently from
+the same pre-action frame.
+
+Replies must echo the ID and state, trim nothing, audit exactly `action`,
+explicitly set `stateTruncated=false`, cover six options and supply
+`stateTokens`, `stateRoom`, `inputTokens`. Explicit null counts are allowed;
+available counts must be positive integers and agree with state room, input
+size and optional `maxInputTokens`. Probabilities must cover exactly the
+options, be finite in `[0,1]`, and sum within `6 * 0.00005 + 1e-12` of one
+for Laya's four-decimal output. Divide accepted values by their `math.fsum`
+total in action order for sampling/audit. Evaluation keeps the reported
+argmax, including ties. Invalid replies stop before stepping; replay uses the
+same checks.
+
+Partner names select **policies**, not extra native actions:
+
+| Policy | Behavior |
+| --- | --- |
+| `solo` | Autonomous greedy: supplies onions, starts full idle pots, takes dishes for ready soup and serves; current-state shortest paths treat the other chef as an obstacle |
+| `role` | Role heuristic: chef 0 primarily supplies; chef 1 prioritizes serving, can fetch a dish while cooking, otherwise parks near its start; can stall |
+| `stay` | Always `STAY`, occupying its cell |
+| `solo_slow` | Diagnostic CLI variant: `solo` only on ticks divisible by three, otherwise `STAY`; not a GUI option |
+
+The GUI offers the first three. Every policy emits one of the same six actions
+per tick. These are local heuristics, not upstream trained or optimal agents;
+they consult no future simulator. Baseline/teacher mode uses `role` for the
+controlled chef; model mode replaces that action with the validated model
+choice, without rescue.
+
+Connect an existing compatible decision server:
 
 ```powershell
-# GUI model observation/control:
-.\integrations\overcooked\run.ps1 -Mode play -DecisionServer 'http://127.0.0.1:8080' -Open
-# Recorded model episode and native verification:
-.\integrations\overcooked\run.ps1 -Mode model -DecisionServer 'http://127.0.0.1:8080'
+.\integrations\overcooked\run.ps1 -Mode play -DecisionServer 'http://127.0.0.1:8803' -Open
+.\integrations\overcooked\run.ps1 -Mode model -DecisionServer 'http://127.0.0.1:8803'
 ```
 
-The routes are `GET /v1/health` and `POST /v1/decide`, using the existing
-`id`, `parts`, `questions` envelope. There is one six-option `action` question.
-Input contains public map, current state, resolved rules, budget and recent
-joint actions. Candidate responses must preserve the complete context and
-return finite normalized probabilities and their argmax. Invalid replies stop
-the run; no rule action substitutes for the model. `HONING_TOKEN` optionally
-supplies a Bearer token and is not recorded. Select a server context limit
-large enough for the entire request; silent truncation is rejected.
+`model.ps1 -Mode inspect` checks an existing WSL NanoJev cache; `-Mode serve`
+uses Honing's shared loader/server and `integrations/ra2/pins.json`.
+`-Distribution`/`-LinuxPython` select the WSL environment; `model_env.py --source`
+selects the NanoJev checkout. Defaults under `/opt/honing/` are local conveniences,
+not bundled dependencies. See [RA2 model setup](../ra2/README.md) for source,
+weights and GPU requirements. No RA2 game assets are needed. Model inference
+is separate from the Windows Python 3.10 game process.
 
-For sampled trajectories, use the module CLI:
+## Recordings, grading and Honing
 
 ```powershell
-& .\integrations\overcooked\.venv\python.exe -m integrations.overcooked.match `
-  --policy model --decision-server http://127.0.0.1:8080 --sample --policy-seed 17 --verify
+.\integrations\overcooked\run.ps1 -Mode demo
+.\integrations\overcooked\run.ps1 -Mode verify -RunDir 'D:\path\to\run'
+.\integrations\overcooked\run.ps1 -Mode replay -RunDir 'D:\path\to\run' -Open
 ```
 
-The adapter preserves the reply distribution and actual sampled action. The
-pilot below runs real NanoJev inference and one SFT candidate through existing
-Honing components. Protocol unit tests still use an explicitly labeled stand-in.
-GRPO rollouts can be recorded, but a GRPO campaign is not implemented here.
+CLI matches write unique ignored directories under `runs/`; explicit outputs
+must be new. `manifest.json` binds scenario, source/runtime, harness and policy;
+`steps.jsonl` records reset and every joint action/frame; `decisions.jsonl`
+retains exact requests/replies/choices/latencies; `harness/files.json` retains
+delivered files; `result.json` reports score, deliveries, completion and grade.
+Optional first/last PNGs are visual aids. Failed runs have `error.json` and
+cannot pass verification.
 
-## Honing tasks and grading
+Replay reconstructs requests, partner actions and every native state/reward,
+validates model replies/choices and checks the final result. It makes no model
+calls or recording changes. Retain original code/runtime for old runs: changed
+play/audit source or runtime identities are refused. Cross-platform bitwise
+replay and mid-episode resume are not promised. Interactive or sampled rollout
+records cannot masquerade as evaluation grades. Records are not signed
+model-server attestations.
 
-`adapter.py` provides `OvercookedEpisodeRunner` and `OvercookedGrader` using the
-unchanged core protocols. The runner starts a separate game-environment process.
-The grader runs native replay in that environment, then requires a completed
-model evaluation with the requested task, policy checksum and harness identity.
-The score is `native_score / (native_score + score_scale)`, with a fixed
-`score_scale=40` for the benchmark. This strictly preserves native score order:
-0, 20, 40 and 200 native points become 0, 1/3, 1/2 and 5/6. Two deliveries remain
-a diagnostic success target; reaching it neither caps the grade nor ends play.
-Only deliveries earning positive native reward count toward the target. The
-native delivery event also fires for disallowed recipes, so raw event counts
-must not be used as task credit.
-The server operator remains responsible for the checkpoint it actually serves.
+The local format is `overcooked-match-v2`, not a shared Reef schema.
+[RFC #148](https://github.com/HectorHHZ/llm-honing/issues/148) accepts Griddly's
+format only. This independent PR documents the Overcooked-local format for maintainer
+review under `CONTRIBUTING.md`; it has no dependency on the Griddly PR.
 
-`e2e.py` exposes `tasks`, `harness_seed`, `episode_runner` and `grader` factories
-for the existing component loader. The surrounding deployment supplies
-`endpoints` with runtime `jev_decision`. Factory paths start with
-`integrations.overcooked.e2e:`. No core changes or model-server startup are needed.
+`adapter.py` implements existing runner/grader contracts using isolated game
+subprocesses. Grading requires native replay and a complete model evaluation
+for the exact task, harness and checkpoint. Grade is
+`raw_score / (raw_score + score_scale)`, default scale 40. It keeps increasing
+beyond two soups; `success` at two deliveries is diagnostic. Raw 400-tick team
+score is the primary research metric.
 
-The harness can change action instructions, notes and history length (0..16).
-It cannot change layout, player seat, teammate, rules, budget or scoring; those
-belong to `Scenario` and `tasks/suite.jsonl`.
+`e2e.py` supplies existing JSON component-loader factories. Harness files are
+`overcooked/controller.json` (`history_steps` only) and
+`overcooked/questions.json` (`action` instructions). Extra settings/instruction
+files become model-visible notes. Harness edits cannot change map, teammate,
+scoring, action options or budget. Executable harness files are refused.
 
-The initial six-task smoke suite separates layouts:
-
-| Split | Layout | Teammates |
-|---|---|---|
-| train | cramped_room | role, solo |
-| val | asymmetric_advantages | role, solo |
-| heldout | coordination_ring | role, solo |
-
-`role` is a public-state onion-soup heuristic with player 0 supplying and
-player 1 preferentially serving. `solo` is a greedy independent heuristic;
-`stay` is a passive partner. These are distinct baselines, not trained agents
-or optimal teachers. They may stall on difficult kitchens, especially layouts
-requiring counter handoffs. Their behavior must not be reported as model skill.
-
-Disjoint kitchen layouts provide a starting point for generalization checks.
-This small suite does not establish cross-game or unseen-partner generalization.
-This checks transfer between kitchen layouts within one game; it does not
-measure transfer between games.
-
-## Cached NanoJev and a bounded real pilot
-
-The previously downloaded checkpoint is inside the D: hosted Ubuntu WSL disk,
-not a missing Windows weights directory. The verified runtime is:
-
-| Item | Location / identity |
-|---|---|
-| WSL distribution / Python | Ubuntu, `/opt/honing/venvs/nanojev/bin/python`, Python 3.12.16 |
-| Native model source | `/opt/honing/deps/nanojev`, `76fdfc9ecdca45a9bcef17991a07d3041a87685a` |
-| Cached checkpoint | `C-Tianyu/NanoJev`, revision `047b927b30882a1138fc504821b82ac145a4b81a` |
-| Weights SHA-256 | `f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b` |
-| Native cache root | `/opt/honing/cache/huggingface` |
-
-`model_env.py` reuses the existing loader and Tank/RA2 NanoJev pins; it checks
-the pinned source and cached weights, and sets offline mode. The Windows game
-environment stays separate. Nothing is installed into either existing runtime.
-The Linux runtime is physically in `D:\ubuntu\wsl\Ubuntu\ext4.vhdx`.
-The verified local discovery is retained in
-[validation/checkpoint-discovery.json](validation/checkpoint-discovery.json).
-
-```powershell
-# Check the cached source/checkpoint and write .cache/model-discovery.json:
-.\integrations\overcooked\model.ps1 -Mode inspect
-# Foreground GPU service; keep this terminal running:
-.\integrations\overcooked\model.ps1 -Mode serve
-# Another terminal, GUI with the real model enabled:
-.\integrations\overcooked\run.ps1 -Mode play -DecisionServer http://127.0.0.1:8803 -Open
-# Only stops a matching Overcooked launcher on this port:
-.\integrations\overcooked\model.ps1 -Mode stop
-```
-
-The formal suite `tasks/benchmark-v1.jsonl` contains 27 conditions, with both
-controlled seats, disjoint kitchen layouts, and a heldout-only `solo_slow`
-partner (greedy once per three ticks, otherwise waiting). The frozen
-`experiments/pilot-v1.json` selects a smaller pilot: three train conditions,
-two validation conditions, and two heldout conditions. Every episode has 400
-joint-action ticks, reference inference, argmax decisions and no fallback.
-One episode per condition does not support a broad generalization claim.
-
-```powershell
-& .\integrations\overcooked\.venv\python.exe -m integrations.overcooked.experiments `
-  --split train --policy model --out integrations/overcooked/runs/my-base-train `
-  --expected-checksum f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b
-```
-
-`experiments.py` uses the existing `run_graded`, runner and grader. Its summary
-retains raw score, deliveries, first delivery step, action counts, stationary
-streaks, token truncations and decision latency. Rule runs use `--policy baseline`
-and are never represented as model results. The initial real train baseline
-scored zero in all three conditions; the model predominantly chose `STAY`.
-
-Teacher matches use explicit `--policy teacher` and retain the exact same typed
-requests a model sees. `data.py` requires native replay and a matching train task
-before producing labels; it refuses validation/heldout kitchen demonstrations.
-The pilot uses 184 action-balanced fit examples and 48 internal validation
-examples from separate train-map episodes, without using heldout data.
-
-`train.py` calls the existing `NanoJevTrainer` for two SFT epochs, bf16 forward,
-one question per batch, seed 7, head learning rate 1e-4. Only parameters matching
-`^(norm|scalar|set_)` train, keeping the backbone frozen on the 8 GB GPU. The
-trainer selects its best internal-validation checkpoint. Losses for every
-forward, epoch metrics, dataset hash, actual trainable parameters, and checkpoint
-manifest remain under the new training directory. W&B cloud logging is not
-configured; equivalent loss/epoch metrics are retained locally. The base weights
-are never overwritten. Stop the inference server before training to release its
-exclusive GPU lock.
-
-The completed candidate trained 200,578 head parameters and reduced internal
-validation cross-entropy from 1.90385 to 1.84120 (20.83% action accuracy). This
-does not establish better game play. Its checksum is
-`b67988c346f8816be40bb9f1e6e1a2d310220ccc161c6867759d23cf847d72da`.
-The first attempt failed during the second checkpoint save because cached
-tokenizer files carried read-only bits onto NTFS. The integration's training
-wrapper now clears those bits only inside its own checkpoint directory. A
-same-configuration retry reproduced all 512 forward losses and the final
-weights exactly. Its successful receipt is under `runs/pilot-v1/training-retry/`;
-the failed attempt is retained under `runs/pilot-v1/training/`.
-Tracked metadata and every forward loss are attached as
-[validation/training-v1.json](validation/training-v1.json) and
-[validation/training-loss-v1.jsonl](validation/training-loss-v1.jsonl).
-W&B is absent from the reused model environment, so no cloud log is claimed.
-
-```powershell
-& .\integrations\overcooked\.venv\python.exe -m integrations.overcooked.data `
-  --out integrations/overcooked/runs/my-teachers
-wsl.exe -d Ubuntu --exec /opt/honing/venvs/nanojev/bin/python `
-  /mnt/d/llm-honing/integrations/overcooked/train.py `
-  --dataset /mnt/d/llm-honing/integrations/overcooked/runs/pilot-v1/teachers/dataset.json `
-  --out /mnt/d/llm-honing/integrations/overcooked/runs/my-training
-# Load a completed candidate using its checkpoint.json, not config.json:
-.\integrations\overcooked\model.ps1 -CheckpointManifest 'D:\path\to\train-xxx\checkpoint.json'
-```
-
-`select_candidate.py` compares the two fixed validation tasks using Honing's
-`WinLossSelector`. It accepts only more paired wins than losses, including
-rejecting an all-tie candidate. Heldout runs happen after that decision, without
-further tuning. This is a local pilot using the core trainer/evaluator/selector;
-it does not publish into the shared release registry or run a GEPA/GRPO campaign.
-
-With the game environment installed and training complete, the full validation
-and selected-policy heldout sequence can be run from Windows with:
-
-```powershell
-& .\integrations\overcooked\.venv\python.exe -m integrations.overcooked.evaluate_pilot `
-  --training integrations/overcooked/runs/pilot-v1/training-retry/receipt.json
-```
-
-It switches the dedicated WSL service between exact checkpoint checksums and
-leaves the selected model available on port 8803. Completed stages can be reused;
-partial stages are retained and require a fresh output root via `--out`.
-
-Recordings now use `overcooked-match-v2` with the grading version stamped in the
-manifest. Earlier first-stage v1 acceptance remains historical; its source was
-saved to `runs/source-v1-1e1d4c440a30.zip` before the scoring change. Replay
-intentionally refuses a source/version mismatch rather than silently rescoring.
-
-## Checks
-
-First-stage acceptance is recorded in [validation/acceptance.json](validation/acceptance.json).
-The first-stage 28 integration tests passed, the setup script and browser acceptance passed,
-and a 400-tick native baseline delivered 10 rewarded soups for 200 points with
-every frame passing replay. These are baseline/interface results, not model
-performance. The combined regression run passed 114 tests and failed two
-unchanged Windows path-separator assertions in `tests/contracts/test_boundaries.py`
-(`litellm` and `wandb` importer paths). No existing repository file was changed.
-
-![Native kitchen in the verified browser observer](validation/gui-delivery.png)
+## Verification
 
 ```powershell
 .\integrations\overcooked\run.ps1 -Mode test
-& .\integrations\overcooked\.venv\python.exe -m ruff check integrations/overcooked
-```
-
-Tests exercise the actual native engine: cooking under both dynamics, delivery
-events, all five selectable kitchens, official rendering, observational purity,
-strict HTTP decisions, sampled trajectories, model failure without fallback,
-tamper rejection, replay seek, and runner/grader execution. Model protocol tests
-use a local stand-in and do not download or train weights.
-
-Optional browser acceptance, using an installed Edge (or `OVERCOOKED_BROWSER`):
-
-```powershell
+& integrations\overcooked\.venv\python.exe scripts\e2e\check_runner.py --config integrations\overcooked\config\runner-check.json --work-dir integrations\overcooked\.cache\runner-check
 npm install --prefix integrations/overcooked/.cache/browser playwright
 node integrations/overcooked/tests/browser_check.cjs
-# After a completed real pilot, also test actual model calls in the GUI:
-node integrations/overcooked/tests/real_model_browser.cjs
 ```
 
-It starts an isolated ephemeral-port service and checks real PNG display,
-autoplay delivery, pause, keyboard actions, state/map/rules panels, export,
-dynamics/layout changes and mobile layout. It closes its own browser/service.
-Screenshots and receipts are in `.cache/browser-qa/`.
+Runner conformance uses the real HTTP `DecisionServer` with an explicitly
+labelled rule stand-in, not model weights. It checks support, harness delivery,
+isolated/concurrent episodes, repeated event loops and the release gate.
+Browser checks launch their own ephemeral native service and test PNGs,
+delivery, pause, keyboard input, state/map/rules, export, layout/dynamics,
+mobile layout and verified replay seeking. Set `OVERCOOKED_BROWSER` to a
+Chromium executable if Edge is unavailable. Receipts go under `.cache/`.
+The committed [acceptance receipt](validation/acceptance.json) reports the
+checks that actually ran. English screenshots show
+[scripted delivery](validation/gui-delivery.png),
+[real model control](validation/gui-model.png) and
+[mobile layout](validation/gui-mobile.png).
+The real NanoJev connectivity smoke completed 400 ticks with zero score;
+it demonstrates no capability improvement.
 
-Upstream source and assets retain their MIT license in the separately downloaded
-`upstream/LICENSE`. Nothing from the commercial Overcooked installation is needed.
+Upstream source and sprites retain their MIT license in the separately
+downloaded `upstream/LICENSE`. No commercial Overcooked installation is needed.

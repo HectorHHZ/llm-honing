@@ -8,7 +8,9 @@ const root = path.resolve(__dirname, '..');
 const python = path.join(root, '.venv', process.platform === 'win32' ? 'python.exe' : 'bin/python');
 const executable = process.env.OVERCOOKED_BROWSER || (process.platform === 'win32' ?
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : undefined);
-const server = spawn(python, ['-m','integrations.overcooked.ui','--port','0'], {
+const modelEndpoint = process.env.OVERCOOKED_DECISION_SERVER;
+const server = spawn(python, ['-m','integrations.overcooked.ui','--port','0',
+    ...(modelEndpoint ? ['--decision-server', modelEndpoint] : [])], {
     cwd:path.resolve(root,'../..'), windowsHide:true, stdio:['ignore','pipe','pipe'],
 });
 let browser;
@@ -31,6 +33,22 @@ async function main(){
     await page.screenshot({path:path.join(output,'gui-initial.png'),fullPage:true});
     await page.click('#once');
     await page.waitForFunction(()=>document.getElementById('step').textContent==='1');
+    if(modelEndpoint){
+        await page.selectOption('#policy','model');
+        for(let tick=2;tick<=4;tick++){
+            await page.click('#once');
+            await page.waitForFunction(t=>Number(document.getElementById('step').textContent)===t,tick);
+        }
+        await page.screenshot({path:path.join(output,'gui-model.png'),fullPage:true});
+        const exported=await (await page.request.post(url+'api/export',{data:{}})).json();
+        const rows=fs.readFileSync(path.join(exported.out,'decisions.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+        assert.equal(rows.filter(r=>r.model_request && r.model_response).length,3);
+        for(const row of rows.filter(r=>r.model_response)){
+            assert.equal(row.chosen,row.model_response.answers.action.choice);
+            assert.equal(row.model_request.id,row.model_response.id);
+        }
+        await page.selectOption('#policy','baseline');
+    }
     await page.click('[data-tab=state]');
     assert.match(await page.locator('#json').innerText(),/players/);
     await page.click('[data-tab=map]');
@@ -46,7 +64,7 @@ async function main(){
     await page.screenshot({path:path.join(output,'gui-delivery.png'),fullPage:true});
     await page.click('#export');
     await page.waitForFunction(()=>document.getElementById('message').textContent.includes('export-'));
-    const saved=(await page.locator('#message').innerText()).split('：')[1];
+    const saved=(await page.locator('#message').innerText()).replace('Recording saved: ', '');
     assert.ok(fs.existsSync(path.join(saved,'steps.jsonl')));
     await page.selectOption('#dynamics','true');
     await page.click('#reset');
@@ -74,7 +92,7 @@ async function main(){
     });
     await page.setViewportSize({width:1440,height:1000});
     await page.goto(replayUrl);
-    await page.waitForFunction(()=>document.getElementById('status').textContent.includes('回放'));
+    await page.waitForFunction(()=>document.getElementById('status').textContent.includes('replay'));
     await page.locator('#seek').evaluate(element=>{element.value='5';element.dispatchEvent(new Event('change'));});
     await page.waitForFunction(()=>document.getElementById('step').textContent==='5');
     await page.click('#reset');
@@ -83,7 +101,7 @@ async function main(){
     const result={passed:true,browser:'Microsoft Edge headless',checks:['native PNG','single step','autoplay delivery',
         'pause','state/map/rules panels','export','dynamics reset','keyboard input','layout switch','mobile layout',
         'verified replay seek','replay reset'],
-        exported_run:saved,screenshots:output};
+        exported_run:saved,screenshots:output,model_gui_decisions:modelEndpoint?3:0};
     fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(result,null,2));
     console.log(JSON.stringify(result));
 }

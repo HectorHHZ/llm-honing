@@ -114,7 +114,7 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=400)
     parser.add_argument("--old-dynamics", action="store_true")
     parser.add_argument("--controlled-player", type=int, default=0)
-    parser.add_argument("--partner", choices=("role", "solo", "stay", "solo_slow"), default="role")
+    parser.add_argument("--partner", choices=("role", "solo", "stay", "solo_slow"), default="solo")
     parser.add_argument("--target-deliveries", type=int, default=2)
     parser.add_argument("--score-scale", type=float, default=40.0)
     parser.add_argument("--decision-server")

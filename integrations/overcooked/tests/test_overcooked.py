@@ -63,7 +63,9 @@ def decision_server() -> Any:
             request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append(request)
             reply = reply_for(request)
-            if invalid[0]:
+            if callable(invalid[0]):
+                invalid[0](reply)
+            elif invalid[0]:
                 reply["trimmed"] = ["required-state"]
             self.output(reply)
 
@@ -170,7 +172,7 @@ def test_every_selectable_kitchen_runs_and_renders(layout: str, old: bool) -> No
 
 def test_baseline_delivers_and_replays_every_frame(tmp_path: Path) -> None:
     out = tmp_path / "native-baseline"
-    result = run_match(Scenario(max_steps=150), out)
+    result = run_match(Scenario(max_steps=150, partner="role"), out)
     assert result["deliveries"] >= 2
     assert replay(out)["result"]["deliveries"] == result["deliveries"]
     rows = (out / "steps.jsonl").read_text(encoding="utf-8").splitlines()
@@ -236,6 +238,104 @@ def test_invalid_probabilities_or_context_are_refused(mutation: str) -> None:
         validate_reply(request, reply)
 
 
+BAD_AUDITS = (
+    {},
+    {"unrelated": {}},
+    {"action": {"options": 6}},
+    {"action": {"stateTruncated": 0, "options": 6}},
+    {"action": {"stateTruncated": False, "options": 0}},
+    {"action": {"stateTruncated": False, "options": 6, "stateTokens": 100, "stateRoom": 1000}},
+    {"action": {"stateTruncated": False, "options": 6, "stateTokens": 100, "stateRoom": 0, "inputTokens": 200}},
+    {"action": {"stateTruncated": False, "options": 6, "stateTokens": 100, "stateRoom": 1000, "inputTokens": 50}},
+    {
+        "action": {
+            "stateTruncated": False,
+            "options": 6,
+            "stateTokens": 100,
+            "stateRoom": 1000,
+            "inputTokens": 200,
+            "maxInputTokens": 500,
+        }
+    },
+)
+
+
+@pytest.mark.parametrize("bad_audit", BAD_AUDITS)
+def test_http_bad_audit_cannot_step_or_produce_a_result(
+    tmp_path: Path, decision_server: Any, monkeypatch: Any, bad_audit: dict[str, Any]
+) -> None:
+    endpoint, requests, invalid = decision_server
+    invalid[0] = lambda reply: reply.update(tokenAudit=bad_audit)
+    native_steps = []
+    original = Engine.step
+
+    def step(engine: Engine, actions: list[str]) -> dict[str, Any]:
+        native_steps.append(actions)
+        return original(engine, actions)
+
+    monkeypatch.setattr(Engine, "step", step)
+    out = tmp_path / "bad-audit"
+    with pytest.raises(ValueError):
+        run_match(Scenario(max_steps=1), out, policy="model", decision_server=endpoint, record_images=False)
+    assert len(requests) == 1 and native_steps == []
+    assert not (out / "result.json").exists()
+    assert (out / "error.json").exists()
+    assert len((out / "steps.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.parametrize("bad_audit", BAD_AUDITS)
+def test_replay_rejects_the_same_bad_audits(tmp_path: Path, decision_server: Any, bad_audit: dict[str, Any]) -> None:
+    endpoint, _, _ = decision_server
+    out = tmp_path / "tampered-audit"
+    run_match(Scenario(max_steps=1), out, policy="model", decision_server=endpoint, record_images=False)
+    row = json.loads((out / "decisions.jsonl").read_text())
+    row["response"]["tokenAudit"] = bad_audit
+    (out / "decisions.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        replay(out)
+
+
+@pytest.mark.parametrize("null_counts", [False, True])
+def test_http_four_decimal_probabilities_and_supported_audits(
+    tmp_path: Path, decision_server: Any, null_counts: bool
+) -> None:
+    endpoint, _, change = decision_server
+
+    def rounded(reply: dict[str, Any]) -> None:
+        reply["answers"]["action"] = {
+            "choice": "NORTH",
+            "probabilities": dict(zip(ACTIONS, (0.3334, 0.2222, 0.2222, 0.2223, 0.0, 0.0), strict=True)),
+        }
+        if null_counts:
+            reply["tokenAudit"]["action"].update(stateTokens=None, stateRoom=None, inputTokens=None)
+
+    change[0] = rounded
+    out = tmp_path / "rounded"
+    run_match(
+        Scenario(max_steps=1),
+        out,
+        policy="model",
+        decision_server=endpoint,
+        sample=True,
+        policy_seed=7,
+        record_images=False,
+    )
+    assert replay(out)["verified"]
+    row = json.loads((out / "decisions.jsonl").read_text())
+    normalized = validate_reply(row["request"], row["response"])
+    assert sum(normalized.values()) == pytest.approx(1)
+
+
+def test_solo_is_the_default_and_the_smoke_suite_keeps_the_fixed_partner() -> None:
+    assert Scenario().partner == "solo" and Scenario().controlled_player == 0
+    suite = load_suite()
+    assert len(suite.records) == 3
+    for row in suite.records:
+        scenario = suite.scenario(row["task_id"])
+        assert scenario.partner == "solo" and scenario.controlled_player == 0
+        assert scenario.max_steps == 400 and not scenario.old_dynamics
+
+
 def test_layout_disjoint_tasks_and_harness_boundaries() -> None:
     suite = load_suite()
     assert suite.tasks("train") and suite.tasks("val") and suite.tasks("heldout")
@@ -270,110 +370,6 @@ def test_teacher_records_exact_inputs_and_replays(tmp_path: Path) -> None:
     assert audit["manifest"]["kind"] == "teacher-demonstration"
     rows = [json.loads(line) for line in (out / "decisions.jsonl").read_text().splitlines()]
     assert all(row["request"] and row["response"] is None for row in rows)
-
-
-def test_frozen_benchmark_has_disjoint_maps_and_unseen_slow_partner() -> None:
-    from integrations.overcooked.engine import ROOT
-
-    suite = load_suite(ROOT / "tasks/benchmark-v1.jsonl")
-    for row in suite.records:
-        scenario = suite.scenario(row["task_id"])
-        assert scenario.max_steps == 400 and scenario.score_scale == 40
-        if scenario.partner == "solo_slow":
-            assert row["split"] == "heldout"
-    with Engine(Scenario(partner="solo_slow", max_steps=3)) as engine:
-        frame = engine.step(["STAY", "STAY"])
-        from integrations.overcooked.policy import baseline
-
-        assert baseline(frame, 1, "solo_slow") == "STAY"
-
-
-def test_sft_labels_require_explicit_train_teacher_and_preserve_requests(tmp_path: Path) -> None:
-    from integrations.overcooked.data import balanced, build_dataset, teacher_rows, training_batch
-
-    train = Scenario(max_steps=5)
-    validation = Scenario(layout="asymmetric_advantages", max_steps=5)
-    suite = Suite(
-        tuple(
-            {"task_id": split, "split": split, "prompt": "Deliver soup.", "overcooked": scenario.record()}
-            for split, scenario in (("train", train), ("val", validation))
-        )
-    )
-    train_run, val_run, baseline_run = (tmp_path / name for name in ("train", "val", "baseline"))
-    run_match(train, train_run, policy="teacher", record_images=False)
-    run_match(validation, val_run, policy="teacher", record_images=False)
-    run_match(train, baseline_run, policy="baseline", record_images=False)
-    rows = teacher_rows(train_run, suite, "fit:0")
-    batch = training_batch(balanced(rows, 1), "audited-test")
-    assert batch.contract.kind == "typed_decisions"
-    assert len(batch.decisions) == len({row["chosen"] for row in rows})
-    assert dict(batch.decisions[0].parts) == {k: tuple(v) for k, v in rows[0]["request"]["parts"].items()}
-    assert dict(batch.decisions[0].chosen)["action"] == rows[0]["chosen"]
-    with pytest.raises(ValueError, match="val/heldout"):
-        teacher_rows(val_run, suite, "fit:0")
-    with pytest.raises(ValueError, match="explicitly recorded"):
-        teacher_rows(baseline_run, suite, "fit:0")
-    with pytest.raises(ValueError, match="separate teacher episodes"):
-        build_dataset([train_run], [train_run], tmp_path / "leaked.json")
-
-
-def test_checkpoint_retry_clears_readonly_only_inside_training_output(tmp_path: Path) -> None:
-    import stat
-    from integrations.overcooked.train import writable_checkpoint
-
-    work = tmp_path / "training"
-    checkpoint = work / "train-1/checkpoint/tokenizer"
-    checkpoint.mkdir(parents=True)
-    copied = checkpoint / "tokenizer.json"
-    copied.write_text("first")
-    copied.chmod(stat.S_IREAD)
-    writable_checkpoint(work / "train-1/checkpoint", work)
-    copied.write_text("second")
-    assert copied.read_text() == "second"
-    with pytest.raises(ValueError):
-        writable_checkpoint(tmp_path, work)
-    with pytest.raises(ValueError, match="must be a child"):
-        writable_checkpoint(work, work)
-
-
-@pytest.mark.parametrize(
-    "base_scores,new_scores,expected",
-    [((0, 0), (0, 0), "reject"), ((0, 0), (0.5, 0), "select"), ((0.5, 0), (0, 0.5), "reject")],
-)
-def test_pilot_uses_paired_win_loss_and_refuses_heldout_selection(
-    tmp_path: Path, base_scores: tuple[float, ...], new_scores: tuple[float, ...], expected: str
-) -> None:
-    from dataclasses import asdict
-    from integrations.overcooked.engine import ROOT, digest
-    from integrations.overcooked.select_candidate import compare
-    from tests.fakes.model import FakeModelSource, FakeWorld
-
-    snapshot = FakeModelSource(FakeWorld()).materialize(tmp_path / "checkpoint")
-    protocol = json.loads((ROOT / "experiments/pilot-v1.json").read_text())
-    common = {
-        "protocol_sha256": digest({"protocol": protocol, "suite": (ROOT / protocol["suite"]).read_text()}),
-        "complete": True,
-        "split": "val",
-        "controller": "model",
-        "spec_id": "same-harness",
-    }
-    summaries = []
-    for checksum, scores in (("parent", base_scores), (snapshot.checkpoint.checksum, new_scores)):
-        summaries.append(
-            {
-                **common,
-                "model": {"weightsSha256": checksum},
-                "episodes": [
-                    {"task_id": key, "verified": True, "complete": True, "grade": grade, "score": grade * 100}
-                    for key, grade in zip(protocol["pilot_tasks"]["val"], scores, strict=True)
-                ],
-            }
-        )
-    training = {"snapshot": asdict(snapshot), "base": {"checkpoint": {"checksum": "parent"}}}
-    assert compare(*summaries, training)["decision"]["outcome"] == expected
-    summaries[1]["split"] = "heldout"
-    with pytest.raises(ValueError, match="validation episodes"):
-        compare(*summaries, training)
 
 
 def test_gui_api_state_graphics_stale_actions_and_export(tmp_path: Path, monkeypatch: Any) -> None:

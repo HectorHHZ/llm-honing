@@ -1,0 +1,12 @@
+{
+  "description": "Native Overcooked runner with the real HTTP DecisionServer and a labelled STAY stand-in; no model weights or training.",
+  "tasks": {"factory": "integrations.overcooked.e2e:tasks", "args": {"split": "val", "limit": 1}},
+  "harness_seed": {"factory": "integrations.overcooked.e2e:harness_seed"},
+  "conformance": {"probe": {"factory": "integrations.overcooked.e2e:delivery_probe"}, "concurrent": 2},
+  "components": {
+    "model_source": {"factory": "integrations.overcooked.tests.conformance:model_source"},
+    "endpoints": {"factory": "integrations.overcooked.tests.conformance:endpoints"},
+    "runner": {"factory": "integrations.overcooked.e2e:episode_runner"},
+    "grader": {"factory": "integrations.overcooked.e2e:grader"}
+  }
+}

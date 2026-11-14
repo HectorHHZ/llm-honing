@@ -65,7 +65,7 @@ class Scenario:
     max_steps: int = 400
     old_dynamics: bool = False
     controlled_player: int = 0
-    partner: str = "role"
+    partner: str = "solo"
     target_deliveries: int = 2
     score_scale: float = 40.0
 

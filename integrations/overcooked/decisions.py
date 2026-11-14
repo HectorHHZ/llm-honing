@@ -71,17 +71,17 @@ def validate_reply(request: dict[str, Any], reply: dict[str, Any]) -> dict[str, 
     for key in ("stateTokens", "stateRoom", "inputTokens"):
         if key not in entry or (entry[key] is not None and (type(entry[key]) is not int or entry[key] <= 0)):
             raise ValueError("decision reply has missing or invalid token counts")
-    if (
-        entry["stateTokens"] is not None
-        and entry["stateRoom"] is not None
-        and entry["stateTokens"] > entry["stateRoom"]
-    ):
-        raise ValueError("decision context exceeds its audited room")
+    size, room, total = (entry[key] for key in ("stateTokens", "stateRoom", "inputTokens"))
     limit = entry.get("maxInputTokens")
-    if limit is not None and (
-        type(limit) is not int or limit <= 0 or (entry["inputTokens"] is not None and entry["inputTokens"] > limit)
+    if limit is not None and (type(limit) is not int or limit <= 0):
+        raise ValueError("decision audit has an invalid token limit")
+    if (
+        (size is not None and room is not None and size > room)
+        or (size is not None and total is not None and size > total)
+        or (total is not None and limit is not None and total > limit)
+        or (room is not None and limit is not None and room > limit)
     ):
-        raise ValueError("decision input exceeds its audited limit")
+        raise ValueError("decision token audit contradicts complete context")
     answers = reply.get("answers")
     if not isinstance(answers, dict) or set(answers) != {"action"}:
         raise ValueError("decision reply must answer action")

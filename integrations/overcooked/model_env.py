@@ -86,6 +86,7 @@ def main() -> None:
         serve(argv)
         return
     import torch
+
     from honing.backends.jev.nanojev import NanoJevSettings, import_nanojev, nanojev_snapshot, resolve_checkpoint
 
     pins_path = REPO / "integrations/ra2/pins.json"

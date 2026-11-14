@@ -10,6 +10,20 @@ from integrations.overcooked.harness import seed_harness
 from integrations.overcooked.scenarios import load_suite
 
 
+class DeliveryProbe:
+    """Check actual saved harness contents, including conformance probe files."""
+
+    def delivered(self, outcome: Any, spec: Any) -> dict[str, bool]:
+        from integrations.overcooked.harness import load_harness
+
+        delivered = dict(load_harness(Path(outcome.workspace_location) / "harness").files)
+        return {path: delivered.get(path) == file for path, file in spec.files}
+
+
+def delivery_probe(context: Any) -> DeliveryProbe:
+    return DeliveryProbe()
+
+
 def tasks(context: Any, split: str = "val", limit: int | None = None) -> tuple:
     return load_suite().tasks(split, limit)
 
