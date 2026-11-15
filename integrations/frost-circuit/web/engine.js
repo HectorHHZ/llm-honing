@@ -38,6 +38,15 @@
     return run.enemies.find(enemy => enemy.hp > 0 && same(enemy, at));
   }
 
+  function coreLocked(run) {
+    return run.enemies.some(enemy => enemy.kind === "warden");
+  }
+
+  function attackDamage(enemy) {
+    if (enemy.kind === "warden") return 3;
+    return enemy.kind === "sentry" ? 2 : 1;
+  }
+
   function carve(tiles, from, to, horizontalFirst) {
     let { x, y } = from;
     tiles[key(x, y)] = 1;
@@ -144,7 +153,7 @@
       if (enemy.intent.length) {
         run.events.push({ type: "blast", cells: enemy.intent });
         if (enemy.intent.some(tile => same(tile, player))) {
-          const damage = enemy.kind === "warden" ? 3 : enemy.kind === "sentry" ? 2 : 1;
+          const damage = attackDamage(enemy);
           player.hp = Math.max(0, player.hp - damage);
           run.events.push({ type: "hurt", x: player.x, y: player.y, text: "Hull lost " + damage + "." });
         }
@@ -238,7 +247,7 @@
     enemyTurn(run);
     if (run.status === "lost") return run;
 
-    if (!run.hasCore && same(player, run.core) && !run.enemies.some(enemy => enemy.kind === "warden")) {
+    if (!run.hasCore && same(player, run.core) && !coreLocked(run)) {
       run.hasCore = true;
       run.events.push({ type: "core", x: player.x, y: player.y, text: "Core recovered. Airlock open." });
     }
@@ -318,8 +327,51 @@
     return { ...structuredClone(run), legalActions: legalActions(run) };
   }
 
+  function observeForAI(run) {
+    const done = run.status === "won" || run.status === "lost";
+    const choices = legalActions(run);
+    const actionSpace = done ? null : { kind: "enum", choices };
+    if (run.status === "upgrade") {
+      actionSpace.upgrades = choices.map(id => ({ id, ...UPGRADES[id] }));
+    }
+    return structuredClone({
+      schema_version: 1,
+      game: "frost-circuit",
+      seed: String(run.seed),
+      status: run.status,
+      done,
+      clock: { unit: "turn", value: run.turn },
+      floor: run.floor,
+      floor_name: FLOORS[run.floor - 1],
+      kills: run.kills,
+      map: {
+        kind: "tile_grid",
+        width: COLS,
+        height: ROWS,
+        tiles: Array.from({ length: ROWS }, (_, y) => run.tiles.slice(y * COLS, (y + 1) * COLS)),
+      },
+      core: { ...run.core, collected: run.hasCore, locked: coreLocked(run) },
+      airlock: { ...run.exit, open: run.hasCore },
+      player: run.player,
+      enemies: run.enemies.map(enemy => ({ ...enemy, attack_damage: attackDamage(enemy) })),
+      danger_cells: Array.from(danger(run), point),
+      items: run.items,
+      events: run.events,
+      action_space: actionSpace,
+    });
+  }
+
+  function stepForAI(run, action) {
+    if (run.status !== "playing" && run.status !== "upgrade") throw new RangeError("the game has ended");
+    if (typeof action !== "string") throw new TypeError("expected an action string");
+    if (!legalActions(run).includes(action)) throw new RangeError("action is unavailable: " + action);
+    step(run, action);
+    return observeForAI(run);
+  }
+
   const api = Object.freeze({
     COLS, ROWS, DEMO_SEED, FLOORS, DIRECTIONS, UPGRADES, createRun, step, observe, legalActions, danger, demoAction,
+    observeForAI, stepForAI,
   });
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FrostCircuit = api;

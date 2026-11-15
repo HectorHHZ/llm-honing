@@ -26,17 +26,50 @@ single offline HTML file.
 node integrations/frost-circuit/scripts/bundle.cjs /tmp/frost-circuit.html
 ```
 
-The pure Node engine in `web/engine.js` supplies `createRun`, `observe`,
-`legalActions` and `step`. An observation contains the grid, current
-attacks, core and airlock positions, and the rover's status. Each accepted
-move, attack, pulse, or wait advances one turn. Upgrade choices use the same
-action interface and start the next station.
+## Drive the engine
+
+Use `agent` for a headless controller in any language. Send one JSON object
+per line on stdin and read one reply on stdout. `observe` reads the current
+state and `step` applies an action before returning the next observation.
+Each reply has `ok: true` and `observation`, or `ok: false` and `error` for
+an invalid request. Close stdin to end the session.
+
+```bash
+printf '%s\n' '{"op":"observe"}' '{"op":"step","action":"wait"}' |
+  node integrations/frost-circuit/scripts/run.cjs agent 1729
+```
+
+### Observation fields
+
+`schema_version` is `1`.
+
+- `map.tiles[y][x]` contains `0` for walls and `1` for walkable cells. The
+  17 × 11 grid starts at the top left. A walkable cell may contain an item
+  or enemy. Entities use the same zero-based coordinates.
+- `player` includes hull (`hp`, `maxHp`), melee damage and Pulse charges
+  (`charge`, `maxCharge`). `enemies` contains each drone's hull, position,
+  attack damage and `intent` cells. `danger_cells` is the union of the
+  marked cells. A warning resolves after the player's next
+  action if the enemy survives it and the attack is still pending.
+- `core` shows whether the core is collected and whether a Warden locks
+  access. `airlock.open` indicates that the player can exit with the core.
+  `items` contains available medkits and cells. `events` describes the
+  latest turn or floor transition.
+- `action_space.choices` gives all accepted actions for the current state.
+  Direction actions move into an empty tile or attack an adjacent drone.
+  `wait` and `pulse` also advance one turn. Pulse costs a charge and deals
+  2 damage to enemies within Manhattan distance 2 while interrupting their
+  pending attacks. When choosing an upgrade, the action is the upgrade ID. This
+  starts the next floor without advancing the turn counter. `done` is true
+  in `won` or `lost` states.
+
+The same API is available directly from `web/engine.js` in Node.
 
 ```javascript
-const { createRun, observe, step } = require("./integrations/frost-circuit/web/engine.js");
+const { createRun, observeForAI, stepForAI } = require("./integrations/frost-circuit/web/engine.js");
 const run = createRun(1729);
-step(run, "east");
-console.log(observe(run).legalActions);
+console.log(observeForAI(run).action_space.choices);
+console.log(stepForAI(run, "wait").danger_cells);
 ```
 
 The browser's **Save action trace** button exports the seed and actions.
