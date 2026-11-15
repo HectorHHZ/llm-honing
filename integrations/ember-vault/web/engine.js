@@ -14,6 +14,10 @@
     coolant: { name: "Coolant", detail: "Dash recharges 16 ticks faster." },
     repair: { name: "Field rebuild", detail: "Repair up to 65 hull." },
   });
+  const AXIS = { type: "number", minimum: -1, maximum: 1 };
+  const AIM = { type: "number" };
+  const BUTTON = { type: "boolean" };
+  const TICK_INPUT_FIELDS = { dx: AXIS, dy: AXIS, aimX: AIM, aimY: AIM, fire: BUTTON, dash: BUTTON };
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -402,7 +406,80 @@
     return structuredClone(run);
   }
 
-  const api = Object.freeze({ WIDTH, HEIGHT, TICKS_PER_SECOND, DEMO_SEED, FLOORS, UPGRADES, createRun, step, observe, demoInput });
+  function actionSpace(run) {
+    if (run.status === "upgrade") {
+      return { kind: "upgrade", choices: run.upgrades.map(id => ({ id, ...UPGRADES[id] })) };
+    }
+    if (run.status !== "playing") return null;
+    return {
+      kind: "tick_input",
+      fields: TICK_INPUT_FIELDS,
+      // movePlayer reduces both cooldowns before checking the input.
+      fire_ready: run.player.fireCooldown <= 1,
+      dash_ready: run.player.dashCooldown <= 1,
+    };
+  }
+
+  function observeForAI(run) {
+    return structuredClone({
+      schema_version: 1,
+      game: "ember-vault",
+      seed: String(run.seed),
+      status: run.status,
+      done: run.status === "won" || run.status === "lost",
+      clock: { unit: "tick", value: run.tick, ticks_per_second: TICKS_PER_SECOND },
+      floor: run.floor,
+      floor_name: FLOORS[run.floor - 1],
+      kills: run.kills,
+      map: {
+        kind: "arena",
+        units: "pixels",
+        width: WIDTH,
+        height: HEIGHT,
+        bounds: { left: BORDER, top: BORDER, right: WIDTH - BORDER, bottom: HEIGHT - BORDER },
+        walls: run.walls,
+      },
+      gate: run.gate,
+      player: run.player,
+      enemies: run.enemies,
+      projectiles: run.shots,
+      pickups: run.pickups,
+      events: run.events,
+      action_space: actionSpace(run),
+    });
+  }
+
+  function stepForAI(run, input) {
+    if (run.status !== "playing" && run.status !== "upgrade") throw new RangeError("the game has ended");
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("expected an action object");
+    const action = { ...input };
+    if (run.status === "upgrade") {
+      if (Object.keys(action).length !== 1 || !run.upgrades.includes(action.upgrade)) {
+        throw new RangeError("expected an offered upgrade as the only action field");
+      }
+    } else {
+      for (const [name, value] of Object.entries(action)) {
+        if (!Object.hasOwn(TICK_INPUT_FIELDS, name)) throw new RangeError("unknown action field: " + name);
+        const { type, minimum, maximum } = TICK_INPUT_FIELDS[name];
+        if (typeof value !== type || (type === "number" && !Number.isFinite(value))) {
+          throw new TypeError(name + " must be a " + type);
+        }
+        if (minimum !== undefined && (value < minimum || value > maximum)) {
+          throw new RangeError(`${name} must be between ${minimum} and ${maximum}`);
+        }
+      }
+      if (Object.hasOwn(action, "aimX") !== Object.hasOwn(action, "aimY")) {
+        throw new RangeError("aimX and aimY must be supplied together");
+      }
+    }
+    step(run, action);
+    return observeForAI(run);
+  }
+
+  const api = Object.freeze({
+    WIDTH, HEIGHT, TICKS_PER_SECOND, DEMO_SEED, FLOORS, UPGRADES,
+    createRun, step, observe, demoInput, observeForAI, stepForAI,
+  });
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.EmberVault = api;
 })(globalThis);

@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
 const game = require("../web/engine.js");
 
 test("the showcase clears all vaults and its recorded inputs reproduce the run", () => {
@@ -15,6 +17,8 @@ test("the showcase clears all vaults and its recorded inputs reproduce the run",
   assert.equal(first.status, "won");
   assert.equal(first.floor, 3);
   assert.equal(first.kills, 16);
+  assert.equal(game.observeForAI(first).done, true);
+  assert.equal(game.observeForAI(first).action_space, null);
 
   const replay = game.createRun(first.seed);
   for (const input of inputs) game.step(replay, input);
@@ -50,9 +54,61 @@ test("only an offered upgrade opens the next vault", () => {
   assert.equal(run.status, "upgrade");
   game.step(run, { upgrade: "unknown" });
   assert.equal(run.floor, 1);
-  game.step(run, { upgrade: run.upgrades[0] });
+  const choices = game.observeForAI(run).action_space.choices;
+  assert.deepEqual(choices.map(({ id }) => id), run.upgrades);
+  assert.throws(() => game.stepForAI(run, { upgrade: "unknown" }), RangeError);
+  const next = game.stepForAI(run, { upgrade: choices[0].id });
+  assert.equal(next.clock.value, 1);
   assert.equal(run.floor, 2);
   assert.equal(run.status, "playing");
   assert.ok(run.enemies.length > 0);
   assert.equal(run.gate.open, false);
+});
+
+test("AI snapshots expose arena geometry and the next tick's shot state", () => {
+  const run = game.createRun(2);
+  run.player.fireCooldown = 1;
+  run.player.dashCooldown = 2;
+  const start = game.observeForAI(run);
+  assert.deepEqual(start.map.walls, run.walls);
+  assert.deepEqual(start.enemies, run.enemies);
+  assert.equal(start.map.units, "pixels");
+  assert.equal(start.map.width, 960);
+  assert.equal(start.action_space.fire_ready, true);
+  assert.equal(start.action_space.dash_ready, false);
+  start.map.walls[0].x = -1;
+  start.player.hp = 0;
+  assert.ok(run.walls[0].x > 0);
+  assert.ok(run.player.hp > 0);
+
+  const next = game.stepForAI(run, { dx: 1, aimX: 700, aimY: 270, fire: true });
+  assert.deepEqual(next.clock, { unit: "tick", value: 1, ticks_per_second: 30 });
+  assert.ok(next.player.x > start.player.x);
+  assert.equal(next.projectiles[0].friendly, true);
+  assert.equal(next.projectiles[0].vx, 13.2);
+  assert.equal(next.action_space.fire_ready, false);
+  assert.equal(next.action_space.dash_ready, true);
+});
+
+test("JSON Lines agent accepts valid inputs and leaves the state intact after invalid requests", () => {
+  const input = [
+    '{"op":"observe"}',
+    "{",
+    '{"op":"step","action":{"dx":2}}',
+    '{"op":"step","action":{"aimX":120}}',
+    '{"op":"observe"}',
+    '{"op":"step","action":{"dx":1,"fire":true}}',
+  ].join("\n") + "\n";
+  const runner = path.join(__dirname, "../scripts/run.cjs");
+  const result = spawnSync(process.execPath, [runner, "agent", "2"], { input, encoding: "utf8", timeout: 5000 });
+  assert.equal(result.status, 0, result.stderr);
+  const [start, badJson, badMove, badAim, again, next] = result.stdout.trim().split("\n").map(JSON.parse);
+  assert.equal(start.ok, true);
+  assert.equal(start.observation.seed, "2");
+  assert.equal(badJson.ok, false);
+  assert.equal(badMove.ok, false);
+  assert.equal(badAim.ok, false);
+  assert.deepEqual(again, start);
+  assert.equal(next.ok, true);
+  assert.equal(next.observation.clock.value, 1);
 });
