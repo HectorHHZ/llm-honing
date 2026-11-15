@@ -428,8 +428,8 @@ jobs:
   agent-gateway:
     # The agent gateway's LiteLLM proxy, from its own environment installed from its lock
     # (integrations/agent_gateway/README.md), in front of a loopback upstream that serves chat completions only,
-    # as SGLang does. No model or key: this catches a lock that no longer installs, or a LiteLLM that no longer
-    # carries Anthropic messages and OpenAI responses over to chat completions.
+    # as SGLang does. No model or key: this catches a lock that no longer installs, a LiteLLM that no longer
+    # carries Anthropic messages and OpenAI responses over to chat completions, or a route outside the agents' own.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -449,3 +449,6 @@ jobs:
           uv pip install --python integrations/agent_gateway/.venv/bin/python -r integrations/agent_gateway/requirements.txt
       - name: Test
         run: python -m pytest tests/test_agent_gateway.py
+        env:
+          # A test that needs the proxy fails rather than skips when its environment is missing.
+          HONING_REQUIRE_GATEWAY: "1"

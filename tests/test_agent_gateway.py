@@ -1,13 +1,15 @@
 """The agent gateway: the proxy config Honing writes, and the real proxy in front of a chat-only upstream.
 
-The integration tests run LiteLLM's proxy from its own environment when it exists, against a loopback
-upstream that answers chat completions only (tests/fakes/chat_upstream.py), as SGLang does.
+The integration tests run LiteLLM's proxy from its own environment, against a loopback upstream that answers
+chat completions only (tests/fakes/chat_upstream.py), as SGLang does. They skip without that environment, and
+fail without it when HONING_REQUIRE_GATEWAY=1, as in CI's agent-gateway job.
 """
 
 from __future__ import annotations
 
 import json
 import socket
+import stat
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
@@ -17,10 +19,10 @@ import pytest
 
 from honing.backends.agent_gateway import PUBLIC_MODEL, AgentGateway, Upstream, default_python, proxy_config
 from honing.core import ContractError, PolicyEndpoint
+from tests.conftest import require
 from tests.fakes.chat_upstream import ChatUpstream
 
 REPO = Path(__file__).resolve().parents[1]
-PYTHON = default_python(REPO)
 
 
 def _post(url: str, body: dict[str, object], key: str | None = "gateway-key") -> tuple[int, str]:
@@ -35,10 +37,10 @@ def _post(url: str, body: dict[str, object], key: str | None = "gateway-key") ->
 
 @pytest.mark.unit
 def test_every_model_name_reaches_the_upstream_and_no_key_is_written(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("UPSTREAM_KEY", "secret-upstream")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "secret-upstream")
     monkeypatch.setenv("HONING_GATEWAY_KEY", "secret-gateway")
 
-    config = proxy_config(Upstream("http://gpu:30000/v1", "honed-7b", "UPSTREAM_KEY"))
+    config = proxy_config(Upstream("http://gpu:30000/v1", "honed-7b", "OPENROUTER_API_KEY"))
 
     names = [entry["model_name"] for entry in config["model_list"]]  # type: ignore[attr-defined]
     params = {json.dumps(entry["litellm_params"]) for entry in config["model_list"]}  # type: ignore[attr-defined]
@@ -46,7 +48,7 @@ def test_every_model_name_reaches_the_upstream_and_no_key_is_written(monkeypatch
     assert json.loads(params.pop()) == {
         "model": "hosted_vllm/honed-7b",
         "api_base": "http://gpu:30000/v1",
-        "api_key": "os.environ/UPSTREAM_KEY",
+        "api_key": "os.environ/HONING_UPSTREAM_KEY",
         "use_chat_completions_api": True,
     }
     assert config["general_settings"] == {"master_key": "os.environ/HONING_GATEWAY_KEY"}
@@ -97,7 +99,7 @@ def test_a_missing_key_is_refused_before_the_proxy_starts(
     with (
         pytest.raises(ContractError, match=f"needs the environment variable {unset}"),
         AgentGateway.launch(
-            Upstream("http://127.0.0.1:1/v1", "m", "UPSTREAM_KEY"), python=_installed(tmp_path), work_dir=tmp_path
+            Upstream("http://127.0.0.1:1/v1", "m", "UPSTREAM_KEY"), root=_installed(tmp_path), work_dir=tmp_path
         ),
     ):
         pass
@@ -108,7 +110,7 @@ def test_a_missing_key_is_refused_before_the_proxy_starts(
 def test_a_missing_environment_is_refused_with_where_to_install_it(tmp_path: Path) -> None:
     with (
         pytest.raises(ContractError, match=r"no gateway environment at .*integrations/agent_gateway/README\.md"),
-        AgentGateway.launch(Upstream("http://127.0.0.1:1/v1", "m"), python=tmp_path / "python", work_dir=tmp_path),
+        AgentGateway.launch(Upstream("http://127.0.0.1:1/v1", "m"), root=tmp_path, work_dir=tmp_path),
     ):
         pass
 
@@ -124,31 +126,50 @@ def test_a_port_already_in_use_is_refused(tmp_path: Path, monkeypatch: pytest.Mo
         with (
             pytest.raises(ContractError, match=f"port {port} is already in use"),
             AgentGateway.launch(
-                Upstream("http://127.0.0.1:1/v1", "m"), python=_installed(tmp_path), work_dir=tmp_path, port=port
+                Upstream("http://127.0.0.1:1/v1", "m"), root=_installed(tmp_path), work_dir=tmp_path, port=port
             ),
         ):
             pass
 
 
-def _installed(tmp_path: Path) -> Path:
-    """A stand-in for the environment's interpreter, for refusals that come before the proxy starts."""
-    python = tmp_path / "python"
-    python.touch()
-    return python
+@pytest.mark.unit
+def test_the_proxy_sees_only_the_two_keys_under_names_of_their_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HONING_GATEWAY_KEY", "gateway-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "upstream-key")
+    # Keys a pass-through route would forward, LiteLLM's own master key variable, and an unrelated secret.
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LITELLM_MASTER_KEY", "HF_TOKEN"):
+        monkeypatch.setenv(name, "leaked")
+    # The "interpreter" records the environment it was started with, and exits.
+    root = _installed(tmp_path, 'env > "$(dirname "$0")/environment.txt"\nexit 3\n')
 
-
-@pytest.fixture(scope="module")
-def served(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[AgentGateway, ChatUpstream]]:
-    with pytest.MonkeyPatch.context() as env, ChatUpstream() as upstream:
-        env.setenv("HONING_GATEWAY_KEY", "gateway-key")
-        env.setenv("UPSTREAM_KEY", "upstream-key")
-        with AgentGateway.launch(
-            Upstream(upstream.url, "honed-7b", "UPSTREAM_KEY"),
-            python=PYTHON,
-            work_dir=tmp_path_factory.mktemp("gateway"),
+    with (
+        pytest.raises(ContractError, match="the gateway exited with 3"),
+        AgentGateway.launch(
+            Upstream("https://openrouter.ai/api/v1", "m", "OPENROUTER_API_KEY"),
+            root=root,
+            work_dir=tmp_path / "run",
             port=_free_port(),
-        ) as gateway:
-            yield gateway, upstream
+        ),
+    ):
+        pass
+
+    seen = dict(
+        line.split("=", 1) for line in (default_python(root).parent / "environment.txt").read_text().splitlines()
+    )
+    assert seen["HONING_GATEWAY_KEY"] == "gateway-key" and seen["HONING_UPSTREAM_KEY"] == "upstream-key"
+    assert seen["CONFIG_FILE_PATH"] == str(tmp_path / "run" / "litellm.yaml")
+    assert "OPENROUTER_API_KEY" not in seen and "leaked" not in seen.values()
+
+
+def _installed(tmp_path: Path, script: str = "exit 0\n") -> Path:
+    """A repository root whose gateway "interpreter" is a shell script, for checks that need no proxy."""
+    python = default_python(tmp_path)
+    python.parent.mkdir(parents=True)
+    python.write_text("#!/bin/sh\n" + script)
+    python.chmod(python.stat().st_mode | stat.S_IXUSR)
+    return tmp_path
 
 
 def _free_port() -> int:
@@ -158,12 +179,29 @@ def _free_port() -> int:
         return port
 
 
-requires_proxy = pytest.mark.skipif(not PYTHON.exists(), reason="no agent gateway environment")
+@pytest.fixture(scope="module")
+def proxy_root() -> Path:
+    if not default_python(REPO).exists():
+        require("gateway", "the agent gateway's environment is not installed (integrations/agent_gateway/README.md)")
+    return REPO
+
+
+@pytest.fixture(scope="module")
+def served(proxy_root: Path, tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[AgentGateway, ChatUpstream]]:
+    with pytest.MonkeyPatch.context() as env, ChatUpstream() as upstream:
+        env.setenv("HONING_GATEWAY_KEY", "gateway-key")
+        env.setenv("UPSTREAM_KEY", "upstream-key")
+        with AgentGateway.launch(
+            Upstream(upstream.url, "honed-7b", "UPSTREAM_KEY"),
+            root=proxy_root,
+            work_dir=tmp_path_factory.mktemp("gateway"),
+            port=_free_port(),
+        ) as gateway:
+            yield gateway, upstream
 
 
 @pytest.mark.integration
 @pytest.mark.slow
-@requires_proxy
 @pytest.mark.parametrize(
     ("route", "body"),
     [
@@ -196,7 +234,38 @@ def test_each_agent_api_reaches_the_upstream_as_chat_completions(
 
 @pytest.mark.integration
 @pytest.mark.slow
-@requires_proxy
+@pytest.mark.parametrize(
+    "route",
+    [
+        # LiteLLM's provider pass-throughs, which forward with whatever provider key the proxy can see
+        "/openrouter/v1/chat/completions",
+        "/openai/v1/chat/completions",
+        "/anthropic/v1/messages",
+        "/vllm/v1/chat/completions",
+        # an escape from a pass-through prefix to the upstream's root, such as SGLang's admin routes
+        "/vllm/..%2F..%2Fupdate_weights_from_disk",
+        "/v1/../openrouter/v1/chat/completions",
+        # the proxy's own admin routes, which the master key opens
+        "/key/generate",
+        "/config/pass_through_endpoint",
+        "/model/new",
+        # LiteLLM's unversioned aliases of the agent routes
+        "/chat/completions",
+        "/messages",
+    ],
+)
+def test_only_the_agent_routes_are_served(served: tuple[AgentGateway, ChatUpstream], route: str) -> None:
+    gateway, upstream = served
+    seen = len(upstream.requests)
+
+    status, _ = _post(gateway.url + route, {"model": PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]})
+
+    assert status == 404
+    assert len(upstream.requests) == seen
+
+
+@pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.parametrize("key", [None, "wrong-key"])
 def test_a_request_without_the_gateway_key_is_refused(
     served: tuple[AgentGateway, ChatUpstream], key: str | None
@@ -214,12 +283,11 @@ def test_a_request_without_the_gateway_key_is_refused(
 
 @pytest.mark.integration
 @pytest.mark.slow
-@requires_proxy
-def test_leaving_the_block_stops_the_proxy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_leaving_the_block_stops_the_proxy(proxy_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HONING_GATEWAY_KEY", "gateway-key")
 
     with AgentGateway.launch(
-        Upstream("http://127.0.0.1:1/v1", "m"), python=PYTHON, work_dir=tmp_path, port=_free_port()
+        Upstream("http://127.0.0.1:1/v1", "m"), root=proxy_root, work_dir=tmp_path, port=_free_port()
     ) as gateway:
         assert not gateway.exited()
 

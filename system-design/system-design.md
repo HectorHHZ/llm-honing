@@ -734,7 +734,7 @@ Steps are ordered by risk: the assumption the whole design rests on is tested fi
 | **8** | Harness phases with a first real evolution method; the harness contracts it needs ([#15](https://github.com/HectorHHZ/llm-honing/issues/15)) are in | in progress |
 | **9** | `backends/local_dpo` | |
 | **10** | `sparse_mask` training unified with `PrunePlan` | |
-| **11** | Serve plane: the engine and campaign endpoints (`backends/sglang`, [#103](https://github.com/HectorHHZ/llm-honing/issues/103)) are in; live routes and serving weights are not | in progress |
+| **11** | Serve plane: the engine and campaign endpoints (`backends/sglang`, [#103](https://github.com/HectorHHZ/llm-honing/issues/103)) are in, and so are the provider-compatible routes for coding agents (`backends/agent_gateway`, [#188](https://github.com/HectorHHZ/llm-honing/issues/188)); the other live routes and serving weights are not | in progress |
 
 Step 2 depends on nothing else and answers the riskiest question (§8.1) on its own.
 

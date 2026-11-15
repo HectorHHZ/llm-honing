@@ -8,7 +8,7 @@ Codex ─────── /v1/responses ─┼─▶ LiteLLM proxy ── chat
 other clients /v1/chat/... ──┘   (config from Honing)                  or any OpenAI-compatible API
 ```
 
-`honing.backends.agent_gateway` writes a LiteLLM proxy config and starts the proxy from this directory's environment. Every request goes to one upstream model, whatever model name the agent asks for, and arrives there as chat completions, which is all SGLang serves.
+`honing.backends.agent_gateway` writes a LiteLLM proxy config and starts the proxy from this directory's environment, through `serve.py`. Every request goes to one upstream model, whatever model name the agent asks for, and arrives there as chat completions, which is all SGLang serves.
 
 ## Setup
 
@@ -73,10 +73,15 @@ wire_api = "responses"
 
 ## Security
 
-- Every request must carry the gateway key (`HONING_GATEWAY_KEY`, or the variable `--key-env` names). A request with no key is a 401; one with a wrong key is a 400 (`no_db_connection`), because LiteLLM looks up any other key in a database of virtual keys that the gateway does not run. Neither reaches the upstream.
-- Keys stay in the environment. The config names the variables that hold them, and LiteLLM reads them itself, so neither the gateway's key nor the upstream's is written to disk.
-- The gateway speaks plain HTTP. Serving other machines over an untrusted network needs TLS in front of it, from a reverse proxy.
-- `--host 127.0.0.1`, the default, serves only this machine.
+The gateway key is LiteLLM's master key, which opens every route LiteLLM mounts: several hundred, among them provider pass-throughs (`/openrouter/...`, `/anthropic/...`, `/vllm/...`) that forward any request with whatever provider key the proxy can see, and admin routes. LiteLLM's `allowed_routes` does not restrict the master key. So the gateway closes them itself:
+
+- **Only the agents' routes answer.** `serve.py` runs LiteLLM's app behind an allowlist checked before LiteLLM sees a request: `/v1/messages` (and its `count_tokens`), `/v1/responses`, `/v1/chat/completions`, `/v1/models`, and `/health/liveliness`. Any other path is a 404, compared exactly after percent-decoding, so `/vllm/..%2F..` cannot reach the upstream's root (on SGLang, its admin routes); a websocket is closed.
+- **The proxy sees two keys and nothing else.** It starts with a minimal environment (`PATH`, `HOME`, `LANG`, `TMPDIR`, `LC_*`, and proxy and CA-bundle variables) plus the gateway key and the upstream key, under names of their own (`HONING_GATEWAY_KEY`, `HONING_UPSTREAM_KEY`). `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or the upstream's own variable such as `OPENROUTER_API_KEY` are never set inside it.
+- **Every request must carry the gateway key.** A request with no key is a 401; one with a wrong key is a 400 (`no_db_connection`), because LiteLLM looks up any other key in a database of virtual keys that the gateway does not run. Neither reaches the upstream.
+- **No key is written to disk.** The config names the variables, and LiteLLM reads them itself.
+- **The gateway speaks plain HTTP.** Serving other machines over an untrusted network needs TLS in front of it, from a reverse proxy. `--host 127.0.0.1`, the default, serves only this machine.
+
+Anyone with the gateway key can use the served model as much as they like, on the upstream's key when it has one.
 
 ## Known gaps
 

@@ -6,8 +6,10 @@ and sends every request, whatever model it names, to one OpenAI-compatible chat 
 released checkpoint, or any provider. An engineer points an agent at the gateway and keeps the agent, its
 sessions and its history; only the model behind it changes.
 
-Keys stay in the environment. The config names the variables that hold the gateway's key and the upstream's key,
-and LiteLLM reads them itself, so neither value is written to disk.
+The proxy answers only the routes agents use (``integrations/agent_gateway/serve.py``), and it sees a minimal
+environment: the gateway's key and the upstream's key, under names of their own, and none of the operator's other
+variables. LiteLLM's provider pass-through routes would otherwise forward requests with any provider key it can
+see. Neither key is written to disk; the config names the variables and LiteLLM reads them.
 """
 
 from __future__ import annotations
@@ -33,6 +35,14 @@ PUBLIC_MODEL = "honing"
 
 KEY_ENV = "HONING_GATEWAY_KEY"
 """The variable that holds the key agents must present, by default."""
+
+# What the proxy sees of the operator's environment, besides the two keys: nothing that holds a credential.
+_INHERITED = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "NO_PROXY", "no_proxy"})
+_INHERITED_PREFIXES = ("LC_", "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
+# The names the keys have inside the proxy, whatever variables held them outside: a provider's own variable name,
+# such as OPENROUTER_API_KEY, is never set there.
+_PROXY_KEY = "HONING_GATEWAY_KEY"
+_PROXY_UPSTREAM_KEY = "HONING_UPSTREAM_KEY"
 
 
 @dataclass(frozen=True)
@@ -74,15 +84,15 @@ class Upstream:
         return cls(base_url=base_url, model=endpoint.served_model, api_key_env=api_key_env)
 
 
-def proxy_config(upstream: Upstream, key_env: str = KEY_ENV) -> dict[str, object]:
+def proxy_config(upstream: Upstream) -> dict[str, object]:
     """Returns the LiteLLM proxy config that sends every request to ``upstream``.
 
     Args:
         upstream: Where requests go.
-        key_env: The variable holding the key agents must present.
 
     Returns:
-        The config, which LiteLLM reads as YAML; JSON is valid YAML.
+        The config, which LiteLLM reads as YAML; JSON is valid YAML. It names the variables the proxy reads the
+        keys from, as :meth:`AgentGateway.launch` sets them, not their values.
     """
     params = {
         # As a self-hosted OpenAI-compatible server, so Anthropic's /v1/messages is sent on as chat completions;
@@ -90,7 +100,7 @@ def proxy_config(upstream: Upstream, key_env: str = KEY_ENV) -> dict[str, object
         "model": f"hosted_vllm/{upstream.model}",
         "api_base": upstream.base_url,
         # LiteLLM's OpenAI client needs a key even for a server that checks none.
-        "api_key": f"os.environ/{upstream.api_key_env}" if upstream.api_key_env else "unused",
+        "api_key": f"os.environ/{_PROXY_UPSTREAM_KEY}" if upstream.api_key_env else "unused",
         # The same for OpenAI's /v1/responses, which Codex speaks.
         "use_chat_completions_api": True,
     }
@@ -99,7 +109,7 @@ def proxy_config(upstream: Upstream, key_env: str = KEY_ENV) -> dict[str, object
         "model_list": [{"model_name": name, "litellm_params": params} for name in (PUBLIC_MODEL, "*")],
         # Agents send provider-specific parameters (thinking budgets, reasoning effort) an upstream may not accept.
         "litellm_settings": {"drop_params": True},
-        "general_settings": {"master_key": f"os.environ/{key_env}"},
+        "general_settings": {"master_key": f"os.environ/{_PROXY_KEY}"},
     }
 
 
@@ -125,7 +135,7 @@ class AgentGateway:
         cls,
         upstream: Upstream,
         *,
-        python: Path,
+        root: Path,
         work_dir: Path,
         host: str = "127.0.0.1",
         port: int = 4000,
@@ -136,7 +146,8 @@ class AgentGateway:
 
         Args:
             upstream: Where requests go.
-            python: The interpreter of the gateway's environment (:func:`default_python`).
+            root: The repository root, which holds the gateway's environment and its server
+                (``integrations/agent_gateway``).
             work_dir: Where the config and the proxy's log are written.
             host: The address to listen on; ``0.0.0.0`` serves other machines.
             port: The port to listen on.
@@ -150,27 +161,30 @@ class AgentGateway:
             ContractError: The environment is not installed, a key variable is not set, the port is taken, or the
                 proxy exited or did not answer in time.
         """
+        python = default_python(root)
         if not python.exists():
             raise ContractError(f"no gateway environment at {python}; see integrations/agent_gateway/README.md")
-        for name in (key_env, upstream.api_key_env):
-            if name and not os.environ.get(name):
-                raise ContractError(f"the gateway needs the environment variable {name}")
+        environment = _proxy_environment(key_env, upstream.api_key_env)
         # A server already on the port would answer the health check in the proxy's place.
         with socket.socket() as probe:
             if probe.connect_ex(("127.0.0.1" if host == "0.0.0.0" else host, port)) == 0:
                 raise ContractError(f"port {port} is already in use")
         work_dir.mkdir(parents=True, exist_ok=True)
         config = work_dir / "litellm.yaml"
-        config.write_text(json.dumps(proxy_config(upstream, key_env), indent=2) + "\n")
+        config.write_text(json.dumps(proxy_config(upstream), indent=2) + "\n")
+        environment["CONFIG_FILE_PATH"] = str(config)
         log_path = work_dir / "gateway.log"
-        command = [
-            str(python), "-m", "litellm.proxy.proxy_cli",
-            "--config", str(config), "--host", host, "--port", str(port),
-        ]  # fmt: skip
+        server = root / "integrations" / "agent_gateway" / "serve.py"
+        command = [str(python), str(server), "--host", host, "--port", str(port)]
         with log_path.open("ab") as log:
             # Its own process group, so stopping it stops the proxy's workers, and it dies with this process.
             process = subprocess.Popen(
-                command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=die_with_parent
+                command,
+                env=environment,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                preexec_fn=die_with_parent,
             )
             url = f"http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}"
             try:
@@ -202,9 +216,23 @@ def default_python(root: Path) -> Path:
     )
 
 
+def _proxy_environment(key_env: str, upstream_key_env: str | None) -> dict[str, str]:
+    environment = {
+        name: value for name, value in os.environ.items() if name in _INHERITED or name.startswith(_INHERITED_PREFIXES)
+    }
+    for outside, inside in ((key_env, _PROXY_KEY), (upstream_key_env, _PROXY_UPSTREAM_KEY)):
+        if outside is None:
+            continue
+        if not os.environ.get(outside):
+            raise ContractError(f"the gateway needs the environment variable {outside}")
+        environment[inside] = os.environ[outside]
+    return environment
+
+
 def _stop(process: subprocess.Popen[bytes]) -> None:
     for sig in (signal.SIGTERM, signal.SIGKILL):
-        with contextlib.suppress(ProcessLookupError):
+        # macOS answers EPERM, not ESRCH, for a group whose processes have all exited.
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, sig)
         try:
             process.wait(timeout=15)
