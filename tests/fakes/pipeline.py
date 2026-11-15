@@ -47,6 +47,7 @@ from tests.fakes.compression import (
 from tests.fakes.data import FakeRolloutProvider, ListDatasetProvider, token_batch
 from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeProposerAgent, FakeTaskGrader
 from tests.fakes.model import SLIME_LIKE, FakeModelSource, FakeTrainer, FakeWorld, small_moe
+from tests.fakes.sse import send_stream
 
 VERIFY_BONUS = 0.05
 
@@ -197,6 +198,9 @@ class _PolicyHandler(BaseHTTPRequestHandler):
             "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": len(system.split()), "completion_tokens": 2},
         }
+        if body.get("stream"):
+            send_stream(self, reply)
+            return
         data = json.dumps(reply).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
