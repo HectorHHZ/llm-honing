@@ -85,6 +85,7 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `ALGORITHM_REQUIREMENTS` |
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
 | `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
+| `traces` | `DecisionTrace`, `TraceEvent`: one decision of an episode and what followed it |
 | `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the method-state rules (`validate_method_state`) |
 | `candidate` | `UpdateCandidate`, `PolicyRef`, `EvaluationResult`, `SelectionDecision` |
 | `release` | `HoneRelease` |
@@ -391,6 +392,24 @@ agent wrote. `ClaudeCodeProposer` (`honing/harness/proposers/`) runs the `claude
 headless, with a minimal environment and in its own process group. Meta-Harness scores
 each candidate on the move's tasks, whose trajectories its proposer reads, so its gate
 must run on held-out tasks; its selector refuses a gate on any task the proposer reads.
+
+A decision model's episode is read through its decisions. `TraceSource`, a protocol in
+`honing/core`, reads an episode back as `DecisionTrace`s:
+`traces(record, *, release_id=None)`. Each trace holds one decision: the state the model
+read, every option's probability, the choice, what the controller allowed and applied,
+and the events up to the next decision, with the episode's outcome and grade.
+`TankTraceSource` (`honing/backends/tank/traces.py`) reads a tank run directory. It
+refuses a run whose `decisions.jsonl`, `events.jsonl` or `result.json` does not match the
+SHA-256 its `manifest.json` records under `outputs`. `render_traces`
+(`honing/harness/traces.py`) writes one episode as compact text within a token cap,
+counting each word, number and punctuation mark as one token. It shows windows of
+decisions around deaths, self-hits and missed shots, and each decision lists only the
+state fields that changed since the decision before it with the same questions. The same
+traces always render to the same text. Given a trace source, GEPA's reflective dataset
+shows each minibatch episode's rendering as its generated output, and Meta-Harness
+writes it as `decisions.txt` beside each search trace. The loader and the renderer
+import only the standard library and `honing.core`, so System 0's scheduler (#138) can
+read the same traces.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
@@ -813,6 +832,8 @@ release's format, no overwritten checkpoint, and refusal of what it does not dec
 `scripts/e2e/tank_campaign.py` runs a campaign on real tank rounds
 (`honing/backends/tank`) with a stand-in decision model: a GEPA harness move, SFT on
 planner-teacher demonstrations, and GRPO on sampled rollouts, each gated on the
-validation rounds. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
+validation rounds. In its dry run (`configs/e2e/tank_dry_run.json`), GEPA reflects on
+the rounds' rendered decision traces, and the scripted chat model refuses a prompt that
+does not show them. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
 real models served through SGLang: the policy and every candidate started on demand by
 `SGLangPolicyEndpoints`, and GEPA reflecting through a chat model on its own engine.

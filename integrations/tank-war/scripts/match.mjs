@@ -16,7 +16,8 @@
 //
 // --out (which must not exist) receives manifest.json, decisions.jsonl (one row per question set the agent was
 // asked, with the state, questions, answers, and executed choice), events.jsonl, and result.json; a run that
-// stops on an error writes error.json and exits 1.
+// stops on an error writes error.json and exits 1. When the round ends, the manifest is written again with the
+// SHA-256 of each of the other three files under "outputs", so a reader can refuse a run whose files changed.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -66,6 +67,8 @@ const INTERVENTIONS = [
     "plan_veto",
     "plan_intent_retained",
 ];
+// The files a finished round writes after the manifest; the manifest records each one's SHA-256.
+export const OUTPUTS = ["decisions.jsonl", "events.jsonl", "result.json"];
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
 // The controller settings a harness asks for, checked; throws on anything a match would misread.
@@ -260,31 +263,28 @@ export async function playMatch({
         : sampleSeed !== undefined
           ? "rollout"
           : "evaluation";
+    const manifest = {
+        kind,
+        edition: "tank-war",
+        seed,
+        seat,
+        opponent,
+        seconds,
+        interval_ms: intervalMs,
+        opponent_interval_ms: opponentIntervalMs,
+        sample_seed: sampleSeed ?? null,
+        decision_server: teacher ? null : decisionServer,
+        model,
+        harness: harness.files,
+        agent_seat: { ...harness.seat },
+        opponent_seat: OPPONENT_SEAT,
+        sources: await sources(),
+        node: process.version,
+        created_at: new Date().toISOString(),
+    };
     await writeFile(
         join(out, "manifest.json"),
-        JSON.stringify(
-            {
-                kind,
-                edition: "tank-war",
-                seed,
-                seat,
-                opponent,
-                seconds,
-                interval_ms: intervalMs,
-                opponent_interval_ms: opponentIntervalMs,
-                sample_seed: sampleSeed ?? null,
-                decision_server: teacher ? null : decisionServer,
-                model,
-                harness: harness.files,
-                agent_seat: { ...harness.seat },
-                opponent_seat: OPPONENT_SEAT,
-                sources: await sources(),
-                node: process.version,
-                created_at: new Date().toISOString(),
-            },
-            null,
-            2,
-        ),
+        JSON.stringify(manifest, null, 2),
     );
 
     const game = new adapter.Game(seed);
@@ -438,6 +438,15 @@ export async function playMatch({
         game.events.map((e) => JSON.stringify(e) + "\n").join(""),
     );
     await writeFile(join(out, "result.json"), JSON.stringify(result, null, 2));
+    manifest.outputs = Object.fromEntries(
+        await Promise.all(
+            OUTPUTS.map(async (f) => [f, sha256(await readFile(join(out, f)))]),
+        ),
+    );
+    await writeFile(
+        join(out, "manifest.json"),
+        JSON.stringify(manifest, null, 2),
+    );
     return result;
 }
 

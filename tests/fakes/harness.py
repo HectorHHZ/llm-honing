@@ -9,7 +9,11 @@ from honing.core import (
     ChatMessage,
     ChatReply,
     ContractError,
+    DecisionQuestion,
+    DecisionSample,
+    DecisionTrace,
     EpisodeOutcome,
+    EpisodeRecord,
     EvaluationResult,
     EvolveContext,
     Grade,
@@ -24,6 +28,7 @@ from honing.core import (
     RunnerSupport,
     SelectionDecision,
     Task,
+    TraceEvent,
 )
 from honing.release import WinLossSelector
 from tests.fakes.model import FakeWorld
@@ -141,6 +146,40 @@ class FakeChatModel:
             input_tokens=sum(len(message.content.split()) for message in messages),
             output_tokens=len(text.split()),
             cost_usd=self._cost,
+        )
+
+
+class FakeTraceSource:
+    """Reads one decision per episode: whether to check the answer, given the grade's score as its probability."""
+
+    def __init__(self) -> None:
+        self.reads = 0
+
+    def traces(self, record: EpisodeRecord, *, release_id: str | None = None) -> tuple[DecisionTrace, ...]:
+        self.reads += 1
+        if record.outcome.failure is not None:
+            return ()
+        check = 0.5 if record.grade is None else record.grade.score
+        question = DecisionQuestion("choice", "Check the answer?", (("check", "Check it."), ("finish", "Finish.")))
+        decision = DecisionSample(
+            parts=(("task", (f"Task {record.task_id}.",)),),
+            questions=(("verify", question),),
+            chosen=(("verify", "check" if check >= 0.5 else "finish"),),
+            behavior_probs=(("verify", (("check", check), ("finish", 1.0 - check))),),
+            source_release=release_id,
+            source_harness=record.spec_id,
+        )
+        event = TraceEvent(1.0, f"the episode ended: {record.outcome.final_output}")
+        return (
+            DecisionTrace(
+                episode_id=record.task_id,
+                step=0,
+                time_seconds=0.0,
+                decision=decision,
+                events=(event,),
+                outcome=record.outcome.final_output,
+                grade=record.grade,
+            ),
         )
 
 

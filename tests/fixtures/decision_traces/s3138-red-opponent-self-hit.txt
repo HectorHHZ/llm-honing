@@ -1,0 +1,87 @@
+Episode s3138-red-opponent-self-hit: 56 decisions.
+Outcome: the red tank won (hit) after 5.85 s.
+Key events: 1 self-hit.
+Shown: 5 decisions around the key events. Each lists the state fields that changed since the decision before it with the same questions.
+Questions:
+  motion, choice of 9 options: Choose joint driving and turning to survive and obtain a verified shot. Every shell is lethal. Prefer safe progress and small heading error. Do not fire yet.
+  weapon, choice of 2 options: Decide whether to fire. Own ricochets are lethal. Use the selected motion forecast when present. Fire only with a safe valid shot; otherwise hold.
+(51 decisions not shown, 0.000 s to 5.333 s)
+decision 51 at 5.333 s:
+  essential, 6 of 26 fields changed:
+    Local bullet avoidance=ON; active=false; requested=reverse/right, actual=reverse/none.
+    Me (693.4,360.8), heading=-172.8deg; enemy (491.8,318.1).
+    Verified aim at predicted response position: {"angle":-2.9319190324422943,"heading_deg":-168,"delta_deg":4.9,"turn":"right","turn_ms":34,"hit_ms":546,"bounces":0,"kind":"direct","self_hit":false}.
+    All 10 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-0","enemy",692.9,195.9,281,-71.7,5,2],["1-1-0","self",464.8,349.9,287.7,-36.2,3,2],["1-0-1","enemy",643,236.3,283.7,-60,5,2.3],["1-1-1","self",319.2,344.1,286,-48.1,3,2.3],["1-1-2","self",193.4,371.2,-281,71.7,1,2.8],["1-0-2","enemy",689.6,259.2,-227.9,-179.3,4,3.1],["1-1-3","self",310.3,346,-277.8,83.4,1,3.2],["1-0-3","enemy",672.8,321,-289.7,-12.1,1,3.5],["1-1-4","self",438.1,320.4,-269.8,106.2,1,3.6],["1-0-4","enemy",696.2,333.7,290,0,0,3.9]].
+    SELECTED MOTION stop_right: Drive stop for 650ms; turn right for 33ms; verified hit direction error after 0deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    Shot forecast {"can_fire":false,"self_hit_ms":null,"enemy_hit_ms":null,"fire_after_ms":33}.
+  weapon: fire 0.100, hold 0.900; chose hold
+decision 52 at 5.550 s:
+  essential, 20 of 51 fields changed:
+    AIM AT CURRENT POSITION: verified hit directions [heading_deg,delta_deg,turn,turn_ms,hit_ms,bounces]=[[-167.7,0.3,"none",2,554,0],[-148.7,19.3,"right",135,654,1]].
+    AIM AT PREDICTED RESPONSE POSITION x=693.4,y=360.8,heading=-168.1deg AFTER 17ms: verified hit directions [heading_deg,delta_deg,turn,turn_ms,hit_ms,bounces]=[[-167.7,0.3,"none",2,554,0],[-148.7,19.3,"right",135,654,1]].
+    Local bullet avoidance=ON; active=false; requested=stop/right, actual=stop/none.
+    Me: x=693.4, y=360.8, heading=-168.1deg.
+    Enemy: x=490.4, y=316.6.
+    Target waypoint: x=490.4, y=316.6.
+    Turn goal=verified firing direction; target hull heading=-167.7deg, relative error=0.3deg after estimated 17ms response delay (positive right).
+    Round 1, time 5.5s, remaining 4.4s.
+    Current executed controls stop/none, expire in 433ms.
+    Enemy heading 19.1deg.
+    All 10 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-0","enemy",673,180.4,-281,-71.7,6,1.7],["1-1-0","self",527.1,342.1,287.7,-36.2,3,1.7],["1-0-1","enemy",704.4,223.3,283.7,-60,5,2.1],["1-1-1","self",381.1,333.7,286,-48.1,3,2.1],["1-1-2","self",241.4,386.7,281,71.7,2,2.6],["1-0-2","enemy",640.3,220.3,-227.9,-179.3,4,2.9],["1-1-3","self",250.1,342.2,-277.8,-83.4,2,3],["1-0-3","enemy",610,318.4,-289.7,-12.1,1,3.3],["1-1-4","self",379.6,343.4,-269.8,106.2,1,3.4],["1-0-4","enemy",666,333.7,-290,0,1,3.7]].
+    motion/forward_left: Drive forward for 650ms; turn left for 183ms; verified hit direction error after 27deg; target progress 35px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/forward_right: Drive forward for 650ms; turn right for 0ms; verified hit direction error after 0deg; target progress 43px; existing shell collision 417ms; shot after turn: enemy hit none, self hit none.
+    motion/forward_none: Drive forward for 650ms; turn none for 0ms; verified hit direction error after 0deg; target progress 43px; existing shell collision 417ms; shot after turn: enemy hit none, self hit none.
+    motion/reverse_left: Drive reverse for 650ms; turn left for 183ms; verified hit direction error after 27deg; target progress 3px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/reverse_right: Drive reverse for 650ms; turn right for 0ms; verified hit direction error after 0deg; target progress -9px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/reverse_none: Drive reverse for 650ms; turn none for 0ms; verified hit direction error after 0deg; target progress -9px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/stop_left: Drive stop for 650ms; turn left for 183ms; verified hit direction error after 27deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/stop_right: Drive stop for 650ms; turn right for 0ms; verified hit direction error after 0deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/stop_none: Drive stop for 650ms; turn none for 0ms; verified hit direction error after 0deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+  motion: forward_left 0.129, forward_right 0.000, forward_none 0.000, reverse_left 0.167, reverse_right 0.188, reverse_none 0.214, stop_left 0.219, stop_right 0.046, stop_none 0.037; chose reverse_none
+  constraints: {"admissible_motion_ids":["reverse_right","reverse_none","stop_right","stop_none"],"motion_changed":true,"policy_motion_changed":false,"fire_permitted":false,"fire_vetoed":false}
+  applied: {"motion_id":"reverse_none","controls":{"drive":"reverse","turn":"none","fire":false},"turn_ms":0,"fire_after_ms":0}
+decision 53 at 5.550 s:
+  essential, 6 of 26 fields changed:
+    Local bullet avoidance=ON; active=false; requested=stop/right, actual=stop/none.
+    Me (693.4,360.8), heading=-168.1deg; enemy (490.4,316.6).
+    Verified aim at predicted response position: {"angle":-2.9272856281729265,"heading_deg":-167.7,"delta_deg":0.3,"turn":"none","turn_ms":2,"hit_ms":554,"bounces":0,"kind":"direct","self_hit":false}.
+    All 10 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-0","enemy",673,180.4,-281,-71.7,6,1.7],["1-1-0","self",527.1,342.1,287.7,-36.2,3,1.7],["1-0-1","enemy",704.4,223.3,283.7,-60,5,2.1],["1-1-1","self",381.1,333.7,286,-48.1,3,2.1],["1-1-2","self",241.4,386.7,281,71.7,2,2.6],["1-0-2","enemy",640.3,220.3,-227.9,-179.3,4,2.9],["1-1-3","self",250.1,342.2,-277.8,-83.4,2,3],["1-0-3","enemy",610,318.4,-289.7,-12.1,1,3.3],["1-1-4","self",379.6,343.4,-269.8,106.2,1,3.4],["1-0-4","enemy",666,333.7,-290,0,1,3.7]].
+    SELECTED MOTION reverse_none: Drive reverse for 650ms; turn none for 0ms; verified hit direction error after 0deg; target progress -9px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    Shot forecast {"can_fire":false,"self_hit_ms":null,"enemy_hit_ms":null,"fire_after_ms":0}.
+  weapon: fire 0.100, hold 0.900; chose hold
+decision 54 at 5.767 s:
+  essential, 21 of 51 fields changed:
+    AIM AT CURRENT POSITION: verified hit directions [heading_deg,delta_deg,turn,turn_ms,hit_ms,bounces]=[[-166.2,1.9,"right",13,537,0],[-146.5,21.6,"right",151,650,1]].
+    AIM AT PREDICTED RESPONSE POSITION x=693.4,y=366.8,heading=-168.1deg AFTER 17ms: verified hit directions [heading_deg,delta_deg,turn,turn_ms,hit_ms,bounces]=[[-166.1,2,"right",14,537,0],[-146.4,21.7,"right",151,654,1]].
+    Local bullet avoidance=ON; active=false; requested=reverse/none, actual=reverse/none.
+    Me: x=693.4, y=366.4, heading=-168.1deg.
+    Enemy: x=496.5, y=318.
+    Target waypoint: x=496.5, y=318.
+    Turn goal=verified firing direction; target hull heading=-166.1deg, relative error=2deg after estimated 17ms response delay (positive right).
+    Round 1, time 5.8s, remaining 4.2s.
+    Current executed controls reverse/none, expire in 433ms.
+    Enemy heading 11.9deg.
+    All 10 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-0","enemy",612.2,164.8,-281,-71.7,6,1.5],["1-1-0","self",589.4,334.3,287.7,-36.2,3,1.5],["1-0-1","enemy",660.7,210.3,-283.7,-60,6,1.9],["1-1-1","self",443.1,323.3,286,-48.1,3,1.9],["1-1-2","self",223.9,402.3,-281,71.7,3,2.4],["1-0-2","enemy",683,181.5,227.9,-179.3,5,2.7],["1-1-3","self",189.9,324.1,-277.8,-83.4,2,2.8],["1-0-3","enemy",547.2,315.7,-289.7,-12.1,1,3.1],["1-1-4","self",321.2,339.4,-269.8,-106.2,2,3.2],["1-0-4","enemy",603.2,333.7,-290,0,1,3.4]].
+    Execution constraints admit plans forward_right,forward_none,stop_right,stop_none; raw model probabilities for all nine plans remain recorded.
+    motion/forward_left: Drive forward for 650ms; turn left for 183ms; verified hit direction error after 28deg; target progress 39px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/forward_right: Drive forward for 650ms; turn right for 17ms; verified hit direction error after 0deg; target progress 43px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/forward_none: Drive forward for 650ms; turn none for 0ms; verified hit direction error after 2deg; target progress 41px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/reverse_left: Drive reverse for 650ms; turn left for 183ms; verified hit direction error after 28deg; target progress 3px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/reverse_right: Drive reverse for 650ms; turn right for 17ms; verified hit direction error after 0deg; target progress -28px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/reverse_none: Drive reverse for 650ms; turn none for 0ms; verified hit direction error after 2deg; target progress -16px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/stop_left: Drive stop for 650ms; turn left for 183ms; verified hit direction error after 28deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/stop_right: Drive stop for 650ms; turn right for 17ms; verified hit direction error after 0deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    motion/stop_none: Drive stop for 650ms; turn none for 0ms; verified hit direction error after 2deg; target progress 0px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+  motion: forward_left 0.072, forward_right 0.197, forward_none 0.219, reverse_left 0.055, reverse_right 0.164, reverse_none 0.109, stop_left 0.123, stop_right 0.034, stop_none 0.026; chose forward_none
+  constraints: {"admissible_motion_ids":["forward_right","forward_none","stop_right","stop_none"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":false,"fire_vetoed":false}
+  applied: {"motion_id":"forward_none","controls":{"drive":"forward","turn":"none","fire":false},"turn_ms":0,"fire_after_ms":0}
+decision 55 at 5.767 s:
+  essential, 5 of 26 fields changed:
+    Local bullet avoidance=ON; active=false; requested=reverse/none, actual=reverse/none.
+    Me (693.4,366.4), heading=-168.1deg; enemy (496.5,318).
+    Verified aim at predicted response position: {"angle":-2.898471059749367,"heading_deg":-166.1,"delta_deg":2,"turn":"right","turn_ms":14,"hit_ms":537,"bounces":0,"kind":"direct","self_hit":false}.
+    All 10 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-0","enemy",612.2,164.8,-281,-71.7,6,1.5],["1-1-0","self",589.4,334.3,287.7,-36.2,3,1.5],["1-0-1","enemy",660.7,210.3,-283.7,-60,6,1.9],["1-1-1","self",443.1,323.3,286,-48.1,3,1.9],["1-1-2","self",223.9,402.3,-281,71.7,3,2.4],["1-0-2","enemy",683,181.5,227.9,-179.3,5,2.7],["1-1-3","self",189.9,324.1,-277.8,-83.4,2,2.8],["1-0-3","enemy",547.2,315.7,-289.7,-12.1,1,3.1],["1-1-4","self",321.2,339.4,-269.8,-106.2,2,3.2],["1-0-4","enemy",603.2,333.7,-290,0,1,3.4]].
+    SELECTED MOTION forward_none: Drive forward for 650ms; turn none for 0ms; verified hit direction error after 2deg; target progress 41px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+  weapon: fire 0.100, hold 0.900; chose hold
+  then 5.850 s, self-hit: blue was destroyed by its own shell
+  then 5.850 s: the round ended (hit), red won

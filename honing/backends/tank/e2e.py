@@ -14,8 +14,8 @@ and ``summary.json`` under ``work_dir``.
 
 ``configs/e2e/tank_dry_run.json`` plays real rounds (the Node match process and
 Honing's ``DecisionServer``) with a stand-in decision model, a fake trainer,
-and GEPA reflecting through a scripted chat model, so it runs on a CPU with
-Node and the ``gepa`` extra.
+and GEPA reflecting, through a scripted chat model, on the rounds' rendered
+decision traces, so it runs on a CPU with Node and the ``gepa`` extra.
 
 Run: ``python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json``
 """
@@ -37,6 +37,7 @@ from honing.backends.tank.harness import seed_harness
 from honing.backends.tank.rollouts import TankRolloutProvider
 from honing.backends.tank.runner import TankEpisodeRunner
 from honing.backends.tank.scenarios import Split, TankSuite, load_suite
+from honing.backends.tank.traces import TankTraceSource
 from honing.campaign import (
     Campaign,
     CampaignDefaults,
@@ -69,6 +70,7 @@ from honing.core import (
     SignalKind,
     Task,
     TaskGrader,
+    TraceSource,
     Trainer,
     TrainJobSpec,
     UtilizationTelemetry,
@@ -221,12 +223,25 @@ def demonstrations(context: E2EContext, limit: int | None = None) -> TankDemonst
     )
 
 
-def gepa_method(context: E2EContext, chat: Mapping[str, Any], **config: Any) -> Any:
-    """GEPA validating on the gate's tasks, reflecting through the chat model ``chat`` names."""
+def gepa_method(
+    context: E2EContext, chat: Mapping[str, Any], traces: Mapping[str, Any] | None = None, **config: Any
+) -> Any:
+    """GEPA validating on the gate's tasks, reflecting through the chat model ``chat`` names.
+
+    With ``traces``, a component entry for a ``TraceSource``, reflection reads
+    each round's rendered decisions.
+    """
     from honing.harness.methods.gepa import GEPAConfig, GEPAMethod
 
     chat_model = build_component(chat, context, "chat", ChatModel)
-    return GEPAMethod(chat_model, GEPAConfig(**config), [task.task_id for task in context.gate_tasks])  # type: ignore[arg-type]
+    source = build_component(traces, context, "traces", TraceSource) if traces else None
+    validation = [task.task_id for task in context.gate_tasks]
+    return GEPAMethod(chat_model, GEPAConfig(**config), validation, traces=source)  # type: ignore[arg-type]
+
+
+def trace_source(context: object) -> TankTraceSource:
+    """The rounds' decision traces, read from their run directories."""
+    return TankTraceSource()
 
 
 def tasks(context: Any, split: str = "val", limit: int | None = 4) -> tuple[Task, ...]:
@@ -417,4 +432,5 @@ __all__ = [
     "rollouts",
     "summarize",
     "tasks",
+    "trace_source",
 ]

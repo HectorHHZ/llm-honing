@@ -297,7 +297,10 @@ performance. The policy acts every 200 ms of game time and the opponent every
 
 The output includes `manifest.json` (scenario, model and source/harness hashes),
 `decisions.jsonl` (exact context, questions, probabilities and choices),
-`events.jsonl` and `result.json`. Use a new output directory for each run.
+`events.jsonl` and `result.json`. Use a new output directory for each run. When
+the round ends, the manifest records the SHA-256 of the other three files under
+`outputs`. Honing's trace loader (`honing/backends/tank/traces.py`) refuses a run
+whose files do not match it.
 
 | Harness file           | Kind         | Purpose                                                             |
 | ---------------------- | ------------ | ------------------------------------------------------------------- |

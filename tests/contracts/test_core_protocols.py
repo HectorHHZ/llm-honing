@@ -8,6 +8,7 @@ from typing import Protocol
 
 import pytest
 
+from honing.backends.tank.traces import TankTraceSource
 from honing.campaign import ScriptedScheduler
 from honing.core import (
     BackendSupport,
@@ -19,6 +20,7 @@ from honing.core import (
     DataContract,
     DecisionQuestion,
     DecisionSample,
+    DecisionTrace,
     EpisodeOutcome,
     EvaluationResult,
     Grade,
@@ -38,6 +40,7 @@ from honing.core import (
     QuantScheme,
     RecoverySpec,
     TeacherRef,
+    TraceEvent,
     TrainingBatch,
     TrainJobSpec,
     UpdateCandidate,
@@ -61,6 +64,7 @@ from tests.fakes.harness import (
     FakeEpisodeRunner,
     FakeProposerAgent,
     FakeTaskGrader,
+    FakeTraceSource,
     StaticPolicyEndpoints,
 )
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld, IdentityConverter, parameters_of, small_moe
@@ -87,6 +91,8 @@ def implementations() -> list[tuple[object, type]]:
         (StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (endpoints.StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (FakeProposerAgent(), protocols.ProposerAgent),
+        (FakeTraceSource(), protocols.TraceSource),
+        (TankTraceSource(), protocols.TraceSource),
         (AppendInstructionMethod(), protocols.EvolveMethod),
         (WinLossSelector(), protocols.CandidateSelector),
         (NoRegressionSelector(0.1), protocols.CandidateSelector),
@@ -225,6 +231,32 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
         lambda: TrainingBatch("b", DataContract("typed_decisions"), token_batch().samples),
     ),
     ("preference training on decisions", lambda: TrainJobSpec(algorithm="dpo", contract="typed_decisions")),
+    ("a trace event before the episode began", lambda: TraceEvent(-0.1, "fired")),
+    ("a trace event with an unknown key", lambda: TraceEvent(1.0, "fired", "near_miss")),  # type: ignore[arg-type]
+    (
+        "a decision trace without behavior probabilities",
+        lambda: DecisionTrace(
+            "e",
+            0,
+            0.0,
+            DecisionSample((), (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),), (("q", "a"),)),
+        ),
+    ),
+    (
+        "a decision trace whose events are out of time order",
+        lambda: DecisionTrace(
+            "e",
+            0,
+            0.0,
+            DecisionSample(
+                (),
+                (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),),
+                (("q", "a"),),
+                behavior_probs=(("q", (("a", 0.5), ("b", 0.5))),),
+            ),
+            events=(TraceEvent(2.0, "fired"), TraceEvent(1.0, "hit")),
+        ),
+    ),
     (
         "a backend that trains on no data contract",
         lambda: BackendSupport("b", "uniform", frozenset({"bf16"}), frozenset({"hf_safetensors"}), (), frozenset()),

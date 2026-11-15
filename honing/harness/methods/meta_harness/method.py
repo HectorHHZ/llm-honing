@@ -13,6 +13,8 @@ The search tasks are the move's tasks (``EvolveContext.tasks``). The gate
 judges a proposal on held-out tasks, as upstream's text-classification example
 holds out its test split: :class:`MetaHarnessSelector` refuses a gate on any
 search task, and the gate's scores and trajectories never enter the archive.
+With a :class:`~honing.core.TraceSource`, each search episode's decisions are
+rendered (:mod:`honing.harness.traces`) beside its transcript.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from honing.core import (
     ProposeResult,
     SelectionDecision,
     Task,
+    TraceSource,
     UpdateCandidate,
 )
 from honing.harness.methods.meta_harness.archive import (
@@ -52,6 +55,7 @@ from honing.harness.methods.meta_harness.archive import (
     valid_name,
     write_archive,
 )
+from honing.harness.traces import DEFAULT_MAX_TOKENS, render_traces
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,17 +122,29 @@ class MetaHarnessMethod:
     smoke test, which a move without room for it skips, as upstream's
     ``--skip-smoke`` does. A move whose budget cannot score the candidate does
     not run the proposer.
+
+    With ``traces``, every search episode the source can read is also written
+    as ``decisions.txt`` in its trace folder, rendered within
+    ``trace_max_tokens``.
     """
 
     name = "meta_harness"
     state_schema_version = ARCHIVE_SCHEMA_VERSION
 
-    def __init__(self, proposer: ProposerAgent, work_dir: Path) -> None:
+    def __init__(
+        self,
+        proposer: ProposerAgent,
+        work_dir: Path,
+        traces: TraceSource | None = None,
+        trace_max_tokens: int = DEFAULT_MAX_TOKENS,
+    ) -> None:
         self.requires = MethodRequirements()
         self.selector = MetaHarnessSelector()
         self.proposer = proposer
         self.work_dir = work_dir
         self.skill = load_skill()
+        self.traces = traces
+        self.trace_max_tokens = trace_max_tokens
 
     def initial_state(self, seed: HarnessSpec) -> Mapping[str, object]:
         return Archive.seed(seed).to_state()
@@ -154,7 +170,7 @@ class MetaHarnessMethod:
         spent = 0
         if served.policy != checksum:
             records = asyncio.run(_gather(context, served.spec(context.current.agent), search))
-            archive = archive.score(served.name, [r.score for r in records], checksum, _traces(records))
+            archive = archive.score(served.name, [r.score for r in records], checksum, self._traces(records))
             spent += len(records)
 
         directory = self.work_dir / ARCHIVE_DIR
@@ -179,7 +195,9 @@ class MetaHarnessMethod:
         if refused is not None:
             _LOGGER.warning("the runner refused Meta-Harness candidate %s: %s", candidate.name, refused)
             return ProposeResult(proposal=None, state=archive.to_state(), episodes_spent=spent)
-        archive = archive.add(candidate).score(candidate.name, [r.score for r in records], checksum, _traces(records))
+        archive = archive.add(candidate).score(
+            candidate.name, [r.score for r in records], checksum, self._traces(records)
+        )
         served_mean, mean = archive.served_candidate.mean, archive.get(candidate.name).mean
         assert served_mean is not None and mean is not None
         if not mean > served_mean:
@@ -212,6 +230,17 @@ class MetaHarnessMethod:
                 "the proposal is not Meta-Harness's newest candidate; record the state propose returned"
             )
         return (archive.with_served(newest.name) if decision.selected else archive).to_state()
+
+    def _traces(self, records: Sequence[EpisodeRecord]) -> dict[str, Trace]:
+        return {
+            record.task_id: Trace(record.transcript_location, record.feedback, self._decisions(record))
+            for record in records
+        }
+
+    def _decisions(self, record: EpisodeRecord) -> str | None:
+        """The episode's rendered decision traces, or ``None`` without a source or traces to read."""
+        traces = self.traces.traces(record) if self.traces is not None else ()
+        return render_traces(traces, max_tokens=self.trace_max_tokens) if traces else None
 
 
 def _prompt(archive: Archive, directory: Path) -> str:
@@ -297,10 +326,6 @@ def _run_candidate(
         else:
             raise result
     return records, refused
-
-
-def _traces(records: Sequence[EpisodeRecord]) -> dict[str, Trace]:
-    return {record.task_id: Trace(record.transcript_location, record.feedback) for record in records}
 
 
 def _mean(scores: Sequence[float]) -> float:

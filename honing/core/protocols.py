@@ -33,6 +33,7 @@ from honing.core.harness import (
 from honing.core.release import HoneRelease
 from honing.core.schedule import CampaignState, Move
 from honing.core.telemetry import UtilizationTelemetry
+from honing.core.traces import DecisionTrace
 from honing.core.training import TrainJobSpec, TrainResult
 from honing.core.weights import CheckpointRef, ModelSnapshot, ServingWeights, WeightFormat
 
@@ -175,6 +176,19 @@ class ProposerAgent(Protocol):
     """
 
     def run(self, prompt: str, workdir: Path, *, instructions: str) -> int: ...
+
+
+@runtime_checkable
+class TraceSource(Protocol):
+    """Reads back the decisions behind one graded episode, in the order they were made.
+
+    Returns no traces for an episode that left none to read, such as one that
+    stopped on an error, and raises ``ContractError`` for an episode whose files
+    are not the ones its run recorded. ``release_id`` names the release the
+    episode ran under, when the caller knows it.
+    """
+
+    def traces(self, record: EpisodeRecord, *, release_id: str | None = None) -> tuple[DecisionTrace, ...]: ...
 
 
 @runtime_checkable

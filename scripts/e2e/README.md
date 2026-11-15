@@ -166,7 +166,7 @@ The default config's model, policy server, and harness runner key on the fake mo
 
 `configs/e2e/tank_dry_run.json` builds the campaign in `honing/backends/tank/e2e.py`. Every round is real: `TankEpisodeRunner` starts `integrations/tank-war/scripts/match.mjs`, which plays one Tank War round in lockstep against the planner opponent and asks Honing's `DecisionServer` for every decision. Only the decision model (`tests/fakes/tank.py`), the trainer, and the chat model GEPA reflects with are stand-ins. The stand-in model takes no permitted shot below quality 0.7, unless its weapon instructions tell it to fire whenever the shot is permitted. So:
 
-1. harness (GEPA): the scripted reflection rewrites `tank/questions.json` with such instructions; the child beats its parent on a train minibatch, and its validation mean (0.5) beats the seed's (0): published.
+1. harness (GEPA): GEPA reads each minibatch round back through `TankTraceSource` and reflects on its rendered decision traces (`honing/harness/traces.py`). The scripted chat model refuses a reflection prompt in which a round does not show its motion and weapon decisions with every option's probability, then rewrites `tank/questions.json` with such instructions. The child beats its parent on a train minibatch, and its validation mean (0.5) beats the seed's (0): published.
 2. train (sft on teacher demonstrations): quality 0.5 to 0.7 changes which motions the model drives (the published instructions already make it fire): 1 win, 3 ties on the gate: published.
 3. train (grpo on sampled rollouts): quality 0.7 to 0.9 ties on every gate task: rolled back.
 

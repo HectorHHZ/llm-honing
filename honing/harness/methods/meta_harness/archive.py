@@ -18,7 +18,8 @@ The layout written under the archive directory:
     the best candidate per task and ``_best``, the best mean, over scores taken
     under the current weights.
 ``traces/<name>/<task id, percent-quoted>/``
-    the episode transcript copied from its location, and ``feedback.txt``.
+    the episode transcript copied from its location, ``feedback.txt``, and
+    for a decision model ``decisions.txt``, its rendered decision traces.
 
 Every score and trace is from the search tasks, which the method runs itself.
 The gate's held-out tasks never enter the archive: the proposer learns of the
@@ -58,10 +59,11 @@ def valid_name(name: object) -> bool:
 
 @dataclass(frozen=True)
 class Trace:
-    """Where one gate episode's transcript is, and the grader's feedback on it."""
+    """Where one episode's transcript is, the grader's feedback on it, and its rendered decisions if read."""
 
     transcript: str | None = None
     feedback: str | None = None
+    decisions: str | None = None
 
 
 @dataclass(frozen=True)
@@ -212,7 +214,11 @@ class Archive:
                     "scores": None if candidate.scores is None else list(candidate.scores),
                     "policy": candidate.policy,
                     "traces": {
-                        task_id: {"transcript": trace.transcript, "feedback": trace.feedback}
+                        task_id: {
+                            "transcript": trace.transcript,
+                            "feedback": trace.feedback,
+                            "decisions": trace.decisions,
+                        }
                         for task_id, trace in candidate.traces.items()
                     },
                 }
@@ -257,7 +263,10 @@ def _candidate_from_row(row: Mapping[str, object]) -> Candidate:
         scores=None if scores is None else tuple(float(score) for score in cast(list[float], scores)),
         policy=None if policy is None else str(policy),
         traces={
-            task_id: Trace(transcript=trace["transcript"], feedback=trace["feedback"])
+            # An archive saved without rendered decisions has no "decisions" key.
+            task_id: Trace(
+                transcript=trace["transcript"], feedback=trace["feedback"], decisions=trace.get("decisions")
+            )
             for task_id, trace in traces.items()
         },
     )
@@ -361,6 +370,8 @@ def _write_trace(trace: Trace, directory: Path) -> None:
     directory.mkdir(parents=True)
     if trace.feedback is not None:
         (directory / "feedback.txt").write_text(trace.feedback, encoding="utf-8")
+    if trace.decisions is not None:
+        (directory / "decisions.txt").write_text(trace.decisions, encoding="utf-8")
     source = None if trace.transcript is None else Path(trace.transcript)
     try:
         if source is not None and source.is_dir():

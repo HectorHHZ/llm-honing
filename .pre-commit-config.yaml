@@ -23,8 +23,11 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: detect-private-key
+      # Recorded tank rounds: their manifests hash the files byte for byte.
       - id: end-of-file-fixer
+        exclude: ^tests/fixtures/decision_traces/
       - id: trailing-whitespace
+        exclude: ^tests/fixtures/decision_traces/
       - id: check-added-large-files
         args: ['--maxkb=1024']
 
