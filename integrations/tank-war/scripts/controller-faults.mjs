@@ -4,6 +4,8 @@ export const CONTROLLER_FAULTS = Object.freeze([
     "swap_selected_turn",
     "drop_fire_after_selection",
     "wrong_legal_projection",
+    "suppress_selected_turn",
+    "invert_selected_drive",
 ]);
 
 export function parseControllerFault(text) {
@@ -55,6 +57,28 @@ export function afterControllerApply(game, player, applied, fault) {
         tank.turn = turn;
         tank.executedTurn = turn;
         applied.controls.turn = turn;
+        return { before, after: { ...applied.controls } };
+    }
+    if (
+        fault?.kind === "suppress_selected_turn" &&
+        ["left", "right"].includes(applied.controls.turn)
+    ) {
+        const before = { ...applied.controls };
+        tank.turn = "none";
+        tank.executedTurn = "none";
+        applied.controls.turn = "none";
+        return { before, after: { ...applied.controls } };
+    }
+    if (
+        fault?.kind === "invert_selected_drive" &&
+        ["forward", "reverse"].includes(applied.controls.drive)
+    ) {
+        const before = { ...applied.controls };
+        const drive =
+            applied.controls.drive === "forward" ? "reverse" : "forward";
+        tank.drive = drive;
+        tank.executedDrive = drive;
+        applied.controls.drive = drive;
         return { before, after: { ...applied.controls } };
     }
     return null;

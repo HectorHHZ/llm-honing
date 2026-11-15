@@ -6,7 +6,13 @@ import argparse
 import json
 from pathlib import Path
 
-KINDS = ("swap_selected_turn", "drop_fire_after_selection", "wrong_legal_projection")
+KINDS = (
+    "swap_selected_turn",
+    "drop_fire_after_selection",
+    "wrong_legal_projection",
+    "suppress_selected_turn",
+    "invert_selected_drive",
+)
 
 
 def build(out: Path) -> list[dict[str, str]]:

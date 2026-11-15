@@ -39,12 +39,19 @@ try {
 }
 candidates = [...new Set(candidates)].sort((a, b) => a - b);
 const limit = args.limit === undefined ? candidates.length : Number(args.limit);
-if (!Number.isInteger(limit) || limit < 1) throw Error("--limit must be a positive integer");
+if (!Number.isInteger(limit) || limit < 1)
+    throw Error("--limit must be a positive integer");
 const requireEffective = args["require-effective"] === "true";
-if (args["require-effective"] !== undefined && !["true", "false"].includes(args["require-effective"]))
+if (
+    args["require-effective"] !== undefined &&
+    !["true", "false"].includes(args["require-effective"])
+)
     throw Error("--require-effective must be true or false");
 const requireExecution = args["require-execution"] === "true";
-if (args["require-execution"] !== undefined && !["true", "false"].includes(args["require-execution"]))
+if (
+    args["require-execution"] !== undefined &&
+    !["true", "false"].includes(args["require-execution"])
+)
     throw Error("--require-execution must be true or false");
 await writeFile(out, "", { flag: "wx" });
 let first = null;
@@ -53,15 +60,23 @@ for (const decisionIndex of candidates.slice(0, limit)) {
     const result = await cleanCounterfactual({
         run,
         decisionIndex,
-        cleanHarnessDir: args["clean-harness-dir"] &&
-            resolve(args["clean-harness-dir"]),
+        cleanHarnessDir:
+            args["clean-harness-dir"] && resolve(args["clean-harness-dir"]),
         cleanDecisionServer: args["clean-decision-server"],
     });
     await appendFile(out, JSON.stringify(result) + "\n");
     scanned++;
-    if (requireExecution ? result.local_execution_changed : requireEffective ? result.local_command_changed || result.local_execution_changed : result.locally_verified) {
+    if (
+        requireExecution
+            ? result.local_execution_changed
+            : requireEffective
+              ? result.local_command_changed || result.local_execution_changed
+              : result.locally_verified
+    ) {
         first = decisionIndex;
         break;
     }
 }
-console.log(JSON.stringify({ run, scanned, first_verified_decision: first, out }));
+console.log(
+    JSON.stringify({ run, scanned, first_verified_decision: first, out }),
+);

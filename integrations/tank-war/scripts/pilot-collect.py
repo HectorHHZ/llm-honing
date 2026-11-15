@@ -1,4 +1,4 @@
-"""Collect fixed Tank War pilot rounds while preserving every attempt."""
+"""Collect fixed Tank War seed-group rounds while preserving every attempt."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ def _json(path: Path) -> dict[str, Any]:
 
 def collect(args: argparse.Namespace) -> dict[str, Any]:
     plan = _json(args.seed_plan)
-    seeds = plan["groups"]["pilot"][args.start_index : args.start_index + args.seed_count]
+    seeds = plan["groups"][args.seed_group][args.start_index : args.start_index + args.seed_count]
     if len(seeds) != args.seed_count or len(set(seeds)) != len(seeds):
-        raise ValueError("pilot seed slice is missing or duplicated")
+        raise ValueError(f"{args.seed_group} seed slice is missing or duplicated")
     with urllib.request.urlopen(args.url.rstrip("/") + "/v1/health", timeout=30) as response:
         health = json.load(response)
     model = health["metadata"]
@@ -40,6 +40,8 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
         "node": str(args.node),
         "timeout_seconds": args.timeout_seconds,
     }
+    if args.seed_group != "pilot":
+        config["seed_group"] = args.seed_group
     args.out.mkdir(parents=True, exist_ok=True)
     config_path = args.out / "config.json"
     if config_path.exists() and _json(config_path) != config:
@@ -116,6 +118,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arm", required=True)
     parser.add_argument("--seed-plan", type=Path, required=True)
+    parser.add_argument("--seed-group", choices=("pilot", "development", "final_test"), default="pilot")
     parser.add_argument("--start-index", type=int, required=True)
     parser.add_argument("--seed-count", type=int, required=True)
     parser.add_argument("--url", required=True)

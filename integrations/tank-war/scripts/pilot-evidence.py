@@ -61,11 +61,20 @@ def _stratum(comparison: dict[str, Any]) -> str:
     return "aim_fire" if before["fire"] != after["fire"] else "movement_avoidance"
 
 
+def _ordered_games(seeds: list[int], instance: str, rank_seed_groups: bool) -> list[tuple[int, str]]:
+    if rank_seed_groups:
+        seeds = sorted(
+            seeds,
+            key=lambda seed: hashlib.sha256(f"tank183-final-v1:{instance}:{seed}".encode()).hexdigest(),
+        )
+    return [(seed, seat) for seed in seeds for seat in ("blue", "red")]
+
+
 def prepare(args: argparse.Namespace) -> dict[str, Any]:
     plan = _json(args.seed_plan)
-    seeds = plan["groups"]["pilot"][args.start_index : args.start_index + args.seed_count]
+    seeds = plan["groups"][args.seed_group][args.start_index : args.start_index + args.seed_count]
     if len(seeds) != args.seed_count:
-        raise ValueError("pilot seed slice is incomplete")
+        raise ValueError(f"{args.seed_group} seed slice is incomplete")
     fault = _json(args.fault_manifest)
     if fault["layer"] != args.layer:
         raise ValueError("fault manifest layer differs")
@@ -75,116 +84,117 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     selected = args.out / "samples.jsonl"
     outcomes = args.out / "outcomes.jsonl"
     accepted = 0
-    for seed in seeds:
-        for seat in ("blue", "red"):
-            source = args.fault_root / f"s{seed}-{seat}"
-            clean_run = args.clean_root / f"s{seed}-{seat}"
-            result = _json(source / "result.json")
-            outcome = result["outcome"][seat]
-            with outcomes.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps({"seed": seed, "seat": seat, "outcome": outcome, "run": str(source)}) + "\n")
-            if outcome != -1 or accepted >= args.target:
-                continue
-            clean_manifest = _json(clean_run / "manifest.json")
-            fault_manifest = _json(source / "manifest.json")
-            if not _single_layer(clean_manifest, fault_manifest, args.layer):
-                raise ValueError(f"more than one layer changed in {source}")
-            sample_id = hashlib.sha256(
-                f"{fault_manifest['code_commit']}:{fault['instance']}:{seed}:{seat}".encode()
-            ).hexdigest()[:16]
-            directory = args.out / sample_id
-            directory.mkdir()
-            scan = directory / "same-state-comparisons.jsonl"
-            command = [
-                os.fspath(args.node),
-                os.fspath(Path(__file__).with_name("scan-counterfactual.mjs")),
-                f"--run={source}",
-                f"--out={scan}",
-            ]
-            if args.layer in ("harness", "weights"):
-                command.append(f"--clean-decision-server={args.clean_url}")
-            if args.require_effective:
-                command.append("--require-effective=true")
-            if args.require_execution:
-                command.append("--require-execution=true")
-            if not _run(command, args.repo, attempts):
-                continue
-            comparisons = _rows(scan)
-            if not comparisons or not comparisons[-1]["locally_verified"]:
-                continue
-            comparison = comparisons[-1]
-            if args.require_effective and not (
-                comparison["local_command_changed"] or comparison["local_execution_changed"]
-            ):
-                continue
-            if args.require_execution and not comparison["local_execution_changed"]:
-                continue
-            replay = directory / "replayed"
-            manifest = fault_manifest
-            replay_command = [
-                os.fspath(args.node),
-                os.fspath(Path(__file__).with_name("match.mjs")),
-                f"--seed={seed}",
-                f"--seat={seat}",
-                f"--replay-dir={source}",
-                f"--out={replay}",
-                f"--seconds={manifest['seconds']}",
-                f"--interval-ms={manifest['interval_ms']}",
-                f"--opponent-interval-ms={manifest['opponent_interval_ms']}",
-            ]
-            if args.harness_dir:
-                replay_command.append(f"--harness-dir={args.harness_dir}")
-            if args.controller_fault_file:
-                replay_command.append(f"--controller-fault-file={args.controller_fault_file}")
-            if not _run(replay_command, args.repo, attempts):
-                continue
-            if signature(source) != signature(replay) or any(
-                (source / name).read_bytes() != (replay / name).read_bytes()
-                for name in ("execution.jsonl", "events.jsonl")
-            ):
-                raise ValueError(f"replay differs for {source}")
-            labels = directory / "planner-reference-all-states.jsonl"
-            label_command = [
-                os.fspath(args.node),
-                os.fspath(Path(__file__).with_name("label-recorded-states.mjs")),
-                f"--run={source}",
-                f"--out={labels}",
-            ]
-            if not _run(label_command, args.repo, attempts):
-                continue
-            index = comparison["decision_index"]
-            reference = next((row for row in _rows(labels) if row["decision_index"] == index), None)
-            if reference is None:
-                raise ValueError(f"missing planner reference at decision {index}")
-            (directory / "reference-action.json").write_text(json.dumps(reference, indent=2) + "\n", encoding="utf-8")
-            packet = {
-                "sample_id": sample_id,
-                "split": "pilot",
-                "seed": seed,
-                "seat": seat,
-                "source_run": str(source),
-                "clean_run": str(clean_run),
-                "fault_instance": fault["instance"],
-                "injected_layer": args.layer,
-                "outcome": outcome,
-                "decision_index": index,
-                "window": [max(0, index - 5), min(index + 5, result["decisions"][seat] - 1)],
-                "state_hash": comparison["source_state_hash"],
-                "task_stratum": _stratum(comparison),
-                "local_decision_changed": comparison["local_decision_changed"],
-                "local_command_changed": comparison["local_command_changed"],
-                "local_execution_changed": comparison["local_execution_changed"],
-                "same_state_evidence": str(scan),
-                "replay": str(replay),
-                "reference_action": str(directory / "reference-action.json"),
-                "review_status": "pending_zhuohang_and_nick",
-            }
-            (directory / "private-review-packet.json").write_text(
-                json.dumps(packet, indent=2) + "\n", encoding="utf-8"
-            )
-            with selected.open("a", encoding="utf-8") as stream:
-                stream.write(json.dumps(packet) + "\n")
-            accepted += 1
+    accepted_seeds: set[int] = set()
+    for seed, seat in _ordered_games(seeds, fault["instance"], args.rank_seed_groups):
+        source = args.fault_root / f"s{seed}-{seat}"
+        clean_run = args.clean_root / f"s{seed}-{seat}"
+        result = _json(source / "result.json")
+        outcome = result["outcome"][seat]
+        with outcomes.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"seed": seed, "seat": seat, "outcome": outcome, "run": str(source)}) + "\n")
+        if outcome != -1 or accepted >= args.target or (args.one_per_seed and seed in accepted_seeds):
+            continue
+        clean_manifest = _json(clean_run / "manifest.json")
+        fault_manifest = _json(source / "manifest.json")
+        if not _single_layer(clean_manifest, fault_manifest, args.layer):
+            raise ValueError(f"more than one layer changed in {source}")
+        sample_id = hashlib.sha256(
+            f"{fault_manifest['code_commit']}:{fault['instance']}:{seed}:{seat}".encode()
+        ).hexdigest()[:16]
+        directory = args.out / sample_id
+        directory.mkdir()
+        scan = directory / "same-state-comparisons.jsonl"
+        command = [
+            os.fspath(args.node),
+            os.fspath(Path(__file__).with_name("scan-counterfactual.mjs")),
+            f"--run={source}",
+            f"--out={scan}",
+        ]
+        if args.layer in ("harness", "weights"):
+            command.append(f"--clean-decision-server={args.clean_url}")
+        if args.require_effective:
+            command.append("--require-effective=true")
+        if args.require_execution:
+            command.append("--require-execution=true")
+        if not _run(command, args.repo, attempts):
+            continue
+        comparisons = _rows(scan)
+        if not comparisons or not comparisons[-1]["locally_verified"]:
+            continue
+        comparison = comparisons[-1]
+        if args.require_effective and not (
+            comparison["local_command_changed"] or comparison["local_execution_changed"]
+        ):
+            continue
+        if args.require_execution and not comparison["local_execution_changed"]:
+            continue
+        replay = directory / "replayed"
+        manifest = fault_manifest
+        replay_command = [
+            os.fspath(args.node),
+            os.fspath(Path(__file__).with_name("match.mjs")),
+            f"--seed={seed}",
+            f"--seat={seat}",
+            f"--replay-dir={source}",
+            f"--out={replay}",
+            f"--seconds={manifest['seconds']}",
+            f"--interval-ms={manifest['interval_ms']}",
+            f"--opponent-interval-ms={manifest['opponent_interval_ms']}",
+        ]
+        if args.harness_dir:
+            replay_command.append(f"--harness-dir={args.harness_dir}")
+        if args.controller_fault_file:
+            replay_command.append(f"--controller-fault-file={args.controller_fault_file}")
+        if not _run(replay_command, args.repo, attempts):
+            continue
+        if signature(source) != signature(replay) or any(
+            (source / name).read_bytes() != (replay / name).read_bytes()
+            for name in ("execution.jsonl", "events.jsonl")
+        ):
+            raise ValueError(f"replay differs for {source}")
+        labels = directory / "planner-reference-all-states.jsonl"
+        label_command = [
+            os.fspath(args.node),
+            os.fspath(Path(__file__).with_name("label-recorded-states.mjs")),
+            f"--run={source}",
+            f"--out={labels}",
+        ]
+        if not _run(label_command, args.repo, attempts):
+            continue
+        index = comparison["decision_index"]
+        reference = next((row for row in _rows(labels) if row["decision_index"] == index), None)
+        if reference is None:
+            raise ValueError(f"missing planner reference at decision {index}")
+        (directory / "reference-action.json").write_text(json.dumps(reference, indent=2) + "\n", encoding="utf-8")
+        packet = {
+            "sample_id": sample_id,
+            "split": args.seed_group,
+            "seed": seed,
+            "seat": seat,
+            "source_run": str(source),
+            "clean_run": str(clean_run),
+            "fault_instance": fault["instance"],
+            "injected_layer": args.layer,
+            "outcome": outcome,
+            "decision_index": index,
+            "window": [max(0, index - 5), min(index + 5, result["decisions"][seat] - 1)],
+            "state_hash": comparison["source_state_hash"],
+            "task_stratum": _stratum(comparison),
+            "local_decision_changed": comparison["local_decision_changed"],
+            "local_command_changed": comparison["local_command_changed"],
+            "local_execution_changed": comparison["local_execution_changed"],
+            "same_state_evidence": str(scan),
+            "replay": str(replay),
+            "reference_action": str(directory / "reference-action.json"),
+            "review_status": "pending_machine_selection" if args.seed_group == "final_test" else "pending_zhuohang",
+        }
+        (directory / "private-review-packet.json").write_text(
+            json.dumps(packet, indent=2) + "\n", encoding="utf-8"
+        )
+        with selected.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(packet) + "\n")
+        accepted += 1
+        accepted_seeds.add(seed)
     summary = {
         "layer": args.layer,
         "instance": fault["instance"],
@@ -192,7 +202,12 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         "target": args.target,
         "require_effective": args.require_effective,
         "require_execution": args.require_execution,
+        "rank_seed_groups": args.rank_seed_groups,
+        "one_per_seed": args.one_per_seed,
+        "distinct_seed_groups": len(accepted_seeds),
     }
+    if args.seed_group != "pilot":
+        summary["seed_group"] = args.seed_group
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
 
@@ -200,11 +215,16 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed-plan", type=Path, required=True)
+    parser.add_argument("--seed-group", choices=("pilot", "development", "final_test"), default="pilot")
     parser.add_argument("--start-index", type=int, required=True)
     parser.add_argument("--seed-count", type=int, required=True)
     parser.add_argument("--target", type=int, default=5)
     parser.add_argument("--require-effective", action="store_true")
     parser.add_argument("--require-execution", action="store_true")
+    parser.add_argument("--rank-seed-groups", action="store_true",
+                        help="visit reset groups in a fixed hash order, independent of outcome")
+    parser.add_argument("--one-per-seed", action="store_true",
+                        help="keep at most one supported seat per reset group")
     parser.add_argument("--layer", choices=("harness", "weights", "controller"), required=True)
     parser.add_argument("--fault-manifest", type=Path, required=True)
     parser.add_argument("--fault-root", type=Path, required=True)
@@ -220,6 +240,12 @@ def main() -> None:
         parser.error("target and seed count must be positive")
     if args.layer in ("harness", "weights") and not args.clean_url:
         parser.error("harness and weights checks require the clean decision server")
+    if args.layer == "harness" and not args.harness_dir:
+        parser.error("harness replay requires --harness-dir")
+    if args.layer == "controller" and not args.controller_fault_file:
+        parser.error("controller replay requires --controller-fault-file")
+    if args.seed_group == "final_test" and not (args.rank_seed_groups and args.one_per_seed):
+        parser.error("final-test evidence requires ranked seed groups and one supported seat per seed")
     print(json.dumps(prepare(args)))
 
 

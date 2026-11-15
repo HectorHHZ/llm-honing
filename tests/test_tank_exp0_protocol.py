@@ -122,7 +122,13 @@ def test_single_layer_provenance_accepts_only_named_change(layer: str, digest: s
         fault["decision_server"] = "http://localhost:18732"
     else:
         fault[digest] = "fault-" + digest
+        fault["decision_server"] = "http://localhost:18732"
     exp0._validate_single_layer(clean, fault, layer, "synthetic")
+    if layer != "weights":
+        fault["model"]["inference"] = "different-server-implementation"
+        with pytest.raises(ValueError, match="changed model|another layer"):
+            exp0._validate_single_layer(clean, fault, layer, "synthetic")
+        del fault["model"]["inference"]
     fault["sources"]["engine"] = "other-build"
     with pytest.raises(ValueError, match="changed sources"):
         exp0._validate_single_layer(clean, fault, layer, "synthetic")

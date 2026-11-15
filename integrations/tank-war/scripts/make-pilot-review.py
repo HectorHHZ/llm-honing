@@ -6,6 +6,7 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,15 @@ def _lines(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
-def build(root: Path, template: Path, out: Path, evidence_set: str, review_file: Path | None = None) -> dict[str, Any]:
+def build(
+    root: Path,
+    template: Path,
+    out: Path,
+    evidence_set: str,
+    review_file: Path | None = None,
+    expected_samples: int = 15,
+    storage_key: str = "tank183-review-v3-zhuohang",
+) -> dict[str, Any]:
     samples: list[dict[str, Any]] = []
     reviews: dict[str, dict[str, str]] = {}
     if review_file:
@@ -93,8 +102,8 @@ def build(root: Path, template: Path, out: Path, evidence_set: str, review_file:
             raw = state["raw_state"]
             result = _json(source / "result.json")
             episode_end = result["sim_seconds"]
-            clip_start = 0 if episode_end <= 12 else max(0, min(state["time"] - 5, episode_end - 10))
-            clip_end = episode_end if episode_end <= 12 else clip_start + 10
+            clip_start = 0 if episode_end <= 20 else max(0, min(state["time"] - 5, episode_end - 10))
+            clip_end = episode_end if episode_end <= 20 else clip_start + 10
             playback_states = [row for row in all_states if clip_start <= row["time"] <= clip_end]
             if not playback_states or not any(
                 row["decision_index"] == packet["decision_index"] for row in playback_states
@@ -160,7 +169,8 @@ def build(root: Path, template: Path, out: Path, evidence_set: str, review_file:
                             {key: event[key] for key in ("type", "time", "player") if key in event}
                             | {key: event[key] for key in ("victim", "self") if key in event}
                             for event in _lines(source / "events.jsonl")
-                            if event["type"] in {"shot", "kill", "assist"} and clip_start <= event["time"] <= clip_end
+                            if event["type"] in {"shot", "kill", "assist"}
+                            and clip_start - 0.001 <= event["time"] <= clip_end + 0.001
                         ],
                     },
                     "faulty": comparison["faulty"],
@@ -179,12 +189,17 @@ def build(root: Path, template: Path, out: Path, evidence_set: str, review_file:
                     },
                 }
             )
-    if len(samples) != 15 or len({item["id"] for item in samples}) != 15:
-        raise ValueError("expected 15 distinct samples")
+    if len(samples) != expected_samples or len({item["id"] for item in samples}) != expected_samples:
+        raise ValueError(f"expected {expected_samples} distinct samples")
     if review_file and set(reviews) != {item["id"] for item in samples}:
         raise ValueError("submitted review does not cover the selected samples exactly")
-    html = template.read_text(encoding="utf-8").replace(
-        "__SAMPLE_DATA__", json.dumps(samples, ensure_ascii=False).replace("<", "\\u003c")
+    if re.fullmatch(r"[A-Za-z0-9_-]+", storage_key) is None:
+        raise ValueError("invalid local review storage key")
+    html = (
+        template.read_text(encoding="utf-8")
+        .replace("__SAMPLE_COUNT__", str(len(samples)))
+        .replace("__REVIEW_STORAGE_KEY__", storage_key)
+        .replace("__SAMPLE_DATA__", json.dumps(samples, ensure_ascii=False).replace("<", "\\u003c"))
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
@@ -202,6 +217,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--evidence-set", choices=("evidence", "effective-evidence"), default="effective-evidence")
     parser.add_argument("--review-file", type=Path)
+    parser.add_argument("--expected-samples", type=int, default=15)
+    parser.add_argument("--storage-key", default="tank183-review-v3-zhuohang")
     args = parser.parse_args()
     print(
         json.dumps(
@@ -211,6 +228,8 @@ def main() -> None:
                 args.out,
                 args.evidence_set,
                 args.review_file,
+                args.expected_samples,
+                args.storage_key,
             )
         )
     )

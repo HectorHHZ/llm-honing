@@ -241,6 +241,53 @@ test("controller fault changes execution only and keeps a private trigger record
     );
 });
 
+test("drive and turn controller faults change the acknowledged action", async () => {
+    for (const [kind, field] of [
+        ["suppress_selected_turn", "turn"],
+        ["invert_selected_drive", "drive"],
+    ]) {
+        const faultDir = await mkdtemp(
+            join(tmpdir(), "tank-exp0-extra-fault-"),
+        );
+        const faultFile = join(faultDir, "fault.json");
+        await writeFile(
+            faultFile,
+            JSON.stringify({
+                layer: "controller",
+                kind,
+                instance: `${kind}_v1`,
+            }),
+        );
+        const out = await outDir();
+        await playMatch({
+            seed: 2001,
+            seat: "blue",
+            out,
+            teacher: true,
+            seconds: SECONDS,
+            controllerFaultFile: faultFile,
+        });
+        const triggers = await lines(join(out, "private_fault_events.jsonl"));
+        const execution = await lines(join(out, "execution.jsonl"));
+        assert.ok(triggers.length > 0, `${kind} did not trigger`);
+        for (const trigger of triggers) {
+            assert.notEqual(trigger.before[field], trigger.after[field]);
+            assert.equal(
+                execution[trigger.decision_index].acknowledged_command.controls[
+                    field
+                ],
+                trigger.after[field],
+            );
+        }
+        const publicEvents = await lines(join(out, "events.jsonl"));
+        assert.ok(
+            publicEvents.every(
+                (event) => !JSON.stringify(event).includes(kind),
+            ),
+        );
+    }
+});
+
 test("every harness file reaches the model: question text, controller, and operating notes", async (t) => {
     const { url, requests } = await stubServer(t);
     const questions = {

@@ -27,8 +27,8 @@ builder = _load("tank_controller_fault_builder", "build-controller-faults.py")
 
 def test_controller_candidates_are_separate_and_named(tmp_path: Path) -> None:
     records = builder.build(tmp_path / "candidates")
-    assert len(records) == 3
-    assert len({record["kind"] for record in records}) == 3
+    assert len(records) == 5
+    assert len({record["kind"] for record in records}) == 5
     for record in records:
         path = tmp_path / "candidates" / f"{record['kind']}.json"
         assert json.loads(path.read_text()) == record

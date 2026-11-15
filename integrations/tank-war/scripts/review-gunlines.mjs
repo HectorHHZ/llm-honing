@@ -17,7 +17,13 @@ function parseArgs(argv) {
     );
     if (!args.run || !args.out) throw Error("--run and --out are required");
     const maxDistance = Number(args["max-distance"] ?? 400);
-    if (!(Number.isFinite(maxDistance) && maxDistance > 0 && maxDistance <= 1200))
+    if (
+        !(
+            Number.isFinite(maxDistance) &&
+            maxDistance > 0 &&
+            maxDistance <= 1200
+        )
+    )
         throw Error("--max-distance must be within (0, 1200] pixels");
     return { run: resolve(args.run), out: resolve(args.out), maxDistance };
 }
@@ -25,9 +31,13 @@ function parseArgs(argv) {
 const { run, out, maxDistance } = parseArgs(process.argv.slice(2));
 const manifest = JSON.parse(await readFile(join(run, "manifest.json"), "utf8"));
 const engine = fileURLToPath(new URL("../web/game/engine.js", import.meta.url));
-const engineSha = createHash("sha256").update(await readFile(engine)).digest("hex");
+const engineSha = createHash("sha256")
+    .update(await readFile(engine))
+    .digest("hex");
 if (manifest.sources["web/game/engine.js"] !== engineSha)
-    throw Error("Recorded game engine differs from the shot-trace implementation");
+    throw Error(
+        "Recorded game engine differs from the shot-trace implementation",
+    );
 const states = (await readFile(join(run, "states.jsonl"), "utf8"))
     .split("\n")
     .filter(Boolean)
@@ -38,18 +48,45 @@ const rows = states.map((state) => {
     const { maze, tanks } = state.raw_state;
     const lines = tanks.map((tank, index) => {
         if (!tank.alive) return { points: [], bounces: 0, blocked: false };
-        const trace = traceShot(maze, tank, tank.angle, maxDistance / 290, tanks[1 - index]);
+        const trace = traceShot(
+            maze,
+            tank,
+            tank.angle,
+            maxDistance / 290,
+            tanks[1 - index],
+        );
         return {
-            points: trace.points.map(({ x, y }) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
+            points: trace.points.map(({ x, y }) => [
+                Math.round(x * 10) / 10,
+                Math.round(y * 10) / 10,
+            ]),
             bounces: trace.bounces,
             blocked: trace.muzzleBlocked,
         };
     });
-    return { decision_index: state.decision_index, state_hash: state.state_hash, lines };
+    return {
+        decision_index: state.decision_index,
+        state_hash: state.state_hash,
+        lines,
+    };
 });
 await writeFile(
     out,
-    JSON.stringify({ source_run: run, engine_sha256: engineSha, max_distance_px: maxDistance, rows }) + "\n",
+    JSON.stringify({
+        source_run: run,
+        engine_sha256: engineSha,
+        max_distance_px: maxDistance,
+        rows,
+    }) + "\n",
     { flag: "wx" },
 );
-console.log(JSON.stringify({ out, frames: rows.length, bounces: rows.reduce((n, row) => n + row.lines.filter((line) => line.bounces > 0).length, 0) }));
+console.log(
+    JSON.stringify({
+        out,
+        frames: rows.length,
+        bounces: rows.reduce(
+            (n, row) => n + row.lines.filter((line) => line.bounces > 0).length,
+            0,
+        ),
+    }),
+);

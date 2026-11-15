@@ -120,11 +120,11 @@ def _validate_single_layer(clean: dict[str, Any], fault: dict[str, Any], layer: 
     if not changed[layer]:
         raise ValueError(f"candidate did not change {layer} in {run}")
     if layer == "harness":
-        if changed["weights"] or clean.get("decision_server") != fault.get("decision_server"):
+        if changed["weights"] or _frozen_model(clean["model"]) != _frozen_model(fault["model"]):
             raise ValueError(f"harness fault also changed model in {run}")
         # Controller hash includes harness settings, so it can change for this layer.
     elif layer == "controller":
-        if changed["harness"] or changed["weights"] or clean.get("decision_server") != fault.get("decision_server"):
+        if changed["harness"] or changed["weights"] or _frozen_model(clean["model"]) != _frozen_model(fault["model"]):
             raise ValueError(f"controller fault also changed another layer in {run}")
     elif changed["harness"] or changed["controller"]:
         raise ValueError(f"weights fault also changed another layer in {run}")

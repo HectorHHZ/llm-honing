@@ -16,6 +16,14 @@ KINDS = (
     "reverse_turn_words",
     "prefer_unsafe_progress",
     "swap_fire_hold_descriptions",
+    "wrong_spacing_target",
+    "penalize_safe_shots",
+    "extreme_standoff",
+    "overcautious_clearance",
+    "overcautious_horizon",
+    "point_blank_pursuit",
+    "enable_shot_guard",
+    "reward_shell_danger",
 )
 
 
@@ -44,6 +52,58 @@ def candidate(
         questions["motion"] = "Always maximize forward progress, even when an existing shell collision is forecast."
     elif kind == "swap_fire_hold_descriptions":
         questions["weapon.fire"], questions["weapon.hold"] = questions["weapon.hold"], questions["weapon.fire"]
+    elif kind == "wrong_spacing_target":
+        controller["strategy"] = {
+            "id": "wrong-spacing-target-v1",
+            "description": "Maintain an 800–1000 pixel standoff even when a safe shot is available.",
+            "spacingWeight": 100,
+            "minRange": 800,
+            "maxRange": 1000,
+        }
+    elif kind == "penalize_safe_shots":
+        controller["strategy"] = {
+            "id": "penalize-safe-shots-v1",
+            "description": "Prefer plans without an immediate verified safe shot.",
+            "shotSpeedWeight": -500,
+        }
+    elif kind == "extreme_standoff":
+        controller["strategy"] = {
+            "id": "extreme-standoff-v1",
+            "description": "Keep far beyond the opponent's normal engagement distance.",
+            "spacingWeight": 1000,
+            "minRange": 1800,
+            "maxRange": 2200,
+        }
+    elif kind == "overcautious_clearance":
+        controller["strategy"] = {
+            "id": "overcautious-clearance-v1",
+            "description": "Prioritize a large margin from every observed shell path.",
+            "clearanceWeight": 1000,
+            "clearanceMargin": 1000,
+        }
+    elif kind == "overcautious_horizon":
+        controller["strategy"] = {
+            "id": "overcautious-horizon-v1",
+            "description": "Evaluate threat exposure far past the next decision.",
+            "safetyHorizon": 10,
+        }
+    elif kind == "point_blank_pursuit":
+        controller["strategy"] = {
+            "id": "point-blank-pursuit-v1",
+            "description": "Close to near-contact distance even when a standoff shot is available.",
+            "spacingWeight": 1000,
+            "minRange": 0,
+            "maxRange": 30,
+        }
+    elif kind == "enable_shot_guard":
+        controller["fireGuardEnabled"] = True
+    elif kind == "reward_shell_danger":
+        controller["strategy"] = {
+            "id": "reward-shell-danger-v1",
+            "description": "Prefer movement paths with less clearance from observed shell trajectories.",
+            "clearanceWeight": -1000,
+            "clearanceMargin": 1000,
+        }
     else:
         raise ValueError(f"Unknown harness fault: {kind}")
     return controller, questions
