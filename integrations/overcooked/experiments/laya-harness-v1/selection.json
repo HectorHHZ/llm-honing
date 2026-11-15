@@ -1,0 +1,16 @@
+{
+  "gate": {
+    "outcome": "reject",
+    "reason": "No strict search improvement; no candidate validation call."
+  },
+  "search_means": {
+    "local_progress": 90.0,
+    "local_progress_no_history": 90.0,
+    "readable": 90.0,
+    "readable_local_effects": 90.0,
+    "readable_objective": 90.0,
+    "seed": 90.0
+  },
+  "search_winner": "seed",
+  "selected": "seed"
+}

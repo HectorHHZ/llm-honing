@@ -1,0 +1,29 @@
+{
+  "clock": "one tick per joint action; no simulation during inference",
+  "control": "chef0_stay",
+  "controller": "actions",
+  "format": "overcooked-match-v2",
+  "grading": "native-score-softsign-v1",
+  "kind": "control",
+  "runtime": {
+    "native_sha256": "b80c1bd80f10725ae5354152f52ea0eefc21c3e5a2862e7b3f88f9255526a94a",
+    "packages": {
+      "gymnasium": "1.1.1",
+      "numpy": "1.26.4",
+      "overcooked-ai": "2.0.0",
+      "pygame": "2.6.1",
+      "scipy": "1.15.3"
+    },
+    "revision": "739950a079cdaed5a44fcc662efc40244c205d06"
+  },
+  "scenario": {
+    "controlled_player": 0,
+    "layout": "counter_circuit_o_1order",
+    "max_steps": 400,
+    "old_dynamics": false,
+    "partner": "solo",
+    "score_scale": 40.0,
+    "target_deliveries": 2
+  },
+  "source_identity": "725620353d55b77e71447339ebbbbab6d3a5bd4b9d9be4cf9fc45528626007ca"
+}

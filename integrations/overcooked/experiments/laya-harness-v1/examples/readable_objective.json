@@ -1,0 +1,88 @@
+{
+  "purpose": "Exact first decision from the recorded search episode",
+  "request": {
+    "id": "overcooked-p0-t0-154ad2604fa9",
+    "parts": {
+      "details": [],
+      "essential": [
+        "You control chef 0. Maximize shared soup delivery points in 400 ticks.\nYour fixed teammate independently collects, cooks and serves. Both act from the same public state; its next action is hidden. Thinking does not advance game time.\nTick 0; remaining 400; team score 0.0; delivered 0.\nFull map cramped_room, width 5, height 4. Coordinates (x,y): origin upper-left, x right, y down.\nMap legend: .=floor, X=counter, O=onion supply, T=tomato supply, D=dish supply, P=pot, S=serve.\nrow y=0: XXPXX\nrow y=1: O...O\nrow y=2: X...X\nrow y=3: XDXSX\nChef 0 (YOU): at [1, 2], facing north, holding empty hands.\nChef 1 (teammate): at [3, 1], facing north, holding empty hands.\nObjects on counters and in pots (all other stations/counters are empty):\nPot capacity: 3 ingredients.\nAllowed soup: onion+onion+onion; cook 20 ticks; delivery reward 20.\nBonus orders: []; order bonus 2.\nBoth chefs share delivery rewards. Actions resolve together, one native tick per joint action.\nA direction moves one floor tile and sets facing; blocked movement can still change facing.\nChefs cannot share a tile or swap positions in one tick. Collisions cancel their movement.\nINTERACT affects the adjacent tile in the direction the chef is facing.\nEmpty hands take ingredients/dishes from dispensers or pick up an object from a counter.\nHolding an object: INTERACT places it on an empty counter. Ingredients can be added to idle pots.\nWith empty hands, INTERACT with an idle pot containing ingredients to start cooking.\nA dish is needed to collect ready soup; deliver the soup at S to score. Cooking uses ticks, not seconds.\nAll six actions are allowed; an ineffective interaction is a native no-op, not an illegal action.\nThe episode ends at its fixed step budget; task goals do not end the native episode early.\nRecent joint actions (chef 0, chef 1) and reward:"
+      ],
+      "logs": [],
+      "memory": []
+    },
+    "questions": {
+      "action": {
+        "criteria": {
+          "EAST": "Move right one tile and face east",
+          "INTERACT": "Interact with the adjacent tile you face",
+          "NORTH": "Move up one tile and face north",
+          "SOUTH": "Move down one tile and face south",
+          "STAY": "Wait one game tick",
+          "WEST": "Move left one tile and face west"
+        },
+        "instructions": "Choose chef 0's next physical action to maximize delivered soup. If holding soup, serve it. With a dish, collect ready soup. With an onion, fill an idle pot. With empty hands, start a full idle pot or fetch a needed onion or dish. Move toward the needed station, face it, then interact. Let the teammate pass. Wait only when useful work is unavailable.",
+        "type": "choice"
+      }
+    }
+  },
+  "response": {
+    "answers": {
+      "action": {
+        "action": {
+          "act_probability": 1.0
+        },
+        "answer_confidence": 0.344,
+        "choice": "NORTH",
+        "confidence": 0.109,
+        "probabilities": {
+          "EAST": 0.1236,
+          "INTERACT": 0.2797,
+          "NORTH": 0.344,
+          "SOUTH": 0.0976,
+          "STAY": 0.1037,
+          "WEST": 0.0513
+        },
+        "type": "choice"
+      }
+    },
+    "id": "overcooked-p0-t0-154ad2604fa9",
+    "latencyMs": 37.99760399999741,
+    "modelResult": {
+      "answers": {
+        "action": {
+          "action": {
+            "act_probability": 1.0
+          },
+          "answer_confidence": 0.344,
+          "choice": "NORTH",
+          "confidence": 0.109,
+          "probabilities": {
+            "EAST": 0.1236,
+            "INTERACT": 0.2797,
+            "NORTH": 0.344,
+            "SOUTH": 0.0976,
+            "STAY": 0.1037,
+            "WEST": 0.0513
+          },
+          "type": "choice"
+        }
+      },
+      "model": "laya-rl-agent",
+      "usage": {
+        "input_tokens": 631,
+        "output_tokens": 0
+      }
+    },
+    "stateText": "You control chef 0. Maximize shared soup delivery points in 400 ticks.\nYour fixed teammate independently collects, cooks and serves. Both act from the same public state; its next action is hidden. Thinking does not advance game time.\nTick 0; remaining 400; team score 0.0; delivered 0.\nFull map cramped_room, width 5, height 4. Coordinates (x,y): origin upper-left, x right, y down.\nMap legend: .=floor, X=counter, O=onion supply, T=tomato supply, D=dish supply, P=pot, S=serve.\nrow y=0: XXPXX\nrow y=1: O...O\nrow y=2: X...X\nrow y=3: XDXSX\nChef 0 (YOU): at [1, 2], facing north, holding empty hands.\nChef 1 (teammate): at [3, 1], facing north, holding empty hands.\nObjects on counters and in pots (all other stations/counters are empty):\nPot capacity: 3 ingredients.\nAllowed soup: onion+onion+onion; cook 20 ticks; delivery reward 20.\nBonus orders: []; order bonus 2.\nBoth chefs share delivery rewards. Actions resolve together, one native tick per joint action.\nA direction moves one floor tile and sets facing; blocked movement can still change facing.\nChefs cannot share a tile or swap positions in one tick. Collisions cancel their movement.\nINTERACT affects the adjacent tile in the direction the chef is facing.\nEmpty hands take ingredients/dishes from dispensers or pick up an object from a counter.\nHolding an object: INTERACT places it on an empty counter. Ingredients can be added to idle pots.\nWith empty hands, INTERACT with an idle pot containing ingredients to start cooking.\nA dish is needed to collect ready soup; deliver the soup at S to score. Cooking uses ticks, not seconds.\nAll six actions are allowed; an ineffective interaction is a native no-op, not an illegal action.\nThe episode ends at its fixed step budget; task goals do not end the native episode early.\nRecent joint actions (chef 0, chef 1) and reward:",
+    "tokenAudit": {
+      "action": {
+        "inputTokens": 631,
+        "options": 6,
+        "stateRoom": 1898,
+        "stateTokens": 481,
+        "stateTruncated": false
+      }
+    },
+    "trimmed": []
+  }
+}

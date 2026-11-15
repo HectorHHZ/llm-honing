@@ -1,0 +1,11 @@
+{
+  "additional_full_game_candidate_budget_used": 2,
+  "changes": {
+    "local_progress": "Frame the question around the immediate physical effect and explicitly distinguish turning from interacting.",
+    "local_progress_no_history": "Same question and local-effect choices, with zero recent-action history to test repetition anchoring."
+  },
+  "evidence": "All four initial harnesses scored 0 and 180. Objective/local-effect variants mostly repeated EAST and never selected a productive interaction.",
+  "phase": "search only, before any validation or heldout model evaluation",
+  "proposer": "Codex in this session",
+  "weights_or_game_changes": false
+}
