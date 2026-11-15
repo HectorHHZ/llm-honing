@@ -20,6 +20,9 @@ class DecisionModel(Protocol):
     would; and ``prepare(requests)`` with ``run(prepared)``, the same split in
     two, where ``prepare`` does CPU work only and may run on any thread while
     another call's ``run`` uses the GPU. The server uses whichever it finds.
+    A model whose forward pass runs in another process may offer ``healthy()``,
+    returning whether that process still answers; the health route calls it on
+    its own thread, concurrently with ``predict``, so it must not run the model.
     """
 
     @property
