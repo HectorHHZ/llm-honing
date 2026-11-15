@@ -1,0 +1,12 @@
+{
+  "name": "honing-pi",
+  "private": true,
+  "description": "The pi coding agent that Honing's PiEpisodeRunner runs; see README.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.0"
+  }
+}

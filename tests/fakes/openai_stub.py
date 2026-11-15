@@ -31,6 +31,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from tests.fakes.sse import send_stream
+
 SUITE = Path(__file__).resolve().parents[2] / "integrations/python-bugfix/tasks"
 SLOW_SECONDS = 5.0
 # What a system prompt must say for each convention, lower-cased.
@@ -88,17 +90,18 @@ class _Handler(BaseHTTPRequestHandler):
         if mode == "slow":
             time.sleep(SLOW_SECONDS)
         text = self.server.reflect(str(messages[-1]["content"])) if reflection else _policy_reply(messages)
-        self._send(
-            200,
-            {
-                "id": "chatcmpl-stub",
-                "object": "chat.completion",
-                "created": 1,
-                "model": body.get("model"),
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
-            },
-        )
+        reply = {
+            "id": "chatcmpl-stub",
+            "object": "chat.completion",
+            "created": 1,
+            "model": body.get("model"),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
+        }
+        if body.get("stream"):
+            send_stream(self, reply)
+        else:
+            self._send(200, reply)
 
     def _send(self, status: int, payload: dict[str, Any]) -> None:
         data = json.dumps(payload).encode()
