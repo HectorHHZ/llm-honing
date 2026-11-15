@@ -53,16 +53,46 @@ opens a new game for keyboard play.
 
 ## Drive the engine
 
-Construct `BrogueSession(engine, seed)` from `integrations.brogue_ce.engine`.
-Each session starts a game in its own temporary directory.
-`observe()` returns the game's 100 × 34 text display, deepest level, gold, and
-the native outcome at game over. The display contains the player's map and
-messages. The session waits for `step(key)` at each native input boundary,
-including menus. The caller can choose each key from the observation and store
-the same trace for a scripted policy or a model. Pass `--actions` to the demo
-to supply a JSON list of keys. Complete any menu prompts in that list before
-the final quit. Use `save_recording(path)` after the terminal event to retain
-the native recording.
+Use `agent` for a headless controller in any language. Send one JSON object
+per line on stdin and read one reply on stdout. `observe` reads the current
+state and `step` sends a key before returning the next observation. Each reply
+has `ok: true` and `observation`, or `ok: false` and `error` for an invalid
+request. Close stdin to end the session.
+
+```bash
+printf '%s\n' '{"op":"observe"}' '{"op":"step","action":"h"}' |
+  python3 -m integrations.brogue_ce agent --engine /path/to/brogue-ce-engine/bin/brogue --seed 7
+```
+
+### Observation fields
+
+`schema_version` is `1`.
+
+- `map.rows`, the 79 × 29 rendered glyph grid. Index it as `rows[y][x]`
+  from the top left. A space is unshown, `@` marks the player, `#` groups
+  walls and other obstacles, `·` is floor-like terrain, and `<` / `>` are
+  stairs. Items, creatures and terrain may share glyphs. The map reflects
+  the player's visibility and remembered terrain.
+- `player.position`, the single `@` position when identifiable, and
+  `player.bars`, the visible health and nutrition bars. Their `background`
+  values are the 20 rendered RGB hex cells in left-to-right order.
+- `depth`, `deepest_level`, `gold`, `sidebar`, `messages`, and
+  `location_hint`. The sidebar contains the stats and descriptions shown
+  for visible creatures, items, and terrain.
+- `action_space`, with common key bindings during play. At a `prompt`, use
+  the `display` rows to select the next key, for example a letter in the
+  inventory, `y` or `n` at confirmation, or `\u001b` to send Escape. The
+  map and position are unavailable while a prompt obscures the map.
+- `clock.value`, the number of keys submitted. One key can open a menu or
+  advance several turns. `done` and `outcome` report game over and `seed`
+  is a decimal string to preserve large native seeds.
+
+In Python, construct `BrogueSession(engine, seed)` from
+`integrations.brogue_ce.engine`, call `observe_for_ai()`, and use `step(key)`
+to advance. `observe()` still returns the original 100 × 34 display.
+Pass `--actions` to `demo` to run a JSON list of keys and record it. Complete
+any menu prompts before the final quit. Use `save_recording(path)` from
+Python after the terminal event to retain the native recording.
 
 The adapter uses Python's standard library. Headless play and verification
 require no graphical session. The replay viewer requires a graphical desktop.

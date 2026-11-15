@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import socket
 import subprocess
@@ -14,6 +15,14 @@ from types import TracebackType
 VERSION = "1.15.1"
 WIDTH, HEIGHT = 100, 34
 OUTCOMES = ("quit", "death", "victory", "mastery", "recording_ended")
+
+# WebBrogue CE 1.15.1 display layout, also used by the native console.
+SIDEBAR_WIDTH = 20
+MAP_LEFT = SIDEBAR_WIDTH + 1
+MAP_TOP = 3
+MAP_WIDTH = WIDTH - MAP_LEFT
+MAP_HEIGHT = HEIGHT - MAP_TOP - 2
+DEPTH_LABEL = re.compile(r"\s*-- Depth: (\d+) --")
 
 
 @dataclass(frozen=True)
@@ -30,6 +39,8 @@ class Observation:
 class _Display:
     def __init__(self) -> None:
         self.rows = [[" "] * WIDTH for _ in range(HEIGHT)]
+        # The player health and nutrition fills are drawn in the background.
+        self.bar_colors = [[b"\0\0\0"] * SIDEBAR_WIDTH for _ in range(2)]
         self.status = [0] * 4
         self.last: Observation | None = None
 
@@ -63,9 +74,64 @@ class _Display:
                     return self.last
             elif x < WIDTH and y < HEIGHT:
                 self.rows[y][x] = chr(int.from_bytes(record[2:4], "big"))
+                if x < SIDEBAR_WIDTH and y in (1, 2):
+                    self.bar_colors[y - 1][x] = record[7:10]
             else:
                 raise RuntimeError("Invalid WebBrogue display coordinate")
         return None
+
+    def observe_for_ai(self, frame: Observation, seed: int, keys: int) -> dict[str, object]:
+        rows = frame.rows
+        depth = DEPTH_LABEL.match(rows[-1])
+        footer = rows[-1][MAP_LEFT:].split()
+        done = frame.outcome is not None
+        show_map = not done and footer == ["Explore", "Rest", "(z)", "Search", "(s)", "Menu", "Inventory"]
+        result: dict[str, object] = {
+            "schema_version": 1,
+            "game": "brogue-ce",
+            "seed": str(seed),
+            "status": "ended" if done else "playing" if show_map else "prompt",
+            "done": done,
+            "clock": {"unit": "key", "value": keys},
+            "depth": int(depth[1]) if depth else None,
+            "deepest_level": frame.deepest_level,
+            "gold": frame.gold,
+            "outcome": frame.outcome,
+            "outcome_message": frame.message,
+            "map": None,
+            "player": None,
+            "action_space": None if done else {"kind": "key"},
+        }
+        if not show_map:
+            result["display"] = list(rows)
+            return result
+
+        glyphs = [row[MAP_LEFT:].ljust(MAP_WIDTH) for row in rows[MAP_TOP : MAP_TOP + MAP_HEIGHT]]
+        positions = [{"x": x, "y": y} for y, row in enumerate(glyphs) for x, glyph in enumerate(row) if glyph == "@"]
+        sidebar = [row[:SIDEBAR_WIDTH].strip() for row in rows[:-1]]
+        bars = {
+            name: {"label": label, "background": [color.hex() for color in colors]}
+            for name, label, colors in zip(("health", "nutrition"), sidebar[1:3], self.bar_colors, strict=True)
+            if label.startswith(name.capitalize())
+        }
+        result.update(
+            map={"kind": "glyph_grid", "width": MAP_WIDTH, "height": MAP_HEIGHT, "rows": glyphs},
+            player={"position": positions[0] if len(positions) == 1 else None, "label": sidebar[0], "bars": bars},
+            sidebar=[line for line in sidebar if line],
+            messages=[row[MAP_LEFT:] for row in rows[:MAP_TOP] if row[MAP_LEFT:].strip()],
+            location_hint=rows[-2][MAP_LEFT:].strip(),
+            action_space={
+                "kind": "key",
+                "move": dict(zip(("n", "ne", "e", "se", "s", "sw", "w", "nw"), "kulnjbhy", strict=True)),
+                "explore": "x",
+                "inventory": "i",
+                "rest": "z",
+                "search": "s",
+                "ascend": "<",
+                "descend": ">",
+            },
+        )
+        return result
 
 
 def check_engine(engine: Path) -> None:
@@ -84,6 +150,8 @@ class BrogueSession:
         engine = engine.resolve()
         check_engine(engine)
         self._timeout = timeout_seconds
+        self._seed = seed
+        self._keys = 0
         self._display = _Display()
         # Keep the socket paths within the Unix-domain address length limit.
         self._temp = tempfile.TemporaryDirectory(prefix="honing-br-", dir="/tmp")
@@ -132,6 +200,10 @@ class BrogueSession:
     def observe(self) -> Observation:
         return self._observation
 
+    def observe_for_ai(self) -> dict[str, object]:
+        """Return the current public map, sidebar and input mode as JSON data."""
+        return self._display.observe_for_ai(self._observation, self._seed, self._keys)
+
     def step(self, key: str) -> Observation:
         """Send one printable ASCII key, Escape, Return or Tab."""
         if self._observation.outcome is not None:
@@ -140,6 +212,7 @@ class BrogueSession:
             raise ValueError("expected one Brogue keyboard input")
         self._socket.sendto(bytes((0, 0, ord(key), 0, 0)), str(self._directory / "server-socket"))
         self._observation = self._read()
+        self._keys += 1
         return self._observation
 
     def save_recording(self, target: Path) -> None:

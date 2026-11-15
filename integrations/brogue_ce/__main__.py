@@ -1,15 +1,38 @@
-"""Run a seeded Brogue demo and watch or verify the native recording."""
+"""Drive Brogue CE or run, watch and verify a seeded demo."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import subprocess
+import sys
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
 from integrations.brogue_ce.engine import VERSION, BrogueSession, check_engine
+
+
+def serve(game: BrogueSession) -> None:
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        try:
+            request = json.loads(line)
+            if not isinstance(request, dict) or request.get("op") not in ("observe", "step"):
+                raise ValueError("expected an object with op 'observe' or 'step'")
+            if request["op"] == "step":
+                if game.observe().outcome is not None:
+                    raise ValueError("the game has ended")
+                key = request.get("action")
+                if not isinstance(key, str):
+                    raise ValueError("expected one Brogue keyboard input as action")
+                game.step(key)
+        except ValueError as exc:
+            response = {"ok": False, "error": str(exc)}
+        else:
+            response = {"ok": True, "observation": game.observe_for_ai()}
+        print(json.dumps(response, ensure_ascii=False), flush=True)
 
 
 def match(engine: Path, seed: int, out: Path, actions: list[str]) -> None:
@@ -55,6 +78,10 @@ def main() -> None:
     demo.add_argument("--out", type=Path, required=True)
     demo.add_argument("--actions", type=Path, help="JSON array of native keyboard inputs")
 
+    agent = sub.add_parser("agent", help="serve AI observations and accept keys over JSON Lines")
+    agent.add_argument("--engine", type=Path, required=True)
+    agent.add_argument("--seed", type=int, default=7)
+
     verify = sub.add_parser("verify", help="check the recording with Brogue's native replay verifier")
     verify.add_argument("--engine", type=Path, required=True)
     verify.add_argument("recording", type=Path)
@@ -68,6 +95,10 @@ def main() -> None:
     play.add_argument("--seed", type=int, default=7)
 
     args = parser.parse_args()
+    if args.command == "agent":
+        with BrogueSession(args.engine, args.seed) as game:
+            serve(game)
+        return
     if args.command == "demo":
         actions = json.loads(args.actions.read_text(encoding="utf-8")) if args.actions else ["x"] * 20
         if not isinstance(actions, list) or not all(isinstance(key, str) for key in actions):
