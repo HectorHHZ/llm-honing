@@ -16,7 +16,8 @@ recorded. Two kinds of failure are told apart:
   nonzero, prints something that is not a grade,
   reports a score outside ``[0, 1]``, or times out, or the command cannot start
   because of a file in the workspace. That is a score of 0 with the reason as
-  feedback, so one bad episode never aborts a gate.
+  feedback, so one bad episode never aborts a gate. (An outcome whose runner set
+  ``failure`` never reaches a grader: ``run_graded`` scores it 0.)
 - the infrastructure failed: the outcome names no workspace, the sandbox cannot be
   opened, or the grader command cannot start for any other reason (``python3`` is
   not on ``PATH``, say). That raises, because scoring it 0 would charge a broken
