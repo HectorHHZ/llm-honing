@@ -187,7 +187,12 @@ class PolicyEndpoints(Protocol):
 async def run_graded(
     runner: EpisodeRunner, grader: TaskGrader, spec: HarnessSpec, task: Task, policy: PolicyRef
 ) -> EpisodeRecord:
-    """Run one episode and grade it: the only way the gate and methods obtain an episode record."""
+    """Run one episode and grade it: the only way the gate and methods obtain an episode record.
+
+    An outcome whose ``failure`` is set is never passed to the grader: it is recorded
+    with score 0 and ``failure`` as its feedback, whatever the grader would have done
+    with it, so the rule holds for every grader.
+    """
     outcome = await runner.run(spec, task, policy)
     if (outcome.task_id, outcome.spec_id, outcome.policy_checksum) != (
         task.task_id,
@@ -199,6 +204,8 @@ async def run_graded(
             f"{outcome.policy_checksum!r} for an episode it was asked to run on task {task.task_id!r}, "
             f"spec {spec.spec_id!r}, and policy {policy.checkpoint.checksum!r}"
         )
+    if outcome.failure is not None:
+        return EpisodeRecord(outcome=outcome, grade=Grade(score=0.0, feedback=outcome.failure))
     return EpisodeRecord(outcome=outcome, grade=await grader.grade(task, outcome))
 
 

@@ -196,3 +196,13 @@ lead to the controller's observation timeout and owned-child cleanup.
 Run `verify_native.py` as described in README for the fixed scripted sequence, duplicate/invalid
 input checks and native watchdog receipts. Run the real-model command separately. Author-side
 native receipts, portable tests/CI and an independent reviewer's native rerun are separate evidence.
+
+## Shared decision-response receiver
+
+The adapter imports the [shared stdlib-only receiver](../_shared/README.md).
+It requires `answers.action.type: "choice"` and explicit `stateTokens`,
+`stateRoom` and `inputTokens` audit keys; null counts are permitted, omitted
+keys are rejected. It rejects duplicate JSON keys at every nesting level as
+well as nonfinite numbers. Raw response bytes are saved before decoding,
+including HTTP error bodies. The game's required/optional context policy
+above remains in effect; invalid decisions cannot reach native input.
