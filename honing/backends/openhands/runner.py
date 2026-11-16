@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import itertools
 import json
 import os
 import shutil
@@ -26,6 +27,7 @@ from typing import Literal
 
 from honing.backends.llm_gateway import GatewayEndpoints
 from honing.backends.openhands.harness import AGENT, AgentPlan, ToolPolicy, plan_agent
+from honing.backends.openhands.key_proxy import KeyProxy
 from honing.core import (
     CampaignRuleError,
     ContractError,
@@ -87,6 +89,11 @@ class Container:
     network as ``127.0.0.1``: address it as ``host.docker.internal`` on Docker
     Desktop, or pass ``--network host`` on Linux.
 
+    The policy's API key does not enter the container. The runner serves the
+    endpoint through a :class:`~honing.backends.openhands.key_proxy.KeyProxy`
+    on the host's loopback, which adds the key, and the worker calls it at
+    ``host.docker.internal``, or at ``127.0.0.1`` with ``--network host``.
+
     Attributes:
         image: An image with the OpenHands environment
             (``integrations/openhands/Dockerfile``) and what the tasks need.
@@ -130,8 +137,10 @@ class OpenHandsEpisodeRunner:
             :class:`~honing.backends.llm_gateway.GatewayEndpoints` and
             :class:`~honing.harness.endpoints.StaticPolicyEndpoints` do, the
             worker also gets the key that variable holds (through the
-            environment, never on disk). With ``GatewayEndpoints`` it also gets
-            the model's prices.
+            environment, never on disk), and removes it from its environment
+            before the agent's terminal starts; a container gets a proxy
+            instead (see :class:`Container`). With ``GatewayEndpoints`` it also
+            gets the model's prices.
         tools: What a harness may give the agent.
         mounts: Directories put into every working directory, by name.
         mount_mode: ``copy``, the default, gives each episode its own copy of
@@ -219,6 +228,7 @@ class OpenHandsEpisodeRunner:
         self._concurrency = concurrency
         self._timeout = timeout_seconds
         self._max_iterations = max_iterations
+        self._llm_timeout = llm_timeout_seconds
         self._limits = {"max_budget_usd": max_budget_usd, "llm_timeout_seconds": llm_timeout_seconds}
         # One semaphore per event loop: a campaign runs each gate in its own asyncio.run.
         self._slots: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
@@ -270,9 +280,11 @@ class OpenHandsEpisodeRunner:
         access = self._access(policy)
         slots = self._slots.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(self._concurrency))
         async with slots:
-            # Off the event loop: copying a mount can take a while, and other episodes are running.
-            root = await asyncio.to_thread(self._prepare, spec, task, plan, access)
-            exit_code = await self._start(root, self._worker_environment(access.get("api_key_env")))
+            with contextlib.ExitStack() as proxies:
+                access = self._key_on_host(access, proxies)
+                # Off the event loop: copying a mount can take a while, and other episodes are running.
+                root = await asyncio.to_thread(self._prepare, spec, task, plan, access)
+                exit_code = await self._start(root, self._worker_environment(access.get("api_key_env")))
         result_path = root / "result.json"
         result = json.loads(result_path.read_text()) if result_path.exists() else {}
         if exit_code == WORKER_FAILED:
@@ -334,6 +346,16 @@ class OpenHandsEpisodeRunner:
             if model.output_usd_per_million is not None:
                 access["output_cost_per_token"] = model.output_usd_per_million / 1e6
         return access
+
+    def _key_on_host(self, access: dict[str, object], proxies: contextlib.ExitStack) -> dict[str, object]:
+        """A container's worker calls the endpoint through a proxy on the host that adds the key, and gets no key."""
+        key_env = access.get("api_key_env")
+        if self._container is None or not isinstance(key_env, str):
+            return access
+        key = self._environment.get(key_env) or os.environ[key_env]
+        proxy = proxies.enter_context(KeyProxy(str(access["base_url"]), key, self._llm_timeout))
+        host = "127.0.0.1" if _host_network(self._container.run_args) else "host.docker.internal"
+        return {**access, "base_url": f"http://{host}:{proxy.port}", "api_key_env": None}
 
     def _prepare(self, spec: HarnessSpec, task: Task, plan: AgentPlan, access: Mapping[str, object]) -> Path:
         root = self._workspaces / f"{task.task_id}--{spec.spec_id[:12]}--{uuid.uuid4().hex[:8]}"
@@ -495,6 +517,13 @@ def _docker_command(
     for variable in sorted(set(environment) - _HOST_ONLY):
         command.extend(["--env", variable])
     return [*command, *container.run_args, container.image, container.python, CONTAINER_WORKER, str(root)]
+
+
+def _host_network(run_args: Sequence[str]) -> bool:
+    """Whether ``docker run`` puts the container on the host's network, where the host's loopback is its own."""
+    if any(arg in ("--network=host", "--net=host") for arg in run_args):
+        return True
+    return any(arg in ("--network", "--net") and value == "host" for arg, value in itertools.pairwise(run_args))
 
 
 def _refuse_links(task: Task, seed: Path) -> None:

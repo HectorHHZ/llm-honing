@@ -5,8 +5,8 @@ the agent plan in ``episode.json`` as given; what each harness file means was
 decided on Honing's side (``honing/backends/openhands/harness.py``).
 
 Exit code: 0 when the conversation finished, 2 when it stopped for another
-reason (error, stuck, iteration or budget limit) or OpenHands could not load
-the harness, 1 when it could not run.
+reason (error, stuck, iteration or budget limit, a full context window) or
+OpenHands could not load the harness, 1 when it could not run.
 """
 
 from __future__ import annotations
@@ -98,6 +98,9 @@ def build_agent(episode: dict[str, Any], root: Path) -> tuple[Any, dict[str, dic
         timeout=int(episode["limits"]["llm_timeout_seconds"]),
         **prices,
     )
+    # The LLM holds the key now. The agent's terminal inherits this environment, and its output reaches the
+    # transcript, so the key must not stay in it.
+    os.environ.pop(policy.get("api_key_env") or "", None)
     try:
         context = AgentContext(
             skills=skills,
@@ -123,7 +126,9 @@ def run(root: Path) -> int:
         The process exit code.
     """
     from openhands.sdk import LocalConversation, MessageEvent
+    from openhands.sdk.conversation.exceptions import ConversationRunError
     from openhands.sdk.conversation.response_utils import get_agent_final_response
+    from openhands.sdk.llm.exceptions import LLMContextWindowExceedError
 
     episode = json.loads((root / "episode.json").read_text())
     try:
@@ -151,6 +156,11 @@ def run(root: Path) -> int:
         conversation.send_message(episode["task"]["prompt"])
         conversation.run()
         status = str(conversation.state.execution_status.value)
+    except ConversationRunError as error:
+        # The agent filled the model's context window, which the harness decides, so the episode is graded.
+        if not isinstance(error.original_exception, LLMContextWindowExceedError):
+            raise
+        traceback.print_exc()
     finally:
         events = list(conversation.state.events)
         with (root / "transcript.jsonl").open("w", encoding="utf-8") as transcript:

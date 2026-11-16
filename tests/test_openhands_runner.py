@@ -44,6 +44,8 @@ from honing.core import (
 from honing.e2e.components import PipelineContext
 from honing.harness.endpoints import StaticEndpoint, StaticPolicyEndpoints
 from honing.release import EpisodeEvaluator, Gate, WinLossSelector
+from tests.fakes.openai_stub import OpenAIStub
+from tests.fakes.tool_policy import ToolCallingPolicy
 
 REPO = Path(__file__).resolve().parents[1]
 FAKE_WORKER = REPO / "tests/fakes/openhands_worker.py"
@@ -416,35 +418,134 @@ def test_a_crashed_worker_raises_instead_of_being_graded(tmp_path: Path) -> None
         _run(_runner(tmp_path, environment={"FAKE_WORKER_EXIT": "1"}))
 
 
-# The OpenHands modules the real worker imports, with Skill.load failing as OpenHands' does on a malformed skill.
+# The OpenHands modules the real worker imports. STUB_SKILL_ERROR makes Skill.load fail as OpenHands' does on a
+# malformed skill; otherwise the conversation's run fails as STUB_RUN_ERROR says, wrapped as OpenHands wraps it, and
+# the agent's final response tells whether the API key is still in the environment.
 _STUB_OPENHANDS = {
     "openhands/__init__.py": "",
-    "openhands/sdk/__init__.py": "LLM = Agent = AgentContext = Tool = LocalConversation = MessageEvent = object\n",
+    "openhands/sdk/__init__.py": (
+        "import os, types\n"
+        "from openhands.sdk.conversation.exceptions import ConversationRunError\n"
+        "from openhands.sdk.llm.exceptions import LLMContextWindowExceedError\n"
+        "class _Any:\n"
+        "    def __init__(self, *args, **kwargs):\n"
+        "        pass\n"
+        "LLM = Agent = AgentContext = Tool = MessageEvent = _Any\n"
+        "class LocalConversation(_Any):\n"
+        "    state = types.SimpleNamespace(events=[])\n"
+        "    conversation_stats = types.SimpleNamespace(get_combined_metrics=lambda: types.SimpleNamespace(\n"
+        "        accumulated_cost=0.0, accumulated_token_usage=None))\n"
+        "    def send_message(self, text):\n"
+        "        pass\n"
+        "    def run(self):\n"
+        "        error = os.environ['STUB_RUN_ERROR']\n"
+        "        cause = LLMContextWindowExceedError(error) if error == 'context' else ConnectionError(error)\n"
+        "        raise ConversationRunError(cause) from cause\n"
+        "    def close(self):\n"
+        "        pass\n"
+    ),
     "openhands/sdk/conversation/__init__.py": "",
-    "openhands/sdk/conversation/response_utils.py": "def get_agent_final_response(events):\n    return ''\n",
+    "openhands/sdk/conversation/exceptions.py": (
+        "class ConversationRunError(RuntimeError):\n"
+        "    def __init__(self, original_exception):\n"
+        "        super().__init__(str(original_exception))\n"
+        "        self.original_exception = original_exception\n"
+    ),
+    "openhands/sdk/conversation/response_utils.py": (
+        "import json, os\n"
+        "def get_agent_final_response(events):\n"
+        "    return json.dumps({'key_in_environment': 'HONING_TEST_KEY' in os.environ})\n"
+    ),
+    "openhands/sdk/llm/__init__.py": "",
+    "openhands/sdk/llm/exceptions.py": "class LLMContextWindowExceedError(Exception):\n    pass\n",
     "openhands/sdk/skills/__init__.py": "",
+    "openhands/tools/__init__.py": "",
     "openhands/sdk/skills/skill.py": (
+        "import os\n"
         "class Skill:\n"
         "    @classmethod\n"
         "    def load(cls, path, skill_base_dir=None, strict=True):\n"
-        "        raise ValueError(f'cannot parse the frontmatter of {path.name}')\n"
+        "        if os.environ.get('STUB_SKILL_ERROR'):\n"
+        "            raise ValueError(f'cannot parse the frontmatter of {path.name}')\n"
+        "        return cls()\n"
+        "    def model_copy(self, update):\n"
+        "        return self\n"
     ),
 }
 
 
-@pytest.mark.unit
-def test_a_harness_openhands_cannot_load_is_graded_instead_of_raised(tmp_path: Path) -> None:
+def _stub_worker(tmp_path: Path, **environment: str) -> OpenHandsEpisodeRunner:
+    """A runner whose real worker imports the stub OpenHands."""
     stub = tmp_path / "stub"
     for path, content in _STUB_OPENHANDS.items():
         (stub / path).parent.mkdir(parents=True, exist_ok=True)
         (stub / path).write_text(content)
-    runner = _runner(tmp_path, worker=REPO / "integrations/openhands/worker.py", environment={"PYTHONPATH": str(stub)})
+    environment = {"PYTHONPATH": str(stub), **environment}
+    return _runner(tmp_path, worker=REPO / "integrations/openhands/worker.py", environment=environment)
 
-    outcome = _run(runner)
+
+@pytest.mark.unit
+def test_a_harness_openhands_cannot_load_is_graded_instead_of_raised(tmp_path: Path) -> None:
+    outcome = _run(_stub_worker(tmp_path, STUB_SKILL_ERROR="1"))
 
     assert outcome.exit_code == REFUSED
     assert "could not load the harness: skill 'skills/search/SKILL.md'" in outcome.final_output
     assert "cannot parse the frontmatter of SKILL.md" in outcome.final_output
+
+
+@pytest.mark.unit
+def test_a_full_context_window_is_graded_and_another_run_error_raises(tmp_path: Path) -> None:
+    outcome = _run(_stub_worker(tmp_path, STUB_RUN_ERROR="context"))
+
+    assert outcome.exit_code == REFUSED
+    assert json.loads((Path(outcome.workspace_location or "") / "result.json").read_text())["status"] == "error"
+    with pytest.raises(EpisodeInfrastructureError, match="could not run task 'q1'"):
+        _run(_stub_worker(tmp_path, STUB_RUN_ERROR="connection reset"))
+
+
+@pytest.mark.unit
+def test_the_worker_removes_the_api_key_before_the_agent_runs(tmp_path: Path) -> None:
+    outcome = _run(_stub_worker(tmp_path, STUB_RUN_ERROR="context"))
+
+    assert json.loads(outcome.final_output) == {"key_in_environment": False}
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not (REPO / "integrations/openhands/.venv/bin/python").exists(), reason="no OpenHands environment")
+def test_the_api_key_reaches_the_model_but_not_the_agents_terminal(tmp_path: Path) -> None:
+    with ToolCallingPolicy("env", tool="terminal") as server:
+        model = GatewayModel(base_url=server.url, model="stand-in", api_key_env="HONING_TEST_KEY")
+        runner = _runner(
+            tmp_path,
+            python=REPO / "integrations/openhands/.venv/bin/python",
+            worker=REPO / "integrations/openhands/worker.py",
+            endpoints=GatewayEndpoints(model),
+        )
+        outcome = asyncio.run(runner.run(SEED, TASK, _policy(model)))
+
+    assert outcome.exit_code == 0
+    assert server.requests[0]["headers"]["Authorization"] == "Bearer secret-value-123"
+    root = Path(outcome.workspace_location or "")
+    # The command's output, the environment, is in the transcript.
+    assert "OPENHANDS_SUPPRESS_BANNER" in (root / "transcript.jsonl").read_text()
+    assert [p for p in root.rglob("*") if p.is_file() and "secret-value-123" in p.read_text(errors="ignore")] == []
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not (REPO / "integrations/openhands/.venv/bin/python").exists(), reason="no OpenHands environment")
+def test_the_real_worker_grades_a_full_context_window(tmp_path: Path) -> None:
+    with OpenAIStub() as stub:
+        model = GatewayModel(base_url=stub.url("context"), model="stand-in", api_key_env="HONING_TEST_KEY")
+        runner = _runner(
+            tmp_path,
+            python=REPO / "integrations/openhands/.venv/bin/python",
+            worker=REPO / "integrations/openhands/worker.py",
+            endpoints=GatewayEndpoints(model),
+        )
+        outcome = asyncio.run(runner.run(SEED, TASK, _policy(model)))
+
+    assert outcome.exit_code == REFUSED
+    assert "LLMContextWindowExceedError" in (Path(outcome.workspace_location or "") / "agent.log").read_text()
 
 
 @pytest.mark.integration
@@ -525,13 +626,43 @@ def test_a_container_mounts_only_the_episode_and_the_worker(
     assert argv[argv.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
     assert argv[argv.index("--workdir") + 1] == str(root / "work")
     assert argv[-6:] == ["--network", "none", "honing-openhands:test", "python", "/opt/honing/worker.py", str(root)]
-    # Variables go by name: no value, the API key's included, is on the command line, and the host's PATH stays out.
+    # Variables go by name, so no value is on the command line, and the host's PATH stays out.
     named = [argv[index + 1] for index, arg in enumerate(argv) if arg == "--env"]
-    assert "HONING_TEST_KEY" in named and f"HOME={root / 'home'}" in named and "PATH" not in named
+    assert f"HOME={root / 'home'}" in named and "PATH" not in named
     assert not any("secret" in arg for arg in argv)
+    # The key stays on the host: the worker gets a proxy's address instead.
     answer = json.loads(outcome.final_output)
-    assert answer["key_present"] and "AWS_SECRET_ACCESS_KEY" not in answer["environment"]
+    assert "HONING_TEST_KEY" not in named and not answer["key_present"]
+    assert "AWS_SECRET_ACCESS_KEY" not in answer["environment"]
     assert answer["cwd"] == str(root / "work")
+    policy = json.loads((root / "episode.json").read_text())["policy"]
+    assert policy["api_key_env"] is None and policy["base_url"].startswith("http://host.docker.internal:")
+
+
+@pytest.mark.unit
+def test_a_container_calls_the_model_through_a_proxy_that_adds_the_key(tmp_path: Path, docker: Path) -> None:
+    with OpenAIStub() as stub:
+        # /401 echoes the Authorization header it got.
+        model = GatewayModel(base_url=stub.url("401"), model="m", api_key_env="HONING_TEST_KEY")
+        runner = _runner(
+            tmp_path,
+            endpoints=GatewayEndpoints(model),
+            container=Container(image="i", run_args=("--network", "host")),
+            environment={"FAKE_WORKER_CALL": "hello"},
+        )
+        call = json.loads(asyncio.run(runner.run(SEED, TASK, _policy(model))).final_output)["call"]
+
+        assert call["status"] == 401 and "Bearer secret-value-123" in call["reply"]
+        ok = GatewayModel(base_url=stub.url("ok"), model="m", api_key_env="HONING_TEST_KEY")
+        runner = _runner(
+            tmp_path,
+            endpoints=GatewayEndpoints(ok),
+            container=Container(image="i", run_args=("--network=host",)),
+            environment={"FAKE_WORKER_CALL": "hello"},
+        )
+        call = json.loads(asyncio.run(runner.run(SEED, TASK, _policy(ok))).final_output)["call"]
+
+    assert call["status"] == 200 and "SUMMARY" in json.loads(call["reply"])["choices"][0]["message"]["content"]
 
 
 @pytest.mark.unit

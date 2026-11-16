@@ -34,7 +34,7 @@ workdir = None
 index = 0
 while arguments[index].startswith("--"):
     flag = arguments[index]
-    if flag in ("--rm", "--init"):
+    if flag in ("--rm", "--init") or "=" in flag:
         index += 1
         continue
     value = arguments[index + 1]
