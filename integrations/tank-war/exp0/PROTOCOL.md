@@ -21,6 +21,11 @@ per-game cause before seeing model answers. The ten no-injection games remain
 controls outside the three edited-fault classes; an ordinary unmodified loss
 must not be silently relabeled as an edited-weight fault. Automated technical
 label auditing does not satisfy the original two-human-reviewer requirement.
+An episode-only prompt/schema was subsequently frozen and run once in each
+mode on the **same 40 games**. Because those games and historical answers were
+already known when the prompt was written, this is a post-test sensitivity
+check, not an independent prospective confirmation. It is reported separately
+from the historical rescore.
 
 ## Question and endpoint
 

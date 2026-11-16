@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     score = json.loads(args.sealed_score.read_text())
+    episode_only_run = "source_run_freeze_sha256" in score
     label_rows = [json.loads(line) for line in args.technical_labels.read_text().splitlines() if line]
     labels = {row["episode_id"]: row for row in label_rows}
     rows = score["records"]
@@ -65,16 +66,23 @@ def main() -> None:
         / 30
         for _ in range(10_000)
     )
+    provenance = {
+        "sealed_score_sha256": sha256(args.sealed_score),
+        "private_technical_labels_sha256": sha256(args.technical_labels),
+        "no_new_model_calls": not episode_only_run,
+        "post_test_endpoint_change": True,
+    }
+    if episode_only_run:
+        provenance.update(
+            source_run_freeze_sha256=score["source_run_freeze_sha256"],
+            prompt_also_requested_a_window=False,
+        )
+    else:
+        provenance["original_prompt_also_requested_a_window"] = True
     summary = {
-        "result_version": "episode-attribution-rescore-v1",
+        "result_version": "episode-only-prompt-v2" if episode_only_run else "episode-attribution-rescore-v1",
         "unit": "one cause label per complete game",
-        "provenance": {
-            "sealed_score_sha256": sha256(args.sealed_score),
-            "private_technical_labels_sha256": sha256(args.technical_labels),
-            "no_new_model_calls": True,
-            "post_test_endpoint_change": True,
-            "original_prompt_also_requested_a_window": True,
-        },
+        "provenance": provenance,
         "cases": {"faults": 30, "no_injection_controls": 10},
         "correct_classification": {
             mode: {"correct": sum(correct(row, mode) for row in faults), "total": 30} for mode in ("read", "probe")
@@ -99,7 +107,11 @@ def main() -> None:
             }
             for mode in ("read", "probe")
         },
-        "interpretation": "Exploratory episode-level rescore of sealed answers; not a new preregistered experiment.",
+        "interpretation": (
+            "Post-test episode-only prompt sensitivity on the same games; not an independent blind confirmation."
+            if episode_only_run
+            else "Exploratory episode-level rescore of sealed answers; not a new preregistered experiment."
+        ),
     }
     args.out.write_text(json.dumps(summary, indent=2) + "\n")
     print(

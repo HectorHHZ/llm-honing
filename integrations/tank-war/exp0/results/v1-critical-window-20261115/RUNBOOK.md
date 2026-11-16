@@ -51,4 +51,38 @@ The private and repository copies of `episode-attribution-summary.json` are
 byte-identical (SHA-256
 `99caa71776c62e498d72b43fb61380ba5c55e7e551c4e7df3cb5599e33b12372`).
 The original prompt and scorer remain frozen. The new episode-only prompt and
-schema are **prospective artifacts**, not inputs used in this rescore.
+schema were not inputs used in this historical rescore.
+
+## Episode-only prompt sensitivity run
+
+The clarified prompt and schema were then run on the **same 40 games** as a
+post-test sensitivity check. The new prompt, schema, protocol, and exact
+anonymous input/probe hashes were frozen before the new answers; this did not
+create an independent test set. The private freeze is
+`episode-only-v2/freeze.json` (SHA-256
+`611c815d76da85916e792f057d0f5af5fd0dcdc1d7eefcc6a7cbcdcd1a12fe8f`).
+No gold labels were passed to the isolated Codex processes.
+
+```sh
+ROOT=/data/xinkaiz/system0/exp0/tank-war/v1-critical-window-20261115
+python3 "$ROOT/repo/integrations/tank-war/scripts/prepare-critical-episode-only.py" \
+  --source-blind "$ROOT/blind-v7" --out "$ROOT/episode-only-v2"
+python3 "$ROOT/repo/integrations/tank-war/scripts/run-critical-episode-only.py" \
+  --source-blind "$ROOT/blind-v7" --out "$ROOT/episode-only-v2" --mode read
+python3 "$ROOT/repo/integrations/tank-war/scripts/run-critical-episode-only.py" \
+  --source-blind "$ROOT/blind-v7" --out "$ROOT/episode-only-v2" --mode probe
+python3 "$ROOT/repo/integrations/tank-war/scripts/make-critical-episode-score-input.py" \
+  --run "$ROOT/episode-only-v2" --out "$ROOT/episode-only-v2/score-input.json"
+python3 "$ROOT/repo/integrations/tank-war/scripts/score-critical-episode-attribution.py" \
+  --sealed-score "$ROOT/episode-only-v2/score-input.json" \
+  --technical-labels "$ROOT/episode-label-audit-v1/labels.jsonl" \
+  --out "$ROOT/episode-only-v2/score.json"
+```
+
+Both modes completed 40/40 calls without invalid output or tool use. Read
+ran from approximately 04:47 to 04:55 UTC on 2026-11-16 (483 seconds of
+observed wall time); probe ran from 04:55 to 05:01 UTC (367 seconds).
+Read used 2,191,730 input and 33,126 output tokens; probe used 2,370,199
+input and 22,658 output tokens. The private and public aggregate scores are
+byte-identical, SHA-256
+`c3866168a11ece0ed7ee3194cd5cf901f2539ff7975d49dc038f51fa1993726c`.
