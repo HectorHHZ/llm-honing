@@ -1,0 +1,96 @@
+diff --git a/src/platform/web-platform.c b/src/platform/web-platform.c
+index a744592..1e68b93 100644
+--- a/src/platform/web-platform.c
++++ b/src/platform/web-platform.c
+@@ -1,4 +1,4 @@
+-#define _POSIX_C_SOURCE 199309L
++#define _POSIX_C_SOURCE 200809L
+
+ #include <stdio.h>
+ #include <string.h>
+@@ -116,13 +116,30 @@ static void flushOutputBuffer() {
+     char msg[80];
+     int no_bytes_sent;
+
+-    no_bytes_sent = sendto(wfd, outputBuffer, outputBufferPos, 0, (struct sockaddr *)&addr_write, sizeof(struct sockaddr_un));
++    if (!outputBufferPos) {
++        return;
++    }
++
++    // Darwin reports ENOBUFS if the local reader has not drained its queue yet.
++    // A dropped datagram would leave the incremental display out of sync.
++    do {
++        no_bytes_sent = sendto(wfd, outputBuffer, outputBufferPos, 0, (struct sockaddr *)&addr_write, sizeof(struct sockaddr_un));
++        if (no_bytes_sent == -1 && errno == ENOBUFS) {
++            const struct timespec backoff = {0, 1000000};
++            nanosleep(&backoff, NULL);
++            errno = ENOBUFS;
++        }
++    } while (no_bytes_sent == -1 && (errno == ENOBUFS || errno == EINTR));
+     if (no_bytes_sent == -1) {
+         snprintf(msg, 80, "Error: %s\n", strerror(errno));
+         writeToLog(msg);
++        fprintf(stderr, "%s", msg);
++        exit(EXIT_FAILURE);
+     } else if (no_bytes_sent != outputBufferPos) {
+         snprintf(msg, 80, "Sent %d bytes only - %s\n", no_bytes_sent, strerror(errno));
+         writeToLog(msg);
++        fprintf(stderr, "%s", msg);
++        exit(EXIT_FAILURE);
+     }
+
+     outputBufferPos = 0;
+@@ -157,8 +174,7 @@ static void web_plotChar(enum displayGlyph inputChar,
+     unsigned char firstCharByte, secondCharByte;
+     enum displayGlyph translatedChar;
+
+-    translatedChar = glyphToUnicode(inputChar);
+-    translatedChar = fixUnicode(inputChar);
++    translatedChar = fixUnicode(glyphToUnicode(inputChar));
+
+     firstCharByte = translatedChar >> 8 & 0xff;
+     secondCharByte = translatedChar;
+@@ -213,7 +229,8 @@ static void sendStatusUpdate() {
+ }
+
+ // Pause by doing a blocking poll on the socket
+-static boolean web_pauseForMilliseconds(short milliseconds) {
++static boolean web_pauseForMilliseconds(short milliseconds, PauseBehavior behavior) {
++    (void)behavior;
+     fd_set input;
+     struct timeval timeout;
+
+@@ -286,7 +303,7 @@ static boolean web_modifierHeld(int modifier) {
+ }
+
+ static void web_notifyEvent(short eventId, int data1, int data2, const char *str1, const char *str2) {
+-    unsigned char statusOutputBuffer[EVENT_SIZE];
++    unsigned char statusOutputBuffer[EVENT_SIZE] = {0};
+
+     // Coordinates of (254, 254) will let the server and client know that this is a event notification update rather than a cell update
+     statusOutputBuffer[0] = 254;
+@@ -300,8 +317,8 @@ static void web_notifyEvent(short eventId, int data1, int data2, const char *str
+     statusOutputBuffer[6] = data1;
+     statusOutputBuffer[7] = rogue.depthLevel >> 8 & 0xff;
+     statusOutputBuffer[8] = rogue.depthLevel;
+-    statusOutputBuffer[9] = rogue.easyMode >> 8 & 0xff;
+-    statusOutputBuffer[10] = rogue.easyMode;
++    statusOutputBuffer[9] = 0;
++    statusOutputBuffer[10] = (rogue.mode == GAME_MODE_EASY);
+     statusOutputBuffer[11] = rogue.gold >> 24 & 0xff;
+     statusOutputBuffer[12] = rogue.gold >> 16 & 0xff;
+     statusOutputBuffer[13] = rogue.gold >> 8 & 0xff;
+@@ -312,11 +329,8 @@ static void web_notifyEvent(short eventId, int data1, int data2, const char *str
+     statusOutputBuffer[18] = rogue.seed;
+
+     // str1 is the death / victory message
+-    memcpy(statusOutputBuffer + EVENT_MESSAGE1_START, str1, EVENT_MESSAGE1_SIZE);
+-    statusOutputBuffer[EVENT_MESSAGE2_START - 1] = 0;
+-    // str2 is unused
+-    memcpy(statusOutputBuffer + EVENT_MESSAGE1_START + EVENT_MESSAGE1_SIZE, str2, EVENT_MESSAGE2_SIZE);
+-    statusOutputBuffer[EVENT_SIZE - 1] = 0;
++    snprintf((char *)statusOutputBuffer + EVENT_MESSAGE1_START, EVENT_MESSAGE1_SIZE, "%s", str1);
++    snprintf((char *)statusOutputBuffer + EVENT_MESSAGE2_START, EVENT_MESSAGE2_SIZE, "%s", str2);
+
+     writeToSocket(statusOutputBuffer, EVENT_SIZE);
+     flushOutputBuffer();

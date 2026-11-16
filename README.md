@@ -80,6 +80,12 @@ engine needs only the Python standard library. It is not the original Isaac
 engine and includes no original game assets. Model integration is checked with
 a local protocol stand-in; no model performance result is claimed yet.
 
+### Brogue CE
+
+[`integrations/brogue_ce/`](integrations/brogue_ce/README.md) connects the
+native WebBrogue keyboard and display interface to Python. Run a seeded
+dungeon and watch its recording in the original graphical client.
+
 ### Bring your own model
 
 The games talk to a model through the same two HTTP routes the decision server

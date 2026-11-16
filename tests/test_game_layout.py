@@ -22,7 +22,13 @@ from integrations.rea_issac import engine as rea_engine
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "game, engine_name", [("craftax", "CraftaxEngine"), ("griddly", "GriddlyEngine"), ("rea_issac", "Engine")]
+    "game, engine_name",
+    [
+        ("brogue_ce", "BrogueSession"),
+        ("craftax", "CraftaxEngine"),
+        ("griddly", "GriddlyEngine"),
+        ("rea_issac", "Engine"),
+    ],
 )
 def test_old_engine_import_is_the_same_class(game: str, engine_name: str) -> None:
     old = importlib.import_module(f"honing.backends.{game}.engine")
@@ -34,6 +40,7 @@ def test_old_engine_import_is_the_same_class(game: str, engine_name: str) -> Non
 def test_games_import_without_honing_or_native_dependencies(repo_root: Path) -> None:
     code = """
 import sys
+from integrations.brogue_ce.engine import BrogueSession
 from integrations.craftax.engine import CraftaxEngine
 from integrations.griddly.engine import GriddlyEngine
 from integrations.rea_issac.engine import Engine
@@ -46,7 +53,7 @@ assert Engine(seed=7, max_ticks=1).step({})['status'] != 'running'
 
 @pytest.mark.unit
 def test_game_runtime_has_no_honing_dependency(repo_root: Path) -> None:
-    for game in ("craftax", "griddly", "rea_issac"):
+    for game in ("brogue_ce", "craftax", "griddly", "rea_issac"):
         for path in (repo_root / "integrations" / game).glob("*.py"):
             for node in ast.walk(ast.parse(path.read_text())):
                 if isinstance(node, ast.Import):
