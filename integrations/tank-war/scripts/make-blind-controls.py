@@ -42,11 +42,21 @@ def main() -> None:
         )
         gold.append(private)
     (args.out / "gold.jsonl").write_text("".join(json.dumps(row) + "\n" for row in gold))
-    print(json.dumps({"controls": len(gold), "outcomes": {
-        str(outcome): sum(json.loads((args.out / "inputs" / f"{row['episode_id']}.json").read_text())["outcome"] == outcome
-                          for row in gold)
-        for outcome in (-1, 0, 1)
-    }}))
+    print(
+        json.dumps(
+            {
+                "controls": len(gold),
+                "outcomes": {
+                    str(outcome): sum(
+                        json.loads((args.out / "inputs" / f"{row['episode_id']}.json").read_text())["outcome"]
+                        == outcome
+                        for row in gold
+                    )
+                    for outcome in (-1, 0, 1)
+                },
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

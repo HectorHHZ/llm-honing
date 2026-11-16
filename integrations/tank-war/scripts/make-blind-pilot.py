@@ -38,7 +38,11 @@ def _packets(root: Path, ids: set[str]) -> dict[str, dict[str, Any]]:
     )
     identity = ("sample_id", "decision_index", "state_hash", "injected_layer", "fault_instance")
     for directory in verified_roots:
-        pattern = "*/*/private-review-packet.json" if directory.name == "effective-evidence" else "*/private-review-packet.json"
+        pattern = (
+            "*/*/private-review-packet.json"
+            if directory.name == "effective-evidence"
+            else "*/private-review-packet.json"
+        )
         for path in directory.glob(pattern):
             packet = json.loads(path.read_text(encoding="utf-8"))
             sample_id = packet["sample_id"]
@@ -49,7 +53,10 @@ def _packets(root: Path, ids: set[str]) -> dict[str, dict[str, Any]]:
                     for name in ("states.jsonl", "decisions.jsonl", "execution.jsonl", "events.jsonl", "result.json"):
                         original = Path(found[sample_id]["source_run"]) / name
                         duplicate = Path(packet["source_run"]) / name
-                        if hashlib.sha256(original.read_bytes()).digest() != hashlib.sha256(duplicate.read_bytes()).digest():
+                        if (
+                            hashlib.sha256(original.read_bytes()).digest()
+                            != hashlib.sha256(duplicate.read_bytes()).digest()
+                        ):
                             raise ValueError(f"duplicate match differs for {sample_id}: {name}")
                 found[sample_id] = packet
     if set(found) != ids:
@@ -77,8 +84,16 @@ def _state(row: dict[str, Any]) -> dict[str, Any]:
 
 
 REQUEST_FIELDS = (
-    "protocol", "state", "weapon_state", "aim", "motions", "admissible_motion_ids",
-    "context_revision", "avoidance_enabled", "avoidance_level", "predicted_response_delay_ms",
+    "protocol",
+    "state",
+    "weapon_state",
+    "aim",
+    "motions",
+    "admissible_motion_ids",
+    "context_revision",
+    "avoidance_enabled",
+    "avoidance_level",
+    "predicted_response_delay_ms",
 )
 
 
@@ -128,7 +143,9 @@ def make_packet(packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
             {
                 "decision_index": i,
                 "raw_state": _state(state),
-                "rendered_request": {key: state["request"].get(key) for key in REQUEST_FIELDS if key in state["request"]},
+                "rendered_request": {
+                    key: state["request"].get(key) for key in REQUEST_FIELDS if key in state["request"]
+                },
                 "model_answers": [
                     {
                         "questions": row["questions"],
@@ -166,7 +183,9 @@ def make_packet(packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
         ),
         "decision_index": index,
         "decision_reference_source": (
-            "preselected_midpoint_control" if cause == "no_injection" else "first_locally_verified_execution_difference"
+            "preselected_midpoint_control"
+            if cause == "no_injection"
+            else "first_locally_verified_execution_difference"
         ),
         "human_judgment": None if cause == "no_injection" else "relevant",
         "human_judgment_scope": (
@@ -195,10 +214,9 @@ def main() -> None:
     reviews = _reviewed(args.root)
     packets = _packets(args.root, set(reviews))
     selected = [packets[sample_id] for sample_id, row in reviews.items() if row["judgment"] == "relevant"]
-    if len(selected) != 15 or {layer: sum(p["injected_layer"] == layer for p in selected) for layer in
-                                  ("harness", "weights", "controller")} != dict.fromkeys(
-                                      ("harness", "weights", "controller"), 5
-                                  ):
+    if len(selected) != 15 or {
+        layer: sum(p["injected_layer"] == layer for p in selected) for layer in ("harness", "weights", "controller")
+    } != dict.fromkeys(("harness", "weights", "controller"), 5):
         raise ValueError("expected five Zhuohang-relevant pilot examples per cause")
     args.out.mkdir(parents=True)
     (args.out / "inputs").mkdir()
@@ -209,9 +227,7 @@ def main() -> None:
             json.dumps(public, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8"
         )
         gold_rows.append(gold)
-    (args.out / "gold.jsonl").write_text(
-        "".join(json.dumps(row) + "\n" for row in gold_rows), encoding="utf-8"
-    )
+    (args.out / "gold.jsonl").write_text("".join(json.dumps(row) + "\n" for row in gold_rows), encoding="utf-8")
     print(json.dumps({"reviewed": len(reviews), "selected": len(selected), "inputs": str(args.out / "inputs")}))
 
 

@@ -188,9 +188,7 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
             "reference_action": str(directory / "reference-action.json"),
             "review_status": "pending_machine_selection" if args.seed_group == "final_test" else "pending_zhuohang",
         }
-        (directory / "private-review-packet.json").write_text(
-            json.dumps(packet, indent=2) + "\n", encoding="utf-8"
-        )
+        (directory / "private-review-packet.json").write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
         with selected.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(packet) + "\n")
         accepted += 1
@@ -221,10 +219,12 @@ def main() -> None:
     parser.add_argument("--target", type=int, default=5)
     parser.add_argument("--require-effective", action="store_true")
     parser.add_argument("--require-execution", action="store_true")
-    parser.add_argument("--rank-seed-groups", action="store_true",
-                        help="visit reset groups in a fixed hash order, independent of outcome")
-    parser.add_argument("--one-per-seed", action="store_true",
-                        help="keep at most one supported seat per reset group")
+    parser.add_argument(
+        "--rank-seed-groups",
+        action="store_true",
+        help="visit reset groups in a fixed hash order, independent of outcome",
+    )
+    parser.add_argument("--one-per-seed", action="store_true", help="keep at most one supported seat per reset group")
     parser.add_argument("--layer", choices=("harness", "weights", "controller"), required=True)
     parser.add_argument("--fault-manifest", type=Path, required=True)
     parser.add_argument("--fault-root", type=Path, required=True)

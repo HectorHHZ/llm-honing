@@ -71,19 +71,32 @@ def screen(args: argparse.Namespace) -> dict[str, Any]:
             if gate._completed(run):
                 continue
             command = [
-                os.fspath(args.node), os.fspath(Path(__file__).with_name("match.mjs")),
-                f"--seed={seed}", f"--seat={seat}", f"--decision-server={args.url}",
-                f"--out={run}", "--seconds=30", "--interval-ms=200", "--opponent-interval-ms=300",
+                os.fspath(args.node),
+                os.fspath(Path(__file__).with_name("match.mjs")),
+                f"--seed={seed}",
+                f"--seat={seat}",
+                f"--decision-server={args.url}",
+                f"--out={run}",
+                "--seconds=30",
+                "--interval-ms=200",
+                "--opponent-interval-ms=300",
             ]
             started = time.monotonic()
             try:
                 # GPU contention can make a fixed 30-second simulation take much longer in real time.
-                result = subprocess.run(command, cwd=args.repo, capture_output=True, text=True, timeout=1800, check=False)
+                result = subprocess.run(
+                    command, cwd=args.repo, capture_output=True, text=True, timeout=1800, check=False
+                )
                 attempt = {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
             except (OSError, subprocess.TimeoutExpired) as error:
                 attempt = {"error": repr(error)}
-            attempt.update(seed=seed, seat=seat, run=str(run), command=command,
-                           elapsed_seconds=round(time.monotonic() - started, 3))
+            attempt.update(
+                seed=seed,
+                seat=seat,
+                run=str(run),
+                command=command,
+                elapsed_seconds=round(time.monotonic() - started, 3),
+            )
             with (args.out / "attempts.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(attempt) + "\n")
             if attempt.get("returncode") != 0:

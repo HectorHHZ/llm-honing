@@ -126,7 +126,7 @@ def test_single_layer_provenance_accepts_only_named_change(layer: str, digest: s
     exp0._validate_single_layer(clean, fault, layer, "synthetic")
     if layer != "weights":
         fault["model"]["inference"] = "different-server-implementation"
-        with pytest.raises(ValueError, match="changed model|another layer"):
+        with pytest.raises(ValueError, match=r"changed model|another layer"):
             exp0._validate_single_layer(clean, fault, layer, "synthetic")
         del fault["model"]["inference"]
     fault["sources"]["engine"] = "other-build"

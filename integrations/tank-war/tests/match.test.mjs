@@ -21,6 +21,51 @@ import {
 import { adapter } from "../web/game/adapter.js";
 import { labelRecordedStates } from "../scripts/label-recorded-states.mjs";
 import { parseControllerFault } from "../scripts/controller-faults.mjs";
+import {
+    criticalCandidate,
+    parseCriticalIntervention,
+} from "../scripts/critical-intervention.mjs";
+
+test("critical intervention uses pre-fault geometry and rejects fake weights", () => {
+    const game = {
+        tanks: [
+            { x: 0, y: 0 },
+            { x: 250, y: 0 },
+        ],
+        bullets: [],
+    };
+    const observed = {
+        request: {
+            motions: [
+                {
+                    shot: {
+                        can_fire: true,
+                        enemy_hit_ms: 900,
+                        self_hit_ms: null,
+                    },
+                },
+            ],
+        },
+    };
+    assert.deepEqual(criticalCandidate(game, 0, observed, "aim_fire"), {
+        kind: "aim_fire",
+        distance_px: 250,
+    });
+    game.tanks[1].x = 401;
+    assert.equal(criticalCandidate(game, 0, observed, "aim_fire"), null);
+    assert.throws(
+        () =>
+            parseCriticalIntervention(
+                JSON.stringify({
+                    layer: "weights",
+                    kind: "action_noise",
+                    instance: "bad-v1",
+                    trigger: "aim_fire",
+                }),
+            ),
+        /real alternate checkpoint/,
+    );
+});
 
 const SECONDS = 6;
 const lines = async (file) =>

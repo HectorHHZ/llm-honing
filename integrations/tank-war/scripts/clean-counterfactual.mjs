@@ -72,6 +72,7 @@ export async function cleanCounterfactual({
     )
         throw Error("Recorded reply cannot score a changed clean request");
     let model, ask;
+    const referenceModelCalls = [];
     if (useRecordedReply) {
         model = manifest.model;
         const recorded = recordedCalls[decisionIndex];
@@ -88,13 +89,16 @@ export async function cleanCounterfactual({
         model = (
             await healthFor(backend, "tank-war", AbortSignal.timeout(60000))
         ).metadata;
-        ask = (request) =>
-            upstream(
+        ask = async (request) => {
+            const reply = await upstream(
                 backend,
                 "/v1/decide",
                 request,
                 AbortSignal.timeout(300000),
             );
+            referenceModelCalls.push({ request, reply });
+            return reply;
+        };
     }
     const response = await decide(
         {
@@ -148,6 +152,7 @@ export async function cleanCounterfactual({
             executed_action: faulty.executed_action,
         },
         clean,
+        reference_model_calls: referenceModelCalls,
         local_decision_changed: localDecisionChanged,
         local_command_changed: localCommandChanged,
         local_execution_changed: localExecutionChanged,

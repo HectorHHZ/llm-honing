@@ -29,6 +29,10 @@ import { strategyFrom } from "../web/game/strategies.js";
 import { plannerTeacher, TEACHER_MODEL } from "../web/game/teacher.js";
 import { snapshotGame, stateHash } from "./state-replay.mjs";
 import {
+    parseCriticalIntervention,
+    criticalCandidate,
+} from "./critical-intervention.mjs";
+import {
     parseControllerFault,
     beforeControllerApply,
     afterControllerApply,
@@ -191,6 +195,7 @@ async function sources() {
         "scripts/match.mjs",
         "scripts/state-replay.mjs",
         "scripts/controller-faults.mjs",
+        "scripts/critical-intervention.mjs",
     ];
     return Object.fromEntries(
         await Promise.all(
@@ -229,6 +234,7 @@ export async function playMatch({
     token,
     replayDir,
     controllerFaultFile,
+    criticalFaultFile,
 }) {
     if (!Number.isInteger(seed) || seed < 0)
         throw Error("--seed must be a non-negative integer");
@@ -246,6 +252,13 @@ export async function playMatch({
         throw Error("--decision-server is required unless --teacher");
     if (replayDir && (teacher || decisionServer || sampleSeed !== undefined))
         throw Error("Replay accepts only --replay-dir as its decision source");
+    if (
+        criticalFaultFile &&
+        (teacher || controllerFaultFile || sampleSeed !== undefined)
+    )
+        throw Error(
+            "Critical intervention requires a model and one fault layer",
+        );
     if (existsSync(out)) throw Error(`--out ${out} already exists`);
     await mkdir(out, { recursive: true });
     const harness = await loadHarness(harnessDir).catch((error) => {
@@ -259,9 +272,53 @@ export async function playMatch({
     const controllerFault = controllerFaultText
         ? parseControllerFault(controllerFaultText)
         : null;
+    const criticalFaultText = criticalFaultFile
+        ? await readFile(criticalFaultFile, "utf8")
+        : null;
+    const criticalFault = criticalFaultText
+        ? parseCriticalIntervention(criticalFaultText)
+        : null;
+    const alternateHarness =
+        criticalFault?.layer === "harness"
+            ? await loadHarness(criticalFault.alternate_harness_dir)
+            : null;
+    if (alternateHarness) {
+        if (alternateHarness.notes !== harness.notes)
+            throw Error("Critical harness fault cannot change operating notes");
+        if (criticalFault.kind === "one_turn_questions") {
+            if (
+                JSON.stringify(alternateHarness.seat) !==
+                    JSON.stringify(harness.seat) ||
+                JSON.stringify(alternateHarness.questions) ===
+                    JSON.stringify(harness.questions)
+            )
+                throw Error(
+                    "Critical question fault must change questions only",
+                );
+        } else {
+            const withoutStrategy = (seatSettings) =>
+                Object.fromEntries(
+                    Object.entries(seatSettings).filter(
+                        ([key]) =>
+                            !["strategy", "decisionVersion"].includes(key),
+                    ),
+                );
+            if (
+                JSON.stringify(alternateHarness.questions) !==
+                    JSON.stringify(harness.questions) ||
+                JSON.stringify(withoutStrategy(alternateHarness.seat)) !==
+                    JSON.stringify(withoutStrategy(harness.seat)) ||
+                JSON.stringify(alternateHarness.seat.strategy) ===
+                    JSON.stringify(harness.seat.strategy)
+            )
+                throw Error(
+                    "Critical settings fault must change only the strategy",
+                );
+        }
+    }
     const me = SEATS.indexOf(seat),
         them = 1 - me;
-    let model, ask;
+    let model, ask, alternateModel, alternateBackend;
     let replayCalls = [],
         replayStates = [],
         replayCursor = 0,
@@ -270,6 +327,11 @@ export async function playMatch({
         sourceManifest = JSON.parse(
             await readFile(join(replayDir, "manifest.json"), "utf8"),
         );
+        if (
+            (sourceManifest.critical_fault_sha256 ?? null) !==
+            (criticalFaultText ? sha256(criticalFaultText) : null)
+        )
+            throw Error("Critical replay fault manifest differs");
         replayCalls = (
             await readFile(join(replayDir, "model_calls.jsonl"), "utf8")
         )
@@ -293,6 +355,9 @@ export async function playMatch({
         )
             throw Error("Replay settings differ from the recorded match");
         model = sourceManifest.model;
+        if (criticalFault?.layer === "weights") {
+            alternateModel = sourceManifest.critical_checkpoint;
+        }
         ask = async (request) => {
             const recorded = replayCalls[replayCursor++];
             if (
@@ -328,6 +393,28 @@ export async function playMatch({
                 AbortSignal.timeout(300000),
             );
     }
+    if (criticalFault?.layer === "weights" && !replayDir) {
+        alternateBackend = {
+            url: criticalFault.alternate_decision_server.replace(/\/$/, ""),
+            token,
+            transport: "honing",
+        };
+        alternateModel = (
+            await healthFor(
+                alternateBackend,
+                "tank-war",
+                AbortSignal.timeout(60000),
+            )
+        ).metadata;
+        if (
+            !model.weights_sha256 ||
+            !alternateModel.weights_sha256 ||
+            model.weights_sha256 === alternateModel.weights_sha256
+        )
+            throw Error(
+                "Critical weights fault requires a different real checkpoint hash",
+            );
+    }
     const kind = teacher
         ? "teacher-demonstration"
         : sampleSeed !== undefined
@@ -350,6 +437,12 @@ export async function playMatch({
                 decision_server: teacher || replayDir ? null : decisionServer,
                 replay_source: replayDir ?? null,
                 model,
+                critical_fault_sha256: criticalFaultText
+                    ? sha256(criticalFaultText)
+                    : null,
+                critical_layer: criticalFault?.layer ?? null,
+                critical_checkpoint: alternateModel ?? null,
+                critical_harness_files: alternateHarness?.files ?? null,
                 harness: harness.files,
                 harness_sha256: sha256(JSON.stringify(harness.files)),
                 controller_sha256: sha256(
@@ -396,12 +489,31 @@ export async function playMatch({
         decisions = [0, 0];
     let serial = 0;
     let pendingExecution = null;
+    let criticalUsed = false;
 
-    async function recordedAsk(request) {
-        const reply = await ask(request);
+    async function recordedAsk(request, useAlternate = false) {
+        const reply =
+            useAlternate && !replayDir
+                ? await upstream(
+                      alternateBackend,
+                      "/v1/decide",
+                      request,
+                      AbortSignal.timeout(300000),
+                  )
+                : await ask(request);
         await appendFile(
             join(out, "model_calls.jsonl"),
-            JSON.stringify({ request, reply }) + "\n",
+            JSON.stringify({
+                request,
+                reply,
+                ...(criticalFault
+                    ? {
+                          checkpoint_sha256: useAlternate
+                              ? alternateModel.weights_sha256
+                              : model.weights_sha256,
+                      }
+                    : {}),
+            }) + "\n",
         );
         return reply;
     }
@@ -410,15 +522,38 @@ export async function playMatch({
         const agent = player === me;
         const rawState = agent ? snapshotGame(game) : null;
         const rawHash = agent ? stateHash(rawState) : null;
-        const s = seats[player],
-            observed = adapter.observe(game, player, { ...s, rtt: 0 }),
-            body = {
-                ...observed.request,
-                id: `${seat}-${seed}-${++serial}`,
-                player,
-                round_id: game.roundSerial,
-                map_revision: game.maze.revision,
-            };
+        const s = seats[player];
+        const baseObserved = adapter.observe(game, player, { ...s, rtt: 0 });
+        const candidate =
+            agent &&
+            criticalFault &&
+            !criticalUsed &&
+            (criticalFault.decision_index === undefined ||
+                decisions[player] === criticalFault.decision_index)
+                ? criticalCandidate(
+                      game,
+                      player,
+                      baseObserved,
+                      criticalFault.trigger,
+                  )
+                : null;
+        const criticalNow = candidate && criticalFault.layer !== "controller";
+        if (criticalNow) criticalUsed = true;
+        const activeSeat =
+            criticalNow && criticalFault.kind === "one_turn_settings"
+                ? { ...alternateHarness.seat, interval: s.interval }
+                : s;
+        const observed =
+            activeSeat === s
+                ? baseObserved
+                : adapter.observe(game, player, { ...activeSeat, rtt: 0 });
+        const body = {
+            ...observed.request,
+            id: `${seat}-${seed}-${++serial}`,
+            player,
+            round_id: game.roundSerial,
+            map_revision: game.maze.revision,
+        };
         validateRequest(body, "tank-war");
         if (agent) {
             const stateIndex = decisions[player];
@@ -451,15 +586,31 @@ export async function playMatch({
             agent && !teacher
                 ? await decide(
                       {
-                          model: model.model,
+                          model:
+                              criticalNow && criticalFault.layer === "weights"
+                                  ? alternateModel.model
+                                  : model.model,
                           agentIds: ["agent", "agent"],
                           contextLimit: null,
-                          branches: model.branches,
-                          ask: recordedAsk,
+                          branches:
+                              criticalNow && criticalFault.layer === "weights"
+                                  ? alternateModel.branches
+                                  : model.branches,
+                          ask: (request) =>
+                              recordedAsk(
+                                  request,
+                                  !!(
+                                      criticalNow &&
+                                      criticalFault.layer === "weights"
+                                  ),
+                              ),
                       },
                       body,
                       {
-                          questions: harness.questions,
+                          questions:
+                              criticalNow && criticalFault.layer === "harness"
+                                  ? alternateHarness.questions
+                                  : harness.questions,
                           notes: harness.notes,
                           choose,
                       },
@@ -488,18 +639,65 @@ export async function playMatch({
             game,
             player,
             projected?.response ?? response,
-            s,
+            activeSeat,
         );
         const executionFault = agent
-            ? afterControllerApply(game, player, applied, controllerFault)
+            ? afterControllerApply(
+                  game,
+                  player,
+                  applied,
+                  controllerFault ||
+                      (candidate &&
+                      criticalFault?.layer === "controller" &&
+                      applied.controls.fire
+                          ? criticalFault
+                          : null),
+              )
             : null;
+        if (
+            candidate &&
+            criticalFault?.layer === "controller" &&
+            executionFault
+        )
+            criticalUsed = true;
+        if (
+            criticalNow ||
+            (candidate &&
+                criticalFault?.layer === "controller" &&
+                executionFault)
+        ) {
+            await appendFile(
+                join(out, "private_critical_event.jsonl"),
+                JSON.stringify({
+                    decision_index: decisions[player],
+                    state_hash: rawHash,
+                    time: Math.round(game.elapsed * 1000) / 1000,
+                    candidate,
+                    layer: criticalFault.layer,
+                    kind: criticalFault.kind,
+                    instance: criticalFault.instance,
+                    clean_checkpoint_sha256: model.weights_sha256,
+                    alternate_checkpoint_sha256:
+                        alternateModel?.weights_sha256 ?? null,
+                    selected_action: {
+                        motion: response.policy_motion_id ?? null,
+                        weapon:
+                            response.weapon_choice ??
+                            response.chosen?.weapon ??
+                            null,
+                    },
+                    acknowledged_command: applied,
+                    execution_change: executionFault ?? null,
+                }) + "\n",
+            );
+        }
         if (projected || executionFault) {
             await appendFile(
                 join(out, "private_fault_events.jsonl"),
                 JSON.stringify({
                     decision_index: decisions[player],
-                    kind: controllerFault.kind,
-                    instance: controllerFault.instance,
+                    kind: (controllerFault ?? criticalFault).kind,
+                    instance: (controllerFault ?? criticalFault).instance,
                     before: projected?.before ?? executionFault.before,
                     after: projected?.after ?? executionFault.after,
                 }) + "\n",
@@ -655,6 +853,7 @@ function parse(argv) {
         "teacher",
         "replay-dir",
         "controller-fault-file",
+        "critical-fault-file",
     ];
     const unknown = Object.keys(args).filter((k) => !known.includes(k));
     if (unknown.length) throw Error(`Unknown option --${unknown[0]}`);
@@ -675,6 +874,8 @@ function parse(argv) {
         controllerFaultFile:
             args["controller-fault-file"] &&
             resolve(args["controller-fault-file"]),
+        criticalFaultFile:
+            args["critical-fault-file"] && resolve(args["critical-fault-file"]),
         token: process.env.HONING_TOKEN,
     };
 }

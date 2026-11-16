@@ -16,12 +16,12 @@ SPEC.loader.exec_module(module)
 
 
 @pytest.mark.unit
-def test_each_harness_candidate_changes_one_file_and_keeps_shot_guard_off(tmp_path: Path) -> None:
+def test_each_harness_candidate_changes_one_file_and_only_guard_fault_enables_guard(tmp_path: Path) -> None:
     records = module.build(tmp_path / "faults")
     assert len(records) >= 5
     for record in records:
         root = tmp_path / "faults" / record["family"]
         assert len(record["changed_paths"]) == 1
         controller = json.loads((root / "tank/controller.json").read_text())
-        assert controller["fireGuardEnabled"] is False
+        assert controller["fireGuardEnabled"] is (record["family"] == "enable_shot_guard")
         assert record["clean_sha256"] != record["fault_sha256"]

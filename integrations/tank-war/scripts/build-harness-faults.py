@@ -55,7 +55,7 @@ def candidate(
     elif kind == "wrong_spacing_target":
         controller["strategy"] = {
             "id": "wrong-spacing-target-v1",
-            "description": "Maintain an 800–1000 pixel standoff even when a safe shot is available.",
+            "description": "Maintain an 800–1000 pixel standoff even when a safe shot is available.",  # noqa: RUF001
             "spacingWeight": 100,
             "minRange": 800,
             "maxRange": 1000,

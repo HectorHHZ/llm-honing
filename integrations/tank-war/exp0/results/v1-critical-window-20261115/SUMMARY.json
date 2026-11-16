@@ -1,0 +1,300 @@
+{
+  "dataset_version": "v1-critical-window-20261115",
+  "private_artifact_root": "/data/xinkaiz/system0/exp0/tank-war/v1-critical-window-20261115",
+  "private_artifact_sha256": {
+    "blind-v7/sample-freeze.json": "a7dbeb68f361c73b9072e23266c95c197a3af67822f1844f22966f4ae21a98f1",
+    "blind-v7/score.json": "0eff6a3bf5be36d08e5f8bdaa93deeb5a67d896ba7fd89c52c4ed818e33cf686",
+    "blind-v7/probe-audit.json": "523dbfe5613d7efa08af3cc3860409a76dba42d962ba2b157b175169fdc8f723",
+    "blind-v7/read/summary.json": "e85fd068201c7aadf3566dd900c0af73dbc991b803cecb05555a5b7e6a98779c",
+    "blind-v7/probe/summary.json": "044873a68a789ec855b6c1952fe2451dc8b496fb6dcb77e061f27efc6ddb301b",
+    "blind-v7/replays/summary.json": "e12748bdcd5659ea439a5a5183c27c39c2f1c4e4b2d265172a7f4ecbf3270b8b",
+    "blind-v7/probes/summary.json": "8041b2bb30b6e38e1a43f89a5f5849855c949b44ec39a4eb36799e705a1a7373",
+    "inventory-final-v3/losses.jsonl": "d57fbe767c47c3ce89dc9dbf78d0219cb1a87335991d8b649e0410a232f0514b",
+    "inventory-final-v3/attempts.jsonl": "d36adef3169f1d921bfbf2e86a593cb91d78ced91a7d13571ae004acda629126",
+    "inventory-final-v3/summary.json": "47c78e808ae258838e6740c3b7bcdcea9d47ffbb567b3b8946857148e318d32f",
+    "DATA_CARD.json": "0e36a2718b8a75ce7cb579fbdcbf424e70410490fb6dddb2bc10db1e083aaaf5",
+    "REPORT.md": "5ab1f598eff90965b5daeb5e24c70a4c873b0d7a2fecf3d41299b0b98bfa1809"
+  },
+  "frozen_public_files_sha256": {
+    "protocol.json": "5b412bb88584187ccab5dc1da5e36f19189a6d1b2d495379b1fa6b28c73e645e",
+    "prompt.txt": "5ecad3bad8d64139f56d777ad330cfb0874988712d5559dbb97eee8086643019",
+    "schema.json": "9e0f00f24b6bc8d6df61e2cd3d98d71aad183468ad848c3e8492268c783b88a4",
+    "collection-cutoff.json": "7e0586c91d0eabcd5c592d0b763fe73fb26c90c2f4bfa583c68e45768692d48a"
+  },
+  "utilization": {
+    "denominator_complete_unique_losses": 1232,
+    "retained_complete_unique_losses": 1232,
+    "ratio": 1.0,
+    "aligned_trace_losses": 1232,
+    "state_hash_verified_losses": 1232,
+    "full_replay_gate": {
+      "cases": 40,
+      "valid": 40,
+      "invalid": [],
+      "seconds_sum": 73.46000000000001
+    },
+    "limitation": "Full deterministic replay was required for blind cases; the complete-loss inventory was checked for file completeness, alignment, and every state hash, not full-engine replay of every archived match."
+  },
+  "new_pairs_by_layer": {
+    "harness": {
+      "completed_pairs": 87,
+      "fault_losses": 56,
+      "retained_fault_losses": 56,
+      "triggered": 78,
+      "local_action_changed": 35,
+      "technically_eligible_losses": 20,
+      "paired_clean_outcome_better": 4
+    },
+    "weights": {
+      "completed_pairs": 66,
+      "fault_losses": 48,
+      "retained_fault_losses": 48,
+      "triggered": 62,
+      "local_action_changed": 30,
+      "technically_eligible_losses": 20,
+      "paired_clean_outcome_better": 2
+    },
+    "controller": {
+      "completed_pairs": 41,
+      "fault_losses": 28,
+      "retained_fault_losses": 28,
+      "triggered": 37,
+      "local_action_changed": 37,
+      "technically_eligible_losses": 24,
+      "paired_clean_outcome_better": 4
+    }
+  },
+  "archived_harness": {
+    "complete_archived_losses": 98,
+    "same_state_checked": 39,
+    "verified_selected_action_difference": 39,
+    "verified_unique_seeds": 22,
+    "paired_clean_outcome_better": 7
+  },
+  "edited_checkpoint_recovery": {
+    "planned_missing_games": 99,
+    "completed_games": 99,
+    "losses": 97,
+    "journal_entries": 99
+  },
+  "unusable_loss_record_count": 0,
+  "blind_sample": {
+    "cases": 40,
+    "by_layer": {
+      "harness": 10,
+      "weights": 10,
+      "controller": 10,
+      "control": 10
+    },
+    "selection_counts": {
+      "harness": {
+        "blind_pairs": 36,
+        "blind_fault_losses": 21,
+        "technical_eligible": 13
+      },
+      "weights": {
+        "blind_pairs": 48,
+        "blind_fault_losses": 37,
+        "technical_eligible": 16
+      },
+      "controller": {
+        "blind_pairs": 28,
+        "blind_fault_losses": 19,
+        "technical_eligible": 16
+      }
+    }
+  },
+  "neutral_probe_audit": {
+    "cases": 40,
+    "signature_pass_by_layer": {
+      "harness": {
+        "pass": 10,
+        "total": 10
+      },
+      "weights": {
+        "pass": 10,
+        "total": 10
+      },
+      "controller": {
+        "pass": 10,
+        "total": 10
+      },
+      "control": {
+        "pass": 10,
+        "total": 10
+      }
+    },
+    "off_target_cases": 0
+  },
+  "diagnosis": {
+    "cases": 40,
+    "fault_cases": 30,
+    "causal_subset": 6,
+    "by_layer": {
+      "harness": {
+        "n": 10,
+        "read": {
+          "technical_window_hit": "3/10",
+          "technical_layer_hit": "3/10",
+          "joint_hit": "2/10",
+          "control_false_alarm": "0/10",
+          "valid_attempts": "10/10"
+        },
+        "probe": {
+          "technical_window_hit": "4/10",
+          "technical_layer_hit": "4/10",
+          "joint_hit": "4/10",
+          "control_false_alarm": "0/10",
+          "valid_attempts": "10/10"
+        }
+      },
+      "weights": {
+        "n": 10,
+        "read": {
+          "technical_window_hit": "1/10",
+          "technical_layer_hit": "5/10",
+          "joint_hit": "0/10",
+          "control_false_alarm": "0/10",
+          "valid_attempts": "10/10"
+        },
+        "probe": {
+          "technical_window_hit": "1/10",
+          "technical_layer_hit": "5/10",
+          "joint_hit": "1/10",
+          "control_false_alarm": "0/10",
+          "valid_attempts": "10/10"
+        }
+      },
+      "controller": {
+        "n": 10,
+        "read": {
+          "technical_window_hit": "4/10",
+          "technical_layer_hit": "0/10",
+          "joint_hit": "0/10",
+          "control_false_alarm": "0/10",
+          "valid_attempts": "10/10"
+        },
+        "probe": {
+          "technical_window_hit": "3/10",
+          "technical_layer_hit": "1/10",
+          "joint_hit": "0/10",
+          "control_false_alarm": "0/10",
+          "valid_attempts": "10/10"
+        }
+      },
+      "control": {
+        "n": 10,
+        "read": {
+          "technical_window_hit": "2/10",
+          "technical_layer_hit": "0/10",
+          "joint_hit": "0/10",
+          "control_false_alarm": "1/10",
+          "valid_attempts": "10/10"
+        },
+        "probe": {
+          "technical_window_hit": "2/10",
+          "technical_layer_hit": "0/10",
+          "joint_hit": "0/10",
+          "control_false_alarm": "1/10",
+          "valid_attempts": "10/10"
+        }
+      }
+    },
+    "paired": {
+      "technical_window_hit": {
+        "read": 8,
+        "probe": 8,
+        "probe_minus_read": 0,
+        "denominator": 30,
+        "paired_difference_95pct_stratified_bootstrap": [
+          -0.16666666666666666, 0.16666666666666666
+        ]
+      },
+      "technical_layer_hit": {
+        "read": 8,
+        "probe": 10,
+        "probe_minus_read": 2,
+        "denominator": 30,
+        "paired_difference_95pct_stratified_bootstrap": [
+          -0.16666666666666666, 0.3
+        ]
+      },
+      "joint_hit": {
+        "read": 2,
+        "probe": 5,
+        "probe_minus_read": 3,
+        "denominator": 30,
+        "paired_difference_95pct_stratified_bootstrap": [
+          -0.03333333333333333, 0.23333333333333334
+        ]
+      }
+    },
+    "causal": {
+      "read": {
+        "joint_hit": "1/6",
+        "window_hit": "1/6",
+        "layer_hit": "2/6"
+      },
+      "probe": {
+        "joint_hit": "1/6",
+        "window_hit": "1/6",
+        "layer_hit": "1/6"
+      }
+    }
+  },
+  "model_usage": {
+    "read": {
+      "valid_cases": 40,
+      "input_tokens": 2196037,
+      "output_tokens": 47852,
+      "elapsed_seconds_sum": 1037.734,
+      "cause_macro_f1": 0.220206,
+      "cause_abstentions_on_fault_cases": 2,
+      "uncached_api_equivalent_usd_at_frozen_price": 4.870594
+    },
+    "probe": {
+      "valid_cases": 40,
+      "input_tokens": 2374573,
+      "output_tokens": 50228,
+      "elapsed_seconds_sum": 1089.806,
+      "cause_macro_f1": 0.310849,
+      "cause_abstentions_on_fault_cases": 0,
+      "uncached_api_equivalent_usd_at_frozen_price": 5.251426
+    }
+  },
+  "price_reference": {
+    "as_of_client_date": "2026-11-13",
+    "source": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+    "service_tier": "standard",
+    "method": "all input priced as uncached text input; API-equivalent estimate, not a ChatGPT/Codex bill"
+  },
+  "earlier_release_level_validation_of_different_fault_variants": {
+    "harness": {
+      "candidate_name": "disable_assistance",
+      "seed_blocks": 128,
+      "rounds_per_arm": 256,
+      "mean_fault_minus_clean": -0.181640625,
+      "paired_bootstrap_95pct": [-0.248046875, -0.115234375],
+      "retained": true,
+      "local_summary_sha256": "bea053b710b4dbaf2d11c2e599907041ced214bb8240ccf588f8fdee36c99494"
+    },
+    "weights": {
+      "candidate_name": "reverse_prior_scalar_edit",
+      "seed_blocks": 128,
+      "rounds_per_arm": 256,
+      "mean_fault_minus_clean": -0.291015625,
+      "paired_bootstrap_95pct": [-0.349609375, -0.232421875],
+      "retained": true,
+      "local_summary_sha256": "18f4dc662dc0e5ef249969da3a2e1a1a031ad8069cb96fb759bf43a5da5d2076"
+    },
+    "controller": {
+      "candidate_name": "wrong_legal_projection",
+      "seed_blocks": 128,
+      "rounds_per_arm": 256,
+      "mean_fault_minus_clean": -0.2421875,
+      "paired_bootstrap_95pct": [-0.306640625, -0.177734375],
+      "retained": true,
+      "local_summary_sha256": "c8e23ff41f5273c9f4121e9363f369f11ee2ad36e2e5cd50750911d0d2cf0728"
+    }
+  }
+}

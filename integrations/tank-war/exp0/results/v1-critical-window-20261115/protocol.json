@@ -1,0 +1,19 @@
+{
+  "version": "tank183-critical-blind-v7",
+  "model": "gpt-6-sol",
+  "effort": "high",
+  "modes": ["read", "probe"],
+  "calls_per_case_per_mode": 1,
+  "max_parallel_diagnoses": 2,
+  "source": "harness from one-turn question-only intervention at the clean game's preselected first permitted shot within 400 px, final_test seed indices 143 through 162 plus independent GPU-0 reserve 203 through 222; weights from critical-window indices 103 through 122 plus reserve 183 through 202; controller from indices 123 through 142 plus reserve 163 through 182. Archived point-blank harness losses were checked first and retained as supplemental but excluded because their strategy setting also participates in post-selection execution.",
+  "split": "no prompt or probe tuning is performed, so all precommitted fresh seed ranges remain eligible for blind_test; low-effect one-turn harness and archived mixed-strategy harness attempts remain in the dataset but outside the strict three-class blind test",
+  "selection": "from all frozen unseen fresh seeds, rank eligible losses by SHA-256, at most one seat per seed and ten per layer; select unmodified losses on unused seeds for controls",
+  "eligible_technical_case": "fault loss, exactly one trigger, identical clean prefix, isolated single layer, and a local selected/command/execution action difference; harness must be a pre-selection question-only change and a selected-action difference",
+  "technical_window_hit": "reported decision center is within two decisions of the pre-recorded event index",
+  "technical_layer_hit": "reported cause equals the verified changed layer",
+  "joint_hit": "both technical window and layer hit on the same case",
+  "failure_causal_subset": "clean paired outcome is better than fault; other local differences are technical attribution cases but not claimed to cause the loss",
+  "control_false_alarm": "on an unmodified loss, reporting harness or controller as the cause",
+  "no_human_review": true,
+  "limits": "Exploratory small three-class test. Archived harness strategy cases are supplemental because the strategy also affects execution; they are not used as strict harness ground truth. The new harness fault changes only model questions at a preselected clean decision. All complete losses and failed checks remain archived. No claim of universal three-class performance or proof that every local change caused the loss."
+}

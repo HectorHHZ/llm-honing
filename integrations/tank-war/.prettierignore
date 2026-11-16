@@ -1,0 +1,2 @@
+# Preserve the exact frozen JSON schema bytes used by the blind test.
+exp0/results/v1-critical-window-20261115/schema.json
