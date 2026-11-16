@@ -1,0 +1,26 @@
+{
+  "id": 1,
+  "parts": {
+    "essential": [
+      "Play Taisei, a vertical bullet-hell shooter. Survive and shoot enemies. Coordinates are viewport pixels, x right, y down. nearestBullets entries are [x,y,vx,vy], native movement velocity parameters in pixels/tick, up to eight nearest on-screen enemy bullets; other bullets, lasers and enemies are not in this partial sensor. Each action holds movement, shot and focus for 120 ticks at 60Hz. Diagonal speed is normalized by the game. The game pauses during inference.",
+      "{\"id\":1,\"frame\":0,\"fps\":60,\"stage\":1,\"gameover\":0,\"viewport\":[480,560],\"player\":{\"x\":240.0,\"y\":496.0,\"lives\":8,\"bombs\":3,\"score\":0},\"visibleEnemyBullets\":0,\"nearestBullets\":[]}"
+    ]
+  },
+  "questions": {
+    "action": {
+      "type": "choice",
+      "instructions": "Choose the next movement to survive.",
+      "criteria": {
+        "stay": "Stay still, shoot and focus.",
+        "left": "Move left, shoot and focus.",
+        "right": "Move right, shoot and focus.",
+        "up": "Move up, shoot and focus.",
+        "down": "Move down, shoot and focus.",
+        "up_left": "Move diagonally up-left, shoot and focus.",
+        "up_right": "Move diagonally up-right, shoot and focus.",
+        "down_left": "Move diagonally down-left, shoot and focus.",
+        "down_right": "Move diagonally down-right, shoot and focus."
+      }
+    }
+  }
+}
