@@ -1,0 +1,169 @@
+{
+  "format_version": 1,
+  "split": "blind_test",
+  "case_count": 40,
+  "source_freeze_sha256": "a7dbeb68f361c73b9072e23266c95c197a3af67822f1844f22966f4ae21a98f1",
+  "description": "Opaque test IDs and input hashes only. Sorted by ID, not the private freeze order. Cause, seed, source path, reference window, and outcome remain in the private evaluation store.",
+  "cases": [
+    {
+      "episode_id": "00cf81c23d09b269f0d8",
+      "input_sha256": "1f02c0203c70d8119853d07edc395d24686a92149e802d2152019ae22dd1031f"
+    },
+    {
+      "episode_id": "036c141e546236d90488",
+      "input_sha256": "e6dd9a7c74176c66f31394f41af033e9ec5374ee34c894ea7edfc0d5b32b8e1a"
+    },
+    {
+      "episode_id": "15a866e047c0c66214f7",
+      "input_sha256": "6ff3218d6c71f828c68a91f7eee0aad5c384c8d6914a852a5dff0fb9435b76ca"
+    },
+    {
+      "episode_id": "15bac7d3146781a8a124",
+      "input_sha256": "971b2fcea8fc71742430d184140db02826984c87578412ca18a3967ddf89dadf"
+    },
+    {
+      "episode_id": "25b176f11e5f6f9032ee",
+      "input_sha256": "fc3c18799af3299d22df3ea77139f8267d58694ba2d8083c7a4efa8577b0dcbf"
+    },
+    {
+      "episode_id": "2929eae3199170018140",
+      "input_sha256": "90bce550647966a4a1cdeb05d122812773904f3d4fd88f3b9cb39eaec58961cb"
+    },
+    {
+      "episode_id": "2937e54b29e17f8d6693",
+      "input_sha256": "b4c440fa164ad898c91553455ba3c8cf2d77490018523653bfb4a68d84bf8411"
+    },
+    {
+      "episode_id": "2c0cec14ea7aa00fb95e",
+      "input_sha256": "80daa31cd9b218f840b9dfca6d19d6edb56d86f13e52d84ffaeb38ac55a95c13"
+    },
+    {
+      "episode_id": "3a71aa07a5a60102bc2f",
+      "input_sha256": "56d69bfda58607fcb365eeb9a4780cf57c43dba74d32c38dd4cfdff9d764b815"
+    },
+    {
+      "episode_id": "3efda722824c1fb0dcab",
+      "input_sha256": "3858f6d3cc8e5a7911e919cdc0923b70a93f6ef660c29e64aed99458f25f7a1b"
+    },
+    {
+      "episode_id": "4031f63de11d5eb16fe2",
+      "input_sha256": "a52632d340fdf26b5e5901e48b3b1a256b7e8bb21e615a60b531af94e7e19023"
+    },
+    {
+      "episode_id": "43b186e47c35fdaea193",
+      "input_sha256": "c8ee5d5da445a166b018b0f7a9f8200f38356b419ed1239d9934f2428b3ba022"
+    },
+    {
+      "episode_id": "459e1a905662c77775d2",
+      "input_sha256": "beebe0ffc2d575092cc6e5ca9faf75b4ad8b8389a907e388aeb5ec5ff2245434"
+    },
+    {
+      "episode_id": "4bd9699c1a760d3f3fa8",
+      "input_sha256": "eb0d382457bc501f98f434f6abf23ee541fb28effa0eb8e9b2bfc620d6d7f4d2"
+    },
+    {
+      "episode_id": "51aed6c03911a0d55092",
+      "input_sha256": "890823fb81164d164353b59a2702d5b61038e3d1a507a15205f9d847d483731f"
+    },
+    {
+      "episode_id": "53e22089fd4c18de5ed9",
+      "input_sha256": "9ef831a4abcb7dbda0eeb642a00c912cf7ebbe717baa1ee3aaa4ad1fe52a7a60"
+    },
+    {
+      "episode_id": "58e033d31ec8f8dea46d",
+      "input_sha256": "c2cead801567aaf69dfbeffe778a1fed049f7679bd07a503c5e0db7f770bb718"
+    },
+    {
+      "episode_id": "5d7f4899a2396e77d620",
+      "input_sha256": "9303c19949fb99940f95f32bd18a75c93a991a871dc39a07541a835c93ab79a6"
+    },
+    {
+      "episode_id": "61a9694c8f616117541f",
+      "input_sha256": "573f6679e9e7d60e7ba56b9fb6dbe06a4c08595b92fc3f7ccb72337d9f91bb1c"
+    },
+    {
+      "episode_id": "6542331621124d9c03c6",
+      "input_sha256": "d8703bcb5706db65c6b8a089184647ed79c243de8ed1987798d19fe8d6d676ef"
+    },
+    {
+      "episode_id": "79dcac73ca32510b7e6e",
+      "input_sha256": "2b93c5d4e04373881c6cd6d1909b298873eae52038dd77261c7801d0fde00bb1"
+    },
+    {
+      "episode_id": "7a339d43d0486042f12b",
+      "input_sha256": "36b5883ca670fcd55bcf4f611c18ed5109908e5959e28347e013d79c6cf5d817"
+    },
+    {
+      "episode_id": "7a60f8257d05a318843b",
+      "input_sha256": "53fb9a2f2efaa72ee6d3952a70eef794b08b9dd3b37a1d9e35cb48d249be28c9"
+    },
+    {
+      "episode_id": "7d0dca2e730a4abd5be3",
+      "input_sha256": "83f1401fda91cd9c15e9ec89b39b70b06a655161a1ab242e1a546ee6fb20de47"
+    },
+    {
+      "episode_id": "87cbbf63507ed34476b0",
+      "input_sha256": "1d89527e0f2131a50f5119af085070d8bb8539baf7b4d0ef00c07946612e50c2"
+    },
+    {
+      "episode_id": "93fa3891b441a1796412",
+      "input_sha256": "e250ab19d142c877e586728da1906e57930fdbd5fd0922ae666e8941285b59c7"
+    },
+    {
+      "episode_id": "96e85306e5e0ce341210",
+      "input_sha256": "1e2412dc21e54b1475ef8b863ef671abefa237f4d8c2f37657276a681d8363bd"
+    },
+    {
+      "episode_id": "9b58d9b7da8d25815db3",
+      "input_sha256": "e6d9561090554464cdd936c87afa3c2086b8cb2cfb4ded64f369bf5fd6cf349c"
+    },
+    {
+      "episode_id": "a1da9de9c114c9fb62fb",
+      "input_sha256": "23d129b1a9792f853c4dc99cd9d3a5fc0d2eeea1a4b7058654abde79da87faa1"
+    },
+    {
+      "episode_id": "a22fefbf41dd36c6f663",
+      "input_sha256": "a6eb47651866de9977e8bcd8ef5e852b90ebc5217ef08eb8b29c316dafe28730"
+    },
+    {
+      "episode_id": "a2518aeee5a9c39083f7",
+      "input_sha256": "d75223da574b7e07ecd6518e69f1d5bd58574b5aa7950934895032b4317979cf"
+    },
+    {
+      "episode_id": "acae4227fdfc3ac5a011",
+      "input_sha256": "9c6d64f6c8c9c05535918d6f0ee85dc8bfbdd857385d29714c9f2a87653d8290"
+    },
+    {
+      "episode_id": "b4d6564122c79a35f969",
+      "input_sha256": "9c09acc7d608baa14649c7646f9cba6f2ff776ad5983d4ae7dfe8be163cba31b"
+    },
+    {
+      "episode_id": "b96d94b3b99a11b4b0ef",
+      "input_sha256": "3ea436ac374d0b9ada8d4d99f5c6dc717ba71b6afb2bf524741b7ebbdcced0ce"
+    },
+    {
+      "episode_id": "bf988124d4e9e210fb81",
+      "input_sha256": "d71f720da62d6737c068e3f017aa6b42f3e1a26d35571f17e0523e09ea79fb9a"
+    },
+    {
+      "episode_id": "c4d85bdf0cae843947dd",
+      "input_sha256": "4226eeb8c1f1b6193290887533db3943f7999e96794047aa1286597a61b16671"
+    },
+    {
+      "episode_id": "d3807d2b783f06d6686a",
+      "input_sha256": "e96ce2c873dc7b0a99e475f199900ea8fb7a5ecc75a980a0500958f437fc2aa7"
+    },
+    {
+      "episode_id": "dddb095897a360ddd2ce",
+      "input_sha256": "19dd9c9fdee170969d844c996637c5d59f2f63f239d8a63e1bd189b73d756401"
+    },
+    {
+      "episode_id": "e62cdcf900daf480c99c",
+      "input_sha256": "9c7af6cd388fceb37c361a28b6c8489292ef79f0b39ecd3dba22dc1ee38ce36e"
+    },
+    {
+      "episode_id": "e8dbbaf930567cf872c4",
+      "input_sha256": "ea16591139c97194581efdfcff85a3e4370ef9e094400be049ccf84b8126ed2e"
+    }
+  ]
+}
