@@ -9,12 +9,27 @@ import math
 import os
 import select
 import subprocess
+import sys
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
+
+# Resolve the sibling stdlib-only receiver without exposing integrations as importable runtimes.
+_shared_import_path = str(Path(__file__).resolve().parents[1])
+sys.path.insert(0, _shared_import_path)
+try:
+    from _shared.decision import DecisionClient as DecisionClient
+    from _shared.decision import checked_action as checked_decision_action
+    from _shared.decision import finite_json_float as finite_json_float
+    from _shared.decision import reject_json_constant as reject_json_constant
+    from _shared.decision import strict_json_loads as strict_json_loads
+    from _shared.decision import unique_object as unique_object
+finally:
+    # Remove only our inserted object, preserving preexisting equal path entries.
+    for _shared_index, _shared_entry in enumerate(sys.path):
+        if _shared_entry is _shared_import_path:
+            del sys.path[_shared_index]
+            break
 
 ACTIONS = {
     "wait": "Wait without pressing buttons.",
@@ -42,10 +57,14 @@ def request_for(observation: dict[str, Any], frames: int) -> dict[str, Any]:
             "essential": [
                 "Play Celeste Classic. Climb to the top of the room and avoid spikes. "
                 "Coordinates are room pixels: x right, y down; velocity pixels/tick. "
-                "Tiles are 8px: # solid, ^ v < > spikes, . other. Entities cover the whole current room. "
+                "Tiles are 8px: # solid, ^ up / v down / > right / < left pointing spikes, . other. "
+                "Entities cover the whole current room. "
                 "Dashes refill on ground. Jump/dash trigger on button edges; "
-                "repeating a held button does not retrigger. "
-                f"Hold one action for {frames} game ticks at 30Hz. Game update and draw pause while you decide.",
+                "Repeated jump/dash first releases that button until the player processes release, "
+                "keeping directions held. "
+                "Native freeze, cooldown and dash availability still apply. "
+                f"One action lasts {frames} game ticks at 30Hz, including any release tick. "
+                "Game update and draw pause while you decide.",
                 json.dumps(observation, separators=(",", ":"), allow_nan=False),
             ]
         },
@@ -60,145 +79,8 @@ def request_for(observation: dict[str, Any], frames: int) -> dict[str, Any]:
 
 
 def checked_action(response: dict[str, Any], request: dict[str, Any]) -> tuple[str, float]:
-    """Require the complete submitted state and audited choices before sending input to the Classic engine."""
-    if type(response.get("id")) is not int or response["id"] != request["id"]:
-        raise ValueError("Decision response id does not match the observation")
-    retained = {key: list(request["parts"].get(key, [])) for key in ("essential", "details", "memory", "logs")}
-    trimmed = response.get("trimmed")
-    if not isinstance(trimmed, list):
-        raise ValueError("Missing context removal audit")
-    for removal in trimmed:
-        if (
-            not isinstance(removal, dict)
-            or set(removal) != {"section", "text"}
-            or removal["section"] != "logs"
-            or not retained["logs"]
-            or removal["text"] != retained["logs"][0]
-        ):
-            raise ValueError("Required or unsubmitted context was removed")
-        retained["logs"].pop(0)
-    state = "\n".join(text for section in retained for text in retained[section])
-    if response.get("stateText") != state:
-        raise ValueError("Decision response stateText differs from the complete submitted context")
-    audits = response.get("tokenAudit")
-    if not isinstance(audits, dict) or set(audits) != set(request["questions"]):
-        raise ValueError("Decision response tokenAudit does not cover the submitted questions")
-    for key, question in request["questions"].items():
-        audit = audits[key]
-        if (
-            not isinstance(audit, dict)
-            or not {"stateTokens", "stateRoom", "inputTokens", "options", "stateTruncated"} <= set(audit)
-            or audit.get("stateTruncated") is not False
-        ):
-            raise ValueError(f"Decision tokenAudit reports truncated or unaudited context for {key}")
-        if type(audit.get("options")) is not int or audit["options"] != len(question["criteria"]):
-            raise ValueError(f"Decision tokenAudit has the wrong option count for {key}")
-        # DJEV reports null token counts. Validate all available counts without inventing them.
-        for field in ("stateTokens", "stateRoom", "inputTokens", "maxInputTokens"):
-            value = audit.get(field)
-            if value is not None and (type(value) is not int or value < 0):
-                raise ValueError(f"Decision tokenAudit has an invalid {field} for {key}")
-        size, room, total, limit = (
-            audit.get(field) for field in ("stateTokens", "stateRoom", "inputTokens", "maxInputTokens")
-        )
-        if (
-            (size is not None and room is not None and size > room)
-            or (size is not None and total is not None and size > total)
-            or (total is not None and limit is not None and total > limit)
-            or (state and any(value == 0 for value in (size, room, total, limit)))
-        ):
-            raise ValueError(f"Decision tokenAudit contradicts complete context for {key}")
-    if not isinstance(response.get("answers"), dict) or set(response["answers"]) != set(request["questions"]):
-        raise ValueError("Answers do not cover the exact questions")
-    try:
-        answer = response["answers"]["action"]
-        action, probabilities = answer["choice"], answer["probabilities"]
-    except (KeyError, TypeError) as error:
-        raise ValueError("Decision response has no action distribution") from error
-    if (
-        not isinstance(probabilities, dict)
-        or set(probabilities) != set(ACTIONS)
-        or not isinstance(action, str)
-        or action not in ACTIONS
-    ):
-        raise ValueError("Decision response does not cover the offered actions")
-    values = list(probabilities.values())
-    if any(
-        isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or not 0 <= p <= 1
-        for p in values
-    ):
-        raise ValueError("Invalid model probabilities")
-    # Laya returns four decimal places, allowing at most 0.00005 rounding error per option.
-    if abs(math.fsum(values) - 1) > len(ACTIONS) * 0.00005 + 1e-8:
-        raise ValueError("Model probabilities do not sum to one within rounding precision")
-    if probabilities[action] != max(values):
-        raise ValueError("Chosen input is not the model's argmax")
-    return action, float(probabilities[action])
-
-
-def reject_json_constant(value: str) -> Any:
-    """Keep NaN/Infinity out of the JSON trace as well as the game input."""
-    raise ValueError(f"Nonstandard JSON numeric constant: {value}")
-
-
-def finite_json_float(value: str) -> float:
-    """Reject exponent overflow before a decoded response can enter the JSON trace."""
-    result = float(value)
-    if not math.isfinite(result):
-        raise ValueError(f"Nonfinite JSON number: {value}")
-    return result
-
-
-def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate JSON object key")
-        result[key] = value
-    return result
-
-
-class DecisionClient:
-    """Use Honing's existing health and decide routes without loading a model in the game client."""
-
-    def __init__(self, url: str, timeout_seconds: float = 180) -> None:
-        parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
-            raise ValueError("decision-url must be an HTTP(S) server base URL")
-        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-            raise ValueError("timeout must be positive and finite")
-        self.url = url.rstrip("/")
-        self.timeout_seconds = timeout_seconds
-
-    def _call(
-        self, route: str, payload: dict[str, Any] | None = None, *, raw_path: Path | None = None
-    ) -> dict[str, Any]:
-        body = None if payload is None else json.dumps(payload, allow_nan=False).encode()
-        request = urllib.request.Request(self.url + route, body, {"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = response.read()
-        except urllib.error.HTTPError as error:
-            if raw_path is not None:
-                raw_path.write_bytes(error.read())
-            raise
-        if raw_path is not None:
-            raw_path.write_bytes(raw)
-        result = json.loads(
-            raw, parse_constant=reject_json_constant, parse_float=finite_json_float, object_pairs_hook=unique_object
-        )
-        if not isinstance(result, dict):
-            raise ValueError("Decision server response must be an object")
-        return result
-
-    def health(self) -> dict[str, Any]:
-        result = self._call("/v1/health")
-        if result.get("ready") is not True:
-            raise ValueError("Decision server is not ready")
-        return result
-
-    def decide(self, request: dict[str, Any], *, raw_path: Path | None = None) -> dict[str, Any]:
-        return self._call("/v1/decide", request, raw_path=raw_path)
+    """Validate the shared serving contract before the game-specific native input."""
+    return checked_decision_action(response, request, ACTIONS, optional_sections=("logs",))
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -382,6 +264,18 @@ def decide_and_step(native: Native, client: DecisionClient, before: dict[str, An
             log.write(line + "\n")
 
 
+def native_watchdog_seconds(timeout: float) -> int:
+    """Keep a full 30-second margin within the native watchdog's supported range."""
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or not 0 < timeout <= 3570
+    ):
+        raise ValueError("timeout must be finite and greater than 0, at most 3570 seconds")
+    return math.ceil(timeout) + 30
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--game", type=Path, required=True)
@@ -396,13 +290,17 @@ def main() -> None:
     args = parser.parse_args()
     if not 1 <= args.frames <= 30 or not 1 <= args.decisions <= 1000 or not 0 <= args.seed <= 1000000000:
         parser.error("frames 1..30, decisions 1..1000, seed 0..1000000000 required")
+    try:
+        watchdog = native_watchdog_seconds(args.timeout)
+    except ValueError as error:
+        parser.error(str(error))
     client = DecisionClient(args.decision_url, args.timeout)
     health = client.health()
     native = Native(
         args.game,
         args.output,
         capture=args.capture,
-        watchdog=min(3600, math.ceil(args.timeout) + 30),
+        watchdog=watchdog,
         seed=args.seed,
         library_path=args.library_path,
     )

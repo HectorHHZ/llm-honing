@@ -55,13 +55,18 @@ setup, every accepted command and every rejected command. It contains:
 Coordinates have origin at the room's top left; x increases right and y down.
 The player's x/y is its sprite reference, not a bounding rectangle. `grounded`
 queries the native solid test one pixel below. Tile symbols are `#` for the
-native solid flag, `^/v/</>` for spike tiles 17/27/43/59, and `.` for everything
+native solid flag, `^/v/>/<` for spike tiles 17/27/43/59, and `.` for everything
 else; dynamic fall floors/platforms/walls are separate entities. Entity records
 exclude the player, smoke, room-title text and lifeup text. They include offscreen
 or occluded objects in the current room without line-of-sight filtering. The
 bridge omits future rooms, future random outcomes, decorative particles, entity
 hitboxes and many internal timers. It is structured scene access, not vision-only
 observation or a complete serialized engine state.
+
+Each spike glyph points toward its dangerous tip: `^` up (17), `v` down (27),
+`>` right (43, mounted on the cell's left side), `<` left (59, mounted on its
+right side). These are pointing directions, not the player's safe travel
+direction. Native collision also checks the player's position and velocity.
 
 ## Native commands
 
@@ -70,7 +75,8 @@ ASCII fields: `operation id mask frames`. It waits for the next observation
 before submitting another command. This temporary format is local working state,
 not a supported public replay/save or network protocol.
 
-- `step <current-id> <mask> <frames>` holds the mask for 1..30 ticks.
+- `step <current-id> <mask> <frames>` applies the mask over 1..30 ticks, including
+  any jump/dash release ticks described below.
 - `reset <current-id> 0 0` restores an in-memory snapshot captured after setup.
 - `stop <current-id> 0 0` publishes `stopped` and exits the player.
 
@@ -82,10 +88,21 @@ publishes the same paused state with an increased `rejected` count and retains a
 local raw prefix (up to 255 bytes) plus reason/counter receipt. No rejected command
 renews the watchdog.
 
-The six mask bits are left=1, right=2, up=4, down=8, jump=16, dash=32. Inputs remain
-held across adjacent steps with the same bit set. Native `p_jump/p_dash` implement
-press edges: repeating jump/dash without a release does not trigger again. The
-original engine decides cooldowns, collision, dash availability and deaths.
+The six mask bits are left=1, right=2, up=4, down=8, jump=16, dash=32. Direction
+bits remain held. Native `p_jump/p_dash` implement press edges. At each step the
+bridge checks those native latches; any requested jump/dash whose latch is still
+held is first released until an original player update samples that release.
+Normally this takes one tick. Native hit-stop or player pause can postpone
+sampling, so the release stays in effect through those ticks. Only the affected
+edge bits are cleared; directions and other requested buttons are preserved.
+The next tick holds the full requested mask. Every release/update/draw pair
+counts toward the requested `frames`; no hidden ticks are added. A short command
+can be entirely release-only; the next command rechecks the actual native
+latches, including when the previous command ended during hit-stop.
+
+A fresh press does not guarantee a successful jump or dash. The original engine
+still decides cooldowns, collision, dash availability and deaths; in particular,
+an airborne player with zero dashes cannot dash again until native refill.
 
 | Model option | Mask |
 | --- | --- |
@@ -104,7 +121,10 @@ observation/capture I/O errors terminate the player with a nonzero code. The cli
 fails on unexpected exit, timeout, nonpaused state or mismatched action/counters.
 
 `HONING_WATCHDOG_SECONDS` is integer 1..3600 (default 240); the normal runner uses
-model timeout +30 seconds, capped at 3600. Every poll checks the deadline before
+`ceil(model timeout) + 30` seconds. The runner requires finite timeout greater
+than zero and at most 3570 seconds, rejecting larger values before model calls,
+output creation or player/display startup. It never silently caps the deadline.
+Every poll checks the deadline before
 reading any command. Only a syntactically valid, current command renews it. A
 continuous stale/invalid stream cannot bypass it. Python cleans up its children
 on model/bridge exceptions too. The CLI model timeout defaults to 180 seconds.
@@ -141,3 +161,13 @@ Local artifacts include model/build/process identity, response bytes,
 `decisions.jsonl`, numbered BMPs when captured, result/video metadata, player/Xvfb
 logs, native rejection diagnostics and owned-process cleanup receipts. These stay
 local. A completed capture proves neither a room clear nor independent replay.
+
+## Shared decision-response receiver
+
+The adapter imports the [shared stdlib-only receiver](../_shared/README.md).
+It requires `answers.action.type: "choice"` and explicit `stateTokens`,
+`stateRoom` and `inputTokens` audit keys; null counts are permitted, omitted
+keys are rejected. It rejects duplicate JSON keys at every nesting level as
+well as nonfinite numbers. Raw response bytes are saved before decoding,
+including HTTP error bodies. The game's required/optional context policy
+above remains in effect; invalid decisions cannot reach native input.

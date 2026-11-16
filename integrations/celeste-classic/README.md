@@ -75,8 +75,11 @@ The local Linux run used gcc 11.3.0, SDL2 2.0.20, SDL2_mixer 2.0.4, Xvfb, and th
 existing Laya CPU decision server. Twenty real model responses each matched its
 request and caused exactly 12 original update calls and 12 original draw calls;
 the original modulo-30 engine clock also advanced correctly. The model selected
-`dash_up` every time. The first dash occurred; later held dash inputs did not
-create new press edges. It remained in the first room with zero deaths. This
+`dash_up` every time. In that original pre-review build, the first dash occurred;
+later held dash inputs did not create new press edges. It remained in the first
+room with zero deaths. The current bridge releases repeated jump/dash until the
+native player samples release, within the requested tick budget; native dash
+availability and cooldown still apply. This
 establishes the connection and action semantics, not model competence or room
 completion.
 
@@ -91,7 +94,14 @@ Portable checks need no game or model:
 
 ```sh
 pytest tests/test_celeste_classic.py
+pytest tests/test_celeste_classic_controls.py
 ```
+
+The control regressions compile the production command loop with SDL/game
+callbacks substituted. With `HONING_CELESTE_SOURCE=/local/ccleste`, they also
+compile the pinned original engine against a synthetic floor and check real
+hit-stop/latches, landing/refill, repeated jump and directional spike collisions.
+Those fixtures are separate from SDL runs with the game's original map/assets.
 
 For a separate scripted interface check, including every input as the first
 accepted action after reset, paused-state stability, malformed/stale rejection,

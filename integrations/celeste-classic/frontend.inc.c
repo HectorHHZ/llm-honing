@@ -5,6 +5,7 @@ extern void Honing_update(void);
 extern void Honing_draw(void);
 extern void Honing_begin(unsigned seed);
 extern void Honing_state(FILE* out);
+extern unsigned Honing_held_edges(void);
 static const char* honing_dir = NULL;
 static unsigned long honing_id = 1, honing_ticks = 0, honing_episode_ticks = 0;
 static unsigned long honing_rejected = 0, honing_resets = 0;
@@ -103,9 +104,13 @@ static void honing_loop(void) {
         Celeste_P8_load_state(honing_initial); honing_episode_ticks = 0; honing_resets++;
         buttons_state = 0; /* Reset performs no draw: drawing mutates the restored game state. */
     } else {
-        buttons_state = (Uint16)bits;
+        /* Release until the native player has sampled it, including hit-stop.
+         * All release ticks consume this command's budget; keep directions. */
+        Uint16 release = Honing_held_edges() & (Uint16)bits;
         for (unsigned long i = 0; i < ticks; i++) {
+            buttons_state = (Uint16)bits & (Uint16)~release;
             Honing_update(); Honing_draw(); honing_ticks++; honing_episode_ticks++;
+            release &= Honing_held_edges();
             if (honing_capture) {
                 char name[80]; snprintf(name, sizeof name, "frames/%06lu.bmp", honing_ticks);
                 honing_path(path, name);

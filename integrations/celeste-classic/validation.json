@@ -134,5 +134,10 @@
     "integrations/celeste-classic/verify_native.py": "1bad98a33a01d898032c91fae9bffe19dff2fcf7a8f0ccae948e11ed5335cd01",
     "tests/test_celeste_classic.py": "b258e6757ba8414b9c84f29a58fd5f0b4369d0a306896bca643132ad2e12c3d0"
   },
-  "postModelRunChange": "run.py only: guard cleanup receipt with output ownership, so refusing an existing output cannot overwrite its prior receipt. New portable regression passes; native binary and accepted model-to-action path unchanged."
+  "postModelRunChange": "run.py only: guard cleanup receipt with output ownership, so refusing an existing output cannot overwrite its prior receipt. New portable regression passes; native binary and accepted model-to-action path unchanged.",
+  "reviewFixEvidenceBoundary": {
+    "status": "Historical pre-review-fix run; original hashes retained.",
+    "inspectableDecisionSample": "validation/review-sample",
+    "postFixNativeBehavior": "See separate review-fix technical validation; not established by this receipt."
+  }
 }

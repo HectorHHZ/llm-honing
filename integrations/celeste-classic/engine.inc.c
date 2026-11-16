@@ -8,6 +8,14 @@ void Honing_begin(unsigned seed) {
     Celeste_P8_init();
     begin_game(); /* Fixed first-room setup, no gameplay inputs or room skipping. */
 }
+/* A release must reach PLAYER_update, not merely a hit-stop update call. */
+unsigned Honing_held_edges(void) {
+    for (int i = 0; i < MAX_OBJECTS; i++) {
+        if (objects[i].active && objects[i].type == OBJ_PLAYER)
+            return (objects[i].p_jump ? 16u : 0u) | (objects[i].p_dash ? 32u : 0u);
+    }
+    return 0;
+}
 void Honing_state(FILE* out) {
     fprintf(out, "\"nativeUpdates\":%lu,\"nativeDraws\":%lu,\"clockFrame\":%d,"
         "\"room\":%d,\"deaths\":%d,\"freezeTicks\":%d,\"restartPending\":%s,\"player\":",
@@ -30,7 +38,7 @@ void Honing_state(FILE* out) {
         fputc('"', out);
         for (int x = 0; x < 16; x++) {
             int t = tile_at(x, y);
-            fputc(t == 17 ? '^' : t == 27 ? 'v' : t == 43 ? '<' : t == 59 ? '>' :
+            fputc(t == 17 ? '^' : t == 27 ? 'v' : t == 43 ? '>' : t == 59 ? '<' :
                   P8fget(t, 0) ? '#' : '.', out);
         }
         fputc('"', out);

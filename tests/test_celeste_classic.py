@@ -33,7 +33,11 @@ def response_for(request: dict) -> dict:
             }
         },
         "answers": {
-            "action": {"choice": "right", "probabilities": {name: 1 if name == "right" else 0 for name in run.ACTIONS}}
+            "action": {
+                "type": "choice",
+                "choice": "right",
+                "probabilities": {name: 1 if name == "right" else 0 for name in run.ACTIONS},
+            }
         },
     }
 
@@ -148,7 +152,11 @@ def test_bad_model_never_reaches_action_boundary_and_keeps_raw(tmp_path: Path, k
 def test_valid_rounded_distribution_and_tie() -> None:
     request = run.request_for({"id": 1}, 12)
     response = response_for(request)
-    response["answers"]["action"] = {"choice": "right", "probabilities": dict.fromkeys(run.ACTIONS, 0.0714)}
+    response["answers"]["action"] = {
+        "type": "choice",
+        "choice": "right",
+        "probabilities": dict.fromkeys(run.ACTIONS, 0.0714),
+    }
     assert run.checked_action(response, request) == ("right", 0.0714)
 
 
@@ -206,7 +214,7 @@ def test_raw_bytes_saved_before_json_failure(tmp_path: Path, raw: bytes) -> None
             return raw
 
     client = run.DecisionClient("http://localhost:8809")
-    with patch.object(run.urllib.request, "urlopen", return_value=Response()), pytest.raises(ValueError):
+    with patch("urllib.request.urlopen", return_value=Response()), pytest.raises(ValueError):
         client.decide({"id": 1}, raw_path=tmp_path / "response.raw")
     assert (tmp_path / "response.raw").read_bytes() == raw
 
