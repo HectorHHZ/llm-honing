@@ -68,6 +68,20 @@ as the historical test, their API equivalents are $4.71 and $4.97. These are
 not ChatGPT-login bills. The CLI was `0.158.0`; the model's internal revision
 and temperature were not pinned.
 
+Representative errors from the sealed probe answers, without publishing
+episode IDs or the private answer key:
+
+- An unmodified loss had identical model inputs and choices under controlled
+  repeats. System 0 still called it `harness`, treating ordinary “do not fire
+  yet” guidance as a faulty instruction.
+- In a real one-turn edited-checkpoint game, System 0 called `controller`.
+  Its explanation focused on ordinary drive-command transformations elsewhere
+  in the game, missing the same-input probability and choice change at the
+  checkpoint call.
+- In a one-turn controller drop-fire game, System 0 called `harness` because
+  it focused on the normal firing guidance. The technical difference was
+  after action selection, in the command sent for that one decision.
+
 **Scoped no-go for reliable per-game three-class attribution.** The
 episode-only prompt improves fault-game accuracy relative to the historical
 window-oriented prompt, while control false alarms rise sharply. Because
