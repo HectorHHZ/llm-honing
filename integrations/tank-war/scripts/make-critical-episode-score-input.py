@@ -24,12 +24,15 @@ def main() -> None:
     freeze = read(args.run / "freeze.json")
     if freeze["status"] != "frozen_before_episode_only_answers":
         raise ValueError("sensitivity sample not frozen")
-    if any(read(args.run / mode / "summary.json")["status"] != "complete" for mode in ("read", "probe")):
+    modes = freeze["modes"]
+    if modes not in (["read", "probe"], ["read+fewshot", "probe+fewshot"]):
+        raise ValueError("unexpected diagnosis modes")
+    if any(read(args.run / mode / "summary.json")["status"] != "complete" for mode in modes):
         raise ValueError("diagnosis mode incomplete")
     records = []
     for case in freeze["cases"]:
         record = {"episode_id": case["episode_id"]}
-        for mode in ("read", "probe"):
+        for mode in modes:
             target = args.run / mode / case["episode_id"]
             attempt, answer = read(target / "attempt.json"), read(target / "answer.json")
             if (
@@ -46,6 +49,7 @@ def main() -> None:
         records.append(record)
     result = {
         "source_run_freeze_sha256": sha(args.run / "freeze.json"),
+        "modes": modes,
         "records": records,
     }
     args.out.write_text(json.dumps(result, indent=2) + "\n")

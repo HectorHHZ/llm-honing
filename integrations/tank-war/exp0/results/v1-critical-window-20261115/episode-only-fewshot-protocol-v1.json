@@ -1,0 +1,22 @@
+{
+  "version": "tank183-episode-only-fewshot-v1",
+  "purpose": "secondary post-test few-shot sensitivity on the same 40 frozen games",
+  "independent_blind_sample": false,
+  "model": "gpt-6-sol",
+  "effort": "high",
+  "modes": [
+    "read+fewshot",
+    "probe+fewshot"
+  ],
+  "calls_per_case_per_mode": 1,
+  "maximum_calls": 80,
+  "maximum_parallel_calls": 2,
+  "maximum_input_tokens_per_mode": 4000000,
+  "maximum_output_tokens_per_mode": 100000,
+  "examples_sha256": "bf05e326c600caa181c8670b02341e95d7d13e863b8dc2be4dac52fa19cf8a83",
+  "example_source": "three frozen, previously human-reviewed development games; no test game",
+  "input": "unchanged anonymous replay and controlled checks from blind-v7; no hidden test labels",
+  "output": "one game-level cause or uncertain abstention; no decision index",
+  "paired_comparison": "probe+fewshot minus read+fewshot on the same 40 games",
+  "interpretation_limit": "Secondary post-test analysis on previously diagnosed games, not independent confirmation."
+}

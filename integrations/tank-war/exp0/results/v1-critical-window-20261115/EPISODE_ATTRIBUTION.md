@@ -87,7 +87,54 @@ episode-only prompt improves fault-game accuracy relative to the historical
 window-oriented prompt, while control false alarms rise sharply. Because
 this is a repeat on the same games and the internal model revision is
 unavailable, the difference cannot be attributed solely to prompt wording.
-Neither run shows a reliable paired gain from controlled probing.
+Neither bare-prompt run shows a reliable paired gain from controlled probing.
+
+## Secondary few-shot run on the same games
+
+The two missing few-shot modes were run later on those **same 40 games** with
+Sol high. Both received the same three previously reviewed development-game
+examples (one per layer), rewritten to demonstrate a single class per game.
+The examples contain no test game or construction manifest. The prompt,
+examples, sample IDs, per-mode token caps, and scoring rule were frozen before
+the new model answers. Freeze SHA-256:
+`50f671ecc82981851b71e7560e32394f9b844cb991f8a196690316f8081c1570`.
+The user requested full available compute during the run, so aggregate CLI
+concurrency rose from two to four after an amendment was recorded; no answer
+contents had been inspected when concurrency changed. All **80/80** new calls
+were valid and made no tool calls. Private answers and the amendment remain in
+`episode-only-fewshot-v1/`; the public aggregate is
+[`episode-only-fewshot-v1-summary.json`](episode-only-fewshot-v1-summary.json).
+
+| Correct class on 30 edited-fault games | Read | Probe | Read + examples | Probe + examples |
+| --- | ---: | ---: | ---: | ---: |
+| Harness | 9/10 | 9/10 | 10/10 | 10/10 |
+| Weights | 4/10 | 4/10 | 6/10 | 10/10 |
+| Controller | 4/10 | 6/10 | 2/10 | 6/10 |
+| **All three classes** | **17/30** | **19/30** | **18/30** | **26/30** |
+| Unsupported harness/controller call on 10 unmodified losses | 7/10 | 7/10 | 1/10 | 0/10 |
+
+With examples, probing improved on nine fault games and worsened on one:
+**+8/30, or +26.7 percentage points** relative to reading with the same
+examples. The episode-stratified paired bootstrap 95% interval was **+10.0
+to +43.3 points**. Across the three secondary comparisons, the exact paired
+two-sided p-value for this contrast is **0.0215** before and **0.0645** after
+Holm correction. Reading with examples alone gained 1/30 over bare read;
+probing with examples gained 7/30 over bare probe. The original bare-prompt
+comparison and its scoped no-go recommendation remain unchanged.
+
+This is a **promising secondary result, not independent confirmation**. The
+same 40 games had already been diagnosed and discussed before these new modes
+were run. There is only one tested fault family per layer, and the interval
+resamples games within those families; it does not estimate performance on
+new families. A fresh held-out test would be needed before changing the
+go/no-go recommendation for the predeclared primary comparison.
+
+Read + examples used 3,028,517 input and 21,458 output tokens in about 337
+seconds of wall time; probe + examples used 3,206,986 input and 14,466
+output tokens in about 282 seconds. At the frozen uncached API reference,
+their equivalents are $6.27 and $6.56, **not** ChatGPT-login bills. The two
+new modes use Codex CLI 0.158.0; internal model revision and temperature
+remain unavailable.
 
 ## Historical rescore of sealed answers
 

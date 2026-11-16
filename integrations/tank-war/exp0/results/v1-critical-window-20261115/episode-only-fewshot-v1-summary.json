@@ -1,0 +1,209 @@
+{
+  "result_version": "episode-only-fewshot-secondary-v1",
+  "interpretation": "Post-test secondary analysis on the same 40 previously diagnosed games; not independent confirmation.",
+  "cases": {
+    "verified_faults": 30,
+    "no_injection_controls": 10
+  },
+  "provenance": {
+    "bare_score_input_sha256": "895aee9eb1b2722f01a410c23d4feb8dd67ecc63dd7ed435efe27eba037cb04d",
+    "fewshot_score_input_sha256": "6e42165860208d14e034051cd2d1cef676471b808eae4dc74c8803a98ceb25ff",
+    "technical_labels_sha256": "0108c5a690b822b450e00c31a08f6e9408ffc368ced01c528c17d27469b32557",
+    "fewshot_freeze_sha256": "50f671ecc82981851b71e7560e32394f9b844cb991f8a196690316f8081c1570"
+  },
+  "modes": {
+    "read": {
+      "verified_fault_correct": 17,
+      "verified_fault_total": 30,
+      "per_cause_correct": {
+        "harness": 9,
+        "weights": 4,
+        "controller": 4
+      },
+      "control_unsupported_harness_or_controller": 7,
+      "control_total": 10,
+      "confusion": {
+        "harness": {
+          "harness": 9,
+          "weights": 1
+        },
+        "weights": {
+          "controller": 3,
+          "harness": 3,
+          "weights": 4
+        },
+        "controller": {
+          "controller": 4,
+          "harness": 4,
+          "weights": 2
+        },
+        "no_injection": {
+          "controller": 5,
+          "harness": 2,
+          "weights": 3
+        }
+      },
+      "usage": {
+        "input_tokens": 2191730,
+        "output_tokens": 33126,
+        "elapsed_seconds_sum": 773.0380000000002,
+        "uncached_api_equivalent_usd": 4.71472
+      }
+    },
+    "probe": {
+      "verified_fault_correct": 19,
+      "verified_fault_total": 30,
+      "per_cause_correct": {
+        "harness": 9,
+        "weights": 4,
+        "controller": 6
+      },
+      "control_unsupported_harness_or_controller": 7,
+      "control_total": 10,
+      "confusion": {
+        "harness": {
+          "harness": 9,
+          "controller": 1
+        },
+        "weights": {
+          "weights": 4,
+          "controller": 4,
+          "harness": 2
+        },
+        "controller": {
+          "harness": 2,
+          "weights": 2,
+          "controller": 6
+        },
+        "no_injection": {
+          "harness": 4,
+          "controller": 3,
+          "weights": 3
+        }
+      },
+      "usage": {
+        "input_tokens": 2370199,
+        "output_tokens": 22658,
+        "elapsed_seconds_sum": 594.0010000000001,
+        "uncached_api_equivalent_usd": 4.966978
+      }
+    },
+    "read+fewshot": {
+      "verified_fault_correct": 18,
+      "verified_fault_total": 30,
+      "per_cause_correct": {
+        "harness": 10,
+        "weights": 6,
+        "controller": 2
+      },
+      "control_unsupported_harness_or_controller": 1,
+      "control_total": 10,
+      "confusion": {
+        "harness": {
+          "harness": 10
+        },
+        "weights": {
+          "controller": 3,
+          "weights": 6,
+          "uncertain": 1
+        },
+        "controller": {
+          "weights": 8,
+          "controller": 2
+        },
+        "no_injection": {
+          "weights": 9,
+          "controller": 1
+        }
+      },
+      "usage": {
+        "input_tokens": 3028517,
+        "output_tokens": 21458,
+        "elapsed_seconds_sum": 584.9639999999999,
+        "uncached_api_equivalent_usd": 6.271614
+      }
+    },
+    "probe+fewshot": {
+      "verified_fault_correct": 26,
+      "verified_fault_total": 30,
+      "per_cause_correct": {
+        "harness": 10,
+        "weights": 10,
+        "controller": 6
+      },
+      "control_unsupported_harness_or_controller": 0,
+      "control_total": 10,
+      "confusion": {
+        "harness": {
+          "harness": 10
+        },
+        "weights": {
+          "weights": 10
+        },
+        "controller": {
+          "controller": 6,
+          "weights": 4
+        },
+        "no_injection": {
+          "weights": 10
+        }
+      },
+      "usage": {
+        "input_tokens": 3206986,
+        "output_tokens": 14466,
+        "elapsed_seconds_sum": 455.32099999999997,
+        "uncached_api_equivalent_usd": 6.558632
+      }
+    }
+  },
+  "paired_comparisons": {
+    "probe_minus_read": {
+      "point": 0.06666666666666667,
+      "stratified_episode_bootstrap_95pct": [
+        -0.16666666666666666,
+        0.26666666666666666
+      ],
+      "right_better": 7,
+      "right_worse": 5,
+      "same": 18
+    },
+    "fewshot_probe_minus_fewshot_read": {
+      "point": 0.26666666666666666,
+      "stratified_episode_bootstrap_95pct": [
+        0.1,
+        0.43333333333333335
+      ],
+      "right_better": 9,
+      "right_worse": 1,
+      "same": 20,
+      "exact_discordance_two_sided_p": 0.021484375,
+      "holm_three_secondary_comparisons_p": 0.064453125
+    },
+    "fewshot_read_minus_read": {
+      "point": 0.03333333333333333,
+      "stratified_episode_bootstrap_95pct": [
+        -0.13333333333333333,
+        0.2
+      ],
+      "right_better": 4,
+      "right_worse": 3,
+      "same": 23,
+      "exact_discordance_two_sided_p": 1.0,
+      "holm_three_secondary_comparisons_p": 1.0
+    },
+    "fewshot_probe_minus_probe": {
+      "point": 0.23333333333333334,
+      "stratified_episode_bootstrap_95pct": [
+        0.06666666666666667,
+        0.4
+      ],
+      "right_better": 9,
+      "right_worse": 2,
+      "same": 19,
+      "exact_discordance_two_sided_p": 0.0654296875,
+      "holm_three_secondary_comparisons_p": 0.130859375
+    }
+  },
+  "uncertainty_limit": "Intervals resample episodes within three causes; there is one tested fault family per cause, so they do not estimate transfer to new fault families.",
+  "cost_reference": "GPT-6 Sol standard-tier uncached API equivalent at frozen $2/M input and $10/M output; not the ChatGPT-login bill."
+}

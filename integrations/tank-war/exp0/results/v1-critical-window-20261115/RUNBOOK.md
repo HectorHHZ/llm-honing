@@ -86,3 +86,54 @@ Read used 2,191,730 input and 33,126 output tokens; probe used 2,370,199
 input and 22,658 output tokens. The private and public aggregate scores are
 byte-identical, SHA-256
 `c3866168a11ece0ed7ee3194cd5cf901f2539ff7975d49dc038f51fa1993726c`.
+
+## Later secondary few-shot modes
+
+The two remaining modes used the **same 40 games** and the three already
+frozen development examples at
+`/data/xinkaiz/system0/exp0/tank-war/v0-pilot/fewshot-blind-v1.json`
+(SHA-256 `bf05e326c600caa181c8670b02341e95d7d13e863b8dc2be4dac52fa19cf8a83`).
+The new task wording requests one class per game. The private freeze was
+written before any new model answer, with SHA-256
+`50f671ecc82981851b71e7560e32394f9b844cb991f8a196690316f8081c1570`.
+Each mode was capped at 40 calls, 4 million input tokens, and 100,000 output
+tokens. The user requested all available compute during execution. A dated
+`CONCURRENCY_AMENDMENT.json` raised aggregate CLI concurrency from two to
+four, while keeping two calls per mode, after 11 read calls had finished but
+before any answer contents were examined. Test inputs, examples, prompt,
+schema, and scoring rules stayed fixed. This is a secondary repeat on known
+games, not a fresh blind test.
+
+```sh
+ROOT=/data/xinkaiz/system0/exp0/tank-war/v1-critical-window-20261115
+python3 "$ROOT/repo/integrations/tank-war/scripts/prepare-critical-episode-fewshot.py" \
+  --source-blind "$ROOT/blind-v7" --source-run "$ROOT/episode-only-v2" \
+  --examples /data/xinkaiz/system0/exp0/tank-war/v0-pilot/fewshot-blind-v1.json \
+  --out "$ROOT/episode-only-fewshot-v1"
+python3 "$ROOT/repo/integrations/tank-war/scripts/run-critical-episode-only.py" \
+  --source-blind "$ROOT/blind-v7" --out "$ROOT/episode-only-fewshot-v1" \
+  --mode read+fewshot
+python3 "$ROOT/repo/integrations/tank-war/scripts/run-critical-episode-only.py" \
+  --source-blind "$ROOT/blind-v7" --out "$ROOT/episode-only-fewshot-v1" \
+  --mode probe+fewshot
+python3 "$ROOT/repo/integrations/tank-war/scripts/make-critical-episode-score-input.py" \
+  --run "$ROOT/episode-only-fewshot-v1" \
+  --out "$ROOT/episode-only-fewshot-v1/score-input.json"
+python3 "$ROOT/repo/integrations/tank-war/scripts/score-critical-episode-fewshot.py" \
+  --bare-score-input "$ROOT/episode-only-v2/score-input.json" \
+  --fewshot-score-input "$ROOT/episode-only-fewshot-v1/score-input.json" \
+  --technical-labels "$ROOT/episode-label-audit-v1/labels.jsonl" \
+  --bare-run "$ROOT/episode-only-v2" --fewshot-run "$ROOT/episode-only-fewshot-v1" \
+  --out "$ROOT/episode-only-fewshot-v1/score.json"
+```
+
+Both modes completed 40/40 valid calls with no tool use or cap violation.
+Read + examples ran approximately 06:09–06:15 UTC (337 seconds of observed
+wall time); probe + examples ran approximately 06:10–06:15 UTC (282 seconds).
+Their input/output token counts were 3,028,517/21,458 and
+3,206,986/14,466. The private and public aggregate files are identical;
+their SHA-256 is
+`d101775ca03a13450ec434f3e79887be910391ce0bd865349a98f5a88ea62ece`.
+An initial aggregate without the already specified Holm correction is
+retained privately as `score-before-holm.json`; the correction changed no
+answers, accuracy counts, or intervals.

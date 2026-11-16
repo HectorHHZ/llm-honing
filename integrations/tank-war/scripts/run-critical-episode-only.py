@@ -44,7 +44,7 @@ def one(case: dict, mode: str, source: Path, out: Path, prompt: str) -> dict:
     if sha(input_path) != case["input_sha256"]:
         raise ValueError(f"source replay changed: {episode_id}")
     checks = "null"
-    if mode == "probe":
+    if mode in ("probe", "probe+fewshot"):
         checks_path = source / "probes" / episode_id / "probes.json"
         if sha(checks_path) != case["probes_sha256"]:
             raise ValueError(f"source probes changed: {episode_id}")
@@ -170,10 +170,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-blind", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--mode", choices=("read", "probe"), required=True)
+    parser.add_argument("--mode", choices=("read", "probe", "read+fewshot", "probe+fewshot"), required=True)
     args = parser.parse_args()
     source, out = args.source_blind, args.out
     freeze = read(out / "freeze.json")
+    if args.mode not in freeze["modes"]:
+        raise ValueError(f"mode not in frozen experiment: {args.mode}")
     if freeze["status"] != "frozen_before_episode_only_answers" or any(
         sha(out / filename) != freeze[f"{filename.split('.')[0]}_sha256"]
         for filename in ("protocol.json", "prompt.txt", "schema.json")
@@ -192,6 +194,8 @@ def main() -> None:
     destination.mkdir(exist_ok=False)
     prompt = (out / "prompt.txt").read_text()
     attempts = []
+    input_cap = freeze.get("maximum_input_tokens_per_mode")
+    output_cap = freeze.get("maximum_output_tokens_per_mode")
     for offset in range(0, len(freeze["cases"]), 2):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             batch = list(
@@ -206,13 +210,28 @@ def main() -> None:
             for item in batch
         ):
             break
+        if (input_cap is not None and sum(item["usage"]["input_tokens"] for item in attempts) > input_cap) or (
+            output_cap is not None and sum(item["usage"]["output_tokens"] for item in attempts) > output_cap
+        ):
+            break
+    input_used = sum((item.get("usage") or {}).get("input_tokens", 0) for item in attempts)
+    output_used = sum((item.get("usage") or {}).get("output_tokens", 0) for item in attempts)
+    over_budget = (input_cap is not None and input_used > input_cap) or (
+        output_cap is not None and output_used > output_cap
+    )
+    if over_budget:
+        status = "stopped_budget"
+    elif len(attempts) == len(freeze["cases"]):
+        status = "complete"
+    else:
+        status = "stopped_invalid"
     summary = {
-        "status": "complete" if len(attempts) == len(freeze["cases"]) else "stopped_invalid",
+        "status": status,
         "mode": args.mode,
         "completed": len(attempts),
         "expected": len(freeze["cases"]),
-        "input_tokens": sum((item.get("usage") or {}).get("input_tokens", 0) for item in attempts),
-        "output_tokens": sum((item.get("usage") or {}).get("output_tokens", 0) for item in attempts),
+        "input_tokens": input_used,
+        "output_tokens": output_used,
         "elapsed_seconds_sum": sum(item["elapsed_seconds"] for item in attempts),
     }
     (destination / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
