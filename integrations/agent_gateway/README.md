@@ -1,6 +1,6 @@
 # Agent gateway
 
-Engineers keep their coding agent (Claude Code, Codex, or anything that speaks an OpenAI or Anthropic API) and point it at a model Honing produced (#188). The agent keeps its own sessions, history and settings; only the model behind it changes.
+Engineers keep their coding agent (Claude Code, Codex, or anything that speaks an OpenAI or Anthropic API) and point it at a model Honing produced. The agent keeps its own sessions, history and settings; only the model behind it changes.
 
 ```text
 Claude Code ─ /v1/messages ──┐

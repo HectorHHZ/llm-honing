@@ -1,19 +1,15 @@
-"""Serve one model to coding agents such as Claude Code and Codex (#188).
+"""Serve one model to coding agents such as Claude Code and Codex; see ``integrations/agent_gateway/README.md``.
 
-The gateway is a LiteLLM proxy in its own environment (``integrations/agent_gateway``), started with a config
-Honing writes. It answers Anthropic's ``/v1/messages``, OpenAI's ``/v1/responses`` and ``/v1/chat/completions``,
-and sends every request, whatever model it names, to one OpenAI-compatible chat API: an SGLang server holding a
-released checkpoint, or any provider. An engineer points an agent at the gateway and keeps the agent, its
-sessions and its history; only the model behind it changes.
+The gateway is a LiteLLM proxy in its own environment, started with a config Honing writes. It answers
+Anthropic's ``/v1/messages`` and OpenAI's ``/v1/responses`` and ``/v1/chat/completions``, and sends every request,
+whatever model it names, to one OpenAI-compatible chat API as chat completions.
 
-The proxy answers only the routes agents use (``integrations/agent_gateway/serve.py``), and it sees a minimal
-environment: the gateway's key and the upstream's key, under names of their own, and none of the operator's other
-variables. LiteLLM's provider pass-through routes would otherwise forward requests with any provider key it can
-see. Neither key is written to disk; the config names the variables and LiteLLM reads them.
+Run ``python -m honing.backends.agent_gateway --base-url http://gpu-node:30000/v1 --model honed``.
 """
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import json
 import os
@@ -23,7 +19,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,18 +27,7 @@ from honing.backends.sglang.engine import die_with_parent
 from honing.core import ContractError, PolicyEndpoint, require
 
 PUBLIC_MODEL = "honing"
-"""The model name the gateway lists; it also answers any other name an agent asks for."""
-
 KEY_ENV = "HONING_GATEWAY_KEY"
-"""The variable that holds the key agents must present, by default."""
-
-# What the proxy sees of the operator's environment, besides the two keys: nothing that holds a credential.
-_INHERITED = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "NO_PROXY", "no_proxy"})
-_INHERITED_PREFIXES = ("LC_", "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
-# The names the keys have inside the proxy, whatever variables held them outside: a provider's own variable name,
-# such as OPENROUTER_API_KEY, is never set there.
-_PROXY_KEY = "HONING_GATEWAY_KEY"
-_PROXY_UPSTREAM_KEY = "HONING_UPSTREAM_KEY"
 
 
 @dataclass(frozen=True)
@@ -91,25 +76,21 @@ def proxy_config(upstream: Upstream) -> dict[str, object]:
         upstream: Where requests go.
 
     Returns:
-        The config, which LiteLLM reads as YAML; JSON is valid YAML. It names the variables the proxy reads the
-        keys from, as :meth:`AgentGateway.launch` sets them, not their values.
+        The config. It names the variables the proxy reads the keys from, not their values.
     """
     params = {
-        # As a self-hosted OpenAI-compatible server, so Anthropic's /v1/messages is sent on as chat completions;
-        # as plain "openai/" it would go to the upstream's /v1/responses, which SGLang and many providers lack.
+        # hosted_vllm and use_chat_completions_api make LiteLLM send /v1/messages and /v1/responses on as chat
+        # completions; as "openai/" it would call the upstream's /v1/responses, which SGLang lacks.
         "model": f"hosted_vllm/{upstream.model}",
         "api_base": upstream.base_url,
-        # LiteLLM's OpenAI client needs a key even for a server that checks none.
-        "api_key": f"os.environ/{_PROXY_UPSTREAM_KEY}" if upstream.api_key_env else "unused",
-        # The same for OpenAI's /v1/responses, which Codex speaks.
+        "api_key": "os.environ/HONING_UPSTREAM_KEY" if upstream.api_key_env else "unused",
         "use_chat_completions_api": True,
     }
     return {
-        # The wildcard catches the names agents ask for (claude-sonnet-..., gpt-5-codex) so none needs configuring.
+        # The wildcard answers the model names agents ask for, such as claude-sonnet-4-5 or gpt-5-codex.
         "model_list": [{"model_name": name, "litellm_params": params} for name in (PUBLIC_MODEL, "*")],
-        # Agents send provider-specific parameters (thinking budgets, reasoning effort) an upstream may not accept.
         "litellm_settings": {"drop_params": True},
-        "general_settings": {"master_key": f"os.environ/{_PROXY_KEY}"},
+        "general_settings": {"master_key": "os.environ/HONING_GATEWAY_KEY"},
     }
 
 
@@ -144,10 +125,13 @@ class AgentGateway:
     ) -> Iterator[AgentGateway]:
         """Starts the proxy and waits until it answers.
 
+        The proxy runs ``integrations/agent_gateway/serve.py``, which answers only the agents' routes. It sees
+        ``PATH``, ``HOME``, and the two keys, under the names the config reads, and none of the operator's other
+        variables.
+
         Args:
             upstream: Where requests go.
-            root: The repository root, which holds the gateway's environment and its server
-                (``integrations/agent_gateway``).
+            root: The repository root.
             work_dir: Where the config and the proxy's log are written.
             host: The address to listen on; ``0.0.0.0`` serves other machines.
             port: The port to listen on.
@@ -164,10 +148,16 @@ class AgentGateway:
         python = default_python(root)
         if not python.exists():
             raise ContractError(f"no gateway environment at {python}; see integrations/agent_gateway/README.md")
-        environment = _proxy_environment(key_env, upstream.api_key_env)
-        # A server already on the port would answer the health check in the proxy's place.
+        environment = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")}
+        for inside, outside in (("HONING_GATEWAY_KEY", key_env), ("HONING_UPSTREAM_KEY", upstream.api_key_env)):
+            if outside is None:
+                continue
+            if not os.environ.get(outside):
+                raise ContractError(f"the gateway needs the environment variable {outside}")
+            environment[inside] = os.environ[outside]
+        local = "127.0.0.1" if host == "0.0.0.0" else host
         with socket.socket() as probe:
-            if probe.connect_ex(("127.0.0.1" if host == "0.0.0.0" else host, port)) == 0:
+            if probe.connect_ex((local, port)) == 0:
                 raise ContractError(f"port {port} is already in use")
         work_dir.mkdir(parents=True, exist_ok=True)
         config = work_dir / "litellm.yaml"
@@ -175,18 +165,16 @@ class AgentGateway:
         environment["CONFIG_FILE_PATH"] = str(config)
         log_path = work_dir / "gateway.log"
         server = root / "integrations" / "agent_gateway" / "serve.py"
-        command = [str(python), str(server), "--host", host, "--port", str(port)]
         with log_path.open("ab") as log:
-            # Its own process group, so stopping it stops the proxy's workers, and it dies with this process.
             process = subprocess.Popen(
-                command,
+                [str(python), str(server), "--host", host, "--port", str(port)],
                 env=environment,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
                 preexec_fn=die_with_parent,
             )
-            url = f"http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}"
+            url = f"http://{local}:{port}"
             try:
                 deadline = time.monotonic() + start_timeout
                 while not _alive(url):
@@ -206,32 +194,50 @@ def default_python(root: Path) -> Path:
     Args:
         root: The repository root.
     """
-    return (
-        root
-        / "integrations"
-        / "agent_gateway"
-        / ".venv"
-        / ("Scripts" if sys.platform == "win32" else "bin")
-        / "python"
-    )
+    venv = root / "integrations" / "agent_gateway" / ".venv"
+    return venv / ("Scripts" if sys.platform == "win32" else "bin") / "python"
 
 
-def _proxy_environment(key_env: str, upstream_key_env: str | None) -> dict[str, str]:
-    environment = {
-        name: value for name, value in os.environ.items() if name in _INHERITED or name.startswith(_INHERITED_PREFIXES)
-    }
-    for outside, inside in ((key_env, _PROXY_KEY), (upstream_key_env, _PROXY_UPSTREAM_KEY)):
-        if outside is None:
-            continue
-        if not os.environ.get(outside):
-            raise ContractError(f"the gateway needs the environment variable {outside}")
-        environment[inside] = os.environ[outside]
-    return environment
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Serve one model to Claude Code, Codex, and other coding agents.")
+    parser.add_argument("--base-url", required=True, help="the upstream's OpenAI-compatible base URL")
+    parser.add_argument("--model", required=True, help="the model name the upstream answers to")
+    parser.add_argument("--api-key-env", help="the variable holding the upstream's key, if it needs one")
+    parser.add_argument("--host", default="127.0.0.1", help="0.0.0.0 serves other machines")
+    parser.add_argument("--port", type=int, default=4000)
+    parser.add_argument("--key-env", default=KEY_ENV, help="the variable holding the key agents must present")
+    parser.add_argument("--work-dir", type=Path, default=Path("runs/agent-gateway"))
+    args = parser.parse_args(argv)
+
+    # A SIGTERM stops the proxy too, as Ctrl-C does; outside Linux nothing else would.
+    signal.signal(signal.SIGTERM, _interrupt)
+    upstream = Upstream(base_url=args.base_url, model=args.model, api_key_env=args.api_key_env)
+    root = Path(__file__).resolve().parents[2]
+    with AgentGateway.launch(
+        upstream, root=root, work_dir=args.work_dir, host=args.host, port=args.port, key_env=args.key_env
+    ) as gateway:
+        print(f"Serving {upstream.model} from {upstream.base_url} at {gateway.url}; agents present ${args.key_env}.")
+        print(f"Claude Code: ANTHROPIC_BASE_URL={gateway.url} ANTHROPIC_AUTH_TOKEN=${args.key_env} claude")
+        print(
+            f'Codex: codex -c model_provider=honing -m {PUBLIC_MODEL} -c \'model_providers.honing={{name="Honing", '
+            f'base_url="{gateway.url}/v1", env_key="{args.key_env}", wire_api="responses"}}\''
+        )
+        print(f"Log: {args.work_dir / 'gateway.log'}. Stop with Ctrl-C.", flush=True)
+        try:
+            while not gateway.exited():
+                time.sleep(1)
+        except KeyboardInterrupt:
+            return
+        raise SystemExit(f"the gateway exited; see {args.work_dir / 'gateway.log'}")
+
+
+def _interrupt(*_: object) -> None:
+    raise KeyboardInterrupt
 
 
 def _stop(process: subprocess.Popen[bytes]) -> None:
     for sig in (signal.SIGTERM, signal.SIGKILL):
-        # macOS answers EPERM, not ESRCH, for a group whose processes have all exited.
+        # macOS answers EPERM, not ESRCH, once the whole group has exited.
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, sig)
         try:
@@ -247,3 +253,7 @@ def _alive(url: str) -> bool:
             return bool(response.status == 200)
     except OSError:
         return False
+
+
+if __name__ == "__main__":
+    main()

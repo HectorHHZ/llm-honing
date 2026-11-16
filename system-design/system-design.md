@@ -511,12 +511,9 @@ possible is, and is tested.
 
 ### 2.9 Serve Plane and telemetry
 
-The Serve plane's live traffic and artifact activation are not built. Its
+The Serve plane's live traffic, `/v1` routes, and artifact activation are not built. Its
 engine is ([#103](https://github.com/HectorHHZ/llm-honing/issues/103)): every model a
-campaign's runners call can be served by SGLang, pinned to one version. The provider-compatible
-`/v1` routes exist only for coding agents: the agent gateway
-([#188](https://github.com/HectorHHZ/llm-honing/issues/188), `backends/agent_gateway`) is a
-LiteLLM proxy that sends every request to one model as chat completions.
+campaign's runners call can be served by SGLang, pinned to one version.
 
 - **One process per checkpoint.** `honing/backends/sglang` starts SGLang from its own
   environment (`scripts/setup-sglang.sh`, built from `scripts/sglang.lock`) and reaches
@@ -644,12 +641,11 @@ RolloutProvider(harness) — samples name the head's release and harness
 
 ## 5. HTTP surface
 
-Reserved for the Serve plane. Only the provider-compatible routes exist, in the agent gateway (#188);
-none of the rest is built. New routes are marked in bold.
+Reserved for the Serve plane; none of it is built. New routes are marked in bold.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v1/chat/completions`, `/v1/messages`, **`/v1/responses`** | provider-compatible inference |
+| `POST /v1/chat/completions`, `/v1/messages` | provider-compatible inference |
 | `POST /hone/report` | feedback: `{score?, feedback?, references[], metadata?}` |
 | `POST /hone/train` | an explicit training instruction |
 | `GET`/`POST` `/hone/campaigns` | list / create |
@@ -734,7 +730,7 @@ Steps are ordered by risk: the assumption the whole design rests on is tested fi
 | **8** | Harness phases with a first real evolution method; the harness contracts it needs ([#15](https://github.com/HectorHHZ/llm-honing/issues/15)) are in | in progress |
 | **9** | `backends/local_dpo` | |
 | **10** | `sparse_mask` training unified with `PrunePlan` | |
-| **11** | Serve plane: the engine and campaign endpoints (`backends/sglang`, [#103](https://github.com/HectorHHZ/llm-honing/issues/103)) are in, and so are the provider-compatible routes for coding agents (`backends/agent_gateway`, [#188](https://github.com/HectorHHZ/llm-honing/issues/188)); the other live routes and serving weights are not | in progress |
+| **11** | Serve plane: the engine and campaign endpoints (`backends/sglang`, [#103](https://github.com/HectorHHZ/llm-honing/issues/103)) are in; live routes and serving weights are not | in progress |
 
 Step 2 depends on nothing else and answers the riskiest question (§8.1) on its own.
 
