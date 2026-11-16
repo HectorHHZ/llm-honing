@@ -1,0 +1,123 @@
+{
+  "result_version": "episode-attribution-rescore-v1",
+  "unit": "one cause label per complete game",
+  "provenance": {
+    "sealed_score_sha256": "0eff6a3bf5be36d08e5f8bdaa93deeb5a67d896ba7fd89c52c4ed818e33cf686",
+    "private_technical_labels_sha256": "0108c5a690b822b450e00c31a08f6e9408ffc368ced01c528c17d27469b32557",
+    "no_new_model_calls": true,
+    "post_test_endpoint_change": true,
+    "original_prompt_also_requested_a_window": true
+  },
+  "cases": {
+    "faults": 30,
+    "no_injection_controls": 10
+  },
+  "correct_classification": {
+    "read": {
+      "correct": 8,
+      "total": 30
+    },
+    "probe": {
+      "correct": 10,
+      "total": 30
+    }
+  },
+  "by_layer": {
+    "harness": {
+      "read": {
+        "correct": 3,
+        "total": 10
+      },
+      "probe": {
+        "correct": 4,
+        "total": 10
+      }
+    },
+    "weights": {
+      "read": {
+        "correct": 5,
+        "total": 10
+      },
+      "probe": {
+        "correct": 5,
+        "total": 10
+      }
+    },
+    "controller": {
+      "read": {
+        "correct": 0,
+        "total": 10
+      },
+      "probe": {
+        "correct": 1,
+        "total": 10
+      }
+    }
+  },
+  "confusion": {
+    "read": {
+      "harness": {
+        "harness": 3,
+        "weights": 7
+      },
+      "weights": {
+        "weights": 5,
+        "harness": 4,
+        "uncertain": 1
+      },
+      "controller": {
+        "harness": 2,
+        "weights": 7,
+        "uncertain": 1
+      },
+      "no_injection": {
+        "weights": 8,
+        "uncertain": 1,
+        "controller": 1
+      }
+    },
+    "probe": {
+      "harness": {
+        "weights": 6,
+        "harness": 4
+      },
+      "weights": {
+        "controller": 1,
+        "harness": 4,
+        "weights": 5
+      },
+      "controller": {
+        "weights": 8,
+        "controller": 1,
+        "harness": 1
+      },
+      "no_injection": {
+        "weights": 8,
+        "harness": 1,
+        "uncertain": 1
+      }
+    }
+  },
+  "paired_probe_minus_read": {
+    "point": 0.06666666666666667,
+    "stratified_bootstrap_95pct": [
+      -0.16666666666666666,
+      0.3
+    ],
+    "resamples": 10000,
+    "seed": 183
+  },
+  "controls": {
+    "read": {
+      "unsupported_harness_or_controller": 1,
+      "total": 10,
+      "weights_answer_on_unmodified_loss": 8
+    },
+    "probe": {
+      "unsupported_harness_or_controller": 1,
+      "total": 10,
+      "weights_answer_on_unmodified_loss": 8
+    }
+  },
+  "interpretation": "Exploratory episode-level rescore of sealed answers; not a new preregistered experiment."
+}

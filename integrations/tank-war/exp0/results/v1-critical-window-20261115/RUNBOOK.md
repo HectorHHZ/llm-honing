@@ -27,3 +27,28 @@ python3 "$ROOT/repo/integrations/tank-war/scripts/summarize-critical-dataset.py"
 ```
 
 The scorer checks its own hash against the private freeze. The repository copy was formatted after the run; the original scorer is retained at `$ROOT/repo/` and its results were separately reproduced byte for byte with the formatted copy. Individual replay, probe, and Codex commands, exact inputs, output, timing, and usage remain in the private per-case attempt records. No new model call is needed to audit the published summary.
+
+## Later per-game label and answer audit
+
+After the user clarified that the System 0 output is one class per game, the
+following game-local commands audited private technical labels and rescored
+the **already sealed** answers. They did not call a model. To repeat the first
+command, choose a new empty output directory because the auditor refuses to
+overwrite existing labels.
+
+```sh
+ROOT=/data/xinkaiz/system0/exp0/tank-war/v1-critical-window-20261115
+python3 "$ROOT/repo/integrations/tank-war/scripts/audit-critical-episode-labels.py" \
+  --blind-root "$ROOT/blind-v7" \
+  --output-dir "$ROOT/episode-label-audit-v1"
+python3 "$ROOT/repo/integrations/tank-war/scripts/score-critical-episode-attribution.py" \
+  --sealed-score "$ROOT/blind-v7/score.json" \
+  --technical-labels "$ROOT/episode-label-audit-v1/labels.jsonl" \
+  --out "$ROOT/episode-label-audit-v1/episode-attribution-summary.json"
+```
+
+The private and repository copies of `episode-attribution-summary.json` are
+byte-identical (SHA-256
+`99caa71776c62e498d72b43fb61380ba5c55e7e551c4e7df3cb5599e33b12372`).
+The original prompt and scorer remain frozen. The new episode-only prompt and
+schema are **prospective artifacts**, not inputs used in this rescore.

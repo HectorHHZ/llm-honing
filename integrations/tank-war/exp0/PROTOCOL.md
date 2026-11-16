@@ -6,6 +6,22 @@ Issue: [#183](https://github.com/HectorHHZ/llm-honing/issues/183), under
 This file is the protocol, not an experimental result. Changes after the first
 confirmatory test episode require a new dataset version and must be reported.
 
+**Post-test scope amendment, 2026-11-15: one label per game.** Zhuohang clarified
+that System 0's requested output is one `harness`, `weights`, or `controller`
+attribution for the complete game. Selecting a decision index and judging
+whether a specific moment caused the loss are no longer primary endpoints.
+The original 40-game prompt and sealed answers are immutable. They already
+contain one cause answer per game, so `episode-attribution-rescore-v1` evaluates
+those cause answers against independently audited per-game technical labels.
+This is an exploratory post-test change of emphasis, not a newly preregistered
+blind test. The original prompt also asked for a window; this may have affected
+its cause answer. The old window and joint metrics remain in the archive only.
+Any new prospective test must freeze a prompt and schema that request just the
+per-game cause before seeing model answers. The ten no-injection games remain
+controls outside the three edited-fault classes; an ordinary unmodified loss
+must not be silently relabeled as an edited-weight fault. Automated technical
+label auditing does not satisfy the original two-human-reviewer requirement.
+
 ## Question and endpoint
 
 Can a diagnoser identify the affected decision window and the verified injected

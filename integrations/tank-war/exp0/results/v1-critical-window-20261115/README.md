@@ -4,17 +4,18 @@ Related: [#183](https://github.com/HectorHHZ/llm-honing/issues/183), [#174](http
 
 ## Decision
 
-**No-go for reliable joint window and layer attribution in this scoped test.** Forty distinct-seed losses were frozen before `gpt-6-sol` produced an answer: ten each with a verified local harness, weights, or controller effect, and ten unmodified controls. The same cases received one `high` effort read diagnosis and one `high` effort diagnosis with controlled checks at every decision.
+**No-go for reliable per-game harness/weights/controller attribution in this scoped test.** After the blind run, the user clarified that System 0 should give one component attribution per complete game, without identifying a failure-causing decision. Forty distinct-seed losses were frozen before `gpt-6-sol` produced an answer: ten each with a verified local harness, weights, or controller effect, and ten unmodified controls. The same cases received one `high` effort read diagnosis and one `high` effort diagnosis with controlled checks at every decision. The original prompt also asked for a window; the per-game result below is an exploratory rescore of its sealed cause answers, not a fresh episode-only blind run.
 
-| Endpoint on 30 fault cases            | Read | Probe |
-| ------------------------------------- | ---: | ----: |
-| Technical window within two decisions | 8/30 |  8/30 |
-| Correct changed layer                 | 8/30 | 10/30 |
-| Both on the same case                 | 2/30 |  5/30 |
+| Per-game class on 30 fault cases | Read | Probe |
+| --- | ---: | ---: |
+| Harness | 3/10 | 4/10 |
+| Weights | 5/10 | 5/10 |
+| Controller | 0/10 | 1/10 |
+| **All three** | **8/30** | **10/30** |
 
-The paired gain in joint hits is 3/30, or 10 percentage points. The prespecified class-stratified paired bootstrap 95% interval is **-3.3 to +23.3 points**, which includes zero. Probe joint hits were 4/10 harness, 1/10 weights, and 0/10 controller. Each mode made one harness/controller false alarm among ten unmodified controls. Cause-only accuracy in probe mode was 10/30, equal to the balanced-set majority-class baseline. The result does not establish reliable localization or an improvement from probing.
+The paired gain in correct classes is 2/30, or 6.7 percentage points. The class-stratified paired bootstrap 95% interval is **-16.7 to +30.0 points**, which includes zero. Each mode made one unsupported harness/controller call among ten unmodified controls. Probe accuracy was 10/30, equal to the balanced-set majority-class baseline. The result does not establish reliable three-class attribution or an improvement from probing. [`EPISODE_ATTRIBUTION.md`](EPISODE_ATTRIBUTION.md) gives the new scoring unit, technical label audit, and the unchanged historical run's limitations.
 
-All 30 fault cases have a single-layer local decision or execution difference. Only six had a better whole-game outcome in the paired clean run. In that six-case subset, each mode jointly identified the window and layer in one case. The technical reference window therefore must not be treated as a proven cause of every loss.
+All 30 fault cases have a single-layer local decision or execution difference. Only six had a better whole-game outcome in the paired clean run. The technical reference index establishes the per-game label but is not scored as a System 0 output or treated as proof that the intervention caused the loss. The original window and joint metrics remain in the frozen historical `SUMMARY.json` for audit.
 
 ## Dataset and files
 
@@ -24,7 +25,7 @@ The private artifact store is `/data/xinkaiz/system0/exp0/tank-war/v1-critical-w
 
 [`blind-split.json`](blind-split.json) lists exactly which 40 anonymous games entered the final test and hashes their inputs. [`RUNBOOK.md`](RUNBOOK.md) records the three-hour GPU-time ceiling, the actual diagnosis usage, and the commands used for the final analysis. The GPU-hour ceiling is derived from the pre-run three-hour and three-GPU limits; actual GPU utilization was not measured. No token or dollar cap was frozen before diagnosis.
 
-[`REVIEW_STATUS.md`](REVIEW_STATUS.md) records the later planner-reference pass over all 1,811 recorded test decisions and the separate 30-game blind human review page. Human labels and second-reviewer agreement are not yet available; this addendum does not change the frozen diagnosis score.
+[`REVIEW_STATUS.md`](REVIEW_STATUS.md) records the later planner-reference pass over all 1,811 recorded test decisions and the separate 30-game blind human review page. That review is no longer requested for the amended three-class task; its partial progress is preserved. The original two-reviewer criterion remains unmet.
 
 The scorer committed with this PR was formatted for repository checks after the blind run. The original scorer remains in the private store; a separate `score-format-audit-v1/` replay of the same frozen answers produced a score file **byte-identical** to the original. The original sample freeze and score were not edited.
 
@@ -37,12 +38,12 @@ Final technically verified fault-loss counts are **20 harness, 20 weights, and 2
 | Detailed pinned protocol, splits, budgets, scoring, commands                 | Met as documentation | `PROTOCOL.md`, `blind-split.json`, and `RUNBOOK.md` now give the game/model, fault catalog, tested IDs and split, sample count, GPU-hour ceiling, statistical rules, and actual commands. The private sample/prompt/scoring freeze predates answers. The numeric GPU-hour conversion was written after the run and actual GPU occupancy was not measured; the rapid test's deviations from the original execution plan are reported separately. |
 | Reset/replay checks and real-model pilot                                     | Met for scoped test | 40/40 blind full replays, 40/40 all-decision probe audits, and prior 891-decision identity gate at tolerance 0.01.                                                                                                                                                                                  |
 | Fault builders, private manifests, validated score drops, exclusions         | Partial             | Game-local builders and all attempt logs are retained. Earlier 128-seed paired screens showed degradation for three _different_ fault variants; the one-turn blind variants were validated for local effect, not separately for a release-level score drop.                                         |
-| Versioned dataset, schema, reference provenance, reviewer records, data card | Partial             | Versioned private store, frozen schema, technical-reference provenance, inventory, and data card exist. Existing human review belongs to the earlier rapid pilot; this 40-case test did not receive two independent reviewers or new blind human diagnoses, following the user's later instruction. |
+| Versioned dataset, schema, reference provenance, reviewer records, data card | Partial             | Versioned private store, frozen schema, technical-reference provenance, inventory, data card, and audited per-game labels exist. The later technical audit does not replace the two independent human reviewers requested in the original issue. |
 | No gold access or split overlap during diagnosis                             | Met for scoped test | Blind inputs excluded seed, source path, fault labels, and gold manifests; the isolated Codex process could read only anonymous inputs and its output directory. The 40 cases used distinct seeds.                                                                                                  |
 | Four modes, baselines, identity checks, separate weight probes               | Partial             | Only read and probe with Sol high were authorized. No Astra, few-shot, second API model, or separate weight-probe arm. Majority baseline and identity checks are reported.                                                                                                                          |
-| Per-cause results, paired intervals, cost, failure cases, go/no-go           | Met for scoped test | Aggregate results are in `SUMMARY.json`; private `REPORT.md`, `score.json`, and per-case records contain examples and raw answers. The conclusion is no-go.                                                                                                                                         |
+| Per-cause results, paired intervals, cost, failure cases, go/no-go           | Met for scoped test | The amended per-game analysis is in `EPISODE_ATTRIBUTION.md` and `episode-attribution-summary.json`; historical window metrics remain in `SUMMARY.json`. Private per-case records contain examples and raw answers. The conclusion is no-go. |
 
-The original full benchmark in #183 remains **unmet**. This draft reports the explicitly scoped rapid experiment and its negative result; it does not claim completion of the full acceptance list or start method selection under #180.
+The original full benchmark in #183 remains **unmet**. This draft reports the user-amended per-game interpretation of the rapid experiment and its negative result; it does not claim completion of the full acceptance list or start method selection under #180.
 
 ## Verification and cost
 
