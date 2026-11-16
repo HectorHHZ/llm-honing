@@ -1,0 +1,29 @@
+{
+  "dataset_version": "v1-critical-window-20261115",
+  "amendment": "episode-attribution-rescore-v1",
+  "unit_of_prediction": "one component label per complete game",
+  "private_dataset_root": "/data/xinkaiz/system0/exp0/tank-war/v1-critical-window-20261115",
+  "blind_cases": 40,
+  "edited_fault_cases": 30,
+  "edited_fault_counts": {
+    "harness": 10,
+    "weights": 10,
+    "controller": 10
+  },
+  "no_injection_controls": 10,
+  "label_source": "same-state technical audit of frozen source manifests and all-decision probes",
+  "label_file": "episode-label-audit-v1/labels.jsonl",
+  "label_file_sha256": "0108c5a690b822b450e00c31a08f6e9408ffc368ced01c528c17d27469b32557",
+  "frozen_sample_sha256": "a7dbeb68f361c73b9072e23266c95c197a3af67822f1844f22966f4ae21a98f1",
+  "sealed_answers_score_sha256": "0eff6a3bf5be36d08e5f8bdaa93deeb5a67d896ba7fd89c52c4ed818e33cf686",
+  "episode_score_sha256": "99caa71776c62e498d72b43fb61380ba5c55e7e551c4e7df3cb5599e33b12372",
+  "technical_reference_index": "private audit evidence only; not a scored System 0 output",
+  "loss_causality": "not inferred from the technical layer label; paired clean outcome stored separately",
+  "human_review": "three partial historical window reviews archived; no human review used as technical cause gold",
+  "limitations": [
+    "The per-game endpoint was foregrounded after the 40-game run.",
+    "The original prompt also asked for a decision window and may have affected cause answers.",
+    "Only one final fault variant per edited layer is represented by ten blind losses.",
+    "The original issue's two-human-reviewer criterion is not met by Codex technical auditing."
+  ]
+}

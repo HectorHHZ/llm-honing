@@ -25,6 +25,8 @@ All **40/40** passed: 10 per edited-fault class and 10 unmodified controls.
 The per-game label file, manifests, and exact reference indices remain private
 under `episode-label-audit-v1/` in the dataset root. Label file SHA-256:
 `0108c5a690b822b450e00c31a08f6e9408ffc368ced01c528c17d27469b32557`.
+[`episode-attribution-data-card.json`](episode-attribution-data-card.json)
+records the public schema, provenance hashes, class counts, and limitations.
 The audit uses these indices to establish the label, but System 0 is scored
 once per game. A better clean-game outcome is a separate field; it occurred
 in only six of the 30 blind fault games.
