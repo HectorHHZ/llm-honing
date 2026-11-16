@@ -65,6 +65,12 @@ replay support local inspection. The runtime is optional; native HTTP contract
 checks use a rule stand-in. A real NanoJev smoke episode reached the step limit
 after choosing WAIT throughout. Real model training remains to be run.
 
+### Frost Circuit
+
+[`integrations/frost-circuit/`](integrations/frost-circuit/README.md) adds an
+original turn-based roguelike with seeded stations, visible attack warnings,
+browser play, and a headless runner for deterministic action replay.
+
 ### Craftax
 
 [`integrations/craftax/`](integrations/craftax/README.md) adds the full Craftax
