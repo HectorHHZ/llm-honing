@@ -18,6 +18,18 @@ def write(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
 
 
+def process_receipt(process: subprocess.Popen) -> dict[str, Any]:
+    """Record procfs identity when available without making it a launch prerequisite."""
+    start_ticks = None
+    try:
+        # The comm field is parenthesized and may itself contain spaces or ')'.
+        fields = Path(f"/proc/{process.pid}/stat").read_text().rsplit(")", 1)[1].split()
+        start_ticks = fields[19]
+    except (OSError, IndexError):
+        pass
+    return {"pid": process.pid, "command": process.args, "procStartTicks": start_ticks}
+
+
 class NativeClient:
     """Send one sequence-checked command while the original engine is paused."""
 
@@ -146,16 +158,9 @@ def main() -> None:
     completed = 0
     with (args.output / "player.log").open("wb") as log:
         process = subprocess.Popen(command, env=environment, stdout=log, stderr=subprocess.STDOUT)
-        write(
-            args.output / "launch.json",
-            {
-                "pid": process.pid,
-                "command": command,
-                "procStartTicks": Path(f"/proc/{process.pid}/stat").read_text().split()[21],
-            },
-        )
-        native = NativeClient(args.output, process)
         try:
+            write(args.output / "launch.json", process_receipt(process))
+            native = NativeClient(args.output, process)
             state = native.observe()
             initial = state
             for _ in range(args.decisions):

@@ -48,6 +48,9 @@ source's original license with compiled copies.
 With a visible display (or a caller-owned Xvfb) and an existing ready decision
 server, run:
 
+To start that service with local weights, follow the
+[Hollow Knight Laya CPU startup recipe](../hollow-knight/README.md#local-cpu-reproduction).
+
 ```bash
 python integrations/vvvvvv/run.py \
   --game work/vvvvvv/build/VVVVVV --assets /path/to/data.zip \
@@ -61,6 +64,10 @@ python integrations/vvvvvv/verify_native.py \
 Output directories must be new. Native saves/settings stay within the run's
 `user/` directory. The launcher starts and cleans only its own game process;
 it never starts, changes or stops the shared decision server or display.
+`launch.json` records the owned PID and command; `procStartTicks` is a Linux
+procfs value when readable, and `null` on hosts without it. Missing procfs does
+not prevent startup or owned-process cleanup. The bridge remains Linux-native
+tested; portable launcher regressions do not establish a macOS game build.
 Model waits have a 180-second HTTP timeout; an orphaned paused game exits after
 10 minutes without a valid command. Full requests, raw responses, accepted
 actions, before/after state and rejection diagnostics remain local.

@@ -72,7 +72,7 @@ time or an independently chosen render-frame duration.
 | `deaths`, `flips` | Original trial counters |
 | `hasControl` | Original player-control flag |
 | `checkpoint` | `[roomX,roomY,x,y,gravity]` for the current native death-respawn checkpoint |
-| `localOriginTiles` | Top-left tile of the exported 9×9 neighborhood (8 px/tile) |
+| `localOriginTiles` | Top-left tile of the exported 9×9 neighborhood: `[floor(player.x/8)-4, floor(player.y/8)-4]`, including negative coordinates before room transitions |
 | `localSolidRows` | Nine 9-character rows: `#` colliding solid, `!` spike tiles detected by the original invincibility collision variant, `.` other, `?` outside the 40×29 room grid |
 | `entities` | All non-invisible valid entities within current room pixel bounds, except player: `[original type,x,y,width,height,harmful 0/1]` |
 
@@ -121,3 +121,13 @@ are written before JSON parsing or semantic validation; rejection artifacts
 retain the request, reason, raw filename, paused state and native call count.
 Portable negative tests prove zero native calls, with a separate real native
 paused-state rejection probe. Neither fixture is model-performance evidence.
+
+## Shared decision-response receiver
+
+The adapter imports the [shared stdlib-only receiver](../_shared/README.md).
+It requires `answers.action.type: "choice"` and explicit `stateTokens`,
+`stateRoom` and `inputTokens` audit keys; null counts are permitted, omitted
+keys are rejected. It rejects duplicate JSON keys at every nesting level as
+well as nonfinite numbers. Raw response bytes are saved before decoding,
+including HTTP error bodies. The game's required/optional context policy
+above remains in effect; invalid decisions cannot reach native input.

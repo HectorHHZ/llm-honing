@@ -24,6 +24,8 @@ repos:
       - id: check-case-conflict
       - id: detect-private-key
       - id: end-of-file-fixer
+        # Historical HTTP samples retain exact received bytes, including no final newline.
+        exclude: ^integrations/[^/]+/validation/review-sample/response\.raw$
       - id: trailing-whitespace
       - id: check-added-large-files
         args: ['--maxkb=1024']

@@ -17,6 +17,12 @@ static int honing_action_tick = 0;
 static std::string honing_last_action = "reset";
 static int honing_last_ticks = 0;
 
+static int honing_tile(int pixel)
+{
+    // C++ integer division truncates toward zero; tiles use mathematical floor.
+    return pixel / 8 - (pixel % 8 < 0 ? 1 : 0);
+}
+
 bool honing_active(void) { return getenv("HONING_SESSION_DIR") != NULL; }
 
 void honing_input(void)
@@ -87,13 +93,13 @@ static void honing_observe(void)
         << ",\"deaths\":" << game.deathcounts << ",\"flips\":" << game.totalflips
         << ",\"hasControl\":" << (game.hascontrol ? "true" : "false")
         << ",\"checkpoint\":[" << game.saverx << ',' << game.savery << ',' << game.savex << ',' << game.savey << ',' << game.savegc << "]"
-        << ",\"localOriginTiles\":[" << e.xp / 8 - 4 << ',' << e.yp / 8 - 4 << "]"
+        << ",\"localOriginTiles\":[" << honing_tile(e.xp) - 4 << ',' << honing_tile(e.yp) - 4 << "]"
         << ",\"localSolidRows\":[";
     for (int y = -4; y <= 4; ++y) {
         if (y != -4) out << ',';
         out << '"';
         for (int x = -4; x <= 4; ++x) {
-            int tx = e.xp / 8 + x, ty = e.yp / 8 + y;
+            int tx = honing_tile(e.xp) + x, ty = honing_tile(e.yp) + y;
             out << (tx < 0 || tx >= 40 || ty < 0 || ty >= 29 ? '?' : (map.collide(tx, ty, false) ? '#' : (map.collide(tx, ty, true) ? '!' : '.')));
         }
         out << '"';

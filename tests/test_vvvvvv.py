@@ -41,7 +41,13 @@ def response_for(request: dict) -> dict:
                 "inputTokens": 200,
             }
         },
-        "answers": {"action": {"choice": "right", "probabilities": {key: float(key == "right") for key in options}}},
+        "answers": {
+            "action": {
+                "type": "choice",
+                "choice": "right",
+                "probabilities": {key: float(key == "right") for key in options},
+            }
+        },
     }
 
 

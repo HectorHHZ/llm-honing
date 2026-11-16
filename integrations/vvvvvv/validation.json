@@ -86,5 +86,10 @@
     "run.py": "12d631ec6e3e39980c9535212af988f170f6b1466b553afe770471fe3c8c7272",
     "decision.py": "52465a31e868ef2e58031288ac7ecc12b2933164b4abea790fc16ca28571059f",
     "verify_native.py": "dbba4cb30a3decf06f92d8c449ec317d4ac1dc6fe6bef45fe3ec2c7586dd5728"
+  },
+  "reviewFixEvidenceBoundary": {
+    "status": "Historical pre-review-fix run; original hashes retained.",
+    "inspectableDecisionSample": "validation/review-sample",
+    "postFixNativeBehavior": "See separate review-fix technical validation; not established by this receipt."
   }
 }
