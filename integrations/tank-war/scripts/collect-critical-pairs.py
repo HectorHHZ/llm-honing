@@ -9,6 +9,7 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import shutil
 import subprocess
 import threading
 import time
@@ -137,6 +138,8 @@ def compare(clean: Path, fault: Path, layer: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed-plan", type=Path, required=True)
+    parser.add_argument("--seed-group", default="final_test")
+    parser.add_argument("--split-name")
     parser.add_argument("--start-index", type=int, default=80)
     parser.add_argument("--seeds-per-layer", type=int, default=20)
     parser.add_argument("--out", type=Path, required=True)
@@ -148,6 +151,8 @@ def main() -> None:
     parser.add_argument("--harness-turn", type=Path, required=True)
     parser.add_argument("--harness-settings", type=Path)
     parser.add_argument("--select-clean-fire", action="store_true")
+    parser.add_argument("--clean-source-root", type=Path)
+    parser.add_argument("--clean-reference-manifest", type=Path)
     parser.add_argument("--layers", default="harness,weights,controller")
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--deadline-unix", type=float, required=True)
@@ -164,8 +169,12 @@ def main() -> None:
         parser.error("--layers must be distinct harness, weights, or controller names")
     if args.select_clean_fire and (layers != ["harness"] or args.harness_settings):
         parser.error("--select-clean-fire is only for the question-only harness arm")
+    if bool(args.clean_source_root) != bool(args.clean_reference_manifest):
+        parser.error("--clean-source-root and --clean-reference-manifest must be supplied together")
+    if args.clean_source_root and layers != ["controller"]:
+        parser.error("clean run sharing is only implemented for the controller arm")
     total = len(layers) * args.seeds_per_layer
-    seeds = plan["groups"]["final_test"][args.start_index : args.start_index + total]
+    seeds = plan["groups"][args.seed_group][args.start_index : args.start_index + total]
     if len(seeds) != total or len(set(seeds)) != total:
         parser.error("frozen seed range is incomplete or duplicated")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -181,7 +190,8 @@ def main() -> None:
                         "seed": seed,
                         "seat": seat,
                         "seed_index": args.start_index + layer_index * args.seeds_per_layer + within,
-                        "split": "blind_test" if within < args.seeds_per_layer // 2 else "development",
+                        "split": args.split_name
+                        or ("blind_test" if within < args.seeds_per_layer // 2 else "development"),
                         "trigger": (
                             "incoming_shell"
                             if layer != "controller"
@@ -289,6 +299,35 @@ def main() -> None:
                 continue
             if out.exists():
                 raise ValueError(f"incomplete previous run: {out}")
+            if arm == "clean" and args.clean_source_root:
+                source = args.clean_source_root / name / "clean"
+                while not (source / "result.json").exists():
+                    if time.time() >= args.deadline_unix:
+                        raise TimeoutError(f"clean source not ready before deadline: {source}")
+                    time.sleep(1)
+                if (source / "error.json").exists():
+                    raise ValueError(f"clean source failed: {source}")
+                source_manifest = json.loads((source / "manifest.json").read_text())
+                reference_manifest = json.loads(args.clean_reference_manifest.read_text())
+                for field in ("harness_sha256", "controller_sha256", "sources"):
+                    if source_manifest[field] != reference_manifest[field]:
+                        raise ValueError(f"clean source {field} differs from reference: {source}")
+                if (
+                    source_manifest["seed"] != seed
+                    or source_manifest["seat"] != seat
+                    or source_manifest["model"]["weights_sha256"] != reference_manifest["model"]["weights_sha256"]
+                ):
+                    raise ValueError(f"clean source identity differs: {source}")
+                shutil.copytree(source, out)
+                result["clean_reused_from"] = str(source)
+                result["clean_source_result_sha256"] = sha(source / "result.json")
+                result["clean_source_states_sha256"] = sha(source / "states.jsonl")
+                if (
+                    sha(out / "result.json") != result["clean_source_result_sha256"]
+                    or sha(out / "states.jsonl") != result["clean_source_states_sha256"]
+                ):
+                    raise ValueError(f"copied clean outcome or state hash changed: {source}")
+                continue
             url = args.clean_url[seed % len(args.clean_url)]
             command = [
                 str(args.node),
