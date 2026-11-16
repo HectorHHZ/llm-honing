@@ -29,10 +29,16 @@ Only the controller writes the private session directory. It atomically renames
 boundary the native main thread writes `observation.tmp`, renames it to
 `observation.json`, and blocks before any simulation tick. Physics, gameplay
 coroutines, rendering and input remain paused during model inference. The native
-wall-clock watchdog exits with code 74 after 240 seconds awaiting a command.
+wall-clock watchdog exits with code 74 after the configured idle deadline.
+`run.py` validates a positive finite HTTP `--timeout` and passes
+`ceil((timeout + 30) * 1000)` as `HONING_IDLE_TIMEOUT_MS`. The native parser
+requires a positive decimal uint64 millisecond value and exits 75 on malformed
+or overflowing values; an absent environment value defaults to 240000 ms.
 The controller owns and terminates only its game and Xvfb child processes; it
 never starts, stops or reconfigures the supplied decision service. Each run
-uses a fresh directory and refuses an occupied display. No TCP native port is
+uses a fresh directory and an automatically allocated owned Xvfb display. It
+waits for `-displayfd` readiness, cleans that child on timeout/startup failure,
+and never selects a pre-existing display. No TCP native port is
 opened.
 
 ## Observations
@@ -128,7 +134,19 @@ accepted actions. `actions.jsonl` pairs each action with before/after native
 observations. `verify_native.py` labels its injected invalid responses as
 synthetic faults, checks real paused-frame stability and zero step calls, tests
 stale and embedded-NUL native commands, then verifies a valid 30-tick action.
-`--watchdog-only` runs the actual 240-second idle deadline under repeated stale
-commands, checking that malformed traffic does not renew the deadline.
+`--watchdog-only` runs the configured idle deadline under repeated stale
+commands, checking that malformed traffic does not renew the deadline. Use
+`--idle-timeout-ms 750` for a bounded native watchdog check; the verifier's
+default remains 240000 ms.
 Portable fixtures, native fault injection, real model smoke, deterministic
 replay and model task proficiency are separate evidence.
+
+## Shared decision-response receiver
+
+The adapter imports the [shared stdlib-only receiver](../_shared/README.md).
+It requires `answers.action.type: "choice"` and explicit `stateTokens`,
+`stateRoom` and `inputTokens` audit keys; null counts are permitted, omitted
+keys are rejected. It rejects duplicate JSON keys at every nesting level as
+well as nonfinite numbers. Raw response bytes are saved before decoding,
+including HTTP error bodies. The game's required/optional context policy
+above remains in effect; invalid decisions cannot reach native input.

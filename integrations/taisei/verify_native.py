@@ -23,8 +23,8 @@ def verify(args: argparse.Namespace) -> None:
     command = [str(args.game.resolve()), "--play", "--sid", "1", "--diff", "Easy", "--shotmode", "youmuA"]
     environment = {
         **os.environ,
-        "DISPLAY": args.display,
         "HONING_SESSION_DIR": str(session),
+        "HONING_IDLE_TIMEOUT_MS": str(args.idle_timeout_ms),
         "TAISEI_STORAGE_PATH": str(session / "storage"),
         "TAISEI_CACHE_PATH": str(session / "cache"),
         "TAISEI_RES_PATH": str(args.resources.resolve()),
@@ -33,21 +33,12 @@ def verify(args: argparse.Namespace) -> None:
         "LIBGL_ALWAYS_SOFTWARE": "1",
         "LP_NUM_THREADS": "4",
     }
-    number = args.display.removeprefix(":").split(".")[0]
-    if Path(f"/tmp/.X11-unix/X{number}").exists():
-        raise ValueError("Display is occupied")
     checks = []
     with (session / "display.log").open("wb") as display_log, (session / "game.log").open("wb") as game_log:
-        xvfb = subprocess.Popen(
-            ["Xvfb", args.display, "-screen", "0", "800x600x24", "-nolisten", "tcp"],
-            stdout=display_log,
-            stderr=subprocess.STDOUT,
-        )
+        xvfb = None
         game = None
         try:
-            time.sleep(0.5)
-            if xvfb.poll() is not None:
-                raise RuntimeError("Owned Xvfb failed")
+            xvfb, environment["DISPLAY"] = demo.start_xvfb(display_log)
             game = subprocess.Popen(command, env=environment, stdout=game_log, stderr=subprocess.STDOUT)
             native = demo.NativeClient(session, game)
             observation = native.observe()
@@ -55,19 +46,21 @@ def verify(args: argparse.Namespace) -> None:
             if args.watchdog_only:
                 started = time.monotonic()
                 writes = 0
-                while game.poll() is None and time.monotonic() - started < 255:
+                expected_seconds = args.idle_timeout_ms / 1000
+                while game.poll() is None and time.monotonic() - started < expected_seconds + 15:
                     demo.atomic_json(session / "action.json", {"id": 0, "action": "right", "frames": 30})
                     writes += 1
                     time.sleep(0.1)
                     assert before == (session / "observation.json").read_bytes()
                 elapsed = time.monotonic() - started
                 assert game.poll() == 74, f"Watchdog failed: exit {game.poll()}, elapsed {elapsed}"
-                assert 239 <= elapsed <= 250
+                assert expected_seconds - 0.2 <= elapsed <= expected_seconds + 10
                 demo.atomic_json(
                     session / "watchdog-check.json",
                     {
                         "syntheticFaultInjection": True,
                         "staleCommandWrites": writes,
+                        "idleTimeoutMilliseconds": args.idle_timeout_ms,
                         "wallSeconds": elapsed,
                         "nativeExit": game.returncode,
                         "pausedFrame": observation["frame"],
@@ -84,9 +77,18 @@ def verify(args: argparse.Namespace) -> None:
                     "id": observation["id"],
                     "stateText": "\n".join(request["parts"]["essential"]),
                     "trimmed": [],
-                    "tokenAudit": {"action": {"stateTruncated": False, "options": 9}},
+                    "tokenAudit": {
+                        "action": {
+                            "stateTruncated": False,
+                            "options": 9,
+                            "stateTokens": None,
+                            "stateRoom": None,
+                            "inputTokens": None,
+                        }
+                    },
                     "answers": {
                         "action": {
+                            "type": "choice",
                             "choice": "right",
                             "probabilities": {key: float(key == "right") for key in demo.ACTIONS},
                         }
@@ -150,13 +152,7 @@ def verify(args: argparse.Namespace) -> None:
             )
         finally:
             for owned in (game, xvfb):
-                if owned is not None and owned.poll() is None:
-                    owned.terminate()
-                    try:
-                        owned.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        owned.kill()
-                        owned.wait()
+                demo.stop_owned(owned)
 
 
 def main() -> None:
@@ -164,11 +160,14 @@ def main() -> None:
     parser.add_argument("--game", type=Path, required=True)
     parser.add_argument("--resources", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--display", default=":191")
+    parser.add_argument("--idle-timeout-ms", type=int, default=240000)
     parser.add_argument(
-        "--watchdog-only", action="store_true", help="Verify the real 240s deadline under stale-command flood"
+        "--watchdog-only", action="store_true", help="Verify the configured native deadline under stale-command flood"
     )
-    verify(parser.parse_args())
+    args = parser.parse_args()
+    if not 1 <= args.idle_timeout_ms <= 2**64 - 1:
+        parser.error("idle-timeout-ms must be a positive uint64 integer")
+    verify(args)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: Apache-2.0 */
 #pragma once
 #include <ctype.h>
+#include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct HoningCommand {
@@ -10,6 +13,18 @@ typedef struct HoningCommand {
     unsigned flags;
     int stop;
 } HoningCommand;
+
+/* Decimal milliseconds; reject signs, empty values, overflow and zero. */
+static inline int honing_parse_idle_timeout(const char *text, uint64_t *out) {
+    if(!text || !*text) return 0;
+    for(const char *p = text; *p; ++p) if(!isdigit((unsigned char)*p)) return 0;
+    char *end;
+    errno = 0;
+    unsigned long long value = strtoull(text, &end, 10);
+    if(errno || *end || !value || value > UINT64_MAX) return 0;
+    *out = (uint64_t)value;
+    return 1;
+}
 
 /* This private transport accepts the controller's canonical JSON only. */
 static int honing_parse_command(const char *text, unsigned expected, HoningCommand *out) {

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0
  * Local, opt-in Taisei v1.4.6 stage bridge. Included from stage.c.
  */
 #include "honing_command.h"
@@ -57,8 +57,13 @@ static int honing_gate(void) {
     if(!honing_remaining) {
         ++honing_id;
         honing_observe();
+        uint64_t idle_timeout = 240000;
+        const char *timeout_text = getenv("HONING_IDLE_TIMEOUT_MS");
+        if(timeout_text && !honing_parse_idle_timeout(timeout_text, &idle_timeout)) exit(75);
         Uint64 start = SDL_GetTicks();
         for(;;) {
+            /* Rejected traffic and commands arriving after the deadline cannot renew it. */
+            if(SDL_GetTicks() - start > idle_timeout) exit(74);
             char path[4096], buf[256];
             honing_path(path, sizeof(path), "action.json");
             FILE *f = fopen(path, "r");
@@ -87,7 +92,6 @@ static int honing_gate(void) {
                 fclose(f);
             }
             /* Wall-clock timeout cannot advance the paused simulation. */
-            if(SDL_GetTicks() - start > 240000) exit(74);
             SDL_Delay(5);
         }
     }

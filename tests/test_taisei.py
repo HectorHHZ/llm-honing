@@ -25,6 +25,7 @@ def answer(request: dict) -> dict:
         "id": request["id"],
         "answers": {
             "action": {
+                "type": "choice",
                 "choice": "right",
                 "probabilities": {key: float(key == "right") for key in request["questions"]["action"]["criteria"]},
             }

@@ -141,5 +141,10 @@
     "invulnerabilityEvidence": "Source player_init zero-initializes iddqd; no cheat key or skip flag used. Not a per-decision observed field.",
     "nativeSpawnRecoveryBombImmunityRulesUnchanged": true,
     "developerDpsTaskHudVisible": true
+  },
+  "reviewFixEvidenceBoundary": {
+    "status": "Historical pre-review-fix run; original hashes retained.",
+    "inspectableDecisionSample": "validation/review-sample",
+    "postFixNativeBehavior": "See separate review-fix technical validation; not established by this receipt."
   }
 }

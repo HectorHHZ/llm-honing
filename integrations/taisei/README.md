@@ -46,6 +46,12 @@ and [COPYING.txt](https://github.com/taisei-project/taisei/blob/5bfc9b842fe6d9bb
 for dependency and resource licensing details (code MIT, soundtrack and
 commissioned portraits CC-BY 4.0). Keep the entire recursive checkout local.
 
+The original adapter files in this directory, including `honing_command.h` and
+`honing_bridge.inc.h`, follow this repository's [Apache-2.0 license](../../LICENSE).
+They are local integration hooks; no upstream submission or relicensing of
+Taisei code or resources is implied. Taisei's own notices and resource licenses
+remain applicable to the caller's checkout and resulting game build.
+
 Author platform: Ubuntu 22.04 x86-64, GCC 11.3, Meson 1.12.1, SDL 3.4.12 via the
 pinned release's Meson wrap, Xvfb and Mesa llvmpipe. No root installation is
 required if development packages are available in a user prefix. On a normal
@@ -61,7 +67,7 @@ git clone --recursive --branch v1.4.6 https://github.com/taisei-project/taisei.g
 python integrations/taisei/build.py --source work/taisei/source --build work/taisei/build
 python integrations/taisei/run.py \
   --game work/taisei/build/src/taisei --resources work/taisei/source/resources \
-  --decision-url http://127.0.0.1:8809 --display :191 \
+  --decision-url http://127.0.0.1:8809 \
   --output work/taisei/episode --decisions 3 --frames 120 --capture
 python integrations/taisei/encode.py --session work/taisei/episode --output work/taisei/demo.mp4
 ```
@@ -72,13 +78,18 @@ endpoint is insufficient. The author smoke used existing local
 `convaiinnovations/laya-typed-decisions` CPU weights; the precise revision and
 weight hash are in the receipt. Another machine must supply its own service and
 local weights. No service credentials or weights are included.
+The [Hollow Knight Laya CPU startup recipe](../hollow-knight/README.md#local-cpu-reproduction)
+shows how to start the existing decision server with local weights. This launcher
+allocates its own unused Xvfb display with `-displayfd` and waits for readiness.
+`--timeout` must be positive and finite; the native command watchdog receives
+that HTTP timeout plus 30 seconds (rounded up to milliseconds).
 
 To exercise synthetic faults against the native game and run portable tests:
 
 ```bash
 python integrations/taisei/verify_native.py \
   --game work/taisei/build/src/taisei --resources work/taisei/source/resources \
-  --display :191 --output work/taisei/native-faults
+  --output work/taisei/native-faults
 pytest tests/test_taisei.py
 ```
 
