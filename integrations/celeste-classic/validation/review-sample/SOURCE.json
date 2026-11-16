@@ -1,0 +1,29 @@
+{
+  "game": "celeste",
+  "evidence": "Author-side historical real Laya/native first decision, 2026-11-08 PST; pre-review-fix.",
+  "originalPrHead": "28dbab721ce80acb576e1bda652e46fad0c28c05",
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu"
+  },
+  "originalArtifacts": {
+    "code/pr/honing-celeste/integrations/celeste-classic/validation.json": "642a8036b1fb4126d8eb5bec6b50f650428c8c0387b502d932dbb6c9d0d9b027",
+    "log/20261108_1917_four_game_integrations/celeste/20261108_1953_final_laya/decisions.jsonl": "4b45e5ce3c7df4faae826557ad69b85df0c7345e988505fd9d88d1783eb48fb7",
+    "log/20261108_1917_four_game_integrations/celeste/20261108_1953_final_laya/response-000001.raw": "afdae24beca300cea6de0ac3704050bbbaa8b27c50f1f0a76c41c3872e11bab7"
+  },
+  "includedSha256": {
+    "original-author-receipt.json": "642a8036b1fb4126d8eb5bec6b50f650428c8c0387b502d932dbb6c9d0d9b027",
+    "request.json": "a9524226e35b270d9bd4720c9278af3d6e7f04bcb3cc1beec26952646bc6c9cd",
+    "response.raw": "afdae24beca300cea6de0ac3704050bbbaa8b27c50f1f0a76c41c3872e11bab7",
+    "transition.json": "84dad2d5734583cd5d39de65cd9c8d5e97e78e5f0ee66a068cd1806e5177e5ff"
+  },
+  "limits": [
+    "The original native bridge and request text differ from the local review fixes.",
+    "This historical sample is not evidence of post-fix native execution or improved policy.",
+    "The four production trace layouts remain unchanged, pending the user's format decision.",
+    "This sample includes no images, video, game assets, model weights, credentials or private conversations.",
+    "The raw response was copied byte-for-byte; request/transition JSON objects were extracted without editing values."
+  ]
+}

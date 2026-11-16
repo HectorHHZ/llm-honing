@@ -1,0 +1,31 @@
+{
+  "id": 1,
+  "parts": {
+    "essential": [
+      "Play Celeste Classic. Climb to the top of the room and avoid spikes. Coordinates are room pixels: x right, y down; velocity pixels/tick. Tiles are 8px: # solid, ^ v < > spikes, . other. Entities cover the whole current room. Dashes refill on ground. Jump/dash trigger on button edges; repeating a held button does not retrigger. Hold one action for 12 game ticks at 30Hz. Game update and draw pause while you decide.",
+      "{\"id\":1,\"status\":\"paused\",\"ticks\":0,\"episodeTicks\":0,\"setupTicks\":60,\"lastMask\":0,\"lastFrames\":0,\"resets\":0,\"rejected\":0,\"nativeUpdates\":60,\"nativeDraws\":60,\"clockFrame\":0,\"room\":0,\"deaths\":0,\"freezeTicks\":0,\"restartPending\":false,\"player\":{\"x\":8,\"y\":96,\"vx\":0,\"vy\":0,\"dashes\":1,\"grounded\":true},\"summitFlagTouched\":false,\"tiles\":[\"#############..#\",\"#######........#\",\"####...........#\",\"###..........###\",\"#...........####\",\"#.............##\",\"#####..........#\",\"##.............#\",\"#..............#\",\"#............###\",\"..............##\",\".......##.....##\",\"...##..##..^^^##\",\"#####..##^^#####\",\"#####^^#########\",\"################\"],\"entities\":[{\"type\":\"FAKE_WALL\",\"x\":8,\"y\":32}]}"
+    ]
+  },
+  "questions": {
+    "action": {
+      "type": "choice",
+      "instructions": "Choose the next input to climb and survive.",
+      "criteria": {
+        "wait": "Wait without pressing buttons.",
+        "left": "Move left.",
+        "right": "Move right.",
+        "jump": "Hold jump.",
+        "jump_left": "Hold jump and left.",
+        "jump_right": "Hold jump and right.",
+        "dash_left": "Hold dash and left.",
+        "dash_right": "Hold dash and right.",
+        "dash_up": "Hold dash and up.",
+        "dash_down": "Hold dash and down.",
+        "dash_up_left": "Hold dash, up and left.",
+        "dash_up_right": "Hold dash, up and right.",
+        "dash_down_left": "Hold dash, down and left.",
+        "dash_down_right": "Hold dash, down and right."
+      }
+    }
+  }
+}
