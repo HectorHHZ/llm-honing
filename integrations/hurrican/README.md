@@ -30,6 +30,10 @@ Use a C++17 compiler, CMake, SDL2, SDL2_image, SDL2_mixer and libepoxy developme
 packages. On Debian/Ubuntu these are `libsdl2-dev libsdl2-image-dev
 libsdl2-mixer-dev libepoxy-dev`. The build helper refuses another game revision,
 applies `native.patch` once and copies the two control hook source files.
+Use a clean pinned checkout when upgrading from an older patch. The current
+hook preserves native forced-action priority and releases a repeated jump on
+the first requested update; that update consumes the existing duration budget.
+Movement/shooting continue during jump release. Native jump eligibility applies.
 `--jobs` defaults to four and accepts 1–8; repeat `--cmake-arg=-DNAME=value`
 for a local dependency prefix. It changes only the external checkout and build
 directory. The hooks are inactive unless `HONING_HURRICAN_SESSION` is set.

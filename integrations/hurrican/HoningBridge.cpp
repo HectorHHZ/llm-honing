@@ -26,6 +26,7 @@ int remaining = 0;
 int action = 0;
 bool initialized = false;
 bool advancing = false;
+bool releaseJump = false;
 int idleSeconds = 240;
 std::string inputBuffer;
 std::string directory;
@@ -126,6 +127,9 @@ bool HoningBeforeTick() {
         ++sequence;
         remaining = frames;
         action = choice;
+        // Re-arm the native jump latch on the first requested heartbeat. Keep
+        // movement/shooting and the command's total heartbeat count unchanged.
+        releaseJump = (action == 6 || action == 7 || action == 8) && Player[0].Aktion[AKTION_JUMP];
     }
     Timer.update();
     Timer.setSpeedFactor(Timer.GetMoveSpeed()/60.0f);
@@ -136,6 +140,7 @@ bool HoningBeforeTick() {
 void HoningAfterTick() {
     if (!HoningEnabled() || !advancing) return;
     advancing = false;
+    releaseJump = false;
     ++tick;
     if (--remaining == 0) observation();
 }
@@ -146,7 +151,7 @@ std::bitset<MAX_AKTIONEN> HoningActions() {
     // left+jump+shoot, right+jump+shoot, crouch+shoot.
     if (action == 1 || action == 4 || action == 7) keys[AKTION_LINKS] = true;
     if (action == 2 || action == 5 || action == 8) keys[AKTION_RECHTS] = true;
-    if (action == 6 || action == 7 || action == 8) keys[AKTION_JUMP] = true;
+    if ((action == 6 || action == 7 || action == 8) && !releaseJump) keys[AKTION_JUMP] = true;
     if (action == 3 || action == 4 || action == 5 || action == 7 || action == 8 || action == 9) keys[AKTION_SHOOT] = true;
     if (action == 9) keys[AKTION_DUCKEN] = true;
     return keys;

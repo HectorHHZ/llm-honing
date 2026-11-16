@@ -1,0 +1,60 @@
+{
+  "before": {
+    "id": 0,
+    "tick": 0,
+    "stage": 1,
+    "mode": 4,
+    "primaryProjectiles": 0,
+    "timeLimit": 699.962,
+    "camera": [
+      1456.73,
+      1940
+    ],
+    "player": {
+      "x": 1753,
+      "y": 2220,
+      "vx": 0,
+      "vy": 0,
+      "energy": 100,
+      "lives": 3,
+      "shotDelay": 0,
+      "autoFireCount": 3,
+      "score": 0,
+      "canJump": true,
+      "action": 0,
+      "facing": 1
+    },
+    "enemies": []
+  },
+  "action": "shoot",
+  "probability": 0.2348,
+  "frames": 40,
+  "wallSeconds": 1.3594079210888594,
+  "after": {
+    "id": 1,
+    "tick": 40,
+    "stage": 1,
+    "mode": 4,
+    "primaryProjectiles": 4,
+    "timeLimit": 699.462,
+    "camera": [
+      1467.96,
+      1940
+    ],
+    "player": {
+      "x": 1753,
+      "y": 2220,
+      "vx": 0,
+      "vy": 0,
+      "energy": 100,
+      "lives": 3,
+      "shotDelay": 0.633333,
+      "autoFireCount": 3,
+      "score": 0,
+      "canJump": true,
+      "action": 0,
+      "facing": 1
+    },
+    "enemies": []
+  }
+}

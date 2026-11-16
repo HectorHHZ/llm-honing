@@ -1,0 +1,136 @@
+{
+  "scope": "Author-side standalone native input demo; Hurrican, not Cuphead. No progress, win, training or deterministic replay claim.",
+  "game": {
+    "repository": "https://github.com/HurricanGame/Hurrican",
+    "revision": "0d91d1f2d40f38d21e7f41afc01369ee55649fb6",
+    "submodules": [
+      " 8d1fd52e5ab5590e2c81768ace50c72bae28f2ed Hurrican/3rdparty/glm (0.9.5.3-2955-g8d1fd52e)",
+      " e037fb54f32973343fada6a051d3a3f8adf3a4a0 Hurrican/3rdparty/sdl2-cmake-scripts (heads/master)"
+    ],
+    "binarySha256": "6eee0afd675c6f306fe71b85ceec4c4a8187d13419832364096c45133b4248aa",
+    "externalAssets": {
+      "files": 803,
+      "bytes": 95791859,
+      "manifestSha256": "fa2fabae8d1d9dedbafd561e65cf4f121ac240408d29d6f751b0dbbe9d9c3566"
+    }
+  },
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+    "layaVersion": "0.3.20",
+    "torch": "2.8.0+cu128",
+    "transformers": "4.56.2",
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "threads": 4,
+    "python": "3.11.15",
+    "maxLen": 2048,
+    "headMaxLen": 512,
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "backend": "honing.backends.jev.laya.LayaDecisionModel",
+    "training_performed": false
+  },
+  "run": {
+    "decisions": 12,
+    "framesPerDecision": 40,
+    "nativeUpdates": 480,
+    "simulationSeconds": 8,
+    "actionCounts": {
+      "shoot": 12
+    },
+    "initialPlayer": {
+      "x": 1753,
+      "y": 2220,
+      "vx": 0,
+      "vy": 0,
+      "energy": 100,
+      "lives": 3,
+      "shotDelay": 0,
+      "autoFireCount": 3,
+      "score": 0,
+      "canJump": true,
+      "action": 0,
+      "facing": 1
+    },
+    "finalPlayer": {
+      "x": 1753,
+      "y": 2220,
+      "vx": 0,
+      "vy": 0,
+      "energy": 100,
+      "lives": 3,
+      "shotDelay": 0.633333,
+      "autoFireCount": 3,
+      "score": 0,
+      "canJump": true,
+      "action": 0,
+      "facing": 1
+    },
+    "receiverAuditPairs": 12,
+    "ownedNativeExitCode": 0,
+    "primaryProjectilesAtBoundaries": [
+      4,
+      5,
+      4,
+      4,
+      5,
+      4,
+      5,
+      5,
+      4,
+      5,
+      4,
+      4
+    ],
+    "traceSha256": "37cb8ca181c461c6cf702746b9635d9d07df07754ec07b3073bcb70340b5a6b1",
+    "initialSetupNeutralUpdates": 1,
+    "initialSetupIncludedInControlledTicks": false,
+    "decisionAndStepWallSeconds": 15.639335883781314
+  },
+  "video": {
+    "sha256": "4b85660aed8656fa3ee495dcbc7ffcb46c8785bd0fa1f5fc1056664b09da7bbc",
+    "width": 640,
+    "height": 480,
+    "frames": 240,
+    "fps": 30,
+    "seconds": 8,
+    "fullDecode": "passed",
+    "containsInferenceWaits": false
+  },
+  "nativeChecks": {
+    "isolatedDisplay": ":195",
+    "rejectedModelResponseNoAdvance": true,
+    "malformedCommandsNoAdvance": 6,
+    "staleDuplicateNoAdvance": true,
+    "freshProcessOpeningFieldsRestored": true,
+    "replayDeterminismEstablished": false,
+    "watchdogInvalidTrafficSeconds": 1.1298285929951817,
+    "watchdogPartialLineSeconds": 1.1657337580109015,
+    "shootAsFirstActionNativeProjectileCount": 1,
+    "watchdogInvalidCommands": 8896,
+    "ownedDisplayCleanedUp": true,
+    "preexistingDisplayPreserved": true
+  },
+  "portableTests": {
+    "focusedPassed": 34,
+    "fullPassed": 1332,
+    "fullSkipped": 46,
+    "fullExpectedFailures": 1,
+    "fullSubtestsPassed": 6,
+    "fullSeconds": 157.87,
+    "preCommit": "passed",
+    "mypy": "Success: no issues found in 149 source files"
+  },
+  "privacy": "No raw model trace, game resources, binary, screenshot or video is distributed.",
+  "integrationSourceSha256": {
+    "API.md": "1337c0dc2eeeeb39728f1e987729d8092676bf6611bbb1f7f9d96559490cacd6",
+    "HoningBridge.cpp": "093c2c0a677c0f07f19971a6cfcf24ccbfe56db46484013a11d70e587a79e2c9",
+    "HoningBridge.hpp": "90f412595cd045a8091e9701bec76c1d4e11024a448653e8b87848b0c64640b9",
+    "README.md": "ef5d764cabac1eecd0aa0e07aa2a3424ff5e446899026a7a9348c7d2799f065d",
+    "build.py": "c3a25e03beaacd9ff2c370e071a38e794600e40854c94d04d6a9891feaf0eb86",
+    "native.patch": "a819dfd0418d0716911acdba828b26a09421b1bbf93b0bf2f6b76d8af59b47bb",
+    "run.py": "39f6597013dcc5007275b93924d5b5997e6ea8736f974575351fa48165561366",
+    "test_hurrican_integration.py": "13e607a82a5134ad140a412179af3aada334b37966868ed0e4f9ba7d6217dea2"
+  }
+}

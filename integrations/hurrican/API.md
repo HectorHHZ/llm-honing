@@ -18,7 +18,11 @@ is outside the controlled `tick` counter and captured demo.
 `HONING_HURRICAN_CAPTURE=1` enables PPM capture. Any present value enables
 capture; unset it to disable. `HONING_HURRICAN_IDLE_SECONDS` is an integer 1–3600,
 default 240. Invalid values stop the game before the first observation. A
-single absolute deadline covers waiting for the next valid step: invalid,
+normal `NativeClient` sets this to `ceil(timeout) + 30`, overriding any inherited
+setting; its receive timeout and the CLI model timeout use the supplied timeout.
+Timeout must be finite and greater than zero, at most 3570 seconds, so the
+native deadline stays within 3600 seconds and always exceeds the model budget.
+A single absolute deadline covers waiting for the next valid step: invalid,
 stale, observe and partial lines do not renew it. EOF, overlong input (more
 than 256 bytes before newline) or idle expiry exits through normal game cleanup.
 
@@ -40,7 +44,7 @@ Send ASCII lines, terminated by newline, through the child's stdin:
 | Command | Behavior |
 | --- | --- |
 | `observe ID` | Return the current paused state, without advancing or renewing the deadline. |
-| `step ID FRAMES ACTION` | Hold one offered input combination for 1–120 updates; return the next paused state. |
+| `step ID FRAMES ACTION` | Apply one offered input combination over 1–120 updates, including any jump-release update; return the next paused state. |
 | `stop ID` | Exit normally. EOF also exits. |
 
 `ID` must exactly match the current observation's integer `id`. A valid step
@@ -59,14 +63,24 @@ update when its speed factor exceeds 0.3; at the normal speed one update is one
 physics chunk. `tick` counts completed heartbeats, not wall time. Internal
 menus, deaths and level transitions remain game-controlled. A heartbeat in a
 non-gameplay mode is not evidence of player physics; inspect `mode` and state.
+Original demo playback and `DoFesteAktion` forced actions take priority over the
+bridge, including end-of-level walkout and the dragon-ride introduction. During
+these scripts a requested action may be overridden by the game's own inputs.
 
 The game remains stopped during inference, error handling and observation.
 Trace `wallSeconds` measures each decision plus validation and its native step;
 it includes rendering/capture and is not pure inference latency.
 There is no background movement, controller auto-fire, dodging or pathfinding.
 Some actions explicitly combine shoot with movement/jump; Hurrican decides
-whether a held key can fire, charge, jump or repeat. Repeated identical actions
-keep that key held across the boundary; the integration adds no release pulse.
+whether a held key can fire, charge, jump or repeat. Movement and shooting stay
+held across boundaries. If a jump action follows a heartbeat whose native jump
+input was held, its first requested heartbeat releases only jump; subsequent
+heartbeats hold jump. Direction, shooting and crouch are unaffected. This applies
+across compound choices such as `jump_left_shoot` to `jump_right_shoot` too.
+The release consumes one of `FRAMES`, with no extra hidden heartbeat: `FRAMES=1`
+can be release-only, and the next command checks the actual final native input.
+Releasing does not grant an airborne jump: the original game re-arms
+`JumpPossible` on supported ground/platforms and still decides whether to jump.
 
 | ACTION | Model choice | Held inputs |
 | --- | --- | --- |
@@ -85,8 +99,9 @@ keep that key held across the boundary; the integration adds no release pulse.
 
 Normal game text may appear on stdout. Only a line prefixed `HONING ` carries
 one JSON observation. At startup it has `id=0,tick=0`; each step returns after
-its final heartbeat. Native startup can take up to the client's90-second
-receive timeout. The client does not use screenshots for model input.
+its final heartbeat. Native startup uses the supplied client receive timeout
+(90 seconds when constructing `NativeClient` directly without an override;
+180 seconds by default in the CLI). The client does not use screenshots for model input.
 
 | Field | Meaning and units |
 | --- | --- |
@@ -153,6 +168,15 @@ reason artifact records that failure. Raw diagnostics remain local.
 
 The CLI defaults to 12 decisions, 40 updates/input and 180 wall seconds per model
 request; `--decisions` accepts 1–10000. A timeout, malformed reply or audit failure
-aborts that run and closes its owned game. A model request timeout greater than
-the native idle deadline can let the native watchdog exit first; raise the
-explicit native idle setting if a legitimately slower server requires it.
+aborts that run and closes its owned game. The launcher derives the native idle
+deadline from that same timeout with the additional 30-second margin above.
+
+## Shared decision-response receiver
+
+The adapter imports the [shared stdlib-only receiver](../_shared/README.md).
+It requires `answers.action.type: "choice"` and explicit `stateTokens`,
+`stateRoom` and `inputTokens` audit keys; null counts are permitted, omitted
+keys are rejected. It rejects duplicate JSON keys at every nesting level as
+well as nonfinite numbers. Raw response bytes are saved before decoding,
+including HTTP error bodies. The game's required/optional context policy
+above remains in effect; invalid decisions cannot reach native input.

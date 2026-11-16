@@ -1,0 +1,30 @@
+{
+  "game": "hurrican",
+  "evidence": "Author-side historical real Laya/native first decision, 2026-11-08 PST; pre-review-fix.",
+  "originalPrHead": "109425f46c76ac39ca99c0b37b75aa2b6d4180e9",
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu"
+  },
+  "originalArtifacts": {
+    "code/pr/honing-hurrican/integrations/hurrican/validation.json": "9018ff04fb3dbfc335704fc9c89903b44d241b3e9ed219d0ba99acb81ad754f4",
+    "log/20261108_1917_four_game_integrations/cuphead-replacement/20261108_1945_laya_demo_final/trace.jsonl": "37cb8ca181c461c6cf702746b9635d9d07df07754ec07b3073bcb70340b5a6b1",
+    "log/20261108_1917_four_game_integrations/cuphead-replacement/20261108_1945_laya_demo_final/decision0000_1794195928448164975.request.json": "c8e275194f7c8af8c03c6af2d0f1ccba4e9148d8dacda9b75e6ddc34bdfc9830",
+    "log/20261108_1917_four_game_integrations/cuphead-replacement/20261108_1945_laya_demo_final/decision0000_1794195928448164975.response.raw": "1685a761070decc83957660e18e756c5d233685fd9ba19523611193cfc0a0772"
+  },
+  "includedSha256": {
+    "original-author-receipt.json": "9018ff04fb3dbfc335704fc9c89903b44d241b3e9ed219d0ba99acb81ad754f4",
+    "request.json": "c8e275194f7c8af8c03c6af2d0f1ccba4e9148d8dacda9b75e6ddc34bdfc9830",
+    "response.raw": "1685a761070decc83957660e18e756c5d233685fd9ba19523611193cfc0a0772",
+    "transition.json": "cc2dcaf8d1d8d2037808034ff22acc5bbb3f21c997c7012cf3b0d481ef2d4c29"
+  },
+  "limits": [
+    "The original native bridge and request text differ from the local review fixes.",
+    "This historical sample is not evidence of post-fix native execution or improved policy.",
+    "The four production trace layouts remain unchanged, pending the user's format decision.",
+    "This sample includes no images, video, game assets, model weights, credentials or private conversations.",
+    "The raw response was copied byte-for-byte; request/transition JSON objects were extracted without editing values."
+  ]
+}

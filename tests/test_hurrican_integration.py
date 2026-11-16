@@ -212,7 +212,7 @@ def test_http_raw_bytes_survive_parse_failure(tmp_path, raw):
             return raw
 
     path = tmp_path / "response.raw"
-    with patch.object(run.urllib.request, "urlopen", return_value=Reply()), pytest.raises(ValueError):
+    with patch("urllib.request.urlopen", return_value=Reply()), pytest.raises(ValueError):
         run.DecisionClient("http://localhost:1").decide({}, raw_path=path)
     assert path.read_bytes() == raw
 

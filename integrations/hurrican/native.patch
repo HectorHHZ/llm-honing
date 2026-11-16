@@ -61,16 +61,16 @@ index 21aa384..ce63cf5 100644
  // Datei : Player.cpp
 
  // --------------------------------------------------------------------------------------
-@@ -546,6 +547,9 @@ bool PlayerClass::GetPlayerInput() {
-             PlayDemo();
-
-         // oder feste Aktion?
+@@ -549,6 +550,9 @@ bool PlayerClass::GetPlayerInput() {
+             if (FesteAktion >= 0)
+                 Aktion[FesteAktion] = true;
+         }
 +        else if (HoningEnabled()) {
 +            Aktion = HoningActions();
 +        }
-         else if (DoFesteAktion) {
-             if (FesteAktion >= 0)
-                 Aktion[FesteAktion] = true;
+         // oder Spieler spielt ?
+         else {
+             // DKS - Cleaned a lot of this up and made the joystick support more complete,
 diff --git a/Hurrican/src/Timer.cpp b/Hurrican/src/Timer.cpp
 index 9cd6d98..e3c36d9 100644
 --- a/Hurrican/src/Timer.cpp

@@ -132,5 +132,10 @@
     "native.patch": "a819dfd0418d0716911acdba828b26a09421b1bbf93b0bf2f6b76d8af59b47bb",
     "run.py": "39f6597013dcc5007275b93924d5b5997e6ea8736f974575351fa48165561366",
     "test_hurrican_integration.py": "13e607a82a5134ad140a412179af3aada334b37966868ed0e4f9ba7d6217dea2"
+  },
+  "reviewFixEvidenceBoundary": {
+    "status": "Historical pre-review-fix run; original hashes retained.",
+    "inspectableDecisionSample": "validation/review-sample",
+    "postFixNativeBehavior": "See separate review-fix technical validation; not established by this receipt."
   }
 }

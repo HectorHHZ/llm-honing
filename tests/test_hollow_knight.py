@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import threading
+import time
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,7 +30,13 @@ def demo(repo_root: Path):
 def answer(actions: dict[str, str], *, identity: int = 7) -> dict:
     return {
         "id": identity,
-        "answers": {"action": {"choice": "right", "probabilities": {key: float(key == "right") for key in actions}}},
+        "answers": {
+            "action": {
+                "type": "choice",
+                "choice": "right",
+                "probabilities": {key: float(key == "right") for key in actions},
+            }
+        },
     }
 
 
@@ -421,12 +428,14 @@ def test_untracked_csharp_cannot_enter_a_pinned_build(tmp_path: Path) -> None:
         builder.verify_source(tmp_path, revision)
 
 
-def write_test_player(tmp_path: Path, *, stall: bool = False) -> Path:
+def write_test_player(tmp_path: Path, *, stall: bool = False, startup_delay: float = 0) -> Path:
     player = tmp_path / "player"
-    player.write_text("#!/usr/bin/env python3\nstall = " + repr(stall) + "\n" + r"""
+    player.write_text(
+        "#!/usr/bin/env python3\nstall = " + repr(stall) + "\nstartup_delay = " + repr(startup_delay) + "\n" + r"""
 import json, os, time
 from pathlib import Path
 session = Path(os.environ['HONING_SESSION_DIR'])
+time.sleep(startup_delay)
 (session / 'pid.txt').write_text(str(os.getpid()))
 (session / 'watchdog.txt').write_text(os.environ.get('HONING_MODEL_TIMEOUT_SECONDS', '180'))
 identity = 1
@@ -439,6 +448,7 @@ while True:
         temporary = session / 'observation.tmp'
         temporary.write_text(json.dumps(observation))
         temporary.replace(session / 'observation.json')
+    (session / 'fixture-ready').touch()
     while True:
         action = session / 'action.json'
         if action.exists():
@@ -451,15 +461,21 @@ while True:
                 identity += 1
                 break
         time.sleep(0.01)
-""")
+"""
+    )
     player.chmod(0o755)
     return player
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("case", ["invalid_response", "http_error", "stalled_game", "success"])
-def test_episode_owns_its_player_on_success_and_failures(demo, tmp_path: Path, monkeypatch, case: str) -> None:
-    player = write_test_player(tmp_path, stall=case == "stalled_game")
+@pytest.mark.parametrize(
+    ("case", "startup_delay"),
+    [("invalid_response", 0), ("invalid_response", 0.25), ("http_error", 0), ("stalled_game", 0), ("success", 0)],
+)
+def test_episode_owns_its_player_on_success_and_failures(
+    demo, tmp_path: Path, monkeypatch, case: str, startup_delay: float
+) -> None:
+    player = write_test_player(tmp_path, stall=case == "stalled_game", startup_delay=startup_delay)
 
     class Client:
         def __init__(self, *_args):
@@ -482,6 +498,17 @@ def test_episode_owns_its_player_on_success_and_failures(demo, tmp_path: Path, m
     def launch(*args, **kwargs):
         process = popen(*args, **kwargs)
         launched.append(process)
+        # The test targets response rejection/cleanup, not interpreter scheduling.
+        # Synchronize startup separately; keep the production observation timeout intact.
+        session = Path(kwargs["env"]["HONING_SESSION_DIR"])
+        deadline = time.monotonic() + 10
+        while not (session / "fixture-ready").exists():
+            if process.poll() is not None or time.monotonic() >= deadline:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+                pytest.fail("test player failed to initialize before the fixture deadline")
+            time.sleep(0.005)
         return process
 
     monkeypatch.setattr(demo, "DecisionClient", Client)
@@ -496,7 +523,7 @@ def test_episode_owns_its_player_on_success_and_failures(demo, tmp_path: Path, m
         scene="Level1",
         decisions=1,
         frames=12,
-        observation_timeout=0.1 if case == "stalled_game" else 2,
+        observation_timeout=0.1 if case == "stalled_game" or startup_delay else 2,
     )
     if case == "success":
         session = demo.run_episode(args)

@@ -1,0 +1,27 @@
+{
+  "id": 0,
+  "parts": {
+    "essential": [
+      "Play Hurrican, a run-and-gun platformer. Progress right through the jungle, shoot enemies and survive. Coordinates are world pixels; positive x is right and positive y is DOWN. Enemy positions are nearby on-screen destroyable objects. Each input is held for 40 fixed60Hz native updates. The game pauses while you decide. Shooting and jumping follow the original game's rules.",
+      "{\"id\":0,\"tick\":0,\"stage\":1,\"mode\":4,\"primaryProjectiles\":0,\"timeLimit\":699.962,\"camera\":[1456.73,1940],\"player\":{\"x\":1753,\"y\":2220,\"vx\":0,\"vy\":0,\"energy\":100,\"lives\":3,\"shotDelay\":0,\"autoFireCount\":3,\"score\":0,\"canJump\":true,\"action\":0,\"facing\":1},\"enemies\":[]}"
+    ]
+  },
+  "questions": {
+    "action": {
+      "type": "choice",
+      "instructions": "Choose the next input to progress and survive.",
+      "criteria": {
+        "wait": "Wait without shooting.",
+        "left": "Move left.",
+        "right": "Move right.",
+        "shoot": "Shoot in the current facing direction.",
+        "left_shoot": "Move left and shoot.",
+        "right_shoot": "Move right and shoot.",
+        "jump": "Hold jump without shooting.",
+        "jump_left_shoot": "Hold left, jump and shoot.",
+        "jump_right_shoot": "Hold right, jump and shoot.",
+        "crouch_shoot": "Crouch and shoot in the current facing direction."
+      }
+    }
+  }
+}
