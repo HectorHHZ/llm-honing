@@ -24,6 +24,8 @@ The private artifact store is `/data/xinkaiz/system0/exp0/tank-war/v1-critical-w
 
 [`blind-split.json`](blind-split.json) lists exactly which 40 anonymous games entered the final test and hashes their inputs. [`RUNBOOK.md`](RUNBOOK.md) records the three-hour GPU-time ceiling, the actual diagnosis usage, and the commands used for the final analysis. The GPU-hour ceiling is derived from the pre-run three-hour and three-GPU limits; actual GPU utilization was not measured. No token or dollar cap was frozen before diagnosis.
 
+[`REVIEW_STATUS.md`](REVIEW_STATUS.md) records the later planner-reference pass over all 1,811 recorded test decisions and the separate 30-game blind human review page. Human labels and second-reviewer agreement are not yet available; this addendum does not change the frozen diagnosis score.
+
 The scorer committed with this PR was formatted for repository checks after the blind run. The original scorer remains in the private store; a separate `score-format-audit-v1/` replay of the same frozen answers produced a score file **byte-identical** to the original. The original sample freeze and score were not edited.
 
 Final technically verified fault-loss counts are **20 harness, 20 weights, and 24 controller**. These are episodes, not independent fault families. All complete losses were retained, including untriggered or unchanged cases, but those cases were not assigned a verified injected-cause label.
