@@ -8,7 +8,8 @@ This is not `laya-typed-decisions`, a Tank checkpoint, a cloud API or a protocol
 
 The feature base is `feat/overcook_ai` at `6f252b2`. All experiment code,
 candidate files and results belong to `experiment/overcook_laya-harness`.
-The feature branch and PR #190 are unchanged.
+The original integration was merged in PR #190. This experiment is a separate
+follow-up targeting `main`; it leaves the original feature branch unchanged.
 
 ## Result
 
@@ -158,6 +159,38 @@ and was clamped; this experiment always uses six choices, whose bucket is unchan
 
 ## Running and verifying
 
+### Watch the recorded demo
+
+After installing the game environment using the integration's
+[setup instructions](../../README.md#setup-and-play), run from the repository
+root. No model download, inference server, API key or GPU is needed for replay:
+
+```powershell
+& integrations/overcooked/.venv/python.exe -m integrations.overcooked.laya_demo --open
+```
+
+The default is the seed's `asymmetric_advantages` game (final team score 180)
+at <http://127.0.0.1:4187/>. To watch its zero-point cramped kitchen instead:
+
+```powershell
+& integrations/overcooked/.venv/python.exe -m integrations.overcooked.laya_demo --episode search--seed--cramped_room --port 4188 --open
+```
+
+`--help` lists all 15 recorded model episodes, including the six candidates.
+The viewer verifies the committed archive checksums, extracts into a fresh
+ignored temporary directory under this integration's `.cache/`, then verifies
+the native joint-action replay before serving. It never modifies the committed
+results. Stop with Ctrl+C to close the viewer and remove its temporary files.
+
+Use Start, Single step, speed selection and the timeline slider. The page shows
+the official native image, map/state/rules interfaces, both recorded actions,
+the model's exact request and its action probabilities. Tick 0 previews the
+first decision; later ticks display the action that produced that frame. This
+is recorded model play, not live inference or a rule-policy demonstration.
+All rewarded deliveries in these model games came from chef 1.
+
+### Run local model inference
+
 From the repository root, prepare and serve the pinned model with the existing
 WSL CUDA interpreter (substitute local interpreter and checkout paths):
 
@@ -194,8 +227,9 @@ and every canonical frame hash:
 & integrations/overcooked/.venv/python.exe integrations/overcooked/experiments/laya-harness-v1/audit.py
 ```
 
-The integration tests passed: `python -m pytest integrations/overcooked/tests`
-reported 65 passed, no skips, with one upstream pygame/pkg_resources warning.
+The integration tests, including the portable replay demo, passed:
+`python -m pytest integrations/overcooked/tests` reported 67 passed, no skips,
+with one upstream pygame/pkg_resources warning.
 
 Each archive retains manifest, result, exact harness and gzip-compressed native
 steps/decisions with SHA-256 identities. `verify` checks every archived file,

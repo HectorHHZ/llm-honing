@@ -145,7 +145,7 @@ class Application:
             self.engine.close()
 
 
-def make_server(app: Application, port: int = 4185) -> ThreadingHTTPServer:
+def make_server(app: Application, port: int = 4185, *, html: bytes | None = None) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, _format: str, *_args: object) -> None:
             pass
@@ -165,7 +165,9 @@ def make_server(app: Application, port: int = 4185) -> ThreadingHTTPServer:
         def do_GET(self) -> None:
             path = urlsplit(self.path).path
             if path == "/":
-                self.send((ROOT / "web/index.html").read_bytes(), "text/html; charset=utf-8")
+                self.send(
+                    html if html is not None else (ROOT / "web/index.html").read_bytes(), "text/html; charset=utf-8"
+                )
             elif path == "/frame.png":
                 with app.lock:
                     wanted = parse_qs(urlsplit(self.path).query).get("hash", [app.frame["frame_hash"]])[0]
