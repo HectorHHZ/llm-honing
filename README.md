@@ -47,6 +47,12 @@ on the model server; the browser needs no GPU.
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
+### Ember Vault
+
+[`integrations/ember-vault/`](integrations/ember-vault/README.md) adds an original
+top-down action roguelike with seeded vaults, a playable browser UI, a rule
+controller and deterministic action replay.
+
 ### Griddly Spiders
 
 [`integrations/griddly/`](integrations/griddly/README.md) adds native Griddly
