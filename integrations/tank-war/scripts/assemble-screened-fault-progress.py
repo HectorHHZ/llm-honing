@@ -98,11 +98,11 @@ def index_instance(setting: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
         "screen_ci95": screen["ci95"],
         "completed_final_games": len(records),
         **dict(counts),
-        "uncertain_reasons": dict(Counter(
-            record["technical_reference"]["reason"]
-            for record in records
-            if not record["verified_local_effect"]
-        )),
+        "uncertain_reasons": dict(
+            Counter(
+                record["technical_reference"]["reason"] for record in records if not record["verified_local_effect"]
+            )
+        ),
     }
 
 
@@ -128,18 +128,20 @@ def main() -> None:
         raise ValueError("duplicate fault sample ID")
     controls = clean_index([Path(protocol["clean_controls"])])
     control_rows = []
-    for name, run in sorted(controls.items()):
+    for _name, run in sorted(controls.items()):
         result = common.read(run / "result.json")
-        control_rows.append({
-            "sample_id": hashlib.sha256(f"control:{result['seed']}:{result['seat']}".encode()).hexdigest()[:24],
-            "seed": result["seed"],
-            "seat": result["seat"],
-            "source_run": str(run),
-            "outcome": result["outcome"][result["seat"]],
-            "condition": "no_injection",
-            "cause_label": None,
-            "result_sha256": common.digest(run / "result.json"),
-        })
+        control_rows.append(
+            {
+                "sample_id": hashlib.sha256(f"control:{result['seed']}:{result['seat']}".encode()).hexdigest()[:24],
+                "seed": result["seed"],
+                "seat": result["seat"],
+                "source_run": str(run),
+                "outcome": result["outcome"][result["seat"]],
+                "condition": "no_injection",
+                "cause_label": None,
+                "result_sha256": common.digest(run / "result.json"),
+            }
+        )
     args.out.mkdir(parents=True)
     (args.out / "protocol.json").write_bytes(args.protocol.read_bytes())
     (args.out / "fault-games.jsonl").write_text("".join(json.dumps(row) + "\n" for row in records))

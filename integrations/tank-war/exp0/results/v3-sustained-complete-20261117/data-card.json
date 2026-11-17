@@ -12,7 +12,7 @@
   "source": "Private labels index original raw games, requests, replies, states, attempts, and event logs",
   "label_provenance": "screened intervention manifest plus same-state raw-state, request, selected action, and command comparison",
   "annotation_status": "machine evidence only; outside human reviews have not been linked to these sample IDs",
-  "blind_test": "40 earlier collected games were frozen separately before any v2 System 0 answer; same-family follow-up only",
+  "blind_test": "40 distinct-seed games were frozen before any follow-up System 0 answer; read/probe completed with 28/30 verified-fault probe accuracy and 8/10 unsupported harness/controller control calls; same-family follow-up only",
   "limitations": [
     "One sustained fault family per layer; this is not a family-transfer test.",
     "The harness strategy setting is used in observation and plan revalidation; its functional boundary is mixed.",

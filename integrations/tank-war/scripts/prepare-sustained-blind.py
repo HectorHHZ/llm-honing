@@ -85,12 +85,7 @@ def main() -> None:
     labels_path = args.dataset / "labels.jsonl"
     controls_path = args.dataset / "controls.jsonl"
     prior_paths = (args.prior_rapid_freeze, args.prior_blind_freeze)
-    exposed = {
-        case["seed"]
-        for path in prior_paths
-        for case in read(path)["cases"]
-        if "seed" in case
-    }
+    exposed = {case["seed"] for path in prior_paths for case in read(path)["cases"] if "seed" in case}
     chosen = select(rows(labels_path), rows(controls_path), exposed)
     public_case = runpy.run_path(str(Path(__file__).with_name("prepare-critical-blind.py")))["public_case"]
     (out / "inputs").mkdir()
@@ -142,9 +137,17 @@ def main() -> None:
         "cases": frozen,
     }
     (out / "sample-freeze.json").write_text(json.dumps(freeze, indent=2) + "\n")
-    print(json.dumps({"cases": len(frozen), "by_layer": {layer: sum(x["technical_label"] == layer for x in frozen)
-                                                    for layer in (*LAYERS, "no_injection")},
-                      "freeze_sha256": digest(out / "sample-freeze.json")}))
+    print(
+        json.dumps(
+            {
+                "cases": len(frozen),
+                "by_layer": {
+                    layer: sum(x["technical_label"] == layer for x in frozen) for layer in (*LAYERS, "no_injection")
+                },
+                "freeze_sha256": digest(out / "sample-freeze.json"),
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

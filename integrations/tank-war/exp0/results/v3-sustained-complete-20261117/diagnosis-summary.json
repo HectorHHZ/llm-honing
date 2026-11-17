@@ -1,0 +1,143 @@
+{
+  "version": "tank183-sustained-diagnosis-v1",
+  "sample_freeze_sha256": "583edbc1bc3055df91c1e0bf5c32d134dcce3794fa799614d7b089b64dcef091",
+  "diagnosis_freeze_sha256": "d4be3911baed7c148cbc6e07d5659adcb812649029e1c2c37cc7c04bff5101fc",
+  "cases": {
+    "verified_faults": 30,
+    "no_injection_losses": 10
+  },
+  "accuracy": {
+    "read": {
+      "correct": 16,
+      "total": 30
+    },
+    "probe": {
+      "correct": 28,
+      "total": 30
+    }
+  },
+  "majority_baseline": {
+    "correct": 10,
+    "total": 30
+  },
+  "by_layer": {
+    "harness": {
+      "read": {
+        "correct": 6,
+        "total": 10
+      },
+      "probe": {
+        "correct": 9,
+        "total": 10
+      }
+    },
+    "weights": {
+      "read": {
+        "correct": 0,
+        "total": 10
+      },
+      "probe": {
+        "correct": 9,
+        "total": 10
+      }
+    },
+    "controller": {
+      "read": {
+        "correct": 10,
+        "total": 10
+      },
+      "probe": {
+        "correct": 10,
+        "total": 10
+      }
+    }
+  },
+  "confusion": {
+    "read": {
+      "harness": {
+        "controller": 3,
+        "harness": 6,
+        "weights": 1
+      },
+      "weights": {
+        "harness": 10
+      },
+      "controller": {
+        "controller": 10
+      },
+      "no_injection": {
+        "harness": 6,
+        "controller": 3,
+        "weights": 1
+      }
+    },
+    "probe": {
+      "harness": {
+        "harness": 9,
+        "controller": 1
+      },
+      "weights": {
+        "weights": 9,
+        "harness": 1
+      },
+      "controller": {
+        "controller": 10
+      },
+      "no_injection": {
+        "weights": 2,
+        "controller": 3,
+        "harness": 5
+      }
+    }
+  },
+  "paired_probe_minus_read": {
+    "point": 0.4,
+    "class_stratified_bootstrap_95pct": [
+      0.3,
+      0.5
+    ],
+    "resamples": 10000,
+    "rng_seed": 183
+  },
+  "controls": {
+    "read": {
+      "unsupported_harness_or_controller": 9,
+      "weights_answer_on_unmodified_loss": 1,
+      "uncertain": 0,
+      "total": 10
+    },
+    "probe": {
+      "unsupported_harness_or_controller": 8,
+      "weights_answer_on_unmodified_loss": 2,
+      "uncertain": 0,
+      "total": 10
+    }
+  },
+  "scoped_go": true,
+  "full_issue_183_confirmed": false,
+  "limitations": [
+    "Only one sustained fault family per layer was sampled.",
+    "The harness strategy also participates in post-choice plan revalidation.",
+    "A same-state local effect is not proof that it caused the loss."
+  ],
+  "usage": {
+    "read": {
+      "status": "complete",
+      "mode": "read",
+      "completed": 40,
+      "expected": 40,
+      "input_tokens": 2117328,
+      "output_tokens": 16650,
+      "elapsed_seconds_sum": 486.94300000000004
+    },
+    "probe": {
+      "status": "complete",
+      "mode": "probe",
+      "completed": 40,
+      "expected": 40,
+      "input_tokens": 2303755,
+      "output_tokens": 21948,
+      "elapsed_seconds_sum": 584.4350000000001
+    }
+  }
+}

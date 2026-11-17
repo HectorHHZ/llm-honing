@@ -42,8 +42,7 @@ def main() -> None:
     if len(prior_freeze["cases"]) != 40 or len({case["episode_id"] for case in prior_freeze["cases"]}) != 40:
         raise ValueError("expected 40 unique games")
     if any(
-        sha(prior / name) != prior_freeze[f"{name.split('.')[0]}_sha256"]
-        for name in ("prompt.txt", "schema.json")
+        sha(prior / name) != prior_freeze[f"{name.split('.')[0]}_sha256"] for name in ("prompt.txt", "schema.json")
     ):
         raise ValueError("episode-only prompt or schema changed")
     examples = read(args.examples)
@@ -60,14 +59,16 @@ def main() -> None:
             "explanation": example["answer"]["evidence"],
         }
         shown_examples.append(shown)
-    prompt = (prior / "prompt.txt").read_text().replace(
-        "EPISODE JSON:\n",
-        "These are three separate, previously reviewed development games. Each answer is for its game as a whole. "
-        "Their selected excerpts illustrate evidence; a test game may have a different cause or no clear cause. "
-        "Do not assume that any component was deliberately changed.\n\n"
-        "DEVELOPMENT EXAMPLES JSON:\n"
-        + json.dumps(shown_examples, separators=(",", ":"))
-        + "\n\nEPISODE JSON:\n",
+    prompt = (
+        (prior / "prompt.txt")
+        .read_text()
+        .replace(
+            "EPISODE JSON:\n",
+            "These are three separate, previously reviewed development games. Each answer is for its game as a whole. "
+            "Their selected excerpts illustrate evidence; a test game may have a different cause or no clear cause. "
+            "Do not assume that any component was deliberately changed.\n\n"
+            "DEVELOPMENT EXAMPLES JSON:\n" + json.dumps(shown_examples, separators=(",", ":")) + "\n\nEPISODE JSON:\n",
+        )
     )
     if prompt.count("DEVELOPMENT EXAMPLES JSON:") != 1 or any(term in prompt.lower() for term in FORBIDDEN):
         raise ValueError("invalid or revealing few-shot prompt")

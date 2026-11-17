@@ -64,17 +64,18 @@ def same_build(a: dict[str, Any], b: dict[str, Any]) -> bool:
 
 
 def same_variant(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    return same_build(a, b) and all(
-        a[key] == b[key] for key in ("harness_sha256", "controller_sha256", "agent_seat")
-    ) and a["model"]["weights_sha256"] == b["model"]["weights_sha256"]
+    return (
+        same_build(a, b)
+        and all(a[key] == b[key] for key in ("harness_sha256", "controller_sha256", "agent_seat"))
+        and a["model"]["weights_sha256"] == b["model"]["weights_sha256"]
+    )
 
 
 def first_local_difference(clean: Path, fault: Path, layer: str) -> dict[str, Any]:
-    files = [
-        (clean / name).open() for name in ("states.jsonl", "execution.jsonl", "model_calls.jsonl")
-    ] + [(fault / name).open() for name in ("states.jsonl", "execution.jsonl", "model_calls.jsonl")]
+    files = [(clean / name).open() for name in ("states.jsonl", "execution.jsonl", "model_calls.jsonl")] + [
+        (fault / name).open() for name in ("states.jsonl", "execution.jsonl", "model_calls.jsonl")
+    ]
     try:
-        clean_states, clean_actions, clean_calls, fault_states, fault_actions, fault_calls = files
         for index, lines in enumerate(zip(*files, strict=False)):
             c_state, c_action, c_call, f_state, f_action, f_call = map(json.loads, lines)
             if c_state["decision_index"] != index or f_state["decision_index"] != index:
@@ -229,26 +230,28 @@ def main() -> None:
             "clean_better_pairs": sum(record["fault_score_minus_clean"] < 0 for record in group),
             "fault_better_pairs": sum(record["fault_score_minus_clean"] > 0 for record in group),
             "equal_pairs": sum(record["fault_score_minus_clean"] == 0 for record in group),
-            "unverified_reasons": dict(Counter(
-                record["technical_reference"]["reason"]
-                for record in group
-                if not record["verified_local_effect"]
-            )),
+            "unverified_reasons": dict(
+                Counter(
+                    record["technical_reference"]["reason"] for record in group if not record["verified_local_effect"]
+                )
+            ),
         }
     controls = []
-    for name, path in sorted(clean_runs.items()):
+    for _name, path in sorted(clean_runs.items()):
         result = read(path / "result.json")
-        controls.append({
-            "sample_id": hashlib.sha256(f"control:{result['seed']}:{result['seat']}".encode()).hexdigest()[:24],
-            "seed": result["seed"],
-            "seat": result["seat"],
-            "source_run": str(path),
-            "result_sha256": digest(path / "result.json"),
-            "manifest_sha256": digest(path / "manifest.json"),
-            "outcome": result["outcome"][result["seat"]],
-            "control_condition": "no_injection",
-            "cause_label": None,
-        })
+        controls.append(
+            {
+                "sample_id": hashlib.sha256(f"control:{result['seed']}:{result['seat']}".encode()).hexdigest()[:24],
+                "seed": result["seed"],
+                "seat": result["seat"],
+                "source_run": str(path),
+                "result_sha256": digest(path / "result.json"),
+                "manifest_sha256": digest(path / "manifest.json"),
+                "outcome": result["outcome"][result["seat"]],
+                "control_condition": "no_injection",
+                "cause_label": None,
+            }
+        )
     args.out.mkdir(parents=True)
     (args.out / "protocol.json").write_bytes(args.protocol.read_bytes())
     (args.out / "labels.jsonl").write_text("".join(json.dumps(row) + "\n" for row in records))

@@ -30,7 +30,7 @@ def test_unpaired_loss_is_retained_without_cause(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_conflicting_clean_counterparts_are_rejected(tmp_path: Path) -> None:
     roots = [tmp_path / "a", tmp_path / "b"]
-    for root, score in zip(roots, (1, -1)):
+    for root, score in zip(roots, (1, -1), strict=True):
         run = root / "s42-blue"
         run.mkdir(parents=True)
         (run / "result.json").write_text(json.dumps({"outcome": {"blue": score}}))

@@ -4,5 +4,5 @@
   "historical_diagnosis": "v1-critical-window-20261115",
   "historical_diagnosis_role": "completed diagnosis on earlier one-decision faults; scores do not transfer to v3",
   "private_dataset_root": "/data/xinkaiz/system0/exp0/tank-war/v3-sustained-complete-20261117/",
-  "blind_test_status": "a distinct-seed 40-game scoped follow-up is frozen and its read/probe diagnosis is in progress"
+  "blind_test_status": "distinct-seed 40-game scoped read/probe follow-up complete; scoped go for probe gain, broad attribution unproven"
 }

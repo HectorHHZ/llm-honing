@@ -43,8 +43,12 @@ available harness games and the complete weights, controller, and clean
 collections. Its source hashes are unchanged in v3. It excludes seeds used in
 the earlier rapid and blind tests and passed 40/40 full deterministic replays.
 The follow-up uses one complete-game harness/weights/controller label per
-game, not a decision-window output. Diagnosis results will be recorded
-separately from this dataset index.
+game, not a decision-window output. Its completed, separately frozen result is
+in [DIAGNOSIS.md](DIAGNOSIS.md) and the public
+[aggregate summary](diagnosis-summary.json): probes classified 28/30 verified
+fault losses versus 16/30 from replays alone, but made unsupported harness or
+controller calls on 8/10 unmodified losses. This supports a scoped go for the
+probe comparison and not a broad go for autonomous failure attribution.
 
 ## Limits
 

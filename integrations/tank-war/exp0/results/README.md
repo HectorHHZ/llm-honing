@@ -10,6 +10,12 @@ supports a machine cause label. The other eleven remain uncertain. The
 private raw games and logs remain at their referenced source paths. The
 earlier `v2-sustained-20261116/` index is preserved.
 
+The completed [v3 diagnosis](v3-sustained-complete-20261117/DIAGNOSIS.md)
+classified 28/30 verified faults with controlled probes versus 16/30 from
+replay alone (paired gain 40 percentage points, 95% interval 30–50). It also
+made unsupported harness/controller calls on 8/10 unmodified losses, so the
+result is scoped to these constructed fault families.
+
 [`v1-critical-window-20261115/`](v1-critical-window-20261115/) remains the
 historical diagnosis and go/no-go result. Its one-decision faults did not pass
 the score-drop rule. Its Sol and Astra answers belong to those **40 older
@@ -20,13 +26,13 @@ nor the original answers have been rewritten.
 
 | Deliverable | Status | Evidence or remaining work |
 | --- | --- | --- |
-| Detailed protocol | Complete for v1; scoped v3 follow-up frozen | [`PROTOCOL.md`](../PROTOCOL.md) and the private v3 assembly and diagnosis protocols document the variants, commands, sample cap, model budget and scoring rule. |
-| Reset/replay checks and real-model pilot | Complete for scoped tests | v1 reports 40/40 deterministic replays, 40/40 all-decision probe audits and the 891-decision identity check. The new v3 follow-up subset passed 40/40 full deterministic replays. The indexer's same-state check does not replay every v3 game. |
+| Detailed protocol | Complete for scoped v3 follow-up | [`PROTOCOL.md`](../PROTOCOL.md) and the private v3 assembly and diagnosis protocols document the variants, commands, sample cap, model budget and scoring rule. |
+| Reset/replay checks and real-model pilot | Complete for scoped tests | v1 reports 40/40 deterministic replays, 40/40 all-decision probe audits and the 891-decision identity check. The v3 follow-up passed 40/40 full deterministic replays and audited all 1850 decisions. The indexer's same-state check does not replay every v3 game. |
 | Fault builders, private manifests, score drops, exclusions | **Partial** | v3 has one screened fault per layer with negative paired intervals, complete 160-game collections, and all ambiguous cases retained. #183's full target is at least three faults per layer. Its harness setting also participates in post-choice plan revalidation, so that boundary needs a cleaner fault for a strict harness-only claim. |
 | Versioned dataset, schema, references, reviewer records, card | **Partial** | v3 has a private versioned index, technical references, checks and a [data card](v3-sustained-complete-20261117/data-card.json). The outside human review has not yet been matched to these sample IDs or archived with reviewer and disagreement records. |
-| No gold access or split overlap | Complete for v1; follow-up in progress | v1's isolated diagnosis passed its input and split audit. The new 40-game follow-up excludes seeds from the earlier rapid and blind tests; its read mode ran in Bubblewrap with only anonymous inputs. Broader exposure to development material remains a limitation. |
-| Four modes, baselines, identity and separate weight probes | **Partial** | Sol high ran four modes on the v1 games; Astra medium ran read/probe on those same known games. The v3 follow-up read mode is complete; its probe mode awaits an available GPU. A separate weight-probe analysis and the full set of required baselines remain incomplete. |
-| Per-cause results, intervals, cost, failures, go/no-go | Complete for scoped v1; **v3 follow-up in progress** | v1's no-go result is preserved. The v3 follow-up needs probe mode before its frozen paired comparison and scoped go/no-go can be scored. |
+| No gold access or split overlap | Complete for scoped v3 follow-up | The 40-game follow-up excludes seeds from the earlier rapid and blind tests. Both modes ran in Bubblewrap on anonymous inputs with no tool calls. Broader exposure to development material remains a limitation. |
+| Four modes, baselines, identity and separate weight probes | **Partial** | Sol high ran four modes on the v1 games; Astra medium ran read/probe on those same known games. The v3 follow-up completed read/probe and audited all 1850 decisions, but did not repeat all extra modes or a separate weight-probe study. |
+| Per-cause results, intervals, cost, failures, go/no-go | Complete for scoped v3; full issue **partial** | The [v3 diagnosis](v3-sustained-complete-20261117/DIAGNOSIS.md) reports per-cause results, paired interval, controls, usage, errors and a scoped go. One family per class and high control false positives prevent a broad go. |
 
 The full [#183 acceptance list](https://github.com/HectorHHZ/llm-honing/issues/183)
 cannot yet be checked off. The v3 data fixes the **score-drop** weakness in v1;

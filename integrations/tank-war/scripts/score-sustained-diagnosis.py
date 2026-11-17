@@ -71,6 +71,7 @@ def main() -> None:
     controls = [case for case in cases if case["technical_label"] == "no_injection"]
     if len(faults) != 30 or len(controls) != 10:
         raise ValueError("unexpected class balance")
+
     def correct(row: dict[str, Any], mode: str) -> bool:
         return row[mode] == row["technical_label"]
 

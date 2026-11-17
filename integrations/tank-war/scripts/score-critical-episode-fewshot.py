@@ -52,15 +52,10 @@ def main() -> None:
     fewshot_rows = {row["episode_id"]: row for row in fewshot["records"]}
     label_rows = [json.loads(line) for line in args.technical_labels.read_text().splitlines() if line]
     labels = {row["episode_id"]: row["technical_label"] for row in label_rows}
-    if (
-        len(bare_rows) != len(fewshot_rows)
-        or len(labels) != 40
-        or set(bare_rows) != set(fewshot_rows) != set(labels)
-    ):
+    if len(bare_rows) != len(fewshot_rows) or len(labels) != 40 or set(bare_rows) != set(fewshot_rows) != set(labels):
         raise ValueError("different or repeated test games")
     if any(
-        row["label_unit"] != "episode" or row["technical_label"] not in (*LAYERS, "no_injection")
-        for row in label_rows
+        row["label_unit"] != "episode" or row["technical_label"] not in (*LAYERS, "no_injection") for row in label_rows
     ):
         raise ValueError("technical labels incomplete")
     rows = {key: {**bare_rows[key], **fewshot_rows[key]} for key in bare_rows}
@@ -109,9 +104,7 @@ def main() -> None:
     )
     secondary_order = sorted(
         secondary_names,
-        key=lambda name: exact_discordance_pvalue(
-            comparisons[name]["right_better"], comparisons[name]["right_worse"]
-        ),
+        key=lambda name: exact_discordance_pvalue(comparisons[name]["right_better"], comparisons[name]["right_worse"]),
     )
     prior_adjusted = 0.0
     for rank, name in enumerate(secondary_order):
@@ -128,8 +121,7 @@ def main() -> None:
         if usage["status"] != "complete" or usage["completed"] != 40:
             raise ValueError(f"mode incomplete: {mode}")
         confusion = {
-            layer: dict(Counter(rows[key][mode]["answer"]["cause"] for key in groups[layer]))
-            for layer in groups
+            layer: dict(Counter(rows[key][mode]["answer"]["cause"] for key in groups[layer])) for layer in groups
         }
         by_mode[mode] = {
             "verified_fault_correct": sum(correct(key, mode) for layer in LAYERS for key in groups[layer]),
