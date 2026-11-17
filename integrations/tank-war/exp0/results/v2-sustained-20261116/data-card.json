@@ -1,0 +1,37 @@
+{
+  "dataset_version": "v2-sustained-20261116",
+  "kind": "retrospective reuse of independent-seed games collected after retained-fault screens",
+  "unit": "complete Tank War episode; first same-state local difference is the technical reference window",
+  "game_count": 587,
+  "fault_games": 427,
+  "fault_losses_retained": 403,
+  "verified_fault_loss_labels": 394,
+  "no_injection_controls": {
+    "games": 160,
+    "losses": 126
+  },
+  "causes": [
+    "harness",
+    "weights",
+    "controller"
+  ],
+  "label_provenance": "screened intervention manifest plus same-state raw-state, model request, selected action, and acknowledged command comparison",
+  "outcome_rule": "fault-minus-clean score is reported separately; equal clean/fault outcomes do not exclude a local layer label",
+  "annotation_status": "machine evidence only; no new human review",
+  "split": "validation screens use 128 seed groups with both seats; collection uses distinct final_test seed groups",
+  "storage": "labels and control manifest here; raw games, requests, replies, states, attempts and event logs remain in the pinned v0-pilot source directories referenced by private labels",
+  "blind_use": "not certified as a fresh independent blind test; sample exposure must be audited before any diagnosis",
+  "limitations": [
+    "One sustained fault family per layer; this is not a family-transfer test.",
+    "The harness strategy setting is used in observation and plan revalidation; its functional boundary is mixed.",
+    "A local change does not prove that it caused the whole-game loss.",
+    "Previously collected games may have appeared in development; do not claim a fresh blind test.",
+    "Harness collection is incomplete at 107/160 planned fault games; all 107 complete games are retained.",
+    "The original full #183 benchmark requires more independent fault families and human review."
+  ],
+  "summary_sha256": "a3109e5915fb7555e061f09b3f784512165028d2fe4ae5367dada55b644baaee",
+  "labels_sha256": "63a3f672c9f72cadc48be4ce6d941aa3559b8433334236380d8962c67ed21693",
+  "controls_sha256": "8f87f3d3850f0c67dd046a633cec44ad8ddc35305f3958d855c5b788edfeb0c7",
+  "independent_recheck_sha256": "4f7011269cbab0d9c55bef26bcdf0df92596eca8f7b9a9af9f4920e3198a488f",
+  "independent_recheck_role": "Post-collection descriptive check; original 128-seed validation screens remain the retention gate."
+}

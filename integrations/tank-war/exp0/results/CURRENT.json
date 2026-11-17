@@ -1,0 +1,8 @@
+{
+  "primary_dataset": "v2-sustained-20261116",
+  "primary_dataset_role": "retained sustained-fault games for the next attribution experiment",
+  "historical_diagnosis": "v1-critical-window-20261115",
+  "historical_diagnosis_role": "completed diagnosis on earlier one-decision faults; scores do not transfer to v2",
+  "private_dataset_root": "/data/xinkaiz/system0/exp0/tank-war/v2-sustained-20261116/",
+  "blind_test_status": "v2 has not been certified as unexposed or diagnosed"
+}

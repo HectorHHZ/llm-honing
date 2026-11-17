@@ -1,5 +1,9 @@
 # Tank War Exp 0: scoped attribution result
 
+**Historical result.** The [current dataset index](../README.md) selects the
+screened sustained-fault v2 data for future attribution tests. The scores below
+remain tied to the original 40 v1 games and are not v2 diagnosis scores.
+
 Related: [#183](https://github.com/HectorHHZ/llm-honing/issues/183), [#174](https://github.com/HectorHHZ/llm-honing/issues/174), and the [registered protocol](../../PROTOCOL.md).
 
 ## Decision

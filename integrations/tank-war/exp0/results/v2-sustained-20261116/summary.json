@@ -1,0 +1,87 @@
+{
+  "version": "v2-sustained-20261116",
+  "protocol_sha256": "53da988c5b5b33198ad82750fea1ed3239b999679c4badc6566ca88480d02c13",
+  "status": "retrospective_assembly_of_previously_screened_and_collected_games",
+  "screens": {
+    "harness": {
+      "instance": "point_blank_pursuit-v1",
+      "mean_fault_minus_clean": -0.150390625,
+      "ci95": [
+        -0.220703125,
+        -0.080078125
+      ],
+      "screen_sha256": "fd62e2e195603a8b0db7d23a1e9e030e16f17fcecd45a30e8f625abee0be54fc"
+    },
+    "weights": {
+      "instance": "reverse_strength_2p5-v1",
+      "mean_fault_minus_clean": -0.291015625,
+      "ci95": [
+        -0.349609375,
+        -0.232421875
+      ],
+      "screen_sha256": "3b430c43d0adaf09c16c2207d118da5535507afcc5b8c49240c2b50eeaf3606a"
+    },
+    "controller": {
+      "instance": "swap_selected_turn-v1",
+      "mean_fault_minus_clean": -0.291015625,
+      "ci95": [
+        -0.3515625,
+        -0.23046875
+      ],
+      "screen_sha256": "f0d288ebf91587621135b73f0e1712035fe850be68268e41e5c9ec4849579561"
+    }
+  },
+  "layers": {
+    "harness": {
+      "collected_games": 107,
+      "retained_games": 107,
+      "losses": 98,
+      "verified_local_effects": 98,
+      "verified_fault_losses": 89,
+      "clean_better_pairs": 20,
+      "fault_better_pairs": 8,
+      "equal_pairs": 79,
+      "unverified_reasons": {
+        "first local difference does not isolate the declared layer": 7,
+        "no same-state local action difference": 2
+      }
+    },
+    "weights": {
+      "collected_games": 160,
+      "retained_games": 160,
+      "losses": 155,
+      "verified_local_effects": 160,
+      "verified_fault_losses": 155,
+      "clean_better_pairs": 33,
+      "fault_better_pairs": 4,
+      "equal_pairs": 123,
+      "unverified_reasons": {}
+    },
+    "controller": {
+      "collected_games": 160,
+      "retained_games": 160,
+      "losses": 150,
+      "verified_local_effects": 160,
+      "verified_fault_losses": 150,
+      "clean_better_pairs": 33,
+      "fault_better_pairs": 6,
+      "equal_pairs": 121,
+      "unverified_reasons": {}
+    }
+  },
+  "controls": {
+    "games": 160,
+    "losses": 126
+  },
+  "fault_loss_utilization": {
+    "retained": 403,
+    "complete": 403
+  },
+  "verified_fault_losses": 394,
+  "limitations": [
+    "One sustained fault family per layer; this is not a family-transfer test.",
+    "The harness strategy setting is used in observation and plan revalidation; its functional boundary is mixed.",
+    "A local change does not prove that it caused the whole-game loss.",
+    "Previously collected games may have appeared in development; do not claim a fresh blind test."
+  ]
+}
