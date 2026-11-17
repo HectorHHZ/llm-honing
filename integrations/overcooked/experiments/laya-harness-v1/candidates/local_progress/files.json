@@ -1,0 +1,17 @@
+[
+  {
+    "content": "{\"history_steps\": 4}",
+    "kind": "settings",
+    "path": "overcooked/controller.json"
+  },
+  {
+    "content": "{\"action\": \"Which action produces useful progress right now? Read each immediate effect. If already facing a useful supply, pot or serving station, interact now. Turning does not pick up or deliver anything. Avoid repeated blocked turns and ineffective interactions. Otherwise move toward the next ingredient, pot, dish or serving station needed for soup.\"}",
+    "kind": "instructions",
+    "path": "overcooked/questions.json"
+  },
+  {
+    "content": "{\"context\": \"readable\", \"choices\": \"local_effects\"}",
+    "kind": "settings",
+    "path": "overcooked/presentation.json"
+  }
+]

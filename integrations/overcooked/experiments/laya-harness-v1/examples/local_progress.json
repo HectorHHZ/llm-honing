@@ -1,0 +1,88 @@
+{
+  "purpose": "Exact first decision from the recorded search episode",
+  "request": {
+    "id": "overcooked-p0-t0-154ad2604fa9",
+    "parts": {
+      "details": [],
+      "essential": [
+        "You control chef 0. Maximize shared soup delivery points in 400 ticks.\nYour fixed teammate independently collects, cooks and serves. Both act from the same public state; its next action is hidden. Thinking does not advance game time.\nTick 0; remaining 400; team score 0.0; delivered 0.\nFull map cramped_room, width 5, height 4. Coordinates (x,y): origin upper-left, x right, y down.\nMap legend: .=floor, X=counter, O=onion supply, T=tomato supply, D=dish supply, P=pot, S=serve.\nrow y=0: XXPXX\nrow y=1: O...O\nrow y=2: X...X\nrow y=3: XDXSX\nChef 0 (YOU): at [1, 2], facing north, holding empty hands.\nChef 1 (teammate): at [3, 1], facing north, holding empty hands.\nObjects on counters and in pots (all other stations/counters are empty):\nPot capacity: 3 ingredients.\nAllowed soup: onion+onion+onion; cook 20 ticks; delivery reward 20.\nBonus orders: []; order bonus 2.\nBoth chefs share delivery rewards. Actions resolve together, one native tick per joint action.\nA direction moves one floor tile and sets facing; blocked movement can still change facing.\nChefs cannot share a tile or swap positions in one tick. Collisions cancel their movement.\nINTERACT affects the adjacent tile in the direction the chef is facing.\nEmpty hands take ingredients/dishes from dispensers or pick up an object from a counter.\nHolding an object: INTERACT places it on an empty counter. Ingredients can be added to idle pots.\nWith empty hands, INTERACT with an idle pot containing ingredients to start cooking.\nA dish is needed to collect ready soup; deliver the soup at S to score. Cooking uses ticks, not seconds.\nAll six actions are allowed; an ineffective interaction is a native no-op, not an illegal action.\nThe episode ends at its fixed step budget; task goals do not end the native episode early.\nRecent joint actions (chef 0, chef 1) and reward:"
+      ],
+      "logs": [],
+      "memory": []
+    },
+    "questions": {
+      "action": {
+        "criteria": {
+          "EAST": "Face east toward [2, 2]: move one floor tile.",
+          "INTERACT": "Interact with [1, 1]: no useful interaction at the faced tile.",
+          "NORTH": "Face north toward [1, 1]: move one floor tile.",
+          "SOUTH": "Face south toward [1, 3]: turn toward the dish dispenser without moving; interact on a later tick.",
+          "STAY": "Wait one tick without moving or interacting; cooking progresses.",
+          "WEST": "Face west toward [0, 2]: turn toward the counter without moving; interact on a later tick."
+        },
+        "instructions": "Which action produces useful progress right now? Read each immediate effect. If already facing a useful supply, pot or serving station, interact now. Turning does not pick up or deliver anything. Avoid repeated blocked turns and ineffective interactions. Otherwise move toward the next ingredient, pot, dish or serving station needed for soup.",
+        "type": "choice"
+      }
+    }
+  },
+  "response": {
+    "answers": {
+      "action": {
+        "action": {
+          "act_probability": 1.0
+        },
+        "answer_confidence": 0.2548,
+        "choice": "NORTH",
+        "confidence": 0.0366,
+        "probabilities": {
+          "EAST": 0.1469,
+          "INTERACT": 0.2284,
+          "NORTH": 0.2548,
+          "SOUTH": 0.1176,
+          "STAY": 0.1697,
+          "WEST": 0.0826
+        },
+        "type": "choice"
+      }
+    },
+    "id": "overcooked-p0-t0-154ad2604fa9",
+    "latencyMs": 230.98983099998804,
+    "modelResult": {
+      "answers": {
+        "action": {
+          "action": {
+            "act_probability": 1.0
+          },
+          "answer_confidence": 0.2548,
+          "choice": "NORTH",
+          "confidence": 0.0366,
+          "probabilities": {
+            "EAST": 0.1469,
+            "INTERACT": 0.2284,
+            "NORTH": 0.2548,
+            "SOUTH": 0.1176,
+            "STAY": 0.1697,
+            "WEST": 0.0826
+          },
+          "type": "choice"
+        }
+      },
+      "model": "laya-rl-agent",
+      "usage": {
+        "input_tokens": 672,
+        "output_tokens": 0
+      }
+    },
+    "stateText": "You control chef 0. Maximize shared soup delivery points in 400 ticks.\nYour fixed teammate independently collects, cooks and serves. Both act from the same public state; its next action is hidden. Thinking does not advance game time.\nTick 0; remaining 400; team score 0.0; delivered 0.\nFull map cramped_room, width 5, height 4. Coordinates (x,y): origin upper-left, x right, y down.\nMap legend: .=floor, X=counter, O=onion supply, T=tomato supply, D=dish supply, P=pot, S=serve.\nrow y=0: XXPXX\nrow y=1: O...O\nrow y=2: X...X\nrow y=3: XDXSX\nChef 0 (YOU): at [1, 2], facing north, holding empty hands.\nChef 1 (teammate): at [3, 1], facing north, holding empty hands.\nObjects on counters and in pots (all other stations/counters are empty):\nPot capacity: 3 ingredients.\nAllowed soup: onion+onion+onion; cook 20 ticks; delivery reward 20.\nBonus orders: []; order bonus 2.\nBoth chefs share delivery rewards. Actions resolve together, one native tick per joint action.\nA direction moves one floor tile and sets facing; blocked movement can still change facing.\nChefs cannot share a tile or swap positions in one tick. Collisions cancel their movement.\nINTERACT affects the adjacent tile in the direction the chef is facing.\nEmpty hands take ingredients/dishes from dispensers or pick up an object from a counter.\nHolding an object: INTERACT places it on an empty counter. Ingredients can be added to idle pots.\nWith empty hands, INTERACT with an idle pot containing ingredients to start cooking.\nA dish is needed to collect ready soup; deliver the soup at S to score. Cooking uses ticks, not seconds.\nAll six actions are allowed; an ineffective interaction is a native no-op, not an illegal action.\nThe episode ends at its fixed step budget; task goals do not end the native episode early.\nRecent joint actions (chef 0, chef 1) and reward:",
+    "tokenAudit": {
+      "action": {
+        "inputTokens": 672,
+        "options": 6,
+        "stateRoom": 1857,
+        "stateTokens": 481,
+        "stateTruncated": false
+      }
+    },
+    "trimmed": []
+  }
+}

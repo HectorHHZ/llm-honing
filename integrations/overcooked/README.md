@@ -38,6 +38,12 @@ GEPA and Meta-Harness code, protocols and results remain on
 and SFT artifacts also remain in those branches and are excluded here.
 This feature PR makes no training-improvement claim.
 
+The follow-up [base Laya experiment](experiments/laya-harness-v1/README.md)
+preserves six context/choice variants, all 25 model/control recordings and a
+portable GUI replay. It found no score improvement from the tested harnesses.
+The experiment README includes the model identity, results, audits and commands
+to replay the recorded model decisions without a GPU or inference server.
+
 ## Setup and play
 
 The verified game runtime is Windows x86-64 with Python 3.10, the version

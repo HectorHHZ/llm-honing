@@ -46,13 +46,27 @@ def parse_harness(spec: HarnessSpec) -> dict[str, Any]:
         or not questions["action"].strip()
     ):
         raise ValueError("questions must specify nonempty action instructions")
+    presentation_file = spec.get("overcooked/presentation.json")
+    presentation = {"context": "json", "choices": "static"}
+    if presentation_file is not None:
+        if presentation_file.kind != "settings":
+            raise ValueError("presentation must be settings")
+        presentation = json.loads(presentation_file.content)
+        if (
+            not isinstance(presentation, dict)
+            or set(presentation) != {"context", "choices"}
+            or presentation["context"] not in {"json", "readable"}
+            or presentation["choices"] not in {"static", "local_effects"}
+        ):
+            raise ValueError("invalid context/choice presentation")
     return {
         "history_steps": settings["history_steps"],
         "instructions": questions["action"],
+        "presentation": presentation,
         "notes": "\n\n".join(
             f"{p}:\n{f.content}"
             for p, f in spec.files
-            if p not in {"overcooked/controller.json", "overcooked/questions.json"}
+            if p not in {"overcooked/controller.json", "overcooked/questions.json", "overcooked/presentation.json"}
         ),
     }
 

@@ -1,0 +1,17 @@
+[
+  {
+    "content": "{\"history_steps\": 4}\n",
+    "kind": "settings",
+    "path": "overcooked/controller.json"
+  },
+  {
+    "content": "{\"action\": \"Choose chef 0's next physical action to maximize delivered soup. If holding soup, serve it. With a dish, collect ready soup. With an onion, fill an idle pot. With empty hands, start a full idle pot or fetch a needed onion or dish. Move toward the needed station, face it, then interact. Let the teammate pass. Wait only when useful work is unavailable.\"}",
+    "kind": "instructions",
+    "path": "overcooked/questions.json"
+  },
+  {
+    "content": "{\"context\": \"readable\", \"choices\": \"static\"}",
+    "kind": "settings",
+    "path": "overcooked/presentation.json"
+  }
+]

@@ -1,0 +1,141 @@
+{
+  "chef0_rewarded_deliveries": 0,
+  "chef1_rewarded_deliveries": 59,
+  "episodes": [
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--seed--cramped_room",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--seed--asymmetric_advantages",
+      "rewarded_deliveries_by_chef": [
+        0,
+        9
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--readable--cramped_room",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--readable--asymmetric_advantages",
+      "rewarded_deliveries_by_chef": [
+        0,
+        9
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--readable_objective--cramped_room",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--readable_objective--asymmetric_advantages",
+      "rewarded_deliveries_by_chef": [
+        0,
+        9
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--readable_local_effects--cramped_room",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--readable_local_effects--asymmetric_advantages",
+      "rewarded_deliveries_by_chef": [
+        0,
+        9
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--local_progress--cramped_room",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--local_progress--asymmetric_advantages",
+      "rewarded_deliveries_by_chef": [
+        0,
+        9
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--local_progress_no_history--cramped_room",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "search--local_progress_no_history--asymmetric_advantages",
+      "rewarded_deliveries_by_chef": [
+        0,
+        9
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "val--seed--coordination_ring",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "heldout--seed--forced_coordination",
+      "rewarded_deliveries_by_chef": [
+        0,
+        0
+      ]
+    },
+    {
+      "chef0_held_object_changes": 0,
+      "chef0_native_events": {},
+      "key": "heldout--seed--counter_circuit_o_1order",
+      "rewarded_deliveries_by_chef": [
+        0,
+        5
+      ]
+    }
+  ]
+}

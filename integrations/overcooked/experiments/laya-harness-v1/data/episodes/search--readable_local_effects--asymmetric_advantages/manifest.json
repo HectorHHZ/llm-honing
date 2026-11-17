@@ -1,0 +1,61 @@
+{
+  "clock": "one tick per joint action; no simulation during inference",
+  "controller": "model",
+  "format": "overcooked-match-v2",
+  "grading": "native-score-softsign-v1",
+  "kind": "evaluation",
+  "model": {
+    "maxBranches": 16,
+    "metadata": {
+      "checkpointMaxLen": 512,
+      "dtype": "torch.bfloat16",
+      "gpu": "0",
+      "gpuUuid": "GPU-c34cf617-b7b8-710c-be22-0f78e39e4611",
+      "headMaxLen": 512,
+      "layaVersion": "0.3.20",
+      "maxLen": 2048,
+      "path": "/mnt/d/llm-honing/integrations/overcooked/.cache/laya-hf/hub/models--convaiinnovations--laya/snapshots/1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+      "python": "3.12.16",
+      "repo": "convaiinnovations/laya",
+      "revision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+      "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+      "temperatureByOptions": {
+        "choice:11+": 0.5,
+        "choice:2": 1.9063563346862793,
+        "choice:3-5": 1.7601518630981445,
+        "choice:6-10": 1.0000158548355103,
+        "noul:2": 1.983399510383606,
+        "score:3-5": 1.2514300346374512
+      },
+      "torch": "2.14.0+cu130",
+      "transformers": "5.17.0",
+      "weightsSha256": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c"
+    },
+    "ready": true
+  },
+  "policy_checksum": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c",
+  "policy_seed": 0,
+  "runtime": {
+    "native_sha256": "b80c1bd80f10725ae5354152f52ea0eefc21c3e5a2862e7b3f88f9255526a94a",
+    "packages": {
+      "gymnasium": "1.1.1",
+      "numpy": "1.26.4",
+      "overcooked-ai": "2.0.0",
+      "pygame": "2.6.1",
+      "scipy": "1.15.3"
+    },
+    "revision": "739950a079cdaed5a44fcc662efc40244c205d06"
+  },
+  "sample": false,
+  "scenario": {
+    "controlled_player": 0,
+    "layout": "asymmetric_advantages",
+    "max_steps": 400,
+    "old_dynamics": false,
+    "partner": "solo",
+    "score_scale": 40.0,
+    "target_deliveries": 2
+  },
+  "source_identity": "725620353d55b77e71447339ebbbbab6d3a5bd4b9d9be4cf9fc45528626007ca",
+  "spec_id": "h-2348e891ae30aaa3"
+}

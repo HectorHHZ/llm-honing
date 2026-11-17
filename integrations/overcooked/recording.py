@@ -25,6 +25,7 @@ def source_identity() -> str:
                 "engine.py",
                 "policy.py",
                 "decisions.py",
+                "presentation.py",
                 "recording.py",
                 "harness.py",
                 "pins.json",
@@ -165,7 +166,14 @@ def replay(run: Path) -> dict[str, Any]:
                 raise ValueError("recorded baseline action differs")
             if controller in {"model", "teacher"}:
                 recent = history[-settings["history_steps"] :] if settings["history_steps"] else []
-                request = make_request(frame, p, settings["instructions"], recent, settings["notes"])
+                request = make_request(
+                    frame,
+                    p,
+                    settings["instructions"],
+                    recent,
+                    settings["notes"],
+                    presentation=settings["presentation"],
+                )
                 if request != decision["request"]:
                     raise ValueError("recorded model input differs from the actual state/rules/harness")
                 if controller == "teacher":
