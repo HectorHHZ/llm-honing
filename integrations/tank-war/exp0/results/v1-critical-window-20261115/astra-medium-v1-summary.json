@@ -1,0 +1,118 @@
+{
+  "result_version": "episode-only-prompt-v2",
+  "unit": "one cause label per complete game",
+  "provenance": {
+    "sealed_score_sha256": "fc6f2f8811c0ab416226a7d220f8abbf09963f43f18adcd7eef2b13905a541df",
+    "private_technical_labels_sha256": "0108c5a690b822b450e00c31a08f6e9408ffc368ced01c528c17d27469b32557",
+    "no_new_model_calls": false,
+    "post_test_endpoint_change": true,
+    "source_run_freeze_sha256": "fb9c2f45b1754ca1be03566679542b23e1514a32a8d24011f3a5e00f7a1f48d4",
+    "prompt_also_requested_a_window": false
+  },
+  "cases": {
+    "faults": 30,
+    "no_injection_controls": 10
+  },
+  "correct_classification": {
+    "read": {
+      "correct": 11,
+      "total": 30
+    },
+    "probe": {
+      "correct": 30,
+      "total": 30
+    }
+  },
+  "by_layer": {
+    "harness": {
+      "read": {
+        "correct": 1,
+        "total": 10
+      },
+      "probe": {
+        "correct": 10,
+        "total": 10
+      }
+    },
+    "weights": {
+      "read": {
+        "correct": 2,
+        "total": 10
+      },
+      "probe": {
+        "correct": 10,
+        "total": 10
+      }
+    },
+    "controller": {
+      "read": {
+        "correct": 8,
+        "total": 10
+      },
+      "probe": {
+        "correct": 10,
+        "total": 10
+      }
+    }
+  },
+  "confusion": {
+    "read": {
+      "harness": {
+        "uncertain": 5,
+        "controller": 4,
+        "harness": 1
+      },
+      "weights": {
+        "controller": 7,
+        "harness": 1,
+        "weights": 2
+      },
+      "controller": {
+        "weights": 1,
+        "controller": 8,
+        "uncertain": 1
+      },
+      "no_injection": {
+        "controller": 10
+      }
+    },
+    "probe": {
+      "harness": {
+        "harness": 10
+      },
+      "weights": {
+        "weights": 10
+      },
+      "controller": {
+        "controller": 10
+      },
+      "no_injection": {
+        "controller": 3,
+        "uncertain": 1,
+        "weights": 6
+      }
+    }
+  },
+  "paired_probe_minus_read": {
+    "point": 0.6333333333333333,
+    "stratified_bootstrap_95pct": [
+      0.5,
+      0.7666666666666667
+    ],
+    "resamples": 10000,
+    "seed": 183
+  },
+  "controls": {
+    "read": {
+      "unsupported_harness_or_controller": 10,
+      "total": 10,
+      "weights_answer_on_unmodified_loss": 0
+    },
+    "probe": {
+      "unsupported_harness_or_controller": 3,
+      "total": 10,
+      "weights_answer_on_unmodified_loss": 6
+    }
+  },
+  "interpretation": "Post-test episode-only prompt sensitivity on the same games; not an independent blind confirmation."
+}

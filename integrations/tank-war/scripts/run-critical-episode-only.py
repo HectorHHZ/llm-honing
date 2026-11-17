@@ -120,9 +120,9 @@ def one(case: dict, mode: str, source: Path, out: Path, prompt: str) -> dict:
         "--output-last-message",
         "/work/answer.json",
         "-m",
-        "gpt-6-sol",
+        read(out / "freeze.json")["model"],
         "-c",
-        'model_reasoning_effort="high"',
+        f'model_reasoning_effort="{read(out / "freeze.json")["effort"]}"',
         "-",
     ]
     started = time.monotonic()
@@ -153,8 +153,8 @@ def one(case: dict, mode: str, source: Path, out: Path, prompt: str) -> dict:
     attempt.update(
         episode_id=episode_id,
         mode=mode,
-        model="gpt-6-sol",
-        effort="high",
+        model=read(out / "freeze.json")["model"],
+        effort=read(out / "freeze.json")["effort"],
         input_sha256=sha(input_path),
         checks_sha256=hashlib.sha256(checks.encode()).hexdigest(),
         prompt_sha256=sha(out / "prompt.txt"),
@@ -181,6 +181,11 @@ def main() -> None:
         for filename in ("protocol.json", "prompt.txt", "schema.json")
     ):
         raise ValueError("episode-only freeze changed")
+    protocol = read(out / "protocol.json")
+    if freeze["model"] not in {"gpt-6-sol", "gpt-6-astra"} or freeze["effort"] not in {"medium", "high"}:
+        raise ValueError("unsupported frozen model or effort")
+    if (freeze["model"], freeze["effort"]) != (protocol["model"], protocol["effort"]):
+        raise ValueError("frozen model or effort differs from protocol")
     if sha(source / "sample-freeze.json") != freeze["source_sample_freeze_sha256"]:
         raise ValueError("source sample changed")
     if read(source / "replays" / "summary.json")["valid"] != len(freeze["cases"]):

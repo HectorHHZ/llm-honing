@@ -20,6 +20,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-blind", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--model", choices=("gpt-6-sol", "gpt-6-astra"), default="gpt-6-sol")
+    parser.add_argument("--effort", choices=("medium", "high"), default="high")
     args = parser.parse_args()
     source, out = args.source_blind, args.out
     if (out / "freeze.json").exists() or any((out / mode).exists() for mode in ("read", "probe")):
@@ -27,6 +29,9 @@ def main() -> None:
     for filename in ("protocol.json", "prompt.txt", "schema.json"):
         if not (out / filename).exists():
             raise FileNotFoundError(out / filename)
+    protocol = read(out / "protocol.json")
+    if (protocol["model"], protocol["effort"]) != (args.model, args.effort):
+        raise ValueError("requested model or effort differs from protocol")
     source_freeze = read(source / "sample-freeze.json")
     if source_freeze["status"] != "frozen_before_model_answers":
         raise ValueError("source blind sample is not sealed")
@@ -53,11 +58,13 @@ def main() -> None:
     freeze = {
         "status": "frozen_before_episode_only_answers",
         "interpretation": "post-test prompt sensitivity on the same 40 games; not an independent blind sample",
-        "model": "gpt-6-sol",
-        "effort": "high",
+        "model": args.model,
+        "effort": args.effort,
         "modes": ["read", "probe"],
         "calls_per_case_per_mode": 1,
         "maximum_calls": 80,
+        "maximum_input_tokens_per_mode": protocol.get("maximum_input_tokens_per_mode"),
+        "maximum_output_tokens_per_mode": protocol.get("maximum_output_tokens_per_mode"),
         "source_sample_freeze_sha256": sha(source / "sample-freeze.json"),
         "protocol_sha256": sha(out / "protocol.json"),
         "prompt_sha256": sha(out / "prompt.txt"),
