@@ -1,8 +1,8 @@
 {
-  "primary_dataset": "v2-sustained-20261116",
-  "primary_dataset_role": "retained sustained-fault games for the next attribution experiment",
+  "primary_dataset": "v3-sustained-complete-20261117",
+  "primary_dataset_role": "complete retained sustained-fault collection for attribution testing",
   "historical_diagnosis": "v1-critical-window-20261115",
-  "historical_diagnosis_role": "completed diagnosis on earlier one-decision faults; scores do not transfer to v2",
-  "private_dataset_root": "/data/xinkaiz/system0/exp0/tank-war/v2-sustained-20261116/",
-  "blind_test_status": "v2 has not been certified as unexposed or diagnosed"
+  "historical_diagnosis_role": "completed diagnosis on earlier one-decision faults; scores do not transfer to v3",
+  "private_dataset_root": "/data/xinkaiz/system0/exp0/tank-war/v3-sustained-complete-20261117/",
+  "blind_test_status": "a distinct-seed 40-game scoped follow-up is frozen and its read/probe diagnosis is in progress"
 }

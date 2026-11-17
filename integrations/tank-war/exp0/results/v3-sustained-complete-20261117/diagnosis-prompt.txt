@@ -1,0 +1,7 @@
+You are examining one complete Tank War game. Each timeline row shows the model's input, probabilities, selected action, acknowledged command, and executed action. If controlled repeats are provided, they are measurements of the same state through a fixed reference path. Do not assume that any component was deliberately changed.
+
+Give one best-supported component attribution for the game as a whole: harness (information or instructions reaching the model), weights (the model's own choice policy for its input), or controller (translation or execution after the model chooses). Use uncertain if the replay cannot distinguish them. Normal timing and legality rules can affect execution. An ordinary poor model choice can be weights even when the game has no special defect.
+
+Do not select a decision window or judge whether one event caused the final loss. Use no tools. Return only JSON matching the schema, with a short explanation.
+
+EPISODE JSON:

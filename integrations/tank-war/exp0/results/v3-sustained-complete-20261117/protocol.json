@@ -1,0 +1,36 @@
+{
+  "version": "v3-sustained-complete-20261117",
+  "purpose": "Complete the previously screened sustained fault collection and retain every finished game",
+  "selection_rule": "Use the preexisting retained point_blank_pursuit, reverse_strength_2p5, and swap_selected_turn instances; retain every complete collected game and every loss, with cause labels only after same-state local evidence.",
+  "score_gate": "128 seed blocks, both seats, mean fault-minus-clean at most -0.05 and paired 95% interval upper below zero",
+  "label_rule": "One episode-level layer label for a fault loss only if the first local action difference occurs at the same raw-state hash and isolates the declared layer; outcome effect is separate.",
+  "clean_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/formal-controls-final-v1/games",
+  "layers": {
+    "harness": {
+      "screen": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/validation-harness-expansion-gpu5-v3-128/point_blank_pursuit/screen.json",
+      "screen_sha256": "fd62e2e195603a8b0db7d23a1e9e030e16f17fcecd45a30e8f625abee0be54fc",
+      "screen_fault_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/validation-harness-expansion-gpu5-v3-128/point_blank_pursuit/fault",
+      "fault_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/formal-faults-final-v2/harness-point-blank-pursuit/games"
+    },
+    "weights": {
+      "screen": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/validation-weight-backup-gpu2-128/reverse_strength_2p5/screen.json",
+      "screen_sha256": "3b430c43d0adaf09c16c2207d118da5535507afcc5b8c49240c2b50eeaf3606a",
+      "screen_fault_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/validation-weight-backup-gpu2-128/reverse_strength_2p5/fault",
+      "fault_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/formal-faults-final-v1/reverse_strength_2p5"
+    },
+    "controller": {
+      "screen": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/validation-extra-128-v4/controller/swap_selected_turn/screen.json",
+      "screen_sha256": "f0d288ebf91587621135b73f0e1712035fe850be68268e41e5c9ec4849579561",
+      "screen_fault_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/validation-extra-128-v4/controller/swap_selected_turn/fault",
+      "fault_games": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/formal-faults-final-v1/controller-swap-selected-turn"
+    }
+  },
+  "prior_protocol_sha256": "53da988c5b5b33198ad82750fea1ed3239b999679c4badc6566ca88480d02c13",
+  "collection_resume": {
+    "gpu": 6,
+    "maximum_concurrent_project_gpus": 2,
+    "service_policy": "one own service, no --share-gpu, stop when collection exits",
+    "resume_script": "/data/xinkaiz/system0/exp0/tank-war/v0-pilot/resume-harness-point-blank-2gpu-limit.sh",
+    "interrupted_attempt": "preserved under formal-faults-final-v2/harness-point-blank-pursuit/interrupted-attempts/"
+  }
+}
