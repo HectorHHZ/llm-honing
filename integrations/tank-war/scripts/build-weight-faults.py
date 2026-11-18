@@ -17,6 +17,14 @@ import struct
 from pathlib import Path
 from typing import Any
 
+INFERENCE_AUX_FILES = {
+    "config.json",
+    "backbone_config/config.json",
+    "tokenizer/tokenizer.json",
+    "tokenizer/tokenizer_config.json",
+    "tokenizer/chat_template.jinja",
+}
+
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -35,6 +43,18 @@ def checkpoint(manifest_path: Path) -> tuple[dict[str, Any], Path]:
     if not weights.is_file() or sha256(weights) != manifest.get("weightsSha256"):
         raise ValueError(f"checkpoint digest mismatch: {manifest_path}")
     return manifest, weights
+
+
+def auxiliary_hashes(folder: Path) -> dict[str, str]:
+    files = {}
+    for path in folder.rglob("*"):
+        name = path.relative_to(folder).as_posix()
+        if name == "best.safetensors" or path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError(f"unsupported checkpoint entry: {name}")
+        files[name] = sha256(path)
+    return files
 
 
 def tensor_span(weights: Path) -> tuple[int, int, bytes, int]:
@@ -83,9 +103,12 @@ def build(
     reverse_manifest_path: Path,
     out: Path,
     strengths: tuple[float, ...],
-    clean_weights_sha256: str,
+    freeze: dict[str, Any],
     clean_manifest_path: Path | None = None,
 ) -> list[dict[str, Any]]:
+    clean_weights_sha256 = freeze["model"]["clean_weights_sha256"]
+    inputs = freeze["selected_faults"]["weights_builder_inputs"]
+    expected_aux = inputs["checkpoint_aux_sha256"]
     if (
         not strengths
         or len(strengths) != len(set(strengths))
@@ -94,10 +117,18 @@ def build(
         raise ValueError("strengths must be distinct finite negative numbers")
     if re.fullmatch(r"[0-9a-f]{64}", clean_weights_sha256) is None:
         raise ValueError("clean weights SHA-256 must be 64 lowercase hex characters")
+    if set(expected_aux) != INFERENCE_AUX_FILES:
+        raise ValueError("freeze must pin every non-weight inference file")
     if out.exists():
         raise FileExistsError(out)
     prior_manifest, prior = checkpoint(prior_manifest_path)
     reverse_manifest, reverse = checkpoint(reverse_manifest_path)
+    if prior_manifest["weightsSha256"] != inputs["prior_edit_weights_sha256"]:
+        raise ValueError("prior checkpoint differs from freeze")
+    if reverse_manifest["weightsSha256"] != inputs["reverse_edit_weights_sha256"]:
+        raise ValueError("reverse checkpoint differs from freeze")
+    if auxiliary_hashes(reverse.parent) != expected_aux:
+        raise ValueError("reverse checkpoint non-weight files differ from freeze")
     start, end, header, size = tensor_span(prior)
     if tensor_span(reverse) != (start, end, header, size):
         raise ValueError("source checkpoints have different tensor layouts")
@@ -109,6 +140,8 @@ def build(
         clean_manifest, clean = checkpoint(clean_manifest_path)
         if clean_manifest["weightsSha256"] != clean_weights_sha256:
             raise ValueError("clean checkpoint does not match declared digest")
+        if any(sha256(clean.parent / name) != digest for name, digest in expected_aux.items()):
+            raise ValueError("clean checkpoint non-weight files differ from freeze")
         if tensor_span(clean) != (start, end, header, size) or not same_except_scalar(prior, clean, start, end, size):
             raise ValueError("clean checkpoint differs outside scalar.weight")
         clean_values = scalar_values(clean, start)
@@ -124,8 +157,12 @@ def build(
     for strength in strengths:
         name = f"reverse_strength_{str(abs(strength)).replace('.', 'p')}"
         destination = out / name
-        shutil.copytree(reverse.parent, destination / "checkpoint", symlinks=True)
+        shutil.copytree(reverse.parent, destination / "checkpoint", symlinks=False)
         edited = destination / "checkpoint" / "best.safetensors"
+        if edited.is_symlink():
+            raise ValueError("copied weights must be a regular file")
+        if auxiliary_hashes(edited.parent) != expected_aux:
+            raise ValueError("copied checkpoint non-weight files differ from freeze")
         values = [
             ((1 + strength) / 2) * p + ((1 - strength) / 2) * r
             for p, r in zip(prior_values, reverse_values, strict=True)
@@ -174,18 +211,19 @@ def build(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clean-manifest", type=Path)
-    parser.add_argument("--clean-weights-sha256", required=True)
+    parser.add_argument("--freeze", required=True, type=Path)
     parser.add_argument("--prior-manifest", required=True, type=Path)
     parser.add_argument("--reverse-manifest", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--strength", required=True, type=float, action="append")
     args = parser.parse_args()
+    freeze = json.loads(args.freeze.read_text(encoding="utf-8"))
     records = build(
         args.prior_manifest,
         args.reverse_manifest,
         args.out,
         tuple(args.strength),
-        args.clean_weights_sha256,
+        freeze,
         args.clean_manifest,
     )
     print(json.dumps({"candidates": len(records), "out": str(args.out)}))

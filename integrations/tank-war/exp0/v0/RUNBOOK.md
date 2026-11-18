@@ -56,8 +56,9 @@ node integrations/tank-war/scripts/check-v0-faults.mjs \
   --controller-fault-file="$EXP0_V0_BUILD/controller/drop_fire_after_selection.json"
 ```
 
-The checker must return the four clean/fault harness/controller SHA-256 values
-in `freeze.json`. It checks the original builder output against the recorded
+The checker must return the clean/fault harness SHA-256 values and all three
+clean, altered-harness and controller-fault controller SHA-256 values in
+`freeze.json`. It checks the original builder output against the recorded
 40-game release, including the exact post-selection controller manifest.
 The pinned recorded game runtime, not the builder, applies that manifest.
 
@@ -68,13 +69,16 @@ They are model artifacts, not uploaded dataset files. The builder uses CPU
 file operations and changes only `scalar.weight`; it refuses source checkpoints
 whose digests or tensor layouts differ. It needs enough free disk for two full
 NanoJev checkpoints. No GPU or training is needed.
+The freeze also pins every non-weight file copied into the edited checkpoint:
+the run config, backbone config, tokenizer files and chat template. The builder
+copies symlink targets as regular files before editing the weight file.
 
 ```bash
 EXP0_V0_BUILD="$(mktemp -d)"
 python3 integrations/tank-war/scripts/build-weight-faults.py \
+  --freeze=integrations/tank-war/exp0/v0/freeze.json \
   --prior-manifest=/data/xinkaiz/honing-pr141-gpu4-20261103/candidate/checkpoint.json \
   --reverse-manifest=/data/xinkaiz/system0/exp0/tank-war/v0-pilot/pilot1/candidates/weights/reverse_prior_scalar_edit/checkpoint.json \
-  --clean-weights-sha256=f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b \
   --strength=-3.0 --strength=-4.0 --out="$EXP0_V0_BUILD/weights"
 ```
 
@@ -91,7 +95,9 @@ node integrations/tank-war/scripts/check-v0-faults.mjs \
   --weights-root="$EXP0_V0_BUILD/weights"
 ```
 
-The extra result must be `edited_checkpoints_verified: 2`. If it fails, retain
+The extra result must be `edited_checkpoints_verified: 2`. This verifies the
+complete copied checkpoint file list and each non-weight file hash, as well as
+the edited weights. If it fails, retain
 the candidate and error for the attempt log and do not assign a weights label.
 The clean release digest is checked against recorded match metadata here; a
 source-side clean checkpoint manifest can also be passed with
