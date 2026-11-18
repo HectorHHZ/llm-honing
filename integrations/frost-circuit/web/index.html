@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eaf1f4">
+  <meta name="description" content="Frost Circuit, a playable turn-based tactical roguelike.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <title>Frost Circuit</title>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="identity">
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <rect x="3" y="3" width="42" height="42" rx="10" fill="#16354b"/>
+          <path d="M24 10v28m-12-7 24-14m-24 0 24 14M20 12l4 5 4-5m-8 24 4-5 4 5" fill="none" stroke="#a0eef4" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="24" cy="24" r="3.6" fill="#d8ffff"/>
+        </svg>
+        <div>
+          <p class="eyebrow">Honing arcade / 02</p>
+          <h1>Frost Circuit</h1>
+        </div>
+      </div>
+      <span class="tag">Turn-based roguelike</span>
+    </header>
+
+    <section class="playfield" aria-label="Frost Circuit game">
+      <div class="arena">
+        <div class="arena-bar">
+          <div><span id="sector" class="sector"></span><strong id="turn"></strong></div>
+          <div class="arena-buttons">
+            <button id="takeover" class="small" hidden>Take control</button>
+            <button id="pause" class="small" hidden>Pause demo</button>
+            <button id="reset" class="small" hidden>New run</button>
+          </div>
+        </div>
+        <div class="viewport">
+          <canvas id="game" width="924" height="612" tabindex="0" aria-label="Frost station grid. Click adjacent tiles or use arrow keys to move or strike. Space uses Pulse."></canvas>
+          <div class="overlay" id="overlay">
+            <div id="brief" class="modal">
+              <p class="eyebrow">Salvage mission</p>
+              <h2>Recover three cores.</h2>
+              <p>Watch the red tiles, retrieve the glowing core, and return to the airlock.</p>
+              <div class="seed-row">
+                <label for="seed">Map seed</label>
+                <input id="seed" type="number" min="0" max="4294967295" step="1" required>
+                <button id="random-seed" class="plain">Shuffle</button>
+              </div>
+              <div class="modal-actions">
+                <button id="start" class="primary">Start run <span aria-hidden="true">↗</span></button>
+                <button id="demo" class="secondary">▶ Watch demo</button>
+              </div>
+            </div>
+            <div id="upgrade-card" class="modal wide" hidden>
+              <p class="eyebrow" id="upgrade-label">Airlock reached</p>
+              <h2>Fit a module.</h2>
+              <div id="upgrades" class="upgrade-options"></div>
+            </div>
+            <div id="finish" class="modal" hidden>
+              <p class="eyebrow">Run complete</p>
+              <h2 id="finish-title"></h2>
+              <p id="finish-summary"></p>
+              <div class="modal-actions">
+                <button id="retry" class="primary">Run it again</button>
+                <button id="briefing" class="secondary">Back to briefing</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="arena-footer" aria-label="Map legend">
+          <span><b class="rover-dot"></b> Your rover</span>
+          <span><b class="core-dot"></b> Core</span>
+          <span><b class="danger-dot"></b> Incoming attack</span>
+          <span><b class="exit-dot"></b> Airlock</span>
+        </div>
+      </div>
+
+      <aside class="console" aria-label="Run status">
+        <div class="card mission">
+          <p class="eyebrow">Current objective</p>
+          <h2 id="objective">Recover the core</h2>
+          <p id="objective-detail"></p>
+          <ol id="route" class="route" aria-label="Recovered cores"></ol>
+        </div>
+        <div class="card instruments">
+          <div class="metric"><span>Hull</span><strong id="hull"></strong></div>
+          <progress id="health" aria-label="Hull health"></progress>
+          <div class="metric"><span>Pulse charges</span><strong id="charge"></strong></div>
+          <div class="action-buttons">
+            <button id="pulse" class="primary">Pulse <kbd>Space</kbd></button>
+            <button id="wait" class="secondary">Wait <kbd>.</kbd></button>
+          </div>
+          <p class="pulse-hint">Pulse interrupts nearby attacks.</p>
+        </div>
+        <div class="card feed">
+          <p class="eyebrow">Station feed</p>
+          <p id="warning" class="warning" aria-live="polite"></p>
+          <ul id="log" aria-label="Recent events"></ul>
+          <p class="controls">Click an adjacent tile or use arrows to move. Move into a drone to strike.</p>
+          <button id="export" class="plain export" disabled>Save action trace</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script src="engine.js"></script>
+  <script src="render.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

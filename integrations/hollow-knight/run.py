@@ -8,14 +8,29 @@ import math
 import os
 import plistlib
 import subprocess
+import sys
 import tempfile
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+# Resolve the sibling stdlib-only receiver without exposing integrations as importable runtimes.
+_shared_import_path = str(Path(__file__).resolve().parents[1])
+sys.path.insert(0, _shared_import_path)
+try:
+    from _shared.decision import DecisionClient as DecisionClient
+    from _shared.decision import checked_action as checked_decision_action
+    from _shared.decision import finite_json_float as finite_json_float
+    from _shared.decision import reject_json_constant as reject_json_constant
+    from _shared.decision import strict_json_loads as strict_json_loads
+    from _shared.decision import unique_object as unique_object
+finally:
+    # Remove only our inserted object, preserving preexisting equal path entries.
+    for _shared_index, _shared_entry in enumerate(sys.path):
+        if _shared_entry is _shared_import_path:
+            del sys.path[_shared_index]
+            break
 
 ACTIONS = {
     "wait": "Stay still briefly.",
@@ -60,119 +75,8 @@ def request_for(observation: dict[str, Any], frames: int) -> dict[str, Any]:
 
 
 def checked_action(response: dict[str, Any], request: dict[str, Any]) -> tuple[str, float]:
-    """Require the complete submitted state and audited choices before sending input to Unity."""
-    if type(response.get("id")) is not int or response["id"] != request["id"]:
-        raise ValueError("Decision response id does not match the observation")
-    # This adapter submits only required state; there is no optional history to prune.
-    if response.get("trimmed") != []:
-        raise ValueError("Decision response trimmed context or omitted its trimmed audit")
-    state = "\n".join(
-        text for section in ("essential", "details", "memory", "logs") for text in request["parts"].get(section, [])
-    )
-    if response.get("stateText") != state:
-        raise ValueError("Decision response stateText differs from the complete submitted context")
-    audits = response.get("tokenAudit")
-    if not isinstance(audits, dict) or set(audits) != set(request["questions"]):
-        raise ValueError("Decision response tokenAudit does not cover the submitted questions")
-    for key, question in request["questions"].items():
-        audit = audits[key]
-        if not isinstance(audit, dict) or audit.get("stateTruncated") is not False:
-            raise ValueError(f"Decision tokenAudit reports truncated or unaudited context for {key}")
-        if type(audit.get("options")) is not int or audit["options"] != len(question["criteria"]):
-            raise ValueError(f"Decision tokenAudit has the wrong option count for {key}")
-        # DJEV reports null token counts. Validate all available counts without inventing them.
-        for field in ("stateTokens", "stateRoom", "inputTokens", "maxInputTokens"):
-            value = audit.get(field)
-            if value is not None and (type(value) is not int or value < 0):
-                raise ValueError(f"Decision tokenAudit has an invalid {field} for {key}")
-        size, room, total, limit = (
-            audit.get(field) for field in ("stateTokens", "stateRoom", "inputTokens", "maxInputTokens")
-        )
-        if (
-            (size is not None and room is not None and size > room)
-            or (size is not None and total is not None and size > total)
-            or (total is not None and limit is not None and total > limit)
-            or (state and any(value == 0 for value in (size, room, total, limit)))
-        ):
-            raise ValueError(f"Decision tokenAudit contradicts complete context for {key}")
-    try:
-        answer = response["answers"]["action"]
-        action, probabilities = answer["choice"], answer["probabilities"]
-    except (KeyError, TypeError) as error:
-        raise ValueError("Decision response has no action distribution") from error
-    if (
-        not isinstance(probabilities, dict)
-        or set(probabilities) != set(ACTIONS)
-        or not isinstance(action, str)
-        or action not in ACTIONS
-    ):
-        raise ValueError("Decision response does not cover the offered actions")
-    values = list(probabilities.values())
-    if any(
-        isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or not 0 <= p <= 1
-        for p in values
-    ):
-        raise ValueError("Invalid model probabilities")
-    # Laya returns four decimal places, allowing at most 0.00005 rounding error per option.
-    if abs(math.fsum(values) - 1) > len(ACTIONS) * 0.00005 + 1e-8:
-        raise ValueError("Model probabilities do not sum to one within rounding precision")
-    if probabilities[action] != max(values):
-        raise ValueError("Chosen input is not the model's argmax")
-    return action, float(probabilities[action])
-
-
-def reject_json_constant(value: str) -> Any:
-    """Keep NaN/Infinity out of the JSON trace as well as the game input."""
-    raise ValueError(f"Nonstandard JSON numeric constant: {value}")
-
-
-def finite_json_float(value: str) -> float:
-    """Reject exponent overflow before a decoded response can enter the JSON trace."""
-    result = float(value)
-    if not math.isfinite(result):
-        raise ValueError(f"Nonfinite JSON number: {value}")
-    return result
-
-
-class DecisionClient:
-    """Use Honing's existing health and decide routes without loading a model in the game client."""
-
-    def __init__(self, url: str, timeout_seconds: float = 180) -> None:
-        parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
-            raise ValueError("decision-url must be an HTTP(S) server base URL")
-        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-            raise ValueError("timeout must be positive and finite")
-        self.url = url.rstrip("/")
-        self.timeout_seconds = timeout_seconds
-
-    def _call(
-        self, route: str, payload: dict[str, Any] | None = None, *, raw_path: Path | None = None
-    ) -> dict[str, Any]:
-        body = None if payload is None else json.dumps(payload, allow_nan=False).encode()
-        request = urllib.request.Request(self.url + route, body, {"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                raw = response.read()
-        except urllib.error.HTTPError as error:
-            if raw_path is not None:
-                raw_path.write_bytes(error.read())
-            raise
-        if raw_path is not None:
-            raw_path.write_bytes(raw)
-        result = json.loads(raw, parse_constant=reject_json_constant, parse_float=finite_json_float)
-        if not isinstance(result, dict):
-            raise ValueError("Decision server response must be an object")
-        return result
-
-    def health(self) -> dict[str, Any]:
-        result = self._call("/v1/health")
-        if result.get("ready") is not True:
-            raise ValueError("Decision server is not ready")
-        return result
-
-    def decide(self, request: dict[str, Any], *, raw_path: Path | None = None) -> dict[str, Any]:
-        return self._call("/v1/decide", request, raw_path=raw_path)
+    """Validate the shared serving contract before the game-specific native input."""
+    return checked_decision_action(response, request, ACTIONS)
 
 
 def atomic_json(path: Path, data: dict[str, Any]) -> None:

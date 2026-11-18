@@ -1,0 +1,48 @@
+{
+  "choice_keys": [
+    "NORTH",
+    "SOUTH",
+    "EAST",
+    "WEST",
+    "STAY",
+    "INTERACT"
+  ],
+  "controlled_chef": 0,
+  "controls": [
+    "chef0_stay",
+    "rule_chef0"
+  ],
+  "experiment_code_sha256": {
+    "laya_experiment.py": "a7d4799a04e804116eb4d03d9f5bda311cb864802d9884e5a55bbc2d51e07314",
+    "laya_runtime.py": "c2766cd2fec1c50516f29507da74e4fb650fefe6cf60b4cba9d4038ea73c1bbe"
+  },
+  "feature_base": "6f252b2c23cfe37f4346189fa70ef9bd1c200a35",
+  "gate": "Only the search winner; real Honing Gate with WinLossSelector on one unseen validation layout; ties reject.",
+  "heldout": "After selection is frozen, seed and selected unique specs on two heldout layouts; never used to select.",
+  "inference": {
+    "argmax": true,
+    "head_max_len": 512,
+    "max_len": 2048,
+    "sampling": false
+  },
+  "initial_candidates": [
+    "seed",
+    "readable",
+    "readable_objective",
+    "readable_local_effects"
+  ],
+  "limits": "Five deterministic layouts; no independent seed repetitions or statistical significance claim.",
+  "manual_cooking": true,
+  "max_adaptive_candidates": 2,
+  "max_candidates_including_seed": 6,
+  "model": "convaiinnovations/laya",
+  "partner": "solo",
+  "revision": "1c5edc17a7acd8701df6fc341c0d179f1c62c982",
+  "search": "Two train layouts; greatest mean raw team score, strict improvement over seed; ties keep earlier candidate.",
+  "source_identity": "725620353d55b77e71447339ebbbbab6d3a5bd4b9d9be4cf9fc45528626007ca",
+  "ticks": 400,
+  "version": "laya-harness-v1",
+  "wandb": "SDK absent and no API key configured; local per-episode and per-decision records are retained.",
+  "weights_fixed": true,
+  "weights_sha256": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c"
+}

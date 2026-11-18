@@ -1,0 +1,14 @@
+{
+  "after": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c",
+  "before": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c",
+  "parameters": 421293830,
+  "runtime_packages": {
+    "huggingface_hub": "1.33.0",
+    "numpy": "2.5.3",
+    "safetensors": "0.8.0",
+    "torch": "2.14.0+cu130",
+    "transformers": "5.17.0"
+  },
+  "unchanged": true,
+  "verified_at": "2026-11-15T18:51:32.411637+00:00"
+}

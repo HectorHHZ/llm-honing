@@ -71,7 +71,12 @@ def run_match(
                 if client:
                     recent = history[-settings["history_steps"] :] if settings["history_steps"] else []
                     request = make_request(
-                        frame, scenario.controlled_player, settings["instructions"], recent, settings["notes"]
+                        frame,
+                        scenario.controlled_player,
+                        settings["instructions"],
+                        recent,
+                        settings["notes"],
+                        presentation=settings["presentation"],
                     )
                     response = client.decide(request)
                     probs = validate_reply(request, response)
@@ -83,7 +88,12 @@ def run_match(
                 elif policy == "teacher":
                     recent = history[-settings["history_steps"] :] if settings["history_steps"] else []
                     request = make_request(
-                        frame, scenario.controlled_player, settings["instructions"], recent, settings["notes"]
+                        frame,
+                        scenario.controlled_player,
+                        settings["instructions"],
+                        recent,
+                        settings["notes"],
+                        presentation=settings["presentation"],
                     )
                 latency = (time.perf_counter() - start) * 1000
                 frame = engine.step(actions)

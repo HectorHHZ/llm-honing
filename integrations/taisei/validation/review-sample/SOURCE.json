@@ -1,0 +1,30 @@
+{
+  "game": "taisei",
+  "evidence": "Author-side historical real Laya/native first decision, 2026-11-08 PST; pre-review-fix.",
+  "originalPrHead": "63571fe8562f3c66a328ab2d35adb4cb7746f174",
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu"
+  },
+  "originalArtifacts": {
+    "log/20261108_1917_four_game_integrations/taisei/final-demo/actions.jsonl": "84e5477357f0df4df6fc92154eaad0db2671bc2dc9e3b3a4ee78a7f82473335d",
+    "code/pr/honing-taisei/integrations/taisei/validation/author-smoke.json": "5f6de011d7cf2f981bacf6993df3632f5cf49eed528d527505eace789a827383",
+    "log/20261108_1917_four_game_integrations/taisei/final-demo/response-000001.raw": "5b42bf24e0b3f0b27b70347284fa2c98db7a676155aa778822a01b6a6c979ebc",
+    "log/20261108_1917_four_game_integrations/taisei/final-demo/request-000001.json": "1fe198c96afde3ca2446515d51f2120108e8b3c09cb313477be210f8ac6f49b1"
+  },
+  "includedSha256": {
+    "original-author-receipt.json": "5f6de011d7cf2f981bacf6993df3632f5cf49eed528d527505eace789a827383",
+    "request.json": "a389c5625e7f360bad69d7e8da0160cd1f4dd9acd8f3d9ecb3901530bd0710a0",
+    "response.raw": "5b42bf24e0b3f0b27b70347284fa2c98db7a676155aa778822a01b6a6c979ebc",
+    "transition.json": "d10df92f27efff586d3b1b669b0a9b01f54376819f6ba0833a4f15d415dbc6dc"
+  },
+  "limits": [
+    "The original native bridge and request text differ from the local review fixes.",
+    "This historical sample is not evidence of post-fix native execution or improved policy.",
+    "The four production trace layouts remain unchanged, pending the user's format decision.",
+    "This sample includes no images, video, game assets, model weights, credentials or private conversations.",
+    "The raw response was copied byte-for-byte; request/transition JSON objects were extracted without editing values."
+  ]
+}

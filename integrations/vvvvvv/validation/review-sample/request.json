@@ -1,0 +1,23 @@
+{
+  "id": 1,
+  "parts": {
+    "essential": [
+      "Play the original VVVVVV. Move through Space Station 1, surviving spikes. Positive x is right and y down, in pixels; a tile is 8 pixels. Flip reverses gravity only on the ground/roof. Each action holds movement for 15 native ticks; flip is a single edge at tick 2. The game pauses while deciding. gravity=0 down,1 up. local rows: # solid, ! static spike, . clear, ? outside room; rows start at localOriginTiles, each is 9 cells. entities are visible room objects [native type,x,y,width,height,harmful]. Head toward the next room; avoid dying.",
+      "{\"id\":1,\"tick\":0,\"epoch\":0,\"engineFrame\":164,\"simulationMilliseconds\":0,\"tickMilliseconds\":34,\"lastAction\":\"reset\",\"lastActionTicks\":0,\"room\":[113,105],\"player\":{\"x\":200,\"y\":161,\"vx\":0,\"vy\":0.25,\"width\":12,\"height\":21,\"onGround\":2,\"onRoof\":-164},\"gravity\":0,\"deathSequence\":-1,\"deaths\":0,\"flips\":0,\"hasControl\":true,\"checkpoint\":[113,105,200,161,0],\"localOriginTiles\":[21,16],\"localSolidRows\":[\".........\",\".........\",\".........\",\".........\",\".........\",\".........\",\".........\",\"#########\",\"#########\"],\"entities\":[]}"
+    ]
+  },
+  "questions": {
+    "action": {
+      "type": "choice",
+      "instructions": "Choose the next input.",
+      "criteria": {
+        "wait": "Release movement and flip.",
+        "left": "Move left.",
+        "right": "Move right.",
+        "flip": "Flip gravity once if touching ground or roof.",
+        "flip_left": "Move left and flip gravity once.",
+        "flip_right": "Move right and flip gravity once."
+      }
+    }
+  }
+}

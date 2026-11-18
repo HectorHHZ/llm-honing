@@ -1,0 +1,11 @@
+<section class="card" style="grid-column:1/-1">
+  <h2>Actual base-Laya experiment recording</h2>
+  <p id="recordingSummary" class="hint"></p>
+  <p class="hint">This is a verified replay of real GPU model decisions, not live inference. Chef 0 was controlled by Laya; chef 1 used the fixed autonomous greedy (solo) policy. All scored soups in the model episodes were delivered by chef 1.</p>
+  <p class="hint">Press Start, use Single step or drag the replay slider. Fast = 70 ms per recorded tick. At tick 0 the action panel previews the first decision; subsequent ticks show the action just applied.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+    <div><h2 id="actionCaption">Recorded action</h2><pre id="recordedActions"></pre></div>
+    <div><h2>Raw action probabilities</h2><pre id="recordedProbabilities"></pre></div>
+  </div>
+  <details><summary>Exact context and choice question sent to Laya</summary><pre id="recordedRequest"></pre></details>
+</section>

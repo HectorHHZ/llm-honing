@@ -1,0 +1,216 @@
+{
+  "before": {
+    "id": 1,
+    "status": "paused",
+    "ticks": 0,
+    "episodeTicks": 0,
+    "setupTicks": 60,
+    "lastMask": 0,
+    "lastFrames": 0,
+    "resets": 0,
+    "rejected": 0,
+    "nativeUpdates": 60,
+    "nativeDraws": 60,
+    "clockFrame": 0,
+    "room": 0,
+    "deaths": 0,
+    "freezeTicks": 0,
+    "restartPending": false,
+    "player": {
+      "x": 8,
+      "y": 96,
+      "vx": 0,
+      "vy": 0,
+      "dashes": 1,
+      "grounded": true
+    },
+    "summitFlagTouched": false,
+    "tiles": [
+      "#############..#",
+      "#######........#",
+      "####...........#",
+      "###..........###",
+      "#...........####",
+      "#.............##",
+      "#####..........#",
+      "##.............#",
+      "#..............#",
+      "#............###",
+      "..............##",
+      ".......##.....##",
+      "...##..##..^^^##",
+      "#####..##^^#####",
+      "#####^^#########",
+      "################"
+    ],
+    "entities": [
+      {
+        "type": "FAKE_WALL",
+        "x": 8,
+        "y": 32
+      }
+    ]
+  },
+  "request": {
+    "id": 1,
+    "parts": {
+      "essential": [
+        "Play Celeste Classic. Climb to the top of the room and avoid spikes. Coordinates are room pixels: x right, y down; velocity pixels/tick. Tiles are 8px: # solid, ^ v < > spikes, . other. Entities cover the whole current room. Dashes refill on ground. Jump/dash trigger on button edges; repeating a held button does not retrigger. Hold one action for 12 game ticks at 30Hz. Game update and draw pause while you decide.",
+        "{\"id\":1,\"status\":\"paused\",\"ticks\":0,\"episodeTicks\":0,\"setupTicks\":60,\"lastMask\":0,\"lastFrames\":0,\"resets\":0,\"rejected\":0,\"nativeUpdates\":60,\"nativeDraws\":60,\"clockFrame\":0,\"room\":0,\"deaths\":0,\"freezeTicks\":0,\"restartPending\":false,\"player\":{\"x\":8,\"y\":96,\"vx\":0,\"vy\":0,\"dashes\":1,\"grounded\":true},\"summitFlagTouched\":false,\"tiles\":[\"#############..#\",\"#######........#\",\"####...........#\",\"###..........###\",\"#...........####\",\"#.............##\",\"#####..........#\",\"##.............#\",\"#..............#\",\"#............###\",\"..............##\",\".......##.....##\",\"...##..##..^^^##\",\"#####..##^^#####\",\"#####^^#########\",\"################\"],\"entities\":[{\"type\":\"FAKE_WALL\",\"x\":8,\"y\":32}]}"
+      ]
+    },
+    "questions": {
+      "action": {
+        "type": "choice",
+        "instructions": "Choose the next input to climb and survive.",
+        "criteria": {
+          "wait": "Wait without pressing buttons.",
+          "left": "Move left.",
+          "right": "Move right.",
+          "jump": "Hold jump.",
+          "jump_left": "Hold jump and left.",
+          "jump_right": "Hold jump and right.",
+          "dash_left": "Hold dash and left.",
+          "dash_right": "Hold dash and right.",
+          "dash_up": "Hold dash and up.",
+          "dash_down": "Hold dash and down.",
+          "dash_up_left": "Hold dash, up and left.",
+          "dash_up_right": "Hold dash, up and right.",
+          "dash_down_left": "Hold dash, down and left.",
+          "dash_down_right": "Hold dash, down and right."
+        }
+      }
+    }
+  },
+  "rawResponse": "response-000001.raw",
+  "response": {
+    "answers": {
+      "action": {
+        "type": "choice",
+        "choice": "dash_up",
+        "probabilities": {
+          "wait": 0.0174,
+          "left": 0.0339,
+          "right": 0.0539,
+          "jump": 0.0584,
+          "jump_left": 0.0634,
+          "jump_right": 0.0538,
+          "dash_left": 0.064,
+          "dash_right": 0.0559,
+          "dash_up": 0.3003,
+          "dash_down": 0.103,
+          "dash_up_left": 0.0649,
+          "dash_up_right": 0.0639,
+          "dash_down_left": 0.0373,
+          "dash_down_right": 0.0296
+        },
+        "confidence": 0.1081,
+        "answer_confidence": 0.3003,
+        "action": {
+          "act_probability": 1.0
+        }
+      }
+    },
+    "modelResult": {
+      "model": "laya-rl-agent",
+      "answers": {
+        "action": {
+          "type": "choice",
+          "choice": "dash_up",
+          "probabilities": {
+            "wait": 0.0174,
+            "left": 0.0339,
+            "right": 0.0539,
+            "jump": 0.0584,
+            "jump_left": 0.0634,
+            "jump_right": 0.0538,
+            "dash_left": 0.064,
+            "dash_right": 0.0559,
+            "dash_up": 0.3003,
+            "dash_down": 0.103,
+            "dash_up_left": 0.0649,
+            "dash_up_right": 0.0639,
+            "dash_down_left": 0.0373,
+            "dash_down_right": 0.0296
+          },
+          "confidence": 0.1081,
+          "answer_confidence": 0.3003,
+          "action": {
+            "act_probability": 1.0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 496,
+        "output_tokens": 0
+      }
+    },
+    "stateText": "Play Celeste Classic. Climb to the top of the room and avoid spikes. Coordinates are room pixels: x right, y down; velocity pixels/tick. Tiles are 8px: # solid, ^ v < > spikes, . other. Entities cover the whole current room. Dashes refill on ground. Jump/dash trigger on button edges; repeating a held button does not retrigger. Hold one action for 12 game ticks at 30Hz. Game update and draw pause while you decide.\n{\"id\":1,\"status\":\"paused\",\"ticks\":0,\"episodeTicks\":0,\"setupTicks\":60,\"lastMask\":0,\"lastFrames\":0,\"resets\":0,\"rejected\":0,\"nativeUpdates\":60,\"nativeDraws\":60,\"clockFrame\":0,\"room\":0,\"deaths\":0,\"freezeTicks\":0,\"restartPending\":false,\"player\":{\"x\":8,\"y\":96,\"vx\":0,\"vy\":0,\"dashes\":1,\"grounded\":true},\"summitFlagTouched\":false,\"tiles\":[\"#############..#\",\"#######........#\",\"####...........#\",\"###..........###\",\"#...........####\",\"#.............##\",\"#####..........#\",\"##.............#\",\"#..............#\",\"#............###\",\"..............##\",\".......##.....##\",\"...##..##..^^^##\",\"#####..##^^#####\",\"#####^^#########\",\"################\"],\"entities\":[{\"type\":\"FAKE_WALL\",\"x\":8,\"y\":32}]}",
+    "tokenAudit": {
+      "action": {
+        "stateTokens": 338,
+        "stateRoom": 1890,
+        "inputTokens": 496,
+        "options": 14,
+        "stateTruncated": false
+      }
+    },
+    "trimmed": [],
+    "latencyMs": 1858.2703620195389,
+    "id": 1
+  },
+  "action": "dash_up",
+  "probability": 0.3003,
+  "after": {
+    "id": 2,
+    "status": "paused",
+    "ticks": 12,
+    "episodeTicks": 12,
+    "setupTicks": 60,
+    "lastMask": 36,
+    "lastFrames": 12,
+    "resets": 0,
+    "rejected": 0,
+    "nativeUpdates": 72,
+    "nativeDraws": 72,
+    "clockFrame": 12,
+    "room": 0,
+    "deaths": 0,
+    "freezeTicks": 0,
+    "restartPending": false,
+    "player": {
+      "x": 8,
+      "y": 71,
+      "vx": 0,
+      "vy": -0.45,
+      "dashes": 0,
+      "grounded": false
+    },
+    "summitFlagTouched": false,
+    "tiles": [
+      "#############..#",
+      "#######........#",
+      "####...........#",
+      "###..........###",
+      "#...........####",
+      "#.............##",
+      "#####..........#",
+      "##.............#",
+      "#..............#",
+      "#............###",
+      "..............##",
+      ".......##.....##",
+      "...##..##..^^^##",
+      "#####..##^^#####",
+      "#####^^#########",
+      "################"
+    ],
+    "entities": [
+      {
+        "type": "FAKE_WALL",
+        "x": 8,
+        "y": 32
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from integrations.overcooked.engine import ACTIONS, canonical
+from integrations.overcooked.presentation import action_descriptions, readable_context
 
 DESCRIPTIONS = {
     "NORTH": "Move up one tile and face north",
@@ -27,6 +28,8 @@ def make_request(
     instructions: str = DEFAULT_INSTRUCTIONS,
     history: list[dict[str, Any]] | None = None,
     notes: str = "",
+    *,
+    presentation: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     if frame["status"] != "running":
         raise ValueError("a finished game has no decision")
@@ -42,10 +45,16 @@ def make_request(
             notes,
         ]
     )
+    presentation = presentation or {"context": "json", "choices": "static"}
+    if presentation["context"] == "readable":
+        state = readable_context(frame, player, history or [], notes)
+    criteria = (
+        action_descriptions(frame, player) if presentation["choices"] == "local_effects" else DESCRIPTIONS.copy()
+    )
     return {
         "id": f"overcooked-p{player}-t{frame['step']}-{frame['frame_hash'][:12]}",
         "parts": {"essential": [state], "details": [], "memory": [], "logs": []},
-        "questions": {"action": {"type": "choice", "instructions": instructions, "criteria": DESCRIPTIONS.copy()}},
+        "questions": {"action": {"type": "choice", "instructions": instructions, "criteria": criteria}},
     }
 
 

@@ -1,0 +1,35 @@
+{
+  "archive_verification": {
+    "episodes": 25,
+    "files": 120,
+    "source_identity": "725620353d55b77e71447339ebbbbab6d3a5bd4b9d9be4cf9fc45528626007ca",
+    "verified": true
+  },
+  "episodes": 25,
+  "model_actions": {
+    "EAST": 5231,
+    "INTERACT": 515,
+    "NORTH": 42,
+    "STAY": 212
+  },
+  "real_model_decisions": 6000,
+  "selection": {
+    "gate": {
+      "outcome": "reject",
+      "reason": "No strict search improvement; no candidate validation call."
+    },
+    "search_means": {
+      "local_progress": 90.0,
+      "local_progress_no_history": 90.0,
+      "readable": 90.0,
+      "readable_local_effects": 90.0,
+      "readable_objective": 90.0,
+      "seed": 90.0
+    },
+    "search_winner": "seed",
+    "selected": "seed"
+  },
+  "source_identity": "725620353d55b77e71447339ebbbbab6d3a5bd4b9d9be4cf9fc45528626007ca",
+  "wandb": "Not configured; full per-episode metrics and raw per-decision probabilities are archived locally.",
+  "weights_sha256": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c"
+}

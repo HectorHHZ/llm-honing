@@ -1,0 +1,9 @@
+{
+  "game": "taisei-project/taisei",
+  "tag": "v1.4.6",
+  "commit": "5bfc9b842fe6d9bb8d1610f76f442ba07c72c4cf",
+  "scope": "standalone native Stage 1 Easy segment; not a campaign runner",
+  "character": "youmuA",
+  "initialGameRngSeed": 7,
+  "requiredExternalResources": "recursive upstream checkout, original project resources and build dependencies"
+}
