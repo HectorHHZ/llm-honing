@@ -62,6 +62,14 @@ def audit(spec: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, An
                 elif not (fault / "result.json").is_file() or not (fault / "manifest.json").is_file():
                     attempt["status"] = "incomplete"
                 else:
+                    try:
+                        result = read(fault / "result.json")
+                        attempt["fault_outcome"] = result["outcome"][result["seat"]]
+                        attempt["fault_source_hashes"] = {name: digest(fault / name) for name in SOURCE_FILES}
+                    except (KeyError, ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+                        attempt.update(status="incomplete_logs", error=repr(exc))
+                        attempts.append(attempt)
+                        continue
                     clean_options = clean_candidates(fault.name, clean_roots)
                     valid = []
                     errors = []
@@ -108,6 +116,9 @@ def audit(spec: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, An
             "fault_losses": sum(row["fault_loss"] for row in instance_rows),
             "verified_fault_losses": sum(row["cause_label"] == layer for row in instance_rows),
             "uncertain_losses": sum(row["fault_loss"] and row["cause_label"] is None for row in instance_rows),
+            "complete_fault_loss_records": sum(
+                row.get("fault_outcome") == -1 for row in attempts if row["instance"] == instance
+            ),
         }
     summary = {
         "version": spec["version"],
@@ -131,6 +142,9 @@ def main() -> None:
     (args.out / "spec.json").write_bytes(args.spec.read_bytes())
     (args.out / "labels.jsonl").write_text("".join(json.dumps(row) + "\n" for row in labels))
     (args.out / "attempts.jsonl").write_text("".join(json.dumps(row) + "\n" for row in attempts))
+    (args.out / "unverified-games.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in attempts if row["status"] != "labeled" and "fault_outcome" in row)
+    )
     summary["spec_sha256"] = digest(args.out / "spec.json")
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary))
