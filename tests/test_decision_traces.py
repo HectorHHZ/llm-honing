@@ -45,6 +45,7 @@ from honing.core import (
     TraceEvent,
 )
 from honing.harness.methods.meta_harness import Archive, MetaHarnessMethod
+from honing.harness.methods.meta_harness.archive import write_archive
 from honing.harness.traces import CUT_MARK, DEFAULT_MAX_TOKENS, estimate_tokens, render_traces
 from tests.fakes.harness import (
     SEED_HARNESS,
@@ -507,10 +508,21 @@ def test_meta_harness_writes_each_search_episodes_rendered_decisions_for_the_pro
 
     archive = Archive.from_state(result.state)
     assert Archive.from_state(json.loads(json.dumps(result.state))) == archive
-    for folder, task in zip(("search%20a", "search-b"), tasks, strict=True):
+    # The state keeps where each rendering is, as it does a transcript, and never the text.
+    assert RENDERED_VERIFY.search(json.dumps(result.state)) is None
+    folders = ("search%20a", "search-b")
+    for folder, task in zip(folders, tasks, strict=True):
+        rendered = archive.get("seed").traces[task.task_id].decisions
+        assert rendered is not None and Path(rendered).parent == tmp_path / "mh/decisions"
         written = (tmp_path / "mh/archive/traces/seed" / folder / "decisions.txt").read_text(encoding="utf-8")
-        assert written == archive.get("seed").traces[task.task_id].decisions
+        assert written == Path(rendered).read_text(encoding="utf-8")
         assert RENDERED_VERIFY.search(written) is not None
+
+    shutil.rmtree(tmp_path / "mh/decisions")
+    write_archive(archive, tmp_path / "again", agent=SEED_HARNESS.agent, policy="ck")
+    for folder, task in zip(folders, tasks, strict=True):
+        unavailable = (tmp_path / "again/traces/seed" / folder / "decisions.unavailable").read_text(encoding="utf-8")
+        assert unavailable == f"{archive.get('seed').traces[task.task_id].decisions}\n"
 
 
 @pytest.mark.unit

@@ -20,6 +20,7 @@ rendered (:mod:`honing.harness.traces`) beside its transcript.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from collections.abc import Mapping, Sequence
@@ -61,6 +62,8 @@ _LOGGER = logging.getLogger(__name__)
 
 ARCHIVE_DIR = "archive"
 PENDING_FILE = "pending_eval.json"
+# Rendered decision traces, one file per rendering named by its SHA-256, so a file never changes once written.
+DECISIONS_DIR = "decisions"
 
 
 def load_skill() -> str:
@@ -123,9 +126,9 @@ class MetaHarnessMethod:
     ``--skip-smoke`` does. A move whose budget cannot score the candidate does
     not run the proposer.
 
-    With ``traces``, every search episode the source can read is also written
-    as ``decisions.txt`` in its trace folder, rendered within
-    ``trace_max_tokens``.
+    With ``traces``, every search episode the source can read is rendered
+    within ``trace_max_tokens`` into ``work_dir / "decisions"``, and copied
+    from there as ``decisions.txt`` into its trace folder.
     """
 
     name = "meta_harness"
@@ -238,9 +241,21 @@ class MetaHarnessMethod:
         }
 
     def _decisions(self, record: EpisodeRecord) -> str | None:
-        """The episode's rendered decision traces, or ``None`` without a source or traces to read."""
+        """Where the episode's rendered decision traces are, or ``None`` without a source or traces to read.
+
+        The archive state keeps the path, as it does a transcript's, since the
+        state is written with every commit and a rendering runs to many
+        kilobytes.
+        """
         traces = self.traces.traces(record) if self.traces is not None else ()
-        return render_traces(traces, max_tokens=self.trace_max_tokens) if traces else None
+        if not traces:
+            return None
+        text = render_traces(traces, max_tokens=self.trace_max_tokens)
+        path = self.work_dir / DECISIONS_DIR / f"{hashlib.sha256(text.encode()).hexdigest()}.txt"
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        return str(path)
 
 
 def _prompt(archive: Archive, directory: Path) -> str:

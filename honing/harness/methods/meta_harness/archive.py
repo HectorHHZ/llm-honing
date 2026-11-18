@@ -19,7 +19,8 @@ The layout written under the archive directory:
     under the current weights.
 ``traces/<name>/<task id, percent-quoted>/``
     the episode transcript copied from its location, ``feedback.txt``, and
-    for a decision model ``decisions.txt``, its rendered decision traces.
+    for a decision model ``decisions.txt``, its rendered decision traces,
+    copied from where the method wrote them.
 
 Every score and trace is from the search tasks, which the method runs itself.
 The gate's held-out tasks never enter the archive: the proposer learns of the
@@ -59,7 +60,7 @@ def valid_name(name: object) -> bool:
 
 @dataclass(frozen=True)
 class Trace:
-    """Where one episode's transcript is, the grader's feedback on it, and its rendered decisions if read."""
+    """Where one episode's transcript is, the grader's feedback on it, and where its rendered decisions are."""
 
     transcript: str | None = None
     feedback: str | None = None
@@ -371,7 +372,10 @@ def _write_trace(trace: Trace, directory: Path) -> None:
     if trace.feedback is not None:
         (directory / "feedback.txt").write_text(trace.feedback, encoding="utf-8")
     if trace.decisions is not None:
-        (directory / "decisions.txt").write_text(trace.decisions, encoding="utf-8")
+        try:
+            shutil.copyfile(trace.decisions, directory / "decisions.txt")
+        except OSError:
+            (directory / "decisions.unavailable").write_text(f"{trace.decisions}\n", encoding="utf-8")
     source = None if trace.transcript is None else Path(trace.transcript)
     try:
         if source is not None and source.is_dir():

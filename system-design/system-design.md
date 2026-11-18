@@ -418,7 +418,8 @@ whole state with the controller's constraints and applied action, and each later
 the state fields that changed or are gone since the decision shown before it with the
 same questions. The same traces and cap always render to the same text. Given a trace
 source, GEPA's reflective dataset shows each minibatch episode's rendering as its
-generated output, and Meta-Harness writes it as `decisions.txt` beside each search
+generated output, and Meta-Harness writes it to a file under its work directory, keeps
+the file's path in its archive state, and copies it as `decisions.txt` beside each search
 trace. The loader and the renderer import only the standard library and `honing.core`,
 so System 0's scheduler (#138) can read the same traces.
 
