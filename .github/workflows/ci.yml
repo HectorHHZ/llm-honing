@@ -343,7 +343,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[gepa]"
       - name: All planes end to end (every plane in one campaign, a reference harness runner and agent process)
-        run: python scripts/e2e/honing_pipeline.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/all-planes"
+        run: |
+          python scripts/e2e/honing_pipeline.py --config configs/e2e/all_planes.json --work-dir "$RUNNER_TEMP/all-planes"
+          python scripts/e2e/check_campaign.py "$RUNNER_TEMP/all-planes"
       - name: Meta-Harness end to end (a scripted proposer, search tasks held out from the gate, a weights change)
         run: python scripts/e2e/honing_pipeline.py --config configs/e2e/meta_harness_dry_run.json --work-dir "$RUNNER_TEMP/meta-harness"
       - name: Harness runner contract (the checks an OpenHands or Reef runner must pass)

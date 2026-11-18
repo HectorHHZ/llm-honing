@@ -39,8 +39,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from honing.campaign.cost import MeteredChatModel
 from honing.core import (
     ChatMessage,
+    ChatModel,
     ChatReply,
     ContractError,
     EpisodeOutcome,
@@ -254,7 +256,7 @@ class RecordingChatModel:
     A call marks the end of the parent's minibatch: the episodes after it are the child's.
     """
 
-    def __init__(self, inner: LiteLLMChatModel, run_log: RunLog) -> None:
+    def __init__(self, inner: ChatModel, run_log: RunLog) -> None:
         self._inner = inner
         self._run_log = run_log
 
@@ -442,7 +444,9 @@ def gepa_method(
     """GEPA validating on the suite's ``validation_split``, which must be the gate's tasks in order."""
     run_log = _run_log(context)
     validation = [task.task_id for task in _suite(context, manifest).tasks(validation_split)]  # type: ignore[arg-type]
-    chat = RecordingChatModel(LiteLLMChatModel(**{**reflection, "model": litellm_model(reflection["model"])}), run_log)
+    client = LiteLLMChatModel(**{**reflection, "model": litellm_model(reflection["model"])})
+    # Metered so the reflection's tokens and dollars reach each move's cost record too.
+    chat = RecordingChatModel(MeteredChatModel(client), run_log)
     return LiveGEPAMethod(run_log, chat, GEPAConfig(**gepa), validation)
 
 

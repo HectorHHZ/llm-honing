@@ -27,7 +27,7 @@ ALL_PLANES = REPO / "configs/e2e/all_planes.json"
 STUB = REPO / "tests/fakes/wandb_stub"
 WANDB = {"project": "honing-e2e", "entity": "honing", "tags": ["issue-100", "gepa", "live"]}
 KEY = "wandb-fake-key-0123456789abcdef"
-LOGGED_PREFIXES = ("move/", "gate/", "candidate/", "selector/", "usage/")
+LOGGED_PREFIXES = ("move/", "gate/", "candidate/", "selector/", "usage/", "cost/")
 
 
 @pytest.fixture
@@ -128,12 +128,15 @@ def test_the_pipeline_logs_one_step_per_schedule_step_and_uploads_its_files(
     assert by_step[3]["selector/regression"] == pytest.approx(0.02)
     assert by_step[6]["candidate/method_episodes"] == 0.0 and by_step[6]["gate/episodes"] == 6.0
     # A skip has no gate, only the episodes the method spent; a rollback has its result and the head.
-    assert by_step[7] == {
+    skip = by_step[7]
+    assert {key: value for key, value in skip.items() if not key.startswith("cost/")} == {
         "move/kind": "harness",
         "move/result": "skipped",
         "gate/episodes": 0.0,
         "candidate/method_episodes": 0.0,
     }
+    # A skip is charged like any move, so its cost is logged too.
+    assert skip["cost/episodes_method"] == 0.0 and skip["cost/usd"] == 0.0 and "cost/wall_seconds" in skip
     assert by_step[9] == {"move/kind": "rollback", "move/result": "restored", "move/release": "r0001"}
 
     # Copies are uploaded, with the run's local paths replaced; the files on disk are unchanged.

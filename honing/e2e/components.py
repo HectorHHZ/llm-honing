@@ -5,7 +5,10 @@ Any value in a config may be ``{"ref": "dotted.path"}``, which
 :func:`resolve_references` replaces with the value at that path in the same
 config, so a setting several entries share (a model pin) is written once.
 The factory is called as ``function(context, **args)`` and must return an
-object satisfying the slot's protocol. ``context`` is whatever the caller
+object satisfying the slot's protocol. A :class:`~honing.core.ChatModel` is
+returned wrapped in :class:`~honing.campaign.cost.MeteredChatModel`, so every
+call it makes is charged to the move in progress; when ``context.shared`` holds
+a ``budget``, a chat model that budget cannot price is refused here. ``context`` is whatever the caller
 passes: it carries paths, the components built so far, and a ``shared`` map
 for factories that belong together (a fake model source and the fake trainer
 that must use the same fake storage, for example).
@@ -35,7 +38,8 @@ from pathlib import Path
 from typing import Any
 
 from honing.campaign import ScriptedScheduler
-from honing.core import CoAdaptScheduler, ContractError, DirectionEditSpec, EvolveMethod, Move, Trainer
+from honing.campaign.cost import CampaignBudget, MeteredChatModel
+from honing.core import ChatModel, CoAdaptScheduler, ContractError, DirectionEditSpec, EvolveMethod, Move, Trainer
 
 # Built after every other slot, so a scheduler's factory can read all the components.
 SCHEDULER_SLOT: tuple[str, type, bool] = ("scheduler", CoAdaptScheduler, False)
@@ -78,6 +82,11 @@ def build_component(spec: Mapping[str, object], context: object, slot: str, prot
         raise ContractError(
             f"the {slot} factory {target!r} returned {type(component).__name__}, not a {protocol.__name__}"
         )
+    if protocol is ChatModel and not isinstance(component, MeteredChatModel):
+        component = MeteredChatModel(component)  # type: ignore[arg-type]
+        budget = getattr(context, "shared", {}).get("budget")
+        if isinstance(budget, CampaignBudget):
+            budget.check_chat_model(component)
     return component
 
 

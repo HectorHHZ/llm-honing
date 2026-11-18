@@ -262,8 +262,8 @@ def no_tasks(context: PipelineContext) -> tuple[Task, ...]:
 def test_a_harness_move_gets_its_own_tasks_and_budget_while_the_gate_keeps_tasks(tmp_path: Path) -> None:
     config = _config(
         harness_tasks={"factory": "tests.test_e2e_pipeline:first_task"},
-        budget=4,
-        harness={"episode_budget": {"ref": "budget"}},  # build resolves references first
+        episodes=4,
+        harness={"episode_budget": {"ref": "episodes"}},  # build resolves references first
         schedule=[{"kind": "harness", "label": "verify"}],
         expect=["published"],
     )

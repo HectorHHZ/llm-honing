@@ -322,7 +322,19 @@ class RecoverySpec:
 
 @dataclass(frozen=True)
 class TrainResult:
-    """The weights a training job produced, always in the master format."""
+    """The weights a training job produced, always in the master format.
+
+    ``gpu_seconds`` is the job's elapsed time times the GPUs it held, which the
+    campaign charges to the move. ``None`` means the trainer did not measure it,
+    and leaves the move's GPU time unknown rather than free.
+    """
 
     snapshot: ModelSnapshot
     metrics: Mapping[str, float] = field(default_factory=dict)
+    gpu_seconds: float | None = None
+
+    def __post_init__(self) -> None:
+        require(
+            self.gpu_seconds is None or (math.isfinite(self.gpu_seconds) and self.gpu_seconds >= 0),
+            f"gpu_seconds must be a finite number >= 0 or None, got {self.gpu_seconds!r}",
+        )

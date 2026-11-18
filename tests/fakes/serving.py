@@ -85,7 +85,7 @@ class NormScaleTrainer:
         self.jobs += 1
         out = self.work_dir / f"{self.jobs:03d}-{job.algorithm}-from-{base.checkpoint.checksum[:8]}"
         scale_norm(Path(base.checkpoint.location), out, self.factor**self.jobs)
-        return TrainResult(snapshot=hf_snapshot(out), metrics={"train_steps": float(job.steps)})
+        return TrainResult(snapshot=hf_snapshot(out), metrics={"train_steps": float(job.steps)}, gpu_seconds=0.0)
 
 
 def trainer(context: Any, factor: float = 1.01) -> NormScaleTrainer:
