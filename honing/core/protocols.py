@@ -300,6 +300,21 @@ class EvolveMethod(Protocol):
 
 @runtime_checkable
 class CoAdaptScheduler(Protocol):
-    """Chooses the next move from the campaign's state."""
+    """Chooses the next move from the campaign's state, and keeps its own state between moves.
+
+    After each decision the campaign writes ``export_state()`` into the commit
+    record, under ``name``, so a restarted run continues through
+    ``restore_state``. The state follows the rules for method state: it is
+    JSON-native and carries ``state_schema_version`` as its ``schema_version``.
+    A rejection or a rollback leaves the scheduler's state alone, because the
+    scheduler chose the move and keeps what it learned from the result.
+    """
+
+    name: str
+    state_schema_version: int
 
     def next_move(self, state: CampaignState) -> Move: ...
+
+    def export_state(self) -> Mapping[str, object]: ...
+
+    def restore_state(self, state: Mapping[str, object]) -> None: ...

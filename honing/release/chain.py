@@ -9,12 +9,18 @@ Every value in the record must be one JSON can represent exactly. A value of a
 type the encoder does not know is an error, not a string: a record that quietly
 stringified a set could not restore it on rollback.
 
+Once a campaign hands the chain a scheduler's state, every line written after
+it carries that state under ``scheduler_state`` and the scheduler's name under
+``scheduler``, so a restart can resume the scheduler from the last line
+(:func:`read_scheduler_state`).
+
 Recovering a chain from its record is not implemented yet; the ordering that
 makes recovery possible is.
 """
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import json
 import os
@@ -31,6 +37,7 @@ from honing.core import (
     SelectionDecision,
     UpdateCandidate,
     validate_method_state,
+    validate_scheduler_state,
 )
 
 
@@ -75,10 +82,26 @@ class ReleaseChain:
         self._releases: dict[str, HoneRelease] = {}
         self._order: list[str] = []
         self._head: str | None = None
+        self._scheduler: tuple[str, dict[str, object]] | None = None
 
     @property
     def record_path(self) -> Path:
         return self._record_path
+
+    @property
+    def scheduler_state(self) -> Mapping[str, object]:
+        """The scheduler state written into each new line, empty until a campaign sets one."""
+        return MappingProxyType(self._scheduler[1] if self._scheduler is not None else {})
+
+    def set_scheduler_state(self, scheduler: str, state: Mapping[str, object]) -> None:
+        """Write ``state``, and the name of the scheduler it belongs to, into every line from now on.
+
+        The scheduler's state is not part of any release, so a rollback keeps
+        it rather than restoring an older one.
+        """
+        validate_scheduler_state(state)
+        # A copy, so a scheduler that keeps changing its own state cannot change what the next line says.
+        self._scheduler = (scheduler, copy.deepcopy(dict(state)))
 
     def initialize(self, candidate: UpdateCandidate) -> HoneRelease:
         """Publish release 0, the model a campaign starts from."""
@@ -186,6 +209,9 @@ class ReleaseChain:
         self._move_head(release.release_id)
 
     def _append_record(self, record: Mapping[str, object]) -> None:
+        if self._scheduler is not None:
+            name, state = self._scheduler
+            record = {**record, "scheduler": name, "scheduler_state": state}
         line = json.dumps(record, sort_keys=True, default=_json_default)
         with self._record_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
@@ -197,3 +223,24 @@ class ReleaseChain:
 
     def _next_id(self) -> str:
         return f"r{len(self._order):04d}"
+
+
+def read_scheduler_state(record_path: Path) -> tuple[str, dict[str, object]] | None:
+    """The scheduler name and state on the last complete line of a commit record, or ``None`` when it has none.
+
+    A line cut short by a crash is not complete, so the line before it counts.
+    ``None`` means the scheduler starts from its own beginning.
+    """
+    if not record_path.is_file():
+        return None
+    text = record_path.read_text(encoding="utf-8")
+    lines = [line for line in text[: text.rfind("\n") + 1].splitlines() if line.strip()]
+    if not lines:
+        return None
+    record = json.loads(lines[-1])
+    if "scheduler_state" not in record:
+        return None
+    name, state = record.get("scheduler"), record["scheduler_state"]
+    if not isinstance(name, str) or not isinstance(state, dict):
+        raise ContractError(f"{record_path} holds a scheduler state that is not a name and an object: {lines[-1]}")
+    return name, state

@@ -86,11 +86,11 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
 | `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
 | `traces` | `DecisionTrace`, `TraceEvent`: one decision of an episode and what followed it |
-| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the method-state rules (`validate_method_state`) |
+| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the rules for method and scheduler state (`validate_method_state`, `validate_scheduler_state`) |
 | `candidate` | `UpdateCandidate`, `PolicyRef`, `EvaluationResult`, `SelectionDecision` |
 | `release` | `HoneRelease` |
 | `backend` | `BackendSupport` |
-| `schedule` | `Move`, `CampaignState` |
+| `schedule` | `Move`, `StepRecord`, `CampaignState` |
 | `protocols` | every plane protocol (listed per plane below) |
 
 ### 2.2 Model Source — where the initial model comes from
@@ -477,11 +477,17 @@ policies.
 
 ```python
 class CoAdaptScheduler(Protocol):
+    name: str
+    state_schema_version: int
     def next_move(self, state: CampaignState) -> Move: ...   # train | prune | quantize | harness | stop
+    def export_state(self) -> Mapping[str, object]: ...
+    def restore_state(self, state: Mapping[str, object]) -> None: ...
 
 campaign.start(source, work_dir, harness_seed)   # release 0
 campaign.run(scheduler)                           # one candidate per move, settled by the gate
+campaign.step(scheduler)                          # one move, or None when the scheduler stops
 campaign.rollback(release_id)                     # restore a whole release
+restore_scheduler(scheduler, record_path)         # resume a scheduler from the commit record
 ```
 
 For each move the campaign builds one candidate, checks the rules, runs the gate, and
@@ -500,9 +506,28 @@ edited, or quantized**, so a refused step costs no compute and leaves nothing be
 | `batch_from_one_release` | samples from a release or harness other than the head's | before training |
 | `method_supported_by_runner`, `spec_runnable` | an evolution method or harness the runner cannot run | at start; per proposal |
 | `method_state_schema_matches` | method state written under a schema the method does not read, for example after a rollback | at start; before each proposal |
+| `scheduler_state_schema_matches` | scheduler state written by another scheduler or under another schema | after each choice; on restore |
 
 A harness method's state is carried across rejected and skipped steps in memory and
 published with the next accepted release, whatever its kind.
+
+**A scheduler sees every move, and keeps its own state.** `CampaignState.history` holds a
+`StepRecord` for every move the campaign advanced, published, rejected, or skipped: the
+move, its label, the head it was built on, the release it published, the reason, and the
+`gate_*` metrics (none for a skip). A scheduler learns from a rejection there, which the
+releases alone never show. Its own state follows the method-state rules: it is JSON-native
+and carries a `schema_version`. After each choice the campaign writes it into every commit
+record line, under `scheduler_state` and the scheduler's `name`. A rejection or a rollback leaves
+it as it is: the scheduler chose the move and keeps what it learned. A restart restores it
+from the record's last line (`restore_scheduler`), and `scheduler_state_schema_matches`
+refuses state another scheduler or schema version wrote. The history itself is in memory.
+Until a chain can be rebuilt from its record, a restarted campaign starts a new one.
+
+**Every runner has the same scheduler slot.** The pipeline, tank, and RA2 configs take an
+optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the
+config's `schedule`. In the pipeline a `rollback` entry stays the pipeline's own step: it
+runs once as many moves as precede it in `schedule` have run, whichever scheduler chose
+them.
 
 **Phases belong to the scheduler, not to core.** A harness move carries a
 `HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the
@@ -568,7 +593,8 @@ Rollback restores all of it.
 
 **The commit record is written before the head moves (P3).** `ReleaseChain` appends each
 publish, rejection, skip, and rollback to a JSON-lines record and flushes it to disk first.
-A value JSON cannot represent exactly is an error, never a string.
+A value JSON cannot represent exactly is an error, never a string. Once a scheduler has
+chosen a move, every line also carries its state (`scheduler`, `scheduler_state`).
 Rebuilding a chain from that record is not implemented yet; the ordering that makes it
 possible is, and is tested.
 

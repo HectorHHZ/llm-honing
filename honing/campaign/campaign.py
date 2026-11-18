@@ -37,6 +37,8 @@ from honing.core import (
     RecoverySpec,
     RolloutProvider,
     SelectionDecision,
+    StepRecord,
+    StepResult,
     Task,
     TaskGrader,
     TelemetryStore,
@@ -126,6 +128,26 @@ def _both(method: SelectionDecision, gate: SelectionDecision) -> SelectionDecisi
     )
 
 
+def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
+    decision, release, evaluation = outcome.decision, outcome.release, outcome.evaluation
+    result: StepResult
+    if decision is None:
+        result, reason = "skipped", outcome.skipped_reason or ""
+    else:
+        result, reason = ("published" if release is not None else "rejected"), decision.reason
+    return StepRecord(
+        step=step,
+        move=outcome.move,
+        result=result,
+        parent_id=parent_id,
+        reason=reason,
+        label=outcome.move.harness.label if outcome.move.harness is not None else None,
+        release_id=release.release_id if release is not None else None,
+        # The same numbers the settled candidate's record holds: the bootstrap is seeded.
+        gate_metrics=gate_metrics(evaluation) if evaluation is not None else {},
+    )
+
+
 class Campaign:
     """Runs moves against one release chain.
 
@@ -134,6 +156,11 @@ class Campaign:
     method's state is carried across rejected and skipped steps in memory and
     published with the next accepted release, whatever its kind. A skipped
     step is still written to the commit record, with the episodes it spent.
+
+    Every move it advances, published, rejected, or skipped, is added to the
+    history a scheduler reads from :meth:`state`. When a scheduler chooses the
+    move (:meth:`step`), its state is written into every commit record line
+    from then on, and neither a rejection nor a rollback changes it.
     """
 
     def __init__(
@@ -158,10 +185,21 @@ class Campaign:
         self._rollout = rollout
         self._pending_method_state: Mapping[str, object] | None = None
         self._recent_records: tuple[EpisodeRecord, ...] = ()
+        self._history: list[StepRecord] = []
 
     @property
     def chain(self) -> ReleaseChain:
         return self._chain
+
+    def state(self) -> CampaignState:
+        """What a scheduler sees now: the head, the releases, and every move advanced so far."""
+        return CampaignState(
+            head=self._chain.head(),
+            releases=self._chain.releases(),
+            step=len(self._history),
+            history=tuple(self._history),
+            scheduler_state=self._chain.scheduler_state,
+        )
 
     def start(self, source: ModelSource, work_dir: Path, harness_seed: HarnessSpec) -> HoneRelease:
         """Check the planes fit together, materialize the initial model, and publish it as release 0."""
@@ -187,16 +225,39 @@ class Campaign:
         """Ask ``scheduler`` for moves until it stops or ``max_steps`` is reached."""
         require(max_steps > 0, f"max_steps must be > 0, got {max_steps}")
         outcomes: list[StepOutcome] = []
-        for step in range(max_steps):
-            state = CampaignState(head=self._chain.head(), releases=self._chain.releases(), step=step)
-            move = scheduler.next_move(state)
-            if move.kind == "stop":
+        for _ in range(max_steps):
+            outcome = self.step(scheduler)
+            if outcome is None:
                 break
-            outcomes.append(self.advance(move))
+            outcomes.append(outcome)
         return tuple(outcomes)
 
+    def step(self, scheduler: CoAdaptScheduler) -> StepOutcome | None:
+        """Ask ``scheduler`` for the next move and advance it. Returns ``None`` when the scheduler stops.
+
+        The scheduler's state after its choice is checked against its declared
+        schema and written into every record line from here on, so a restart
+        resumes it from its last choice.
+        """
+        move = scheduler.next_move(self.state())
+        exported = scheduler.export_state()
+        # Refused now, not at a restart hours later when the state could no longer be restored.
+        rules.scheduler_state_schema_matches(
+            exported, written_by=scheduler.name, scheduler=scheduler.name, expected=scheduler.state_schema_version
+        )
+        self._chain.set_scheduler_state(scheduler.name, exported)
+        if move.kind == "stop":
+            return None
+        return self.advance(move)
+
     def advance(self, move: Move) -> StepOutcome:
-        """Build, check, and settle the candidate for one move."""
+        """Build, check, and settle the candidate for one move, and add the move to the history."""
+        parent_id = self._chain.head().release_id
+        outcome = self._advance(move)
+        self._history.append(_step_record(len(self._history), parent_id, outcome))
+        return outcome
+
+    def _advance(self, move: Move) -> StepOutcome:
         head = self._chain.head()
         if move.kind == "harness":
             return self._advance_harness(move, head)
@@ -215,7 +276,10 @@ class Campaign:
         return self._settle(move, candidate, head, selector=None)
 
     def rollback(self, release_id: str) -> HoneRelease:
-        """Restore an earlier release as the head. Method state not yet published is discarded."""
+        """Restore an earlier release as the head. Method state not yet published is discarded.
+
+        The scheduler's state is kept: it is the scheduler's memory, not part of a release.
+        """
         self._pending_method_state = None
         return self._chain.rollback(release_id)
 

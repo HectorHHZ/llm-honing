@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 from honing.core.compression import CompressionBudget
@@ -13,6 +15,7 @@ from honing.core.release import HoneRelease
 from honing.core.training import RecoverySpec, TrainJobSpec
 
 MoveKind = Literal["train", "prune", "quantize", "harness", "stop"]
+StepResult = Literal["published", "rejected", "skipped"]
 
 
 @dataclass(frozen=True)
@@ -42,9 +45,51 @@ class Move:
 
 
 @dataclass(frozen=True)
+class StepRecord:
+    """One move the campaign advanced, as a scheduler reads it back: published, rejected, or skipped.
+
+    ``step`` is the move's index in the campaign's history. ``parent_id`` is
+    the head the move was built on, and ``release_id`` the release it
+    published, set only when it was published. ``reason`` is the gate's reason,
+    or why a harness method proposed nothing. ``gate_metrics`` are the
+    evaluation's numbers that every gated candidate records (the ``gate_*``
+    metrics). A skipped move reached no gate, so it has none.
+    """
+
+    step: int
+    move: Move
+    result: StepResult
+    parent_id: str
+    reason: str
+    label: str | None = None
+    release_id: str | None = None
+    gate_metrics: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        require(self.step >= 0, f"StepRecord.step must be >= 0, got {self.step}")
+        require_choice(self.result, get_args(StepResult), "StepRecord.result")
+        require(self.move.kind != "stop", "a stop is not a step, since the campaign advances no move for it")
+        require(
+            (self.release_id is not None) == (self.result == "published"),
+            "a step names a release exactly when it was published",
+        )
+        require(self.result != "skipped" or not self.gate_metrics, "a skipped step reached no gate")
+        require(all(math.isfinite(value) for value in self.gate_metrics.values()), "gate metrics must be finite")
+
+
+@dataclass(frozen=True)
 class CampaignState:
-    """What a scheduler sees: the current head, every published release, and the step count."""
+    """What a scheduler sees when it chooses the next move.
+
+    ``head`` and ``releases`` are the published releases. ``history`` is every
+    move the campaign advanced, in order, including the rejected and skipped
+    ones, and ``step`` is its length. ``scheduler_state`` is the scheduler
+    state the campaign wrote into the commit record after the previous move,
+    empty before the first.
+    """
 
     head: HoneRelease
     releases: tuple[HoneRelease, ...]
     step: int
+    history: tuple[StepRecord, ...] = ()
+    scheduler_state: Mapping[str, object] = field(default_factory=dict)
