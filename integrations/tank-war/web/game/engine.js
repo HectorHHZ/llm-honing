@@ -1163,6 +1163,7 @@ export class Game {
             x = t.x + Math.cos(a) * 23,
             y = t.y + Math.sin(a) * 23;
         if (blocked(this.maze, x, y, 4)) return false;
+        const shell = `${this.roundSerial}-${t.id}-${this.shots[t.id]}`;
         this.bullets.push({
             x,
             y,
@@ -1172,7 +1173,7 @@ export class Game {
             bounces: 0,
             owner: t.id,
             trail: [],
-            id: `${this.roundSerial}-${t.id}-${this.shots[t.id]}`,
+            id: shell,
         });
         this.shots[t.id]++;
         t.cooldown = FIRE_COOLDOWN;
@@ -1186,7 +1187,7 @@ export class Game {
             life: 0.14,
             max: 0.14,
         });
-        this.emit("shot", { player: t.id });
+        this.emit("shot", { player: t.id, shell });
         return true;
     }
     move(t, drive, turn, dt) {
@@ -1460,6 +1461,7 @@ export class Game {
                             player: b.owner,
                             victim: t.id,
                             self: b.owner === t.id,
+                            shell: b.id,
                         });
                         this.kills[b.owner] += b.owner !== t.id ? 1 : 0;
                         break;
