@@ -33,7 +33,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -138,10 +138,14 @@ class NanoJevTrainer:
         run.mkdir(parents=True)
         try:
             with gpu_lock(self._settings.gpu, self._settings.lock_dir):
+                # Timed while the one GPU is held, so waiting for the lock is not charged as GPU time.
+                held = time.monotonic()
                 loaded = self._load(base)
                 if job.algorithm == "grpo":
-                    return self._policy_gradient(job, base, batch, run, loaded)
-                return self._supervised(job, base, batch, run, loaded)
+                    result = self._policy_gradient(job, base, batch, run, loaded)
+                else:
+                    result = self._supervised(job, base, batch, run, loaded)
+                return replace(result, gpu_seconds=time.monotonic() - held)
         except Exception as error:
             (run / "error.json").write_text(json.dumps({"error": str(error)}) + "\n")
             raise

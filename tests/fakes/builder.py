@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, HarnessComponents
+from honing.campaign.cost import CampaignBudget
 from honing.core import (
     BackendSupport,
     CandidateSelector,
@@ -73,6 +74,8 @@ def build_campaign(
     gate_tasks: Sequence[Task] = TASKS,
     harness_selector: CandidateSelector | None = None,
     method_tasks: Sequence[Task] | None = None,
+    budget: CampaignBudget | None = None,
+    gpu_seconds_per_step: float | None = 1.5,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake.
 
@@ -82,7 +85,7 @@ def build_campaign(
     those tasks and then the gate's (``HarnessComponents.method_evaluator``).
     """
     world = FakeWorld()
-    trainer = FakeTrainer(world, support=support, gain=trainer_gain)
+    trainer = FakeTrainer(world, support=support, gain=trainer_gain, gpu_seconds_per_step=gpu_seconds_per_step)
     runner = make_runner(world)
     grader = FakeTaskGrader()
     method = method if method is not None else AppendInstructionMethod()
@@ -127,6 +130,7 @@ def build_campaign(
             scheme=INT4_G128,
         ),
         rollout=rollout,
+        budget=budget,
     )
     campaign.start(FakeModelSource(world), work_dir, harness_seed=SEED_HARNESS)
     return CampaignFixture(campaign, world, trainer, editor, quantizer, runner, grader, method, data)

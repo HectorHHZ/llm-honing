@@ -28,7 +28,7 @@ import sys
 import time
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -155,9 +155,13 @@ class LocalJevTrainer:
         run.mkdir(parents=True)
         try:
             with gpu_lock(self._settings.gpu, self._settings.lock_dir):
+                # Timed while the one GPU is held, so waiting for the lock is not charged as GPU time.
+                held = time.monotonic()
                 if job.algorithm == "grpo":
-                    return self._policy_gradient(job, base, batch, run)
-                return self._train(job, base, batch, run)
+                    result = self._policy_gradient(job, base, batch, run)
+                else:
+                    result = self._train(job, base, batch, run)
+                return replace(result, gpu_seconds=time.monotonic() - held)
         except Exception as error:
             (run / "error.json").write_text(json.dumps({"error": str(error)}) + "\n")
             raise

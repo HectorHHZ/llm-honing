@@ -8,6 +8,7 @@
   "harness_tasks": {"split": "train", "limit": 4},
   "episode_budget": 6,
   "samples_per_task": 2,
+  "budget": {"unit": "usd", "limit": 50.0, "gpu_hour_usd": 2.5},
   "schedule": [
     {"kind": "harness", "label": "gepa"},
     {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"},
@@ -25,7 +26,7 @@
     "method": {
       "factory": "honing.backends.tank.e2e:gepa_method",
       "args": {
-        "chat": {"factory": "tests.fakes.tank:chat", "args": {"expect_decisions": true}},
+        "chat": {"factory": "tests.fakes.tank:chat", "args": {"expect_decisions": true, "cost_per_call": 0.002}},
         "traces": {"factory": "honing.backends.tank.e2e:trace_source"},
         "max_metric_calls": 100,
         "minibatch_size": 3

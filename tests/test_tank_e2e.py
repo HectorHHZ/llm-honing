@@ -174,6 +174,20 @@ def test_the_dry_run_publishes_the_gepa_harness_and_rolls_back_both_train_moves_
     # the sft candidate ties the head on every seed and the grpo candidate does worse on one.
     assert [decision["metrics"]["difference_mean"] for decision in decisions] == [0.625, 0.0, -0.125]
     assert [decision["metrics"]["difference_low"] > 0.0 for decision in decisions] == [True, False, False]
+    # Every move is charged for every purpose. The gate is the fresh-seed gate alone, 8 rounds on both sides for
+    # every move. GEPA's method episodes are its 3 + 3 minibatch episodes and its own validation run, 4 val tasks
+    # on both sides, plus one priced reflection. sft plays 2 teacher rounds; grpo samples 4 tasks x 2.
+    costs = [step["cost"] for step in summary["steps"]]
+    assert [cost["episodes"] for cost in costs] == [
+        {"gate": 16, "method": 14, "rollout": 0, "demonstration": 0},
+        {"gate": 16, "method": 0, "rollout": 0, "demonstration": 2},
+        {"gate": 16, "method": 0, "rollout": 8, "demonstration": 0},
+    ]
+    # The summary's episodes are the gate's, so they match the gate count, not the method's validation run.
+    assert [step["episodes"] for step in summary["steps"]] == [cost["episodes"]["gate"] for cost in costs]
+    assert [cost["api_usd"] for cost in costs] == [0.002, 0.0, 0.0]
+    assert [cost["gpu_seconds"] for cost in costs] == [0.0, 1.5, 1.5]
+    assert summary["budget"]["unit"] == "usd" and summary["budget"]["stopped"] is None
     kinds = {
         json.loads((p / "manifest.json").read_text())["kind"]
         for p in (work / "runs").iterdir()

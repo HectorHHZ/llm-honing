@@ -70,8 +70,8 @@ class SlimeLikeTrainer:
     as a real trainer must, then trains the fake model.
     """
 
-    def __init__(self, world: FakeWorld, gain: float) -> None:
-        self._inner = FakeTrainer(world, support=SLIME_LIKE, gain=gain)
+    def __init__(self, world: FakeWorld, gain: float, gpu_seconds_per_step: float | None = 1.5) -> None:
+        self._inner = FakeTrainer(world, support=SLIME_LIKE, gain=gain, gpu_seconds_per_step=gpu_seconds_per_step)
         self.support = SLIME_LIKE
 
     def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult:
@@ -80,8 +80,8 @@ class SlimeLikeTrainer:
         return self._inner.train(job, base, batch)
 
 
-def trainer(context: PipelineContext, gain: float = 0.1) -> SlimeLikeTrainer:
-    return SlimeLikeTrainer(_world(context), gain)
+def trainer(context: PipelineContext, gain: float = 0.1, gpu_seconds_per_step: float | None = 1.5) -> SlimeLikeTrainer:
+    return SlimeLikeTrainer(_world(context), gain, gpu_seconds_per_step)
 
 
 def data(context: PipelineContext) -> ListDatasetProvider:

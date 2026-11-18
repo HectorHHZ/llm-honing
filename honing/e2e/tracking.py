@@ -150,6 +150,16 @@ def step_values(
     }
     if (episodes := _number(step.get("episodes"))) is not None:
         values["gate/episodes"] = episodes
+    cost = step.get("cost")
+    if isinstance(cost, Mapping):
+        # An unknown part (None) is not logged, so a chart never shows it as free.
+        by_purpose = cost.get("episodes")
+        for purpose, count in (by_purpose.items() if isinstance(by_purpose, Mapping) else ()):
+            if (number := _number(count)) is not None:
+                values[f"cost/episodes_{purpose}"] = number
+        for name, value in cost.items():
+            if (number := _number(value)) is not None:
+                values[f"cost/{name}"] = number
     for record in records:
         op = record.get("op")
         if op == "skip":
@@ -162,6 +172,8 @@ def step_values(
         for prefix, source in (("candidate", record.get("candidate")), ("selector", record.get("decision"))):
             metrics = source.get("metrics", {}) if isinstance(source, Mapping) else {}
             for name, value in metrics.items():
+                if prefix == "candidate" and name.startswith("cost_"):
+                    continue  # logged as cost/* from the step
                 if (number := _number(value)) is not None:
                     values[f"{prefix}/{name}"] = number
     for name, value in (usage or {}).items():

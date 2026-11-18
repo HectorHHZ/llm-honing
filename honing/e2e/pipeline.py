@@ -27,6 +27,10 @@ result (``published``, ``rolled back``, ``skipped``, or ``restored``); a run
 whose results differ fails. Everything a run wrote goes under ``work_dir``:
 ``summary.json``, the release chain, and whatever the runner keeps. An
 optional ``logging`` block logs the run to W&B (:mod:`honing.e2e.tracking`).
+An optional ``budget`` block (:func:`~honing.campaign.cost.budget_from_config`)
+stops the run once its spend reaches the limit; every step's cost and the
+total are in ``summary.json`` either way. A ``usd`` budget also stops the run,
+and fails it, after a move whose dollars it could not price.
 
 ``configs/e2e/all_planes.json`` runs fakes for every plane except the harness
 runner, which is :class:`~honing.e2e.workspace_runner.WorkspaceEpisodeRunner`
@@ -48,6 +52,7 @@ from pathlib import Path
 from typing import Any
 
 from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, HarnessComponents, StepOutcome
+from honing.campaign.cost import CampaignBudget, budget_from_config, cost_summary
 from honing.core import (
     CandidateSelector,
     CoAdaptScheduler,
@@ -63,6 +68,7 @@ from honing.core import (
     ModelEditor,
     ModelSource,
     Move,
+    MoveCost,
     NumericsPolicy,
     ParamMask,
     PolicyEndpoints,
@@ -218,6 +224,8 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     work = (work_dir or root / config.get("work_dir", "runs/e2e-pipeline")).resolve()
     work.mkdir(parents=True, exist_ok=False)
     context = PipelineContext(root=root.resolve(), work_dir=work)
+    budget = budget_from_config(config.get("budget"))
+    context.shared["budget"] = budget
     components = config.get("components", {})
     unknown = set(components) - {slot for slot, _, _ in SLOTS}
     if unknown:
@@ -262,6 +270,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
         ),
         defaults=_defaults(config),
         rollout=c.get("rollout"),  # type: ignore[arg-type]
+        budget=budget,
     )
     campaign.start(c["model_source"], work, harness_seed=seed)  # type: ignore[arg-type]
     schedule = tuple(config.get("schedule", ()))
@@ -291,6 +300,7 @@ def _step(outcome: StepOutcome) -> dict[str, object]:
         "candidate_mean": statistics.fmean(evaluation.candidate_scores) if evaluation else None,
         "incumbent_mean": statistics.fmean(evaluation.incumbent_scores) if evaluation else None,
         "episodes": len(evaluation.records) if evaluation else 0,
+        "cost": outcome.cost.to_record() if outcome.cost is not None else None,
     }
 
 
@@ -311,18 +321,34 @@ def _rollback(campaign: Campaign, entry: Mapping[str, Any]) -> dict[str, object]
     }
 
 
+def _stopped_at_limit(
+    budget: CampaignBudget | None, report: Mapping[str, object] | None, costs: Sequence[MoveCost]
+) -> bool:
+    """Whether the budget stopped the run at its limit, right after the first move whose spend reached it."""
+    if budget is None or report is None or report["stopped"] != "limit" or not costs:
+        return False
+    before = MoveCost()
+    for cost in costs[:-1]:
+        before = before.plus(cost)
+    spent_before, spent_after = budget.spent(before), budget.spent(before.plus(costs[-1]))
+    return spent_before is not None and spent_after is not None and spent_before < budget.limit <= spent_after
+
+
 def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, Any]:
     """Run the scheduler's moves and the schedule's rollbacks in order, and return the summary.
 
     ``failures`` names any step whose result was unexpected, and a run with
     ``expect`` fails when it ran another number of steps. A ``rollback`` entry
     the run never reached, because the scheduler stopped first, is a failure
-    too.
+    too. Neither counts when the budget stopped the run at its limit, after
+    the first move whose spend reached it. A ``usd`` budget's stop on a move
+    whose dollars are unknown is always a failure.
     """
     campaign = pipeline.campaign
     tracker = tracker or NullTracker()
     records = ChainRecords(campaign.chain.record_path)
     steps: list[dict[str, object]] = []
+    costs: list[MoveCost] = []
 
     def log(step: dict[str, object]) -> None:
         steps.append(step)
@@ -330,6 +356,9 @@ def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, A
 
     entries = list(pipeline.schedule)
     for _ in range(MAX_MOVES):
+        # Campaign.step checks the budget too; checking here first keeps a rollback from running after the stop.
+        if not campaign.admits_move():
+            break
         while entries and entries[0].get("kind") == "rollback":
             log(_rollback(campaign, entries.pop(0)))
         if entries:
@@ -337,6 +366,8 @@ def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, A
         outcome = campaign.step(pipeline.scheduler)
         if outcome is None:
             break
+        if outcome.cost is not None:
+            costs.append(outcome.cost)
         log(_step(outcome))
     head = campaign.chain.head()
     failures = [
@@ -344,20 +375,28 @@ def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, A
         for index, (step, wanted) in enumerate(zip(steps, pipeline.expect, strict=False))
         if step["result"] != wanted
     ]
-    if pipeline.expect and len(steps) != len(pipeline.expect):
-        failures.append(f"{len(steps)} steps ran, but expect lists {len(pipeline.expect)}")
-    # A rollback the scheduler stopped before would otherwise pass unnoticed, with no step and no failure.
-    first_left = len(pipeline.schedule) - len(entries)
-    failures.extend(
-        f"the run ended before schedule step {first_left + offset + 1} (rollback to {entry['to']}) ran"
-        for offset, entry in enumerate(entries)
-        if entry.get("kind") == "rollback"
-    )
+    budget = campaign.budget_report()
+    if budget is not None and budget["stopped"] == "unknown_cost":
+        failures.append(f"stopped: {budget['reason']}")
+    # A budget that ends the run at its limit is how a budgeted run ends, so the steps it cut short are no failure.
+    # Only a stop at the first move whose spend reached the limit counts: one later would mean a move ran unadmitted.
+    if not _stopped_at_limit(pipeline.context.shared.get("budget"), budget, costs):
+        if pipeline.expect and len(steps) != len(pipeline.expect):
+            failures.append(f"{len(steps)} steps ran, but expect lists {len(pipeline.expect)}")
+        # A rollback the scheduler stopped before would otherwise pass unnoticed, with no step and no failure.
+        first_left = len(pipeline.schedule) - len(entries)
+        failures.extend(
+            f"the run ended before schedule step {first_left + offset + 1} (rollback to {entry['to']}) ran"
+            for offset, entry in enumerate(entries)
+            if entry.get("kind") == "rollback"
+        )
     releases = campaign.chain.releases()
     return {
         "head": head.release_id,
         "releases": [{"id": r.release_id, "kind": r.kind, "parameters": r.master.parameters} for r in releases],
         "steps": steps,
+        "cost_total": cost_summary(costs),
+        "budget": budget,
         "failures": failures,
         "work_dir": str(pipeline.context.work_dir),
     }
