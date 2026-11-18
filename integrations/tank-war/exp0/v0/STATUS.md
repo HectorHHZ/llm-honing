@@ -3,8 +3,10 @@
 Source of truth: [issue #183](https://github.com/HectorHHZ/llm-honing/issues/183),
 current v0 acceptance text as checked on 2026-11-18. This file records progress;
 it does not change the issue. Update each row only with a linked, verifiable
-artifact. Work on the next row starts after the current row's independent PR
-merges. Do not post to #174 until the final receipt is ready.
+artifact. Item 1's PR must merge before item 2 starts, as agreed for this
+sequence. Items 2–8 are primarily dataset, validation, release, and reporting
+work; they do not each require a PR. Open another PR only if code or repository
+documentation must change. Do not post to #174 until the final receipt is ready.
 
 | Order | v0 acceptance item                                                                                             | Current evidence                                                                                                          | State                                           |
 | ----- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
