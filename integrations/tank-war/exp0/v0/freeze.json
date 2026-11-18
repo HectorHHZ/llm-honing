@@ -1,0 +1,102 @@
+{
+  "protocol_version": "tank-war-exp0-v0-20261118",
+  "issue": "https://github.com/HectorHHZ/llm-honing/issues/183",
+  "unit": "one complete Tank War episode",
+  "question": "Can System 0 identify the changed component, and do controlled probes improve on reading the same episode?",
+  "game": {
+    "recorded_code_commit": "31912a1a3378f49e542577fa383d42891a6f2dc3",
+    "node_version": "v22.22.0",
+    "python_version_on_ds_serv2": "3.10.12",
+    "sources_sha256": {
+      "web/game/engine.js": "35fc0dfdd707b0cd498117678f40cd9f818b6faf251eec333cd4d8eac9436062",
+      "web/game/planner.js": "9ddd57d0208eaa3eaeb663d16a1f9ced680920e2ea548212cedf2a5c0f121ebd",
+      "web/game/adapter.js": "f1b5f9a866657895ea5fd5f54b1ca15422dd8fd66bb403d7c892bd3081aa018c",
+      "web/game/strategies.js": "3d5ac541db905172a45af9db24c9e211571cd1d75057a00d2990189ff959b923",
+      "web/game/teacher.js": "c3b5ffcf455439bd8bda58846a5f8eb7e287146987631f4100e59d4a9457905d",
+      "model-bridge.mjs": "b5cfaf877351a76c53d2de90c490a2db387bf0ad39c169d40c5eaa4178e0d580",
+      "scripts/match.mjs": "881e7b8d10bfaf2689f9d86f85f321474825cdcc07cbe3ffec3fec417b12b0bd",
+      "scripts/state-replay.mjs": "b76fa38e6d74dc1aa0f701c487fa8546ab1c8ace1efd9af75e1bfc156da60131",
+      "scripts/controller-faults.mjs": "48d01ddd652ce3b6b0f6c0b6bccbc2a490072dfc8e5d9a8a1ef417ce742b5d94"
+    },
+    "opponent": "planner",
+    "seats": ["blue", "red"],
+    "sim_seconds": 30,
+    "model_interval_ms": 200,
+    "opponent_interval_ms": 300,
+    "outcome_score": { "win": 1, "draw_or_timeout": 0.5, "loss": 0 }
+  },
+  "model": {
+    "family": "NanoJev",
+    "repo": "C-Tianyu/NanoJev",
+    "revision": "047b927b30882a1138fc504821b82ac145a4b81a",
+    "source_revision": "76fdfc9ecdca45a9bcef17991a07d3041a87685a",
+    "clean_weights_sha256": "f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b",
+    "max_input_tokens": 8192,
+    "selection": "argmax; no sample-seed",
+    "inference": "reference"
+  },
+  "clean_harness": {
+    "controller_mode": "plans",
+    "context_version": "full",
+    "assist_enabled": true,
+    "assist_profile": "light",
+    "fire_guard_enabled": false,
+    "strategy": "baseline",
+    "recorded_harness_sha256": "3d365066469cb8b7e5375c74fdb6cdb19387533d8b7b7c964fbfbf6c0ead56e4",
+    "recorded_controller_sha256": "8707ec60d3b3fcb77885ae6f26c1c9f5d840180cc2d967587521995666205ba7"
+  },
+  "selected_faults": {
+    "harness": {
+      "instance": "extreme_standoff-v1",
+      "builder_kind": "extreme_standoff",
+      "recorded_harness_sha256": "c5ae1360c2689097d37f8b12378574424069a3600c4902dc9d4571766532f96d",
+      "recorded_controller_sha256": "b4efec6b4575fc497db5c9f420071b7bc9b57226dddea6a64122f566a4d23eda",
+      "boundary_note": "The strategy also participates in post-choice plan revalidation; selected reference cases have direct model-choice evidence."
+    },
+    "weights": [
+      {
+        "instance": "reverse_strength_3p0-v1",
+        "family": "reverse_prior_scalar_edit",
+        "builder_strength": -3.0,
+        "weights_sha256": "94ffcb068607fb91f13f5b6a815b17b43896b12cdc4c3560869fc2413a5db484"
+      },
+      {
+        "instance": "reverse_strength_4p0-v1",
+        "family": "reverse_prior_scalar_edit",
+        "builder_strength": -4.0,
+        "weights_sha256": "b2538b1649843791b5e5996b8364af88051e6f3aa1c7828770873ce90cc574f7"
+      }
+    ],
+    "weights_builder_inputs": {
+      "prior_edit_weights_sha256": "5f09dffce1a07ed7d994dcc345f9e8e149dad4774e30b83b09b9d09661a268b4",
+      "reverse_edit_weights_sha256": "dc6a6985954cbf0fb6dc43123cc94ff34a3717ba2c20b4328b8b6211e52f7662"
+    },
+    "controller": {
+      "instance": "drop_fire_after_selection-v1",
+      "builder_kind": "drop_fire_after_selection",
+      "recorded_controller_sha256": "b248fa1654b6c9590af35b932017e1a22a7d02c05909eca5669404f89db4764e"
+    }
+  },
+  "existing_sample": {
+    "sample_sha256": "3c7a50d15531c21b8c9937122b9c33a9b998498b189dfa832abf1238c9b746f4",
+    "counts": {
+      "harness": 10,
+      "weights": 10,
+      "controller": 10,
+      "no_injection": 10
+    },
+    "independent_seed_blocks": 19,
+    "controls_outcome": "all ten selected controls are losses",
+    "status": "development and reproducibility sample; previously inspected data; not independent confirmation"
+  },
+  "diagnosis": {
+    "unit": "one component per episode, or abstain",
+    "minimum_modes": ["read", "probe"],
+    "primary_model": "gpt-6-sol",
+    "primary_effort": "high",
+    "codex_cli_version_recorded": "0.158.0",
+    "internal_model_revision_and_temperature": "not verifiable in ChatGPT-login CLI records",
+    "probability_identity_tolerance": 0.01,
+    "decision_window_score": "not a v0 endpoint"
+  }
+}
