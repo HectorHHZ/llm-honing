@@ -6,7 +6,7 @@ import math
 from statistics import NormalDist
 
 from honing.core import EvaluationResult, SelectionDecision, UpdateCandidate, require
-from honing.release.statistics import PairedDifference, normal_paired_difference, paired_difference
+from honing.release.statistics import MAX_BET, PairedDifference, betting_paired_difference, paired_difference
 
 #: The share of ``1 - confidence`` a sequential gate's interim looks spend, split evenly between them. It is
 #: small so the final look's interval stays close to a fixed gate's, and interim looks stop only on clear results.
@@ -80,15 +80,14 @@ class NoRegressionSelector:
 class PairedIntervalSelector:
     """Select when the interval on the mean per-task difference lies above ``min_effect``.
 
-    The interval is :func:`~honing.release.statistics.normal_paired_difference`,
+    The interval is :func:`~honing.release.statistics.betting_paired_difference`,
     two-sided at ``confidence``. A candidate whose true mean difference is at
     most ``min_effect`` is selected with probability at most
-    ``(1 - confidence) / 2``, which is 2.5% at the default 95%, up to the error
-    of the normal approximation. Skew toward rare large losses is where that
-    error is largest, because a sample that misses the losses looks like a
-    clear gain. In simulation, with half-point gains in 10% of rounds and
-    whole-round losses in 5%, a fixed gate selected at 6.7% with 61 rounds,
-    5.0% with 100 and 4.1% with 200.
+    ``(1 - confidence) / 2``, which is 2.5% at the default 95%. The bound
+    assumes only that the per-task differences are independent and lie in
+    ``[-1, 1]``, which every pair of scores in ``[0, 1]`` does. It holds for
+    skewed differences, for a block whose differences are all equal, and for
+    a handful of tasks.
 
     With ``looks > 1`` the gate plays its rounds in ``looks`` equal blocks and
     calls :meth:`look` after each one, so it can stop once the result is clear.
@@ -97,26 +96,24 @@ class PairedIntervalSelector:
     evenly and the final look keeps the rest. The chance that any look's
     interval misses the true mean is at most the sum of the parts, so the bound
     above holds across all the looks. This is a Haybittle-Peto design with a
-    Bonferroni split. With four looks an interim look stops only on a
-    difference of 3.1 standard errors, and the final interval uses 2.0 where a
-    fixed gate uses 1.96. The sequential gate needs about 3% more rounds for
-    the same power, before rounding up to whole blocks, and stops early on
-    candidates that are clearly better or clearly worse.
+    Bonferroni split.
 
-    A confidence sequence for bounded scores, such as the predictable plug-in
-    empirical-Bernstein sequence of Waudby-Smith and Ramdas (2023), would also
-    control repeated looks, and would allow a look after every round. Tuned to
-    400 rounds at a paired standard deviation of 0.5, it is about 1.8 times as
-    wide as this interval there. In simulation it needed 450 rounds for 80%
-    power to detect 0.10, where this design needs 208. The gate looks only
-    between blocks whose number it knows in advance, so it does not need that
-    freedom.
+    A bound that holds for every distribution costs rounds. To detect 0.10
+    with 80% power at a paired standard deviation of 0.5, a fixed gate needs
+    327 rounds and a four-look gate 336, where a normal interval needed 199
+    and 208. The normal interval selected a candidate with no effect up to 16%
+    of the time on skewed differences. In simulation this one selected at most
+    0.6% on every shape the tests try. :meth:`rounds_needed` sizes a gate for
+    this interval.
     """
 
     name = "paired_interval"
 
     def __init__(self, min_effect: float = 0.0, confidence: float = 0.95, looks: int = 1) -> None:
-        require(math.isfinite(min_effect), f"min_effect must be finite, got {min_effect}")
+        require(
+            -1.0 < min_effect < 1.0,
+            f"min_effect must be in (-1, 1), where differences of scores lie, got {min_effect}",
+        )
         require(0.0 < confidence < 1.0, f"confidence must be in (0, 1), got {confidence}")
         require(looks >= 1, f"looks must be >= 1, got {looks}")
         self._min_effect = min_effect
@@ -137,7 +134,7 @@ class PairedIntervalSelector:
             return self.decide(candidate, evaluation)
         require(self._looks > 1, "a selector with one look has no interim looks")
         confidence = self._look_confidence(final=False)
-        interval = normal_paired_difference(evaluation, confidence=confidence)
+        interval = betting_paired_difference(evaluation, confidence=confidence)
         if interval.low > self._min_effect or interval.high < self._min_effect:
             return self._decision(interval, confidence)
         return None
@@ -145,27 +142,45 @@ class PairedIntervalSelector:
     def decide(self, candidate: UpdateCandidate, evaluation: EvaluationResult) -> SelectionDecision:
         """The final look. A gate that plays all its rounds at once calls only this."""
         confidence = self._look_confidence(final=True)
-        return self._decision(normal_paired_difference(evaluation, confidence=confidence), confidence)
+        return self._decision(betting_paired_difference(evaluation, confidence=confidence), confidence)
 
     def rounds_needed(self, paired_sd: float, effect: float, power: float = 0.8) -> int:
         """Paired rounds for the final look to select a true mean difference of ``effect`` with ``power``.
 
         ``paired_sd`` is the standard deviation of one round's difference. The
-        count is the normal approximation plus ``z ** 2 / 2``, where ``z`` is the
-        final look's quantile, rounded up to whole blocks. The extra rounds are
-        Guenther's (1981) allowance for estimating the standard deviation from
-        the same rounds. Without them a fixed gate's simulated power falls about
-        0.3 points short. Interim looks add a little power, since they can
-        select early, and almost never reject a candidate this good.
+        low end clears ``min_effect`` when the log capital of betting above it
+        reaches the final look's level, ``log(2 / alpha)``. With stake ``b``, a
+        round adds ``log(1 + b (d - min_effect))``, which averages about
+        ``b g - b ** 2 (paired_sd ** 2 + g ** 2) / 2`` with a standard deviation
+        of about ``b paired_sd``, where ``g`` is ``effect - min_effect``. The
+        count is the smallest at which the total's mean, less ``z(power)`` of
+        its standard deviations, reaches the level, at the stake the interval
+        uses once it has seen the spread. Simulated power at that count is 80
+        to 83% for spreads of 0.3 to 0.7 and an effect of 0.10. It is rounded
+        up to whole blocks of at least two rounds. Interim looks add a little
+        power, since they can select early.
         """
         require(paired_sd > 0.0, f"paired_sd must be > 0, got {paired_sd}")
         require(effect > self._min_effect, f"effect must be above min_effect {self._min_effect}, got {effect}")
         require(0.0 < power < 1.0, f"power must be in (0, 1), got {power}")
-        z = NormalDist().inv_cdf
-        final_z = z((1.0 + self._look_confidence(final=True)) / 2.0)
-        normal = ((final_z + z(power)) * paired_sd / (effect - self._min_effect)) ** 2
-        rounds = math.ceil(normal + final_z**2 / 2.0)
-        return math.ceil(rounds / self._looks) * self._looks
+        level = math.log(2.0 / (1.0 - self._look_confidence(final=True)))
+        gap = effect - self._min_effect
+        z_power = NormalDist().inv_cdf(power)
+
+        def enough(rounds: int) -> bool:
+            bet = min(math.sqrt(2.0 * level / (rounds * paired_sd**2)), MAX_BET / (1.0 + self._min_effect))
+            growth = rounds * (bet * gap - bet**2 * (paired_sd**2 + gap**2) / 2.0)
+            return growth - z_power * bet * paired_sd * math.sqrt(rounds) >= level
+
+        # Enough rounds stay enough with more, so double past the count and bisect back to it.
+        short, rounds = 0, 1
+        while not enough(rounds):
+            short, rounds = rounds, rounds * 2
+        while rounds - short > 1:
+            middle = (short + rounds) // 2
+            short, rounds = (short, middle) if enough(middle) else (middle, rounds)
+        blocks = max(math.ceil(rounds / self._looks), 2)
+        return blocks * self._looks
 
     def _look_confidence(self, *, final: bool) -> float:
         """One look's interval level. The levels' miss chances add up to ``1 - confidence``."""

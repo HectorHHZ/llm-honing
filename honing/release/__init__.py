@@ -7,8 +7,8 @@ from honing.release.selectors import AcceptAll, NoRegressionSelector, PairedInte
 from honing.release.statistics import (
     GATE_METRIC_NAMES,
     PairedDifference,
+    betting_paired_difference,
     gate_metrics,
-    normal_paired_difference,
     paired_difference,
 )
 
@@ -23,7 +23,7 @@ __all__ = [
     "PairedIntervalSelector",
     "ReleaseChain",
     "WinLossSelector",
+    "betting_paired_difference",
     "gate_metrics",
-    "normal_paired_difference",
     "paired_difference",
 ]
