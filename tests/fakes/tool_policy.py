@@ -1,8 +1,9 @@
 """A stand-in OpenAI-compatible policy that makes the agent run one shell command, then answers.
 
-The first reply to a conversation calls the ``bash`` tool with ``command``; once the conversation holds a tool result,
-the reply is ``answer``. It streams when asked, as pi always does, and keeps every request's headers and body so a
-test can check what reached the model. With it, a test drives a real agent through a tool call without a model.
+The first reply to a conversation calls the shell tool (``bash``, or the one ``tool`` names) with ``command``; once the
+conversation holds a tool result, the reply is ``answer``. It streams when asked, as pi always does, and keeps every
+request's headers and body so a test can check what reached the model. With it, a test drives a real agent through a
+tool call without a model.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ class _Handler(BaseHTTPRequestHandler):
             finish = "stop"
         else:
             arguments = json.dumps({"command": self.server.command})
-            call = {"id": "call_1", "type": "function", "function": {"name": "bash", "arguments": arguments}}
+            call = {"id": "call_1", "type": "function", "function": {"name": self.server.tool, "arguments": arguments}}
             message, finish = {"role": "assistant", "content": "", "tool_calls": [call]}, "tool_calls"
         reply = {
             "id": "chatcmpl-tool",
@@ -56,9 +57,10 @@ class ToolCallingPolicy(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, command: str, answer: str = "done") -> None:
+    def __init__(self, command: str, answer: str = "done", tool: str = "bash") -> None:
         super().__init__(("127.0.0.1", 0), _Handler)
         self.command = command
+        self.tool = tool
         self.answer = answer
         self.requests: list[dict[str, Any]] = []
         self.lock = threading.Lock()
