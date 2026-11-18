@@ -1,0 +1,84 @@
+{
+  "version": "tank183-sustained-baselines-v1",
+  "sample_freeze_sha256": "583edbc1bc3055df91c1e0bf5c32d134dcce3794fa799614d7b089b64dcef091",
+  "diagnosis_freeze_sha256": "d4be3911baed7c148cbc6e07d5659adcb812649029e1c2c37cc7c04bff5101fc",
+  "class_counts": {
+    "harness": 10,
+    "weights": 10,
+    "controller": 10
+  },
+  "baselines": {
+    "uniform_random_expected_correct": 10,
+    "majority_correct": 10,
+    "always_harness_correct": 10,
+    "always_weights_correct": 10,
+    "always_controller_correct": 10,
+    "fault_total": 30,
+    "blind_human_cause": "unavailable: reviewer marked decisions, not cause"
+  },
+  "modes": {
+    "read": {
+      "correct": 16,
+      "fault_total": 30,
+      "macro_f1": 0.443701226309922,
+      "harness_vs_weights_correct": 6,
+      "harness_vs_weights_total": 20,
+      "abstentions": 0,
+      "brier_for_stated_cause_confidence": 0.3684866666666667,
+      "expected_calibration_error_5_bins": 0.3739999999999999,
+      "calibration_bins": [
+        {
+          "range": [
+            0.6,
+            0.8
+          ],
+          "count": 2,
+          "mean_confidence": 0.765,
+          "accuracy": 0.5
+        },
+        {
+          "range": [
+            0.8,
+            1.0
+          ],
+          "count": 28,
+          "mean_confidence": 0.9174999999999999,
+          "accuracy": 0.5357142857142857
+        }
+      ],
+      "no_injection_unsupported_harness_or_controller": 9
+    },
+    "probe": {
+      "correct": 28,
+      "fault_total": 30,
+      "macro_f1": 0.933249791144528,
+      "harness_vs_weights_correct": 18,
+      "harness_vs_weights_total": 20,
+      "abstentions": 0,
+      "brier_for_stated_cause_confidence": 0.06957666666666676,
+      "expected_calibration_error_5_bins": 0.03566666666666699,
+      "calibration_bins": [
+        {
+          "range": [
+            0.6,
+            0.8
+          ],
+          "count": 4,
+          "mean_confidence": 0.7750000000000001,
+          "accuracy": 1.0
+        },
+        {
+          "range": [
+            0.8,
+            1.0
+          ],
+          "count": 26,
+          "mean_confidence": 0.9165384615384612,
+          "accuracy": 0.9230769230769231
+        }
+      ],
+      "no_injection_unsupported_harness_or_controller": 8
+    }
+  },
+  "scope": "one fault family per layer; controls have no constructed-fault gold cause"
+}

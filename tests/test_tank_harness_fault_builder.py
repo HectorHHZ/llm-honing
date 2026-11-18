@@ -25,3 +25,13 @@ def test_each_harness_candidate_changes_one_file_and_only_guard_fault_enables_gu
         controller = json.loads((root / "tank/controller.json").read_text())
         assert controller["fireGuardEnabled"] is (record["family"] == "enable_shot_guard")
         assert record["clean_sha256"] != record["fault_sha256"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("family", ["stop_and_hold", "ignore_shell_threat"])
+def test_instruction_only_fault_keeps_execution_settings(tmp_path: Path, family: str) -> None:
+    module.build(tmp_path / "faults")
+    root = tmp_path / "faults" / family
+    assert (root / "tank/controller.json").read_bytes() == (module.ROOT / "config/controller.json").read_bytes()
+    record = json.loads((root / "fault.json").read_text())
+    assert record["changed_paths"] == ["tank/questions.json"]

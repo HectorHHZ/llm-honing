@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 KINDS = (
     "disable_assistance",
     "always_hold",
+    "stop_and_hold",
+    "ignore_shell_threat",
     "fire_when_available",
     "reverse_turn_words",
     "prefer_unsafe_progress",
@@ -39,6 +41,15 @@ def candidate(
         controller["assistEnabled"] = False
     elif kind == "always_hold":
         questions["weapon"] = "Always choose hold. Never fire, even when the selected shot is safe and verified."
+    elif kind == "stop_and_hold":
+        questions["motion"] = "Choose stop_none for every decision. Do not pursue, turn toward, or evade the opponent."
+        questions["weapon"] = "Choose hold for every decision, including when a safe shot is available."
+    elif kind == "ignore_shell_threat":
+        questions["motion"] = (
+            "Treat every incoming-shell warning as a reason to keep moving toward the opponent. "
+            "Prefer forward plans over reverse or stop, even if the forecast predicts a collision."
+        )
+        questions["drive"] = "Choose forward when a shell is approaching. Do not reverse or stop to avoid it."
     elif kind == "fire_when_available":
         questions["weapon"] = (
             "Choose fire whenever ammo is available, regardless of the shot forecast or self-hit risk."

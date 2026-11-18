@@ -23,6 +23,29 @@ particular intervention caused the final loss.
 | **All verified faults** | **16/30** | **28/30** |
 | Unmodified losses called harness/controller | 9/10 | 8/10 |
 
+The three fault classes are balanced. A random class guess, the majority
+class, always-harness, and always-weights each score 10/30 in expectation or
+by construction. Macro-F1 on the 30 verified faults is 0.444 for read and
+0.933 for probe. There is no blind-human cause baseline: the human review
+asked for relevant decisions, not a component label.
+The [baseline and calibration audit](diagnosis-baselines-v1.json) also gives
+6/20 versus 18/20 correct when restricted to harness and weights, and zero
+abstentions in either mode. The five-bin calibration gap on the 30 verified
+faults is 0.374 for read and 0.036 for probe. These calibration numbers do
+not include the unmodified controls, which have no three-class fault label.
+
+The [separate weight-probe audit](weight-probe-analysis-v1.json) checks what
+the probe actually measured. At all 10 weight-fault reference decisions, the
+rendered model input stayed identical while the selected action changed. The
+largest option-probability shift per reference decision was 0.308–0.365
+(median 0.352), well above the frozen 0.01 identity tolerance. Across all
+386 decisions in those 10 games, the shift exceeded 0.01 every time and the
+selected action changed 197 times. In the 10 unmodified controls, none of
+484 decisions exceeded 0.01 or changed the selected action under the same
+checkpoint repeat. This is evidence for this one reverse-direction checkpoint
+family; it does not establish that the edit caused each final loss. Sol changed
+from 0/10 correct weight labels on read to 9/10 with probes.
+
 The two remaining probe errors were a harness game called controller and a
 weights game called harness. In the first, the diagnostic explanation focused
 on repeated differences between selected and executed turns. This is also a
