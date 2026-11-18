@@ -16,19 +16,18 @@ SPEC.loader.exec_module(module)
 
 @pytest.mark.unit
 def test_pairing_and_instance_reset_groups() -> None:
-    rows = []
-    for layer in module.LAYERS:
-        for instance in ("a", "b"):
-            for seed in (101, 202):
-                rows.append(
-                    {
-                        "label": layer,
-                        "instance": f"{layer}-{instance}",
-                        "seed": seed,
-                        "read": {"cause": "uncertain"},
-                        "probe": {"cause": layer, "confidence": 1.0},
-                    }
-                )
+    rows = [
+        {
+            "label": layer,
+            "instance": f"{layer}-{instance}",
+            "seed": seed,
+            "read": {"cause": "uncertain"},
+            "probe": {"cause": layer, "confidence": 1.0},
+        }
+        for layer in module.LAYERS
+        for instance in ("a", "b")
+        for seed in (101, 202)
+    ]
     result = module.paired_interval(rows, "read", "probe", draws=100)
     assert result["point"] == 1
     assert result["instance_and_reset_group_bootstrap_95pct"] == [1, 1]

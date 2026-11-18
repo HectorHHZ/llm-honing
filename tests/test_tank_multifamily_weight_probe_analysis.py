@@ -46,23 +46,32 @@ def test_splits_checkpoint_instances_and_rejects_tampered_probe(tmp_path: Path) 
         control = case["technical_label"] == "no_injection"
         write(
             source / "probes" / case["episode_id"] / "probes.json",
-            {"indices": [{
-                "decision_index": 0,
-                "same_model_input": True,
-                "selected_action_changed": not control,
-                "max_abs_probability_change": 0.0 if control else 0.3,
-            }]},
+            {
+                "indices": [
+                    {
+                        "decision_index": 0,
+                        "same_model_input": True,
+                        "selected_action_changed": not control,
+                        "max_abs_probability_change": 0.0 if control else 0.3,
+                    }
+                ]
+            },
         )
-        records.append({
-            "episode_id": case["episode_id"],
-            "probe_sha256": module.sha(source / "probes" / case["episode_id"] / "probes.json"),
-        })
-    write(source / "probes/summary.json", {
-        "status": "complete",
-        "cases": 3,
-        "sample_freeze_sha256": module.sha(source / "sample-freeze.json"),
-        "records": records,
-    })
+        records.append(
+            {
+                "episode_id": case["episode_id"],
+                "probe_sha256": module.sha(source / "probes" / case["episode_id"] / "probes.json"),
+            }
+        )
+    write(
+        source / "probes/summary.json",
+        {
+            "status": "complete",
+            "cases": 3,
+            "sample_freeze_sha256": module.sha(source / "sample-freeze.json"),
+            "records": records,
+        },
+    )
     write(source / "probe-audit.json", {"valid": 3})
     result = module.analyze(source)
     assert set(result["edited_checkpoint_instances"]) == {"edit-1", "edit-2"}

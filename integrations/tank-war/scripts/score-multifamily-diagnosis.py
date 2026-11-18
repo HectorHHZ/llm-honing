@@ -44,11 +44,7 @@ def macro_f1(rows: list[dict[str, Any]], key: str) -> float:
 def calibration_error(rows: list[dict[str, Any]], key: str, bins: int = 5) -> float:
     error = 0.0
     for bin_index in range(bins):
-        members = [
-            row
-            for row in rows
-            if min(int(row[key]["confidence"] * bins), bins - 1) == bin_index
-        ]
+        members = [row for row in rows if min(int(row[key]["confidence"] * bins), bins - 1) == bin_index]
         if members:
             accuracy = sum(row[key]["cause"] == row["label"] for row in members) / len(members)
             confidence = sum(row[key]["confidence"] for row in members) / len(members)
@@ -67,11 +63,13 @@ def paired_interval(rows: list[dict[str, Any]], left: str, right: str, draws: in
     def delta(row: dict[str, Any]) -> int:
         return int(row[right]["cause"] == row["label"]) - int(row[left]["cause"] == row["label"])
 
-    point = sum(
-        sum(delta(row) for row in faults if row["label"] == layer)
-        / sum(row["label"] == layer for row in faults)
-        for layer in LAYERS
-    ) / 3
+    point = (
+        sum(
+            sum(delta(row) for row in faults if row["label"] == layer) / sum(row["label"] == layer for row in faults)
+            for layer in LAYERS
+        )
+        / 3
+    )
     seed_ids = sorted({row["seed"] for row in faults})
     rng = random.Random(183)
     samples = []
@@ -200,9 +198,7 @@ def summarize(rows: list[dict[str, Any]], source: Path, diagnosis: Path) -> dict
                 "abstentions": sum(row[key]["cause"] == "uncertain" for row in faults),
                 "harness_vs_weights_correct": {
                     "correct": sum(
-                        row[key]["cause"] == row["label"]
-                        for row in faults
-                        if row["label"] in ("harness", "weights")
+                        row[key]["cause"] == row["label"] for row in faults if row["label"] in ("harness", "weights")
                     ),
                     "total": sum(row["label"] in ("harness", "weights") for row in faults),
                 },
@@ -233,7 +229,7 @@ def summarize(rows: list[dict[str, Any]], source: Path, diagnosis: Path) -> dict
         ):
             try:
                 comparisons[f"{model}:{name}"] = paired_interval(rows, f"{model}:{left}", f"{model}:{right}")
-            except ValueError as error:
+            except ValueError as error:  # noqa: PERF203
                 comparisons[f"{model}:{name}"] = {"status": "unavailable", "reason": str(error)}
     primary = comparisons["sol:probe_minus_read"]
     majority = max(sum(row["label"] == layer for row in faults) for layer in LAYERS)

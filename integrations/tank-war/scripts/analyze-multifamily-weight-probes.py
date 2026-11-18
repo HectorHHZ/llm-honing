@@ -72,9 +72,7 @@ def analyze(source: Path) -> dict[str, Any]:
                 "max": max(deltas),
             },
             "all_decisions": len(all_rows),
-            "all_decisions_delta_gt_0p01": sum(
-                (row["max_abs_probability_change"] or 0) > 0.01 for row in all_rows
-            ),
+            "all_decisions_delta_gt_0p01": sum((row["max_abs_probability_change"] or 0) > 0.01 for row in all_rows),
             "all_decisions_selected_action_changed": sum(row["selected_action_changed"] for row in all_rows),
         }
     return {
