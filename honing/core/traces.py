@@ -12,27 +12,27 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Literal, get_args
 
 from honing.core.data import DecisionSample
-from honing.core.errors import require, require_choice
+from honing.core.errors import require
 from honing.core.harness import Grade
-
-KeyEvent = Literal["death", "self_hit", "missed_shot"]
 
 
 @dataclass(frozen=True)
 class TraceEvent:
     """Something that happened in an episode, in the words of the source that read it.
 
-    ``key`` marks an event a reader looks around first: a death, a self-hit
-    (a death the agent caused itself), or a missed shot. It is ``None`` for an
-    ordinary event.
+    A key event is one a reader looks around first, such as the agent's death
+    or a missed shot. It has a ``label`` the source chooses, which names the
+    kind of event, and a ``priority``: under a length limit, events with a
+    lower number are kept longer, and 0 marks the events a reader must see. An
+    ordinary event has neither.
     """
 
     time_seconds: float
     text: str
-    key: KeyEvent | None = None
+    label: str | None = None
+    priority: int | None = None
 
     def __post_init__(self) -> None:
         require(
@@ -40,8 +40,19 @@ class TraceEvent:
             f"a trace event's time must be finite and >= 0, got {self.time_seconds}",
         )
         require(bool(self.text), "a trace event needs a description")
-        if self.key is not None:
-            require_choice(self.key, get_args(KeyEvent), "TraceEvent.key")
+        require(
+            (self.label is None) == (self.priority is None),
+            "a key event has both a label and a priority, and an ordinary event has neither",
+        )
+        if self.label is not None:
+            require(bool(self.label.strip()), "a key event's label must not be blank")
+        if self.priority is not None:
+            require(self.priority >= 0, f"a key event's priority must be >= 0, got {self.priority}")
+
+    @property
+    def key(self) -> bool:
+        """Whether this is a key event."""
+        return self.label is not None
 
 
 @dataclass(frozen=True)

@@ -232,7 +232,10 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
     ),
     ("preference training on decisions", lambda: TrainJobSpec(algorithm="dpo", contract="typed_decisions")),
     ("a trace event before the episode began", lambda: TraceEvent(-0.1, "fired")),
-    ("a trace event with an unknown key", lambda: TraceEvent(1.0, "fired", "near_miss")),  # type: ignore[arg-type]
+    ("a key event without a priority", lambda: TraceEvent(1.0, "fired", "missed shot")),
+    ("a priority without a label", lambda: TraceEvent(1.0, "fired", priority=1)),
+    ("a key event with a blank label", lambda: TraceEvent(1.0, "fired", " ", 0)),
+    ("a key event with a negative priority", lambda: TraceEvent(1.0, "fired", "missed shot", -1)),
     (
         "a decision trace without behavior probabilities",
         lambda: DecisionTrace(

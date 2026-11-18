@@ -397,19 +397,30 @@ A decision model's episode is read through its decisions. `TraceSource`, a proto
 `honing/core`, reads an episode back as `DecisionTrace`s:
 `traces(record, *, release_id=None)`. Each trace holds one decision: the state the model
 read, every option's probability, the choice, what the controller allowed and applied,
-and the events up to the next decision, with the episode's outcome and grade.
+and the events up to the next decision, with the episode's outcome and grade. A
+`TraceEvent` that a reader should look around first is a key event: the source gives it a
+free-text `label` and an integer `priority`, where a lower number is kept longer under a
+length limit. The source chooses both, so each game names its own events without a change
+to `honing.core`.
+
 `TankTraceSource` (`honing/backends/tank/traces.py`) reads a tank run directory. It
 refuses a run whose `decisions.jsonl`, `events.jsonl` or `result.json` does not match the
-SHA-256 its `manifest.json` records under `outputs`. `render_traces`
-(`honing/harness/traces.py`) writes one episode as compact text within a token cap,
-counting each word, number and punctuation mark as one token. It shows windows of
-decisions around deaths, self-hits and missed shots, and each decision lists only the
-state fields that changed since the decision before it with the same questions. The same
-traces always render to the same text. Given a trace source, GEPA's reflective dataset
-shows each minibatch episode's rendering as its generated output, and Meta-Harness
-writes it as `decisions.txt` beside each search trace. The loader and the renderer
-import only the standard library and `honing.core`, so System 0's scheduler (#138) can
-read the same traces.
+SHA-256 its `manifest.json` records under `outputs`. Its key events are the agent's tank
+destroyed ("agent destroyed", "agent self-hit") at priority 0, and at priority 1 the
+opponent's tank destroyed ("opponent destroyed", "opponent self-hit") and each missed
+shot. A shot missed when its shell hit no tank, which the round's result settles: the
+engine names the shell on each shot and kill, and one hit ends the round.
+
+`render_traces` (`honing/harness/traces.py`) writes one episode as compact text within a
+token cap, counting each word, number and punctuation mark as one token. It shows
+windows of decisions around the key events. The first decision of each window lists the
+whole state with the controller's constraints and applied action, and each later one
+the state fields that changed or are gone since the decision shown before it with the
+same questions. The same traces and cap always render to the same text. Given a trace
+source, GEPA's reflective dataset shows each minibatch episode's rendering as its
+generated output, and Meta-Harness writes it as `decisions.txt` beside each search
+trace. The loader and the renderer import only the standard library and `honing.core`,
+so System 0's scheduler (#138) can read the same traces.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:

@@ -1,32 +1,35 @@
 """Decision traces (#168): the tank loader, the compact renderer, and the GEPA and Meta-Harness adapters.
 
-The fixtures are two recorded tank rounds, played by ``match.mjs`` with the
-dry run's stand-in model on a 10-second clock, and kept byte for byte as the
-match wrote them. ``s3114-blue-destroyed`` ends with the agent shot down after
-two missed shots, and ``s3138-red-opponent-self-hit`` with the opponent hit by
-its own shell. Each has its rendering at the default cap next to it as
-``<name>.txt``. Set ``HONING_UPDATE_GOLDEN=1`` to write those again.
+The fixtures are four recorded tank rounds, played by ``match.mjs`` against
+the planner with the dry run's stand-in model (``ForecastModel`` in
+``tests/fakes/tank.py`` at quality 0.7) and kept byte for byte as the match
+wrote them. On a 10-second clock, ``s3114-blue-destroyed`` ends with the agent
+shot down after five missed shots, and ``s3138-red-opponent-self-hit`` with the
+opponent hit by its own shell. Both were recorded before the engine named the
+shell on each shot and kill. On the suite's 30-second clock,
+``s3104-blue-opponent-destroyed`` ends with the agent's sixth shell hitting the
+opponent after three later shots, and ``s3102-red-timeout`` at the time limit
+after twenty missed shots. Those two run to 0.3 and 1.5 MB, so each is kept
+packed as ``<name>.tar.gz``. Each round has its rendering at the default cap
+next to it as ``<name>.txt``. Set ``HONING_UPDATE_GOLDEN=1`` to write those
+again.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
+import tarfile
 from collections import Counter
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
 
-from honing.backends.tank.traces import (
-    OUTPUTS,
-    SEATS,
-    SHELL_LIFETIME_SECONDS,
-    TankTraceSource,
-    load_run,
-)
+from honing.backends.tank.traces import OUTPUTS, TankTraceSource, load_run
 from honing.core import (
     ChatMessage,
     ContractError,
@@ -54,19 +57,44 @@ from tests.fakes.harness import (
 from tests.fakes.model import FakeModelSource, FakeWorld
 from tests.fakes.tank import chat
 
-REPO = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures/decision_traces"
 DESTROYED = "s3114-blue-destroyed"
 SELF_HIT = "s3138-red-opponent-self-hit"
-RUNS = (DESTROYED, SELF_HIT)
-KEY_EVENTS = {DESTROYED: {"death": 1, "missed_shot": 2}, SELF_HIT: {"self_hit": 1}}
+KILL = "s3104-blue-opponent-destroyed"
+TIMEOUT = "s3102-red-timeout"
+RUNS = (DESTROYED, SELF_HIT, KILL, TIMEOUT)
+KEY_EVENTS = {
+    DESTROYED: {"agent destroyed": 1, "missed shot": 5},
+    SELF_HIT: {"opponent self-hit": 1, "missed shot": 5},
+    KILL: {"opponent destroyed": 1, "missed shot": 8},
+    TIMEOUT: {"missed shot": 20},
+}
+CAPS = (300, 1000, 2000, DEFAULT_MAX_TOKENS, 20000)
 RENDERED_VERIFY = re.compile(
     r"^  verify: check [01]\.\d{3}, finish [01]\.\d{3}; chose (?:check|finish)$", re.MULTILINE
 )
+GAP = re.compile(r"^\(\d+ decisions? not shown, .*\)$", re.MULTILINE)
 
 
-def _copy(tmp_path: Path, name: str) -> Path:
-    return Path(shutil.copytree(FIXTURES / name, tmp_path / name))
+@pytest.fixture(scope="module")
+def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Every fixture round's run directory, the packed ones unpacked."""
+    unpacked = tmp_path_factory.mktemp("runs")
+    for packed in sorted(FIXTURES.glob("*.tar.gz")):
+        with tarfile.open(packed) as archive:
+            archive.extractall(unpacked, filter="data")
+    return {name: FIXTURES / name if (FIXTURES / name).is_dir() else unpacked / name for name in RUNS}
+
+
+def _copy(tmp_path: Path, run: Path) -> Path:
+    return Path(shutil.copytree(run, tmp_path / run.name))
+
+
+def _rehash(run: Path) -> None:
+    """Record the run's outputs as they are now, as match.mjs does when a round ends."""
+    manifest = json.loads((run / "manifest.json").read_text())
+    manifest["outputs"] = {name: hashlib.sha256((run / name).read_bytes()).hexdigest() for name in OUTPUTS}
+    (run / "manifest.json").write_text(json.dumps(manifest))
 
 
 def _lines(path: Path) -> list[dict[str, object]]:
@@ -75,7 +103,31 @@ def _lines(path: Path) -> list[dict[str, object]]:
 
 def _blocks(text: str) -> dict[int, str]:
     """Each shown decision's lines, by step."""
-    return {int(block.split(" ", 1)[0]): block for block in text.split("\ndecision ")[1:]}
+    return {int(block.split(" ", 1)[0]): block for block in GAP.sub("", text).split("\ndecision ")[1:]}
+
+
+def _windows(text: str) -> list[list[int]]:
+    """The shown decisions' steps, grouped into windows: a window ends where a hidden run begins."""
+    windows = [
+        [int(step) for step in re.findall(r"^decision (\d+) at", chunk, re.MULTILINE)] for chunk in GAP.split(text)
+    ]
+    return [window for window in windows if window]
+
+
+def _fields(trace: DecisionTrace) -> dict[str, list[str]]:
+    """The state's fields by section: each sentence of each line, once, in order."""
+    return {
+        section: list(
+            dict.fromkeys(
+                field
+                for line in lines
+                for row in line.split("\n")
+                for field in re.split(r"(?<=\.)\s+", row.strip())
+                if field
+            )
+        )
+        for section, lines in trace.decision.parts
+    }
 
 
 def _policy(world: FakeWorld) -> PolicyRef:
@@ -83,15 +135,20 @@ def _policy(world: FakeWorld) -> PolicyRef:
     return PolicyRef(snapshot.checkpoint, snapshot.architecture, "master")
 
 
-def _trace(step: int, state: str = "Me at 1. Enemy at 5.", events: tuple[TraceEvent, ...] = ()) -> DecisionTrace:
-    question = DecisionQuestion("choice", "Fire?", (("fire", "Fire."), ("hold", "Hold.")))
+def _trace(
+    step: int,
+    state: str = "Me at 1. Enemy at 5.",
+    events: tuple[TraceEvent, ...] = (),
+    question: str = "weapon",
+    applied: str | None = None,
+) -> DecisionTrace:
     decision = DecisionSample(
         parts=(("state", (state,)),),
-        questions=(("weapon", question),),
-        chosen=(("weapon", "hold"),),
-        behavior_probs=(("weapon", (("fire", 0.25), ("hold", 0.75))),),
+        questions=((question, DecisionQuestion("choice", "Fire?", (("fire", "Fire."), ("hold", "Hold.")))),),
+        chosen=((question, "hold"),),
+        behavior_probs=((question, (("fire", 0.25), ("hold", 0.75))),),
     )
-    return DecisionTrace("e", step, float(step), decision, events=events)
+    return DecisionTrace("e", step, float(step), decision, events=events, applied=applied)
 
 
 # ------------------------------------------------------------ the loader
@@ -99,40 +156,71 @@ def _trace(step: int, state: str = "Me at 1. Enemy at 5.", events: tuple[TraceEv
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name", RUNS)
-def test_the_loader_reads_every_decision_and_marks_every_key_event(name: str) -> None:
-    run = FIXTURES / name
-    seat = json.loads((run / "manifest.json").read_text())["seat"]
+def test_the_loader_reads_every_decision_and_marks_every_key_event(name: str, runs: dict[str, Path]) -> None:
+    run = runs[name]
     events = _lines(run / "events.jsonl")
-    end = next(float(str(e["time"])) for e in events if e["type"] == "round")
 
     traces = load_run(run)
 
     assert [trace.step for trace in traces] == list(range(len(_lines(run / "decisions.jsonl"))))
     assert {trace.episode_id for trace in traces} == {name}
-    keys = Counter(event.key for trace in traces for event in trace.events if event.key)
+    keys = Counter(event.label for trace in traces for event in trace.events if event.key)
     assert keys == KEY_EVENTS[name]
-    kills = [e for e in events if e["type"] == "kill"]
-    assert keys["death"] + keys["self_hit"] == len(kills)
-    assert keys["self_hit"] == sum(1 for e in kills if e.get("self"))
-    me = SEATS.index(seat)
-    missed = [e for e in events if e["type"] == "shot" and e["player"] == me]
-    assert keys["missed_shot"] == sum(1 for e in missed if float(str(e["time"])) + SHELL_LIFETIME_SECONDS < end)
+    assert sum(n for label, n in keys.items() if label != "missed shot") == sum(e["type"] == "kill" for e in events)
+    # Only the agent's own death has priority 0.
+    priorities = {(e.label, e.priority) for trace in traces for e in trace.events if e.key}
+    assert all((priority == 0) == str(label).startswith("agent ") for label, priority in priorities)
     # Each event follows the decision before it and comes before the next one.
     for trace, after in pairwise(traces):
         assert all(trace.time_seconds - 0.0005 <= e.time_seconds <= after.time_seconds + 0.0005 for e in trace.events)
 
 
 @pytest.mark.unit
-def test_the_shell_lifetime_matches_the_engines() -> None:
-    engine = (REPO / "integrations/tank-war/web/game/engine.js").read_text(encoding="utf-8")
-    match = re.search(r"SHELL_LIFETIME = ([\d.]+)", engine)
-    assert match is not None and float(match.group(1)) == SHELL_LIFETIME_SECONDS
+@pytest.mark.parametrize("name", RUNS)
+def test_missed_shots_are_the_agents_shots_less_its_hits_in_the_rounds_result(
+    name: str, runs: dict[str, Path]
+) -> None:
+    result = json.loads((runs[name] / "result.json").read_text())
+    seat = result["seat"]
+    hits = result["enemy_hits"].count(seat) + result["self_hits"].count(seat)
+
+    traces = load_run(runs[name])
+
+    missed = [e for trace in traces for e in trace.events if e.label == "missed shot"]
+    assert len(missed) == result["shots"][seat] - hits
+    assert {e.text for e in missed} == {f"{seat} fired"}
+
+
+@pytest.mark.unit
+def test_the_hit_is_the_shell_the_kill_names_even_when_later_shots_were_fired(runs: dict[str, Path]) -> None:
+    events = _lines(runs[KILL] / "events.jsonl")
+    kill = next(e for e in events if e["type"] == "kill")
+    shots = [e for e in events if e["type"] == "shot" and e["player"] == kill["player"]]
+    assert shots[-1]["shell"] != kill["shell"]
+
+    traces = load_run(runs[KILL])
+
+    fired = [e for trace in traces for e in trace.events if e.text == "blue fired"]
+    assert [e.label is None for e in fired] == [shot["shell"] == kill["shell"] for shot in shots]
+
+
+@pytest.mark.unit
+def test_a_kill_by_the_agents_shell_that_names_no_shell_is_refused(tmp_path: Path, runs: dict[str, Path]) -> None:
+    run = _copy(tmp_path, runs[KILL])
+    events = _lines(run / "events.jsonl")
+    for event in events:
+        event.pop("shell", None)
+    (run / "events.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events))
+    _rehash(run)
+
+    with pytest.raises(ContractError, match="names no shell"):
+        load_run(run)
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name", OUTPUTS)
 def test_a_changed_output_is_refused(tmp_path: Path, name: str) -> None:
-    run = _copy(tmp_path, DESTROYED)
+    run = _copy(tmp_path, FIXTURES / DESTROYED)
     path = run / name
     path.write_bytes(path.read_bytes() + b"\n")
 
@@ -142,7 +230,7 @@ def test_a_changed_output_is_refused(tmp_path: Path, name: str) -> None:
 
 @pytest.mark.unit
 def test_a_missing_output_is_refused(tmp_path: Path) -> None:
-    run = _copy(tmp_path, DESTROYED)
+    run = _copy(tmp_path, FIXTURES / DESTROYED)
     (run / "events.jsonl").unlink()
 
     with pytest.raises(ContractError, match=r"events\.jsonl is missing"):
@@ -152,7 +240,7 @@ def test_a_missing_output_is_refused(tmp_path: Path) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("drop", [None, "result.json"])
 def test_a_manifest_without_every_outputs_hash_is_refused(tmp_path: Path, drop: str | None) -> None:
-    run = _copy(tmp_path, DESTROYED)
+    run = _copy(tmp_path, FIXTURES / DESTROYED)
     manifest = json.loads((run / "manifest.json").read_text())
     if drop is None:
         del manifest["outputs"]
@@ -195,34 +283,57 @@ def test_an_episode_that_left_no_finished_run_has_no_traces(outcome: EpisodeOutc
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name", RUNS)
-def test_the_rendering_matches_its_golden_text(name: str) -> None:
-    text = render_traces(load_run(FIXTURES / name))
+def test_the_rendering_matches_its_golden_text(name: str, runs: dict[str, Path]) -> None:
+    text = render_traces(load_run(runs[name]))
     golden = FIXTURES / f"{name}.txt"
     if os.environ.get("HONING_UPDATE_GOLDEN") == "1":
         golden.write_text(text, encoding="utf-8")
 
     assert text == golden.read_text(encoding="utf-8")
-    assert render_traces(load_run(FIXTURES / name)) == text
+    assert render_traces(load_run(runs[name])) == text
     assert estimate_tokens(text) <= DEFAULT_MAX_TOKENS
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name", RUNS)
-def test_every_death_and_self_hit_is_shown_under_the_decision_it_followed(name: str) -> None:
-    traces = load_run(FIXTURES / name)
-    for max_tokens in (300, 1000, DEFAULT_MAX_TOKENS):
-        blocks = _blocks(render_traces(traces, max_tokens=max_tokens))
-        for trace in traces:
-            for event in trace.events:
-                if event.key in ("death", "self_hit"):
-                    label = event.key.replace("_", "-")
-                    assert f", {label}: {event.text}" in blocks[trace.step]
+def test_the_first_decision_of_every_window_shows_the_whole_state(name: str, runs: dict[str, Path]) -> None:
+    traces = load_run(runs[name])
+    for max_tokens in CAPS:
+        text = render_traces(traces, max_tokens=max_tokens)
+        if text.endswith(CUT_MARK + "\n"):
+            continue
+        blocks, fields = _blocks(text), "State fields are left out" not in text
+        for window in _windows(text):
+            block, trace = blocks[window[0]] + "\n", traces[window[0]]
+            if fields:
+                for section, items in _fields(trace).items():
+                    if items:
+                        listed = "\n".join(f"    {field}" for field in items)
+                        assert (
+                            f"\n  {section}, all {len(items)} field{'s' if len(items) > 1 else ''}:\n{listed}\n"
+                            in block
+                        )
+            for key, value in (("constraints", trace.constraints), ("applied", trace.applied)):
+                if value:
+                    assert f"\n  {key}: {value}\n" in block
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("name", RUNS)
-def test_the_text_never_exceeds_the_cap(name: str) -> None:
-    traces = load_run(FIXTURES / name)
+def test_every_priority_0_event_is_shown_under_the_decision_it_followed(name: str, runs: dict[str, Path]) -> None:
+    traces = load_run(runs[name])
+    for max_tokens in (300, 1000, DEFAULT_MAX_TOKENS):
+        blocks = _blocks(render_traces(traces, max_tokens=max_tokens))
+        for trace in traces:
+            for event in trace.events:
+                if event.priority == 0:
+                    assert f", {event.label}: {event.text}" in blocks[trace.step]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", RUNS)
+def test_the_text_never_exceeds_the_cap(name: str, runs: dict[str, Path]) -> None:
+    traces = load_run(runs[name])
     for max_tokens in (8, 50, 200, 250, 400, 700, 1000, 2000, 4000, 8000, 20000):
         text = render_traces(traces, max_tokens=max_tokens)
         assert estimate_tokens(text) <= max_tokens
@@ -235,28 +346,83 @@ def test_over_the_cap_missed_shots_leave_first_then_state_fields_then_the_text_i
     full = render_traces(traces, max_tokens=100_000)
     default = render_traces(traces)
     deaths_only = render_traces(traces, max_tokens=2000)
-    no_fields = render_traces(traces, max_tokens=400)
+    no_fields = render_traces(traces, max_tokens=1000)
     cut = render_traces(traces, max_tokens=100)
 
-    # Windows of 4 decisions before and 2 after each key event: steps 7 to 17 and 53 to 57.
-    assert sorted(_blocks(full)) == [*range(7, 18), *range(53, 58)]
-    assert {11, 15, 57} <= set(_blocks(default)) < set(_blocks(full))
-    assert set(_blocks(deaths_only)) <= set(range(53, 58)) and 57 in _blocks(deaths_only)
-    assert "State fields are left out" in no_fields and "fields changed" not in no_fields
+    # Windows of 4 decisions before and 2 after each key event: the five missed shots' merge into 7 to 29.
+    assert sorted(_blocks(full)) == [*range(7, 30), *range(53, 58)]
+    # The death's window stays whole, and the last missed shot's decision is the last of its kind to leave.
+    assert sorted(_blocks(default)) == [27, *range(53, 58)]
+    assert sorted(_blocks(deaths_only)) == [57]
+    assert "State fields are left out" in no_fields
+    assert re.search(r"^  \w+, (?:all|\d+ of) ", no_fields, re.MULTILINE) is None
     assert len(_blocks(no_fields)) > 1
     assert cut.endswith(CUT_MARK + "\n") and estimate_tokens(cut) == 100
 
 
 @pytest.mark.unit
-def test_a_decision_lists_only_the_fields_that_changed_since_the_last_one_with_the_same_questions() -> None:
-    traces = [_trace(0), _trace(1, "Me at 2. Enemy at 5."), _trace(2, "Me at 2. Enemy at 5.")]
+def test_without_a_priority_0_event_the_decision_that_would_leave_last_stays() -> None:
+    traces = load_run(FIXTURES / SELF_HIT)
+    opponent_hit = next(trace.step for trace in traces for event in trace.events if event.label == "opponent self-hit")
+
+    for max_tokens in (300, 1000, 2000):
+        assert f"\ndecision {opponent_hit} at " in render_traces(traces, max_tokens=max_tokens)
+
+
+@pytest.mark.unit
+def test_a_later_decision_lists_what_changed_and_what_is_gone_since_the_one_shown_before() -> None:
+    traces = [
+        _trace(0, "Me at 1. Enemy shell incoming."),
+        _trace(1, "Me at 1."),
+        _trace(2, "Me at 2."),
+        _trace(3, "Me at 2."),
+    ]
 
     blocks = _blocks(render_traces(traces))
 
-    assert "state, all 2 fields:\n    Me at 1.\n    Enemy at 5." in blocks[0]
-    assert "state, 1 of 2 fields changed:\n    Me at 2.\n" in blocks[1]
-    assert "state, 0 of 2 fields changed\n" in blocks[2]
-    assert "  weapon: fire 0.250, hold 0.750; chose hold" in blocks[2]
+    assert "  state, all 2 fields:\n    Me at 1.\n    Enemy shell incoming.\n" in blocks[0]
+    assert "  state, 0 of 1 field changed, 1 gone:\n    gone: Enemy shell incoming.\n" in blocks[1]
+    assert "  state, 1 of 1 field changed:\n    Me at 2.\n  weapon" in blocks[2]
+    assert "  state, 0 of 1 field changed\n" in blocks[3]
+    assert "  weapon: fire 0.250, hold 0.750; chose hold" in blocks[3]
+
+
+@pytest.mark.unit
+def test_a_window_after_hidden_decisions_starts_with_the_whole_state_and_controller() -> None:
+    missed = TraceEvent(2.5, "blue fired", "missed shot", 1)
+    destroyed = TraceEvent(9.5, "red destroyed blue", "agent destroyed", 0)
+    traces = [
+        _trace(step, events=(missed,) * (step == 2) + (destroyed,) * (step == 9), applied='{"drive":"stop"}')
+        for step in range(12)
+    ]
+    traces[10] = _trace(10, question="motion", applied='{"drive":"stop"}')
+
+    text = render_traces(traces, before=1, after=1)
+
+    assert _windows(text) == [[1, 2, 3], [8, 9, 10]]
+    blocks = _blocks(text)
+    # Decision 8 has the state and controller decision 3 had, but the decisions between them are hidden.
+    for step in (1, 8):
+        assert "  state, all 2 fields:\n    Me at 1.\n    Enemy at 5.\n" in blocks[step]
+        assert '  applied: {"drive":"stop"}' in blocks[step]
+    assert "  state, 0 of 2 fields changed\n" in blocks[9] and "applied" not in blocks[9]
+    # Decision 10 is the first in its window with its questions.
+    assert "  state, all 2 fields:" in blocks[10]
+
+
+@pytest.mark.unit
+def test_key_events_are_counted_by_label_in_priority_order() -> None:
+    traces = [
+        _trace(0),
+        _trace(1, events=(TraceEvent(1.5, "blue fired", "missed shot", 1),)),
+        _trace(2, events=(TraceEvent(2.5, "the episode timed out", "timeout", 2),)),
+        _trace(3, events=(TraceEvent(3.5, "blue fell", "fall", 0), TraceEvent(3.6, "blue fired", "missed shot", 1))),
+    ]
+
+    text = render_traces(traces)
+
+    assert "\nKey events: fall (1), missed shot (2), timeout (1).\n" in text
+    assert "  then 3.500 s, fall: blue fell\n" in text
 
 
 @pytest.mark.unit

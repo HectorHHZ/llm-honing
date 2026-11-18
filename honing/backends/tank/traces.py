@@ -8,10 +8,21 @@ it are the round's events up to the next decision, except the ``plan`` events
 (the row's ``applied`` already holds the agent's) and the opponent's controller
 interventions.
 
-The key events are every death, a tank destroyed by its own shell being a
-self-hit, and every missed shot of the agent. One hit ends the round, so a
-shell the agent fired more than :data:`SHELL_LIFETIME_SECONDS` before the end
-expired without hitting anything. A later one may be the shell that ended it.
+The key events and their labels: the agent's tank destroyed by the opponent
+("agent destroyed") or by its own shell ("agent self-hit"), the opponent's tank
+destroyed the same two ways ("opponent destroyed", "opponent self-hit"), and
+every missed shot of the agent ("missed shot"). The agent's own death has
+priority 0, so a rendering always shows it. The opponent's death and missed
+shots have priority 1 and are shown as room allows: winning is not a failure
+to explain, and an opponent's self-hit is not the agent's doing.
+
+A shot missed when its shell hit no tank. The round's result settles which
+shots those are, since one hit ends the round. When no shell of the agent hit
+a tank, every shot the agent fired missed, including those still in flight
+when the round ended. When one did, the engine names the shell on the shot and
+on the kill, and every other shot missed. A run whose kill by the agent's
+shell names no shell was recorded before the engine named shells, and is
+refused.
 
 This module imports only the standard library and :mod:`honing.core`.
 """
@@ -37,8 +48,9 @@ from honing.core import (
 
 OUTPUTS = ("decisions.jsonl", "events.jsonl", "result.json")
 SEATS = ("blue", "red")
-# SHELL_LIFETIME in integrations/tank-war/web/game/engine.js. tests/test_decision_traces.py keeps the two equal.
-SHELL_LIFETIME_SECONDS = 4.5
+# The agent's own death is shown whatever the length, and the other key events as room allows.
+AGENT_DEATH_PRIORITY = 0
+OTHER_KEY_PRIORITY = 1
 # Every seat's controller writes these, but only the agent's are its decisions' doing.
 _ALWAYS_KEPT = frozenset({"shot", "kill", "round"})
 # A decision's time is rounded to the millisecond, so an event within half of one belongs to it.
@@ -93,11 +105,11 @@ def load_run(
     result = json.loads((run / "result.json").read_text(encoding="utf-8"))
     rows = _lines(run / "decisions.jsonl")
     events = _lines(run / "events.jsonl")
-    end = next((float(e["time"]) for e in events if e["type"] == "round"), float(result["sim_seconds"]))
+    hits = _hits(events, me, run)
     times = [float(row["time"]) for row in rows]
     followed: list[list[TraceEvent]] = [[] for _ in rows]
     for event in events:
-        traced = _event(event, me, end)
+        traced = _event(event, me, hits)
         if traced is not None and rows:
             index = bisect_right(times, traced.time_seconds + _TIME_TOLERANCE_SECONDS) - 1
             followed[max(index, 0)].append(traced)
@@ -163,7 +175,18 @@ def _lines(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def _event(event: Mapping[str, Any], me: int, end: float) -> TraceEvent | None:
+def _hits(events: list[dict[str, Any]], me: int, run: Path) -> frozenset[str]:
+    """The agent's shells that hit a tank, named as the engine names them on the shot and the kill."""
+    kills = [event for event in events if event["type"] == "kill" and event["player"] == me]
+    if any("shell" not in kill for kill in kills):
+        raise ContractError(
+            f"{run}/events.jsonl has a kill by the agent's shell that names no shell, so its missed shots"
+            " cannot be told from the hit. The round was recorded before the engine named shells"
+        )
+    return frozenset(str(kill["shell"]) for kill in kills)
+
+
+def _event(event: Mapping[str, Any], me: int, hits: frozenset[str]) -> TraceEvent | None:
     """One game event as a trace event, or ``None`` for one the decisions already hold or the opponent's own."""
     kind = str(event["type"])
     player = event.get("player")
@@ -171,13 +194,17 @@ def _event(event: Mapping[str, Any], me: int, end: float) -> TraceEvent | None:
         return None
     time = float(event["time"])
     if kind == "shot":
-        missed = player == me and time + SHELL_LIFETIME_SECONDS < end
-        return TraceEvent(time, f"{SEATS[event['player']]} fired", "missed_shot" if missed else None)
+        text = f"{SEATS[event['player']]} fired"
+        if player == me and event.get("shell") not in hits:
+            return TraceEvent(time, text, "missed shot", OTHER_KEY_PRIORITY)
+        return TraceEvent(time, text)
     if kind == "kill":
         victim = SEATS[event["victim"]]
+        mine = event["victim"] == me
+        whose, priority = ("agent", AGENT_DEATH_PRIORITY) if mine else ("opponent", OTHER_KEY_PRIORITY)
         if event.get("self"):
-            return TraceEvent(time, f"{victim} was destroyed by its own shell", "self_hit")
-        return TraceEvent(time, f"{SEATS[event['player']]} destroyed {victim}", "death")
+            return TraceEvent(time, f"{victim} was destroyed by its own shell", f"{whose} self-hit", priority)
+        return TraceEvent(time, f"{SEATS[event['player']]} destroyed {victim}", f"{whose} destroyed", priority)
     if kind == "round":
         winner = event.get("winner")
         won = f"{SEATS[winner]} won" if winner in (0, 1) else "no winner"
@@ -207,4 +234,12 @@ def _json(value: object) -> str | None:
     return None if value is None else json.dumps(value, separators=(",", ":"))
 
 
-__all__ = ["OUTPUTS", "SHELL_LIFETIME_SECONDS", "TankTraceSource", "decision_from_row", "load_run", "verify_outputs"]
+__all__ = [
+    "AGENT_DEATH_PRIORITY",
+    "OTHER_KEY_PRIORITY",
+    "OUTPUTS",
+    "TankTraceSource",
+    "decision_from_row",
+    "load_run",
+    "verify_outputs",
+]
