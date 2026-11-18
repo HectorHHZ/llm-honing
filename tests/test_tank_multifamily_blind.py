@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -64,3 +65,17 @@ def test_controls_require_unmodified_losses_on_distinct_seeds() -> None:
     chosen = module.select_controls(controls, {1, 2, 3}, count=3)
     assert {row["seed"] for row in chosen} == {1, 3}
     assert len(chosen) == 2
+
+
+@pytest.mark.unit
+def test_legacy_source_is_excluded_before_blind_sampling(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    source = repo / "integrations/tank-war/scripts/match.mjs"
+    source.parent.mkdir(parents=True)
+    source.write_text("current")
+    game = tmp_path / "game"
+    game.mkdir()
+    (game / "manifest.json").write_text(json.dumps({"sources": {"scripts/match.mjs": module.sha(source)}}))
+    assert module.replay_source_compatible({"fault_run": str(game)}, repo)
+    source.write_text("changed")
+    assert not module.replay_source_compatible({"fault_run": str(game)}, repo)

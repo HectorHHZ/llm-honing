@@ -46,6 +46,14 @@ def rank(item: dict[str, Any]) -> str:
     return hashlib.sha256(f"{VERSION}:{identity}".encode()).hexdigest()
 
 
+def replay_source_compatible(item: dict[str, Any], repo: Path) -> bool:
+    """Exclude older recordings whose match source differs from the pinned replay checkout."""
+    manifest = read(Path(item["fault_run"]) / "manifest.json")
+    return all(
+        sha(repo / "integrations/tank-war" / name) == expected for name, expected in manifest["sources"].items()
+    )
+
+
 def select_faults(labels: list[dict[str, Any]], eligible_seeds: set[int], per_layer: int = 10) -> list[dict[str, Any]]:
     chosen = []
     for layer in LAYERS:
@@ -113,6 +121,7 @@ def main() -> None:
     parser.add_argument("--pre-registration", type=Path, required=True)
     parser.add_argument("--bare-prompt", type=Path, required=True)
     parser.add_argument("--schema", type=Path, required=True)
+    parser.add_argument("--replay-repo", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.out.exists():
@@ -132,8 +141,9 @@ def main() -> None:
     if len(eligible_seeds) != len(exposure["unexposed_final_positions"]):
         raise ValueError("eligible seed positions duplicate a reset")
     labels = rows(args.dataset / "labels.jsonl")
+    replayable = [item for item in labels if replay_source_compatible(item, args.replay_repo)]
     controls = rows(args.controls)
-    selected_faults = select_faults(labels, eligible_seeds, registration["sampling"]["target_faults_per_layer"])
+    selected_faults = select_faults(replayable, eligible_seeds, registration["sampling"]["target_faults_per_layer"])
     selected_controls = select_controls(
         controls, eligible_seeds, registration["sampling"]["target_no_injection_controls"]
     )
@@ -188,6 +198,8 @@ def main() -> None:
         "pre_registration_sha256": sha(args.pre_registration),
         "dataset_summary_sha256": sha(args.dataset / "summary.json"),
         "dataset_labels_sha256": sha(args.dataset / "labels.jsonl"),
+        "source_compatible_fault_labels": len(replayable),
+        "source_incompatible_fault_labels": len(labels) - len(replayable),
         "controls_sha256": sha(args.controls),
         "seed_exposure_sha256": sha(args.exposure_register),
         "protocol_sha256": sha(args.out / "protocol.json"),
