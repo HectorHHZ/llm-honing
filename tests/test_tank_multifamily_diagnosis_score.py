@@ -36,3 +36,5 @@ def test_pairing_and_instance_reset_groups() -> None:
     assert module.macro_f1(rows, "read") == 0
     assert module.macro_f1(rows, "probe") == 1
     assert module.calibration_error(rows, "probe") == 0
+    with pytest.raises(ValueError, match="no eligible instance"):
+        module.paired_interval([row for row in rows if row["label"] != "harness"], "read", "probe", draws=100)

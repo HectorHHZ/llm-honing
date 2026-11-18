@@ -225,14 +225,16 @@ def summarize(rows: list[dict[str, Any]], source: Path, diagnosis: Path) -> dict
                 },
                 "usage": read(diagnosis / modes[mode] / mode / "summary.json"),
             }
-    comparisons = {
-        f"{model}:{name}": paired_interval(rows, f"{model}:{left}", f"{model}:{right}")
-        for model in RUNS
+    comparisons = {}
+    for model in RUNS:
         for name, left, right in (
             ("probe_minus_read", "read", "probe"),
             ("probe_fewshot_minus_read_fewshot", "read+fewshot", "probe+fewshot"),
-        )
-    }
+        ):
+            try:
+                comparisons[f"{model}:{name}"] = paired_interval(rows, f"{model}:{left}", f"{model}:{right}")
+            except ValueError as error:
+                comparisons[f"{model}:{name}"] = {"status": "unavailable", "reason": str(error)}
     primary = comparisons["sol:probe_minus_read"]
     majority = max(sum(row["label"] == layer for row in faults) for layer in LAYERS)
     return {
@@ -247,7 +249,7 @@ def summarize(rows: list[dict[str, Any]], source: Path, diagnosis: Path) -> dict
         "mode_results": mode_results,
         "paired_comparisons": comparisons,
         "technical_component_go_pending_human_review": (
-            primary["instance_and_reset_group_bootstrap_95pct"][0] > 0
+            primary.get("instance_and_reset_group_bootstrap_95pct", [0])[0] > 0
             and mode_results["sol:probe"]["correct"] > majority
         ),
         "full_issue_go_no_go": "pending blinded human decision review",
