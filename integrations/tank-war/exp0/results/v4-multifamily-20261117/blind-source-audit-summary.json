@@ -1,0 +1,141 @@
+{
+  "version": "v4-core-audit-with-fixed-harness-extension-20261117",
+  "instances": {
+    "point_blank_pursuit-v1": {
+      "layer": "harness",
+      "family": "point_blank_pursuit",
+      "screen_mean_fault_minus_clean": -0.150390625,
+      "screen_ci95": [
+        -0.220703125,
+        -0.080078125
+      ],
+      "attempts": {
+        "labeled": 160
+      },
+      "fault_losses": 145,
+      "verified_fault_losses": 134,
+      "uncertain_losses": 11,
+      "complete_fault_loss_records": 145
+    },
+    "reverse_strength_2p5-v1": {
+      "layer": "weights",
+      "family": "reverse_prior_scalar_edit",
+      "screen_mean_fault_minus_clean": -0.291015625,
+      "screen_ci95": [
+        -0.349609375,
+        -0.232421875
+      ],
+      "attempts": {
+        "labeled": 160
+      },
+      "fault_losses": 155,
+      "verified_fault_losses": 155,
+      "uncertain_losses": 0,
+      "complete_fault_loss_records": 155
+    },
+    "swap_selected_turn-v1": {
+      "layer": "controller",
+      "family": "swap_selected_turn",
+      "screen_mean_fault_minus_clean": -0.291015625,
+      "screen_ci95": [
+        -0.3515625,
+        -0.23046875
+      ],
+      "attempts": {
+        "labeled": 160
+      },
+      "fault_losses": 150,
+      "verified_fault_losses": 150,
+      "uncertain_losses": 0,
+      "complete_fault_loss_records": 150
+    },
+    "reverse_strength_4p0-v1": {
+      "layer": "weights",
+      "family": "reverse_prior_scalar_edit",
+      "screen_mean_fault_minus_clean": -0.291015625,
+      "screen_ci95": [
+        -0.3515625,
+        -0.232421875
+      ],
+      "attempts": {
+        "labeled": 160
+      },
+      "fault_losses": 152,
+      "verified_fault_losses": 152,
+      "uncertain_losses": 0,
+      "complete_fault_loss_records": 152
+    },
+    "reverse_strength_3p0-v1": {
+      "layer": "weights",
+      "family": "reverse_prior_scalar_edit",
+      "screen_mean_fault_minus_clean": -0.298828125,
+      "screen_ci95": [
+        -0.35546875,
+        -0.2421875
+      ],
+      "attempts": {
+        "labeled": 61,
+        "incomplete": 1
+      },
+      "fault_losses": 56,
+      "verified_fault_losses": 56,
+      "uncertain_losses": 0,
+      "complete_fault_loss_records": 56
+    },
+    "suppress_selected_turn-v1": {
+      "layer": "controller",
+      "family": "suppress_selected_turn",
+      "screen_mean_fault_minus_clean": -0.212890625,
+      "screen_ci95": [
+        -0.283203125,
+        -0.14453125
+      ],
+      "attempts": {
+        "unmatched": 101,
+        "labeled": 18,
+        "incomplete": 1,
+        "error": 40
+      },
+      "fault_losses": 16,
+      "verified_fault_losses": 16,
+      "uncertain_losses": 0,
+      "complete_fault_loss_records": 98
+    },
+    "extreme_standoff-v1": {
+      "layer": "harness",
+      "family": "extreme_standoff",
+      "screen_mean_fault_minus_clean": -0.24609375,
+      "screen_ci95": [
+        -0.306640625,
+        -0.185546875
+      ],
+      "attempts": {
+        "labeled": 147,
+        "incomplete": 1
+      },
+      "fault_losses": 135,
+      "verified_fault_losses": 127,
+      "uncertain_losses": 8,
+      "complete_fault_loss_records": 135
+    },
+    "drop_fire_after_selection-v1": {
+      "layer": "controller",
+      "family": "drop_fire_after_selection",
+      "screen_mean_fault_minus_clean": -0.3046875,
+      "screen_ci95": [
+        -0.361328125,
+        -0.25
+      ],
+      "attempts": {
+        "labeled": 160
+      },
+      "fault_losses": 159,
+      "verified_fault_losses": 142,
+      "uncertain_losses": 17,
+      "complete_fault_loss_records": 159
+    }
+  },
+  "labeled_games": 1026,
+  "attempts": 1170,
+  "spec_sha256": "ca3167b3f4e2971b435c38a978f3a249934e1bb7019919486cc102f96974f6d0"
+}

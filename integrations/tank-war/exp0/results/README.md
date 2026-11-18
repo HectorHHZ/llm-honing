@@ -1,39 +1,45 @@
 # Tank War Exp 0 results
 
 [`CURRENT.json`](CURRENT.json) points to
-[`v3-sustained-complete-20261117/`](v3-sustained-complete-20261117/) as the
-**primary dataset**. Its three sustained faults lowered matched game scores
-on independent 128-seed, two-seat screens. The private versioned index
-contains 640 games: 480 fault games and 160 unmodified controls. It retains
-all 450 complete fault losses; 439 have a same-state local difference that
-supports a machine cause label. The other eleven remain uncertain. The
-private raw games and logs remain at their referenced source paths. The
-earlier `v2-sustained-20261116/` index is preserved.
+[`v4-multifamily-20261117/`](v4-multifamily-20261117/) as the current
+dataset and prospective diagnosis. The private combined audit contains
+**1,186 paired fault games** across **1,330 fault attempt records** and retains
+160 unmodified controls. Of 1,202 complete fault-loss recordings, 1,120
+(93.2%) enter the paired label table; the other 82 remain in a private
+unverified index with their original logs. Of the paired losses, 1,058 have a
+verified same-state local layer effect and 62 remain uncertain. The prior
+[`v3-sustained-complete-20261117/`](v3-sustained-complete-20261117/) index is
+preserved.
 
-The completed [v3 diagnosis](v3-sustained-complete-20261117/DIAGNOSIS.md)
-classified 28/30 verified faults with controlled probes versus 16/30 from
-replay alone (paired gain 40 percentage points, 95% interval 30–50). It also
-made unsupported harness/controller calls on 8/10 unmodified losses, so the
-result is scoped to these constructed fault families.
+The [second prospective blind test](v4-multifamily-20261117/README.md) froze
+30 verified fault losses and 10 unmodified losses before model answers. Sol
+high correctly classified 25/30 with controlled probes versus 14/30 from the
+same replays alone: a paired gain of 36.7 percentage points, with the
+pre-registered grouped 95% interval from +19.2 to +51.5. Astra medium and
+two example-assisted modes were run on the same 40 games. All 320 diagnoses
+were valid, but Sol's bare probe still made unsupported harness/controller
+calls on 8/10 unmodified losses. The result is a scoped go for the technical
+probe comparison; autonomous attribution across fault families remains
+unproven. Independent human decision-relevance review is still pending.
 
 [`v1-critical-window-20261115/`](v1-critical-window-20261115/) remains the
-historical diagnosis and go/no-go result. Its one-decision faults did not pass
-the score-drop rule. Its Sol and Astra answers belong to those **40 older
-games** and cannot be scored as answers to v3. Neither the v1 sample freeze
-nor the original answers have been rewritten.
+historical one-decision experiment. Its faults did not pass the score-drop
+rule; its model answers and sample freeze have not been rewritten.
 
 ## #183 acceptance status
 
 | Deliverable | Status | Evidence or remaining work |
 | --- | --- | --- |
-| Detailed protocol | Complete for scoped v3 follow-up | [`PROTOCOL.md`](../PROTOCOL.md) and the private v3 assembly and diagnosis protocols document the variants, commands, sample cap, model budget and scoring rule. |
-| Reset/replay checks and real-model pilot | Complete for scoped tests | v1 reports 40/40 deterministic replays, 40/40 all-decision probe audits and the 891-decision identity check. The v3 follow-up passed 40/40 full deterministic replays and audited all 1850 decisions. The indexer's same-state check does not replay every v3 game. |
-| Fault builders, private manifests, score drops, exclusions | **Partial** | v3 has one screened fault per layer with negative paired intervals, complete 160-game collections, and all ambiguous cases retained. #183's full target is at least three faults per layer. Its harness setting also participates in post-choice plan revalidation, so that boundary needs a cleaner fault for a strict harness-only claim. |
-| Versioned dataset, schema, references, reviewer records, card | **Partial** | v3 has a private versioned index, technical references, checks and a [data card](v3-sustained-complete-20261117/data-card.json). The outside human review has not yet been matched to these sample IDs or archived with reviewer and disagreement records. |
-| No gold access or split overlap | Complete for scoped v3 follow-up | The 40-game follow-up excludes seeds from the earlier rapid and blind tests. Both modes ran in Bubblewrap on anonymous inputs with no tool calls. Broader exposure to development material remains a limitation. |
-| Four modes, baselines, identity and separate weight probes | **Partial** | Sol high ran four modes on the v1 games; Astra medium ran read/probe on those same known games. The v3 follow-up completed read/probe and audited all 1850 decisions, but did not repeat all extra modes or a separate weight-probe study. |
-| Per-cause results, intervals, cost, failures, go/no-go | Complete for scoped v3; full issue **partial** | The [v3 diagnosis](v3-sustained-complete-20261117/DIAGNOSIS.md) reports per-cause results, paired interval, controls, usage, errors and a scoped go. One family per class and high control false positives prevent a broad go. |
+| Detailed protocol | Complete for the scoped v4 test | [`PROTOCOL.md`](../PROTOCOL.md), the [frozen diagnosis protocol](v4-multifamily-20261117/diagnosis-protocol.json), and private manifests record configuration, limits and scoring. |
+| Reset/replay checks and real-model pilot | Complete for the sampled blind test; full-index replay partial | The 40 sampled games passed full deterministic replay; all 2,151 decision probes and 40/40 signatures passed. The 1,186-game index was not replayed end to end. |
+| Fault builders, private manifests, score drops, exclusions | Partial for the full issue | The new harness and controller instances passed separate 128-seed, two-seat score screens. The private audit preserves every attempt. The harness instance participates in post-choice revalidation, and the full independent-family target is not met. |
+| Versioned dataset, schema, references, reviewer records, card | Partial | The [data card](v4-multifamily-20261117/data-card.json) and private index include technical references, attempts and hashes. Independent human reviews have not been joined to the frozen case IDs. |
+| No gold access or split overlap | Complete for the scoped v4 test | The 40 cases used unexposed seed blocks, and all 320 isolated CLI calls used anonymous inputs without tool calls. |
+| Four modes, baselines, identity and separate weight probes | Complete for the scoped v4 test | Sol high and Astra medium ran all four modes on the same cases. The separate [weight-probe audit](v4-multifamily-20261117/weight-probe-analysis.json) and [diagnosis summary](v4-multifamily-20261117/diagnosis-summary.json) include control identity, baselines, calibration and cost. |
+| Per-cause results, intervals, cost, failures, go/no-go | Complete for the scoped technical test; full issue pending human review | The [v4 report](v4-multifamily-20261117/README.md) gives per-class counts, paired intervals, control false positives, concrete errors, usage and limits. |
 
 The full [#183 acceptance list](https://github.com/HectorHHZ/llm-honing/issues/183)
-cannot yet be checked off. The v3 data fixes the **score-drop** weakness in v1;
-it does not retroactively complete human review or family-transfer evidence.
+cannot yet be checked off. The main remaining work is the independent human
+decision-relevance review; a broader family-transfer claim would also require
+more cleanly separated fault families. No shared pipeline module changed, and
+cross-game generalization is not claimed.

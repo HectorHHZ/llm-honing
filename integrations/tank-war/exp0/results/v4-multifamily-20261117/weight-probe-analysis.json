@@ -1,0 +1,42 @@
+{
+  "version": "tank183-multifamily-weight-probe-analysis-v1",
+  "sample_freeze_sha256": "3c7a50d15531c21b8c9937122b9c33a9b998498b189dfa832abf1238c9b746f4",
+  "probe_summary_sha256": "da895cdf840cbc2393254482a39edfe7160f86f101b907713cccbeb586571471",
+  "probe_audit_sha256": "84e37766d2386b122342b822d417d91d7fce6f81c65dfe5a4a95200a5634c92d",
+  "edited_checkpoint_instances": {
+    "reverse_strength_3p0-v1": {
+      "games": 5,
+      "reference_same_input": 5,
+      "reference_selected_action_changed": 5,
+      "reference_delta_gt_0p01": 5,
+      "reference_probability_delta": {
+        "min": 0.3856375813484192,
+        "median": 0.4062563106417656,
+        "max": 0.411885529756546
+      },
+      "all_decisions": 240,
+      "all_decisions_delta_gt_0p01": 240,
+      "all_decisions_selected_action_changed": 126
+    },
+    "reverse_strength_4p0-v1": {
+      "games": 5,
+      "reference_same_input": 5,
+      "reference_selected_action_changed": 5,
+      "reference_delta_gt_0p01": 5,
+      "reference_probability_delta": {
+        "min": 0.4359517842531204,
+        "median": 0.4480830505490303,
+        "max": 0.4696720540523529
+      },
+      "all_decisions": 192,
+      "all_decisions_delta_gt_0p01": 192,
+      "all_decisions_selected_action_changed": 98
+    }
+  },
+  "control_decisions": {
+    "count": 481,
+    "delta_gt_0p01": 0,
+    "selected_action_changed": 0
+  },
+  "scope": "Same-state checkpoint signal; not proof that the edit caused each final loss"
+}
