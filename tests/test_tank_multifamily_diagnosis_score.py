@@ -26,7 +26,7 @@ def test_pairing_and_instance_reset_groups() -> None:
                         "instance": f"{layer}-{instance}",
                         "seed": seed,
                         "read": {"cause": "uncertain"},
-                        "probe": {"cause": layer},
+                        "probe": {"cause": layer, "confidence": 1.0},
                     }
                 )
     result = module.paired_interval(rows, "read", "probe", draws=100)
@@ -35,3 +35,4 @@ def test_pairing_and_instance_reset_groups() -> None:
     assert result["independent_seed_blocks"] == 2
     assert module.macro_f1(rows, "read") == 0
     assert module.macro_f1(rows, "probe") == 1
+    assert module.calibration_error(rows, "probe") == 0

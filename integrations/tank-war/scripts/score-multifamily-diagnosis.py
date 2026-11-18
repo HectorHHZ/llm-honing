@@ -41,6 +41,21 @@ def macro_f1(rows: list[dict[str, Any]], key: str) -> float:
     return sum(scores) / len(scores)
 
 
+def calibration_error(rows: list[dict[str, Any]], key: str, bins: int = 5) -> float:
+    error = 0.0
+    for bin_index in range(bins):
+        members = [
+            row
+            for row in rows
+            if min(int(row[key]["confidence"] * bins), bins - 1) == bin_index
+        ]
+        if members:
+            accuracy = sum(row[key]["cause"] == row["label"] for row in members) / len(members)
+            confidence = sum(row[key]["confidence"] for row in members) / len(members)
+            error += len(members) / len(rows) * abs(accuracy - confidence)
+    return error
+
+
 def paired_interval(rows: list[dict[str, Any]], left: str, right: str, draws: int = 10_000) -> dict[str, Any]:
     faults = [row for row in rows if row["label"] in LAYERS]
     groups: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
@@ -174,6 +189,7 @@ def summarize(rows: list[dict[str, Any]], source: Path, diagnosis: Path) -> dict
                 "correct": sum(row[key]["cause"] == row["label"] for row in faults),
                 "fault_total": len(faults),
                 "macro_f1": macro_f1(faults, key),
+                "calibration_ece_5_bins": calibration_error(faults, key),
                 "by_layer": {
                     layer: {
                         "correct": sum(row[key]["cause"] == layer for row in faults if row["label"] == layer),
@@ -182,6 +198,23 @@ def summarize(rows: list[dict[str, Any]], source: Path, diagnosis: Path) -> dict
                     for layer in LAYERS
                 },
                 "abstentions": sum(row[key]["cause"] == "uncertain" for row in faults),
+                "harness_vs_weights_correct": {
+                    "correct": sum(
+                        row[key]["cause"] == row["label"]
+                        for row in faults
+                        if row["label"] in ("harness", "weights")
+                    ),
+                    "total": sum(row["label"] in ("harness", "weights") for row in faults),
+                },
+                "by_instance": {
+                    instance: {
+                        "correct": sum(
+                            row[key]["cause"] == row["label"] for row in faults if row["instance"] == instance
+                        ),
+                        "total": sum(row["instance"] == instance for row in faults),
+                    }
+                    for instance in sorted({row["instance"] for row in faults})
+                },
                 "control_unsupported_harness_or_controller": sum(
                     row[key]["cause"] in ("harness", "controller") for row in controls
                 ),
