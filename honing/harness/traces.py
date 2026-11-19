@@ -26,7 +26,11 @@ there is none. It also lists as gone each field of that decision that no new
 field took the place of. A new field takes the place of an old one when both
 begin with the same name: the first two words of the text before the first
 digit, sign, or one of ``=:([{``. So "Me at 2." replaces "Me at 1.", and
-"Enemy shell incoming." is gone when nothing begins with "Enemy shell". The
+"Enemy shell incoming." is gone when nothing begins with "Enemy shell". When
+several old fields share the new one's name, it takes the place of the one
+whose text it shares the longest start with, so "Enemy 2 at 8." replaces
+"Enemy 2 at 7." and leaves "Enemy 1 at 3." gone. Without names from the
+source this is a guess, which a list whose items all changed can defeat. The
 constraints and applied action are shown when they changed since the decision
 shown before. A decision's text therefore depends on which decisions are shown
 before it in its window.
@@ -336,19 +340,26 @@ def _state(current: Fields, before: Fields | None) -> list[str]:
 
 
 def _diff(items: Sequence[str], old: Sequence[str]) -> tuple[list[str], list[str]]:
-    """The fields new since ``old``, and the fields of ``old`` that no new field took the place of."""
+    """The fields new since ``old``, and the fields of ``old`` that no new field took the place of.
+
+    Each new field, in order, takes the place of the old field with its name
+    that shares the longest start with it, the earliest on a tie.
+    """
     present, earlier = set(items), set(old)
     new = [field for field in items if field not in earlier]
-    room = Counter(_name(field) for field in new)
-    gone = []
-    for field in old:
-        if field in present:
-            continue
-        if room[_name(field)]:
-            room[_name(field)] -= 1
-        else:
-            gone.append(field)
-    return new, gone
+    left = [field for field in old if field not in present]
+    for field in new:
+        name = _name(field)
+        same = [index for index, gone in enumerate(left) if _name(gone) == name]
+        if same:
+            del left[max(same, key=lambda index: (_shared_start(field, left[index]), -index))]
+    return new, left
+
+
+def _shared_start(first: str, second: str) -> int:
+    """How many characters the two texts begin with alike."""
+    pairs = enumerate(zip(first, second, strict=False))
+    return next((index for index, (a, b) in pairs if a != b), min(len(first), len(second)))
 
 
 def _name(field: str) -> str:
