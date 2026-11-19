@@ -1,0 +1,52 @@
+{
+  "ghost_id": "BRITTA",
+  "game_mode": "Classic",
+  "ghost_x": 6150.0,
+  "ghost_y": 2770.0,
+  "room_name": "forgotten_deans-pass",
+  "respawn_x": 6150.0,
+  "respawn_y": 2770.0,
+  "ghosts_in_party": [ "BRITTA" ],
+  "abilities": {
+    "crystal_heart": false,
+    "dream_nail": false,
+    "ismas_tear": false,
+    "mantis_claw": false,
+    "monarch_wings": false,
+    "mothwing_cloak": false,
+    "shade_cloak": false,
+    "vengeful_spirit": false,
+    "shade_soul": false,
+    "desolate_dive": false,
+    "descending_dark": false,
+    "howling_wraiths": false,
+    "abyss_shriek": false,
+    "quick_focus": false,
+    "soul_catcher_bonus": 0,
+    "dream_wielder": false,
+    "deep_focus": false,
+    "shaman_stone": false,
+    "spell_twister": false
+  },
+  "weapons": [ "Old Nail" ],
+  "current_weapon": "Old Nail",
+  "progress": {
+    "frame_idx": 2880,
+    "steel_sole": { "dunks": 0, "c_dashes": 0 },
+    "by_room": [
+      ("forgotten_deans-pass",
+        {
+          "removed_tile_idxs": [],
+          "removed_platform_ids": [],
+          "finished_interactions": [],
+          "revealed_shadow_layers": []
+        })
+    ],
+    "purple_pens_found": [],
+    "keys_found": [],
+    "dreamer_items_found": 0,
+    "last_upgrade_claimed": 0
+  },
+  "max_health": 5,
+  "max_soul": 99
+}

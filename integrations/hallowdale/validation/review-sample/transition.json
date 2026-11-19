@@ -1,0 +1,502 @@
+{
+ "frames": 12,
+ "command": {
+  "id": 1,
+  "action": "attack_right",
+  "frames": 12
+ },
+ "ack": {
+  "ack": 1,
+  "id": 1,
+  "status": "applied",
+  "action": "attack_right",
+  "frames": 12,
+  "jump_frames": null,
+  "keys": {
+   "NAIL": {
+    "first_tick": 0,
+    "last_tick": 4,
+    "ticks": 5
+   },
+   "RIGHT": {
+    "first_tick": 0,
+    "last_tick": 59,
+    "ticks": 60
+   }
+  },
+  "ticks_per_frame": 5,
+  "frame_before": 0,
+  "frame_after": 12,
+  "observation_id": 2,
+  "started": [
+   "NAIL"
+  ],
+  "children": []
+ },
+ "before": {
+  "schema": "honing.visible.v1",
+  "adapter": "hallowdale-visible-v1",
+  "profile": "visible",
+  "game": "hallowdale",
+  "frame": {
+   "id": 1,
+   "tick": 0,
+   "simulation_time": 21.766667
+  },
+  "view": {
+   "screen_rect": [
+    0,
+    0,
+    960,
+    523
+   ],
+   "world_from_screen": [
+    0.04583333333333333,
+    0.0,
+    0.0,
+    -0.04583333333333333,
+    29.388890584309895,
+    -90.49999516805012
+   ],
+   "window": {
+    "size": [
+     960,
+     523
+    ],
+    "rect": [
+     0.0,
+     0.0,
+     960.0,
+     523.0
+    ],
+    "player_centred": false
+   },
+   "world_units": "1 unit = 1 map tile (12 source px); x right, y up; origin = top-left corner of the current room; screen x right/y down"
+  },
+  "terrain": {
+   "status": "available",
+   "coverage": "full",
+   "origin": [
+    0,
+    0
+   ],
+   "cell_size": [
+    40,
+    40
+   ],
+   "rows": [
+    "ŁŁŁŁāāāāāāāāāāāāāāāāāāāā",
+    "Łāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāƁāāāāāāāƁƁāāāā",
+    "āāāāāāāāāƁƁāāāāāāāƁƁāāāā",
+    "āāāāāāāāāƁƁđāāāāāāƁƁāāāā",
+    "ăăăăăăăăăƃƃēăăăăăăƃƃăăăă",
+    "ĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂ",
+    "łłłłłłłłłłłłłłłłłłłłłłłł"
+   ],
+   "legend": {
+    "unknown": "? unknown: outside the window, behind the HUD or a text box, or the screen is faded; never safe",
+    "background": ". visible background/no visible obstacle; not a collision guarantee",
+    "solid": "# visible solid-looking terrain (black areas of the picture, solid doors)",
+    "platform": "= visible floating platform (furniture and the like): solid",
+    "hazard": "! visible spikes/acid/projectile",
+    "actor": "@ visible player/enemy sprite",
+    "interactable": "+ visible thing that reacts to a nail strike (door, jar, lever)",
+    "scenery": ": visible scenery, debris, water, a dead enemy, the player's own nail swing; no collision"
+   }
+  },
+  "objects": [
+   {
+    "id": "forgotten_deans-pass/f84",
+    "kind": "wall",
+    "bounds": [
+     0,
+     447,
+     960,
+     76
+    ],
+    "look": "terrain"
+   },
+   {
+    "id": "forgotten_deans-pass/player",
+    "kind": "player",
+    "bounds": [
+     445,
+     401,
+     29,
+     46
+    ],
+    "look": "BRITTA"
+   }
+  ],
+  "self": {
+   "object_id": "forgotten_deans-pass/player",
+   "screen_box": [
+    449.7,
+    406.11,
+    24.24,
+    41.21
+   ],
+   "facing": "right"
+  },
+  "hud": {
+   "health": {
+    "value": 5,
+    "evidence": "hud"
+   },
+   "health_max": {
+    "value": 5,
+    "evidence": "hud"
+   },
+   "soul": {
+    "fraction": 1.0,
+    "evidence": "hud gauge"
+   },
+   "text": [
+    {
+     "kind": "corner",
+     "blocking": false,
+     "content": "Press [Z] to jump, press [X] to attack"
+    }
+   ]
+  },
+  "rules": [
+   "Explore: leave the room through an opening at one of its edges. No direction to an offscreen exit is supplied.",
+   "Walk left/right; jump height depends on how long jump is held. More abilities (dash, wall jump, double jump, spells) are found later in the game.",
+   "The nail strikes left/right, or up/down while up/down is held (down only in the air); a downward strike on spikes or an enemy bounces you up.",
+   "Doors and jars break when struck. Enemies and their projectiles hurt on touch. Spikes hurt and put you back on the last safe ground.",
+   "Screen x increases right and screen y increases down. Each action holds for the requested window of frames; the game pauses while the next action is chosen."
+  ],
+  "capabilities": {
+   "global_debug": true,
+   "pixels_to_model": false,
+   "hidden_own_state": false
+  },
+  "disclosure": {
+   "visibility": "label render of the scene with the game's camera and draw order; what is covered by terrain, shadow layers, the HUD or a text box is not reported",
+   "geometry": "terrain/door/hazard objects are the game's collision rectangles clipped to where their art is seen; sprites are their visible pixel bounds",
+   "unsupported": "texels below 0.9 alpha are treated as not drawn; pause menu and map screens are reported as unknown",
+   "resolution": "40 px cells on a 960 x 523 screen",
+   "debug": "debug_observation.json / observations.jsonl hold global state; plumbing and evaluation only"
+  }
+ },
+ "after": {
+  "schema": "honing.visible.v1",
+  "adapter": "hallowdale-visible-v1",
+  "profile": "visible",
+  "game": "hallowdale",
+  "frame": {
+   "id": 2,
+   "tick": 12,
+   "simulation_time": 22.166667
+  },
+  "view": {
+   "screen_rect": [
+    0,
+    0,
+    960,
+    523
+   ],
+   "world_from_screen": [
+    0.04583333333333333,
+    0.0,
+    0.0,
+    -0.04583333333333333,
+    30.99083607991536,
+    -90.49999516805012
+   ],
+   "window": {
+    "size": [
+     960,
+     523
+    ],
+    "rect": [
+     0.0,
+     0.0,
+     960.0,
+     523.0
+    ],
+    "player_centred": false
+   },
+   "world_units": "1 unit = 1 map tile (12 source px); x right, y up; origin = top-left corner of the current room; screen x right/y down"
+  },
+  "terrain": {
+   "status": "available",
+   "coverage": "full",
+   "origin": [
+    0,
+    0
+   ],
+   "cell_size": [
+    40,
+    40
+   ],
+   "rows": [
+    "ŁŁŁŁāāāāāāāāāāāāāāāāāāāā",
+    "Łāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāāāāāāāāāāāāāāāā",
+    "āāāāāāāāāƁāāāāāāāāƁƁāāāā",
+    "āāāāāāāāāƁāāāāāāāāƁāāāāā",
+    "āāāāāāāāāƁāāđđāāāāƁāāāāā",
+    "ăăăăăăăăƃƃăăēēăăăăƃăăăăă",
+    "ĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂ",
+    "łłłłłłłłłłłłłłłłłłłłłłłł"
+   ],
+   "legend": {
+    "unknown": "? unknown: outside the window, behind the HUD or a text box, or the screen is faded; never safe",
+    "background": ". visible background/no visible obstacle; not a collision guarantee",
+    "solid": "# visible solid-looking terrain (black areas of the picture, solid doors)",
+    "platform": "= visible floating platform (furniture and the like): solid",
+    "hazard": "! visible spikes/acid/projectile",
+    "actor": "@ visible player/enemy sprite",
+    "interactable": "+ visible thing that reacts to a nail strike (door, jar, lever)",
+    "scenery": ": visible scenery, debris, water, a dead enemy, the player's own nail swing; no collision"
+   }
+  },
+  "objects": [
+   {
+    "id": "forgotten_deans-pass/f84",
+    "kind": "wall",
+    "bounds": [
+     0,
+     447,
+     960,
+     76
+    ],
+    "look": "terrain"
+   },
+   {
+    "id": "forgotten_deans-pass/player",
+    "kind": "player",
+    "bounds": [
+     503,
+     402,
+     34,
+     45
+    ],
+    "look": "BRITTA"
+   }
+  ],
+  "self": {
+   "object_id": "forgotten_deans-pass/player",
+   "screen_box": [
+    510.1,
+    406.11,
+    24.24,
+    41.21
+   ],
+   "facing": "right"
+  },
+  "hud": {
+   "health": {
+    "value": 5,
+    "evidence": "hud"
+   },
+   "health_max": {
+    "value": 5,
+    "evidence": "hud"
+   },
+   "soul": {
+    "fraction": 1.0,
+    "evidence": "hud gauge"
+   },
+   "text": [
+    {
+     "kind": "corner",
+     "blocking": false,
+     "content": "Press [Z] to jump, press [X] to attack"
+    }
+   ]
+  },
+  "rules": [
+   "Explore: leave the room through an opening at one of its edges. No direction to an offscreen exit is supplied.",
+   "Walk left/right; jump height depends on how long jump is held. More abilities (dash, wall jump, double jump, spells) are found later in the game.",
+   "The nail strikes left/right, or up/down while up/down is held (down only in the air); a downward strike on spikes or an enemy bounces you up.",
+   "Doors and jars break when struck. Enemies and their projectiles hurt on touch. Spikes hurt and put you back on the last safe ground.",
+   "Screen x increases right and screen y increases down. Each action holds for the requested window of frames; the game pauses while the next action is chosen."
+  ],
+  "capabilities": {
+   "global_debug": true,
+   "pixels_to_model": false,
+   "hidden_own_state": false
+  },
+  "disclosure": {
+   "visibility": "label render of the scene with the game's camera and draw order; what is covered by terrain, shadow layers, the HUD or a text box is not reported",
+   "geometry": "terrain/door/hazard objects are the game's collision rectangles clipped to where their art is seen; sprites are their visible pixel bounds",
+   "unsupported": "texels below 0.9 alpha are treated as not drawn; pause menu and map screens are reported as unknown",
+   "resolution": "40 px cells on a 960 x 523 screen",
+   "debug": "debug_observation.json / observations.jsonl hold global state; plumbing and evaluation only"
+  }
+ },
+ "debugBefore": {
+  "id": 1,
+  "frame": 0,
+  "health": 5,
+  "jumps": 1,
+  "fixedSteps": 1765,
+  "scene": "forgotten_deans-pass",
+  "x": 50.5556,
+  "y": -111.0022,
+  "vx": 0.0,
+  "vy": -0.0,
+  "simulationTime": 21.7667,
+  "grounded": true,
+  "facing": "right",
+  "frozen": false,
+  "healthMax": 5,
+  "soul": 99,
+  "deaths": 0,
+  "interacting": false,
+  "fadeAlpha": 0,
+  "inBossFight": false,
+  "mode": "Classic",
+  "abilities": [],
+  "pixel": [
+   1090.91,
+   2380.65,
+   24.24,
+   41.21
+  ],
+  "camera": [
+   1121.21,
+   2236.36
+  ],
+  "tilePixels": 21.8182,
+  "enemies": [
+   {
+    "name": "PENGUIN",
+    "x": 119.3,
+    "y": -34.0,
+    "health": 15
+   },
+   {
+    "name": "PENGUIN",
+    "x": 237.47,
+    "y": -120.0,
+    "health": 15
+   },
+   {
+    "name": "PENGUIN",
+    "x": 152.55,
+    "y": -111.0,
+    "health": 15
+   },
+   {
+    "name": "PENGUIN",
+    "x": 194.63,
+    "y": -111.0,
+    "health": 15
+   },
+   {
+    "name": "FLYING_HIPPIE",
+    "x": 93.17,
+    "y": -67.81,
+    "health": 15
+   },
+   {
+    "name": "BIRD",
+    "x": 134.15,
+    "y": -79.41,
+    "health": 15
+   },
+   {
+    "name": "FLYING_HIPPIE",
+    "x": 129.98,
+    "y": -51.85,
+    "health": 15
+   }
+  ],
+  "exits": []
+ },
+ "debugAfter": {
+  "id": 2,
+  "frame": 12,
+  "health": 5,
+  "jumps": 1,
+  "fixedSteps": 1825,
+  "scene": "forgotten_deans-pass",
+  "x": 54.9259,
+  "y": -111.0022,
+  "vx": 11.1111,
+  "vy": -0.0,
+  "simulationTime": 22.1667,
+  "grounded": true,
+  "facing": "right",
+  "frozen": false,
+  "healthMax": 5,
+  "soul": 99,
+  "deaths": 0,
+  "interacting": false,
+  "fadeAlpha": 0,
+  "inBossFight": false,
+  "mode": "Classic",
+  "abilities": [],
+  "pixel": [
+   1186.26,
+   2380.65,
+   24.24,
+   41.21
+  ],
+  "camera": [
+   1156.16,
+   2236.36
+  ],
+  "tilePixels": 21.8182,
+  "enemies": [
+   {
+    "name": "PENGUIN",
+    "x": 121.52,
+    "y": -34.0,
+    "health": 15
+   },
+   {
+    "name": "PENGUIN",
+    "x": 239.69,
+    "y": -120.0,
+    "health": 15
+   },
+   {
+    "name": "PENGUIN",
+    "x": 154.77,
+    "y": -111.0,
+    "health": 15
+   },
+   {
+    "name": "PENGUIN",
+    "x": 194.16,
+    "y": -111.0,
+    "health": 15
+   },
+   {
+    "name": "FLYING_HIPPIE",
+    "x": 92.94,
+    "y": -67.78,
+    "health": 15
+   },
+   {
+    "name": "BIRD",
+    "x": 133.89,
+    "y": -79.26,
+    "health": 15
+   },
+   {
+    "name": "FLYING_HIPPIE",
+    "x": 130.02,
+    "y": -51.96,
+    "health": 15
+   }
+  ],
+  "exits": []
+ }
+}
