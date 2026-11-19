@@ -89,8 +89,9 @@ class PairedIntervalSelector:
     skewed differences, for a block whose differences are all equal, and for
     a handful of tasks.
 
-    With ``looks > 1`` the gate plays its rounds in ``looks`` equal blocks and
-    calls :meth:`look` after each one, so it can stop once the result is clear.
+    With ``looks > 1`` the :class:`~honing.release.Gate` plays its rounds in
+    ``looks`` equal blocks and calls :meth:`look` after each one, so it can
+    stop once the result is clear. The decision records ``stopped_early``.
     Every look is another chance for noise to clear the bar, so the looks split
     ``1 - confidence`` between them. The interim looks share a tenth of it
     evenly and the final look keeps the rest. The chance that any look's
@@ -120,6 +121,10 @@ class PairedIntervalSelector:
         self._confidence = confidence
         self._looks = looks
 
+    @property
+    def looks(self) -> int:
+        return self._looks
+
     def look(
         self, candidate: UpdateCandidate, evaluation: EvaluationResult, *, final: bool
     ) -> SelectionDecision | None:
@@ -136,13 +141,14 @@ class PairedIntervalSelector:
         confidence = self._look_confidence(final=False)
         interval = betting_paired_difference(evaluation, confidence=confidence)
         if interval.low > self._min_effect or interval.high < self._min_effect:
-            return self._decision(interval, confidence)
+            return self._decision(interval, confidence, stopped_early=True)
         return None
 
     def decide(self, candidate: UpdateCandidate, evaluation: EvaluationResult) -> SelectionDecision:
         """The final look. A gate that plays all its rounds at once calls only this."""
         confidence = self._look_confidence(final=True)
-        return self._decision(betting_paired_difference(evaluation, confidence=confidence), confidence)
+        interval = betting_paired_difference(evaluation, confidence=confidence)
+        return self._decision(interval, confidence, stopped_early=False)
 
     def rounds_needed(self, paired_sd: float, effect: float, power: float = 0.8) -> int:
         """Paired rounds for the final look to select a true mean difference of ``effect`` with ``power``.
@@ -191,7 +197,7 @@ class PairedIntervalSelector:
             return 1.0 - (1.0 - INTERIM_SHARE) * alpha
         return 1.0 - INTERIM_SHARE * alpha / (self._looks - 1)
 
-    def _decision(self, interval: PairedDifference, confidence: float) -> SelectionDecision:
+    def _decision(self, interval: PairedDifference, confidence: float, *, stopped_early: bool) -> SelectionDecision:
         selected = interval.low > self._min_effect
         return SelectionDecision(
             outcome="select" if selected else "reject",
@@ -207,6 +213,7 @@ class PairedIntervalSelector:
                 "difference_high": interval.high,
                 "interval_confidence": confidence,
                 "min_effect": self._min_effect,
+                "stopped_early": float(stopped_early),
             },
         )
 

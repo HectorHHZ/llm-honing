@@ -1,9 +1,10 @@
 {
-  "description": "A direction edit on real NanoJev weights, gated on tank duels. The pinned NanoJev release is the first model; the trainer reads the head's inputs on the planner teacher's rounds (the train split, 16 tasks) and adds one unit of the fire-minus-hold direction to scalar.weight; the gate plays the candidate and the incumbent on all 16 validation tasks against the planner, each through its own decision server started on demand, and publishes the candidate if it wins more rounds than it loses. Needs the pinned NanoJev checkout (HONING_NANOJEV_SOURCE), two GPUs for the servers (HONING_NANOJEV_GPUS, for example 0,1), one for the trainer's forward pass (HONING_NANOJEV_EDIT_GPU) and the pinned release in HF_HOME. Run: python scripts/e2e/tank_campaign.py --config configs/e2e/tank_direction_edit.json. The method slot is required by the tank campaign but never scheduled here, so it names the all-planes stand-in.",
+  "description": "A direction edit on real NanoJev weights, gated on tank duels. The pinned NanoJev release is the first model; the trainer reads the head's inputs on the planner teacher's rounds (the train split, 16 tasks) and adds one unit of the fire-minus-hold direction to scalar.weight; the gate plays the candidate and the incumbent on 64 rounds against the planner, 32 fresh validation seeds from both seats, each through its own decision server started on demand, and publishes the candidate if the 95% interval on the mean difference per seed lies above 0. Needs the pinned NanoJev checkout (HONING_NANOJEV_SOURCE), two GPUs for the servers (HONING_NANOJEV_GPUS, for example 0,1), one for the trainer's forward pass (HONING_NANOJEV_EDIT_GPU) and the pinned release in HF_HOME. Run: python scripts/e2e/tank_campaign.py --config configs/e2e/tank_direction_edit.json. The method slot is required by the tank campaign but never scheduled here, so it names the all-planes stand-in.",
   "integration_dir": "integrations/tank-war",
   "suite": "tasks/suite.jsonl",
   "work_dir": "runs/tank-direction-edit",
-  "gate_tasks": {"split": "val", "limit": 16},
+  "validation_tasks": {"split": "val", "limit": 16},
+  "gate": {"rounds": 64, "looks": 1, "min_effect": 0.0, "confidence": 0.95},
   "harness_tasks": {"split": "train", "limit": 16},
   "episode_budget": 0,
   "samples_per_task": 1,

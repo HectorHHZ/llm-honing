@@ -9,7 +9,9 @@ Checks that hold for any run of scripts/e2e/ra2_campaign.py or scripts/e2e/tank_
   the head is the last published release (or r0000 when nothing was published);
 - every gated step's episodes are on disk: summary.json lists each one's run
   directory, and each holds a result.json. A method's own minibatches, rollouts,
-  and demonstrations leave run directories too, and are not counted.
+  and demonstrations leave run directories too, and are not counted;
+- a gate that records the seeds it played (``seed_first`` to ``seed_last``, as
+  the tank gate does) shares none with an earlier gate of the run.
 
 ``--expect harness="rolled back"`` also requires that step's result, in order.
 """
@@ -58,6 +60,16 @@ def problems(work: Path, expected: list[tuple[str, str]]) -> list[str]:
             found.append(
                 f"step {index + 1} ({step['move']}) has {len(missing)} episodes without a result: {missing[:3]}"
             )
+
+    played: list[tuple[int, int]] = []
+    for record in records:
+        metrics = (record.get("decision") or {}).get("metrics", {})
+        if "seed_first" in metrics:
+            first, last = int(metrics["seed_first"]), int(metrics["seed_last"])
+            shared = [(a, b) for a, b in played if a <= last and first <= b]
+            if shared:
+                found.append(f"a gate played seeds {first}-{last}, which overlap an earlier gate's {shared[0]}")
+            played.append((first, last))
     return found
 
 

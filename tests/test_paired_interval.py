@@ -1,4 +1,4 @@
-"""The paired interval selector: its decisions, its looks, and its error rates on simulated gates.
+"""The paired interval selector: its decisions, its looks, the gate's blocks, and its error rates on simulated gates.
 
 A simulated gate draws per-round differences with a chosen mean and standard
 deviation on tank's score steps and runs the selector on them, in one look or
@@ -7,14 +7,27 @@ in blocks. Every simulation is seeded, so each rate is the same on every run.
 
 from __future__ import annotations
 
+import json
 import math
 import random
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 
-from honing.core import CheckpointRef, ContractError, EvaluationResult, ModelSnapshot, UpdateCandidate
-from honing.release import PairedDifference, PairedIntervalSelector, betting_paired_difference
+from honing.core import (
+    CheckpointRef,
+    ContractError,
+    EvaluationResult,
+    HoneRelease,
+    ModelSnapshot,
+    Move,
+    Task,
+    UpdateCandidate,
+)
+from honing.release import Gate, PairedDifference, PairedIntervalSelector, betting_paired_difference
+from tests.fakes.builder import TASKS, build_campaign
+from tests.fakes.harness import FakeEpisodeRunner
 from tests.fakes.model import parameters_of, small_moe
 
 #: The improvement in round score the gate must detect (#166).
@@ -37,12 +50,13 @@ def _candidate() -> UpdateCandidate:
 
 
 CANDIDATE = _candidate()
+INCUMBENT = HoneRelease("r0000", UpdateCandidate(kind="init", parent_id=None, master=CANDIDATE.master), None)
 
 
-def _evaluation(differences: list[float]) -> EvaluationResult:
-    """Scores in [0, 1] whose per-task differences are ``differences``."""
+def _evaluation(differences: list[float], first: int = 0) -> EvaluationResult:
+    """Scores in [0, 1] whose per-task differences are ``differences``, on tasks from number ``first``."""
     return EvaluationResult(
-        task_ids=TASK_IDS[: len(differences)],
+        task_ids=TASK_IDS[first : first + len(differences)],
         candidate_scores=tuple(0.5 + difference / 2 for difference in differences),
         incumbent_scores=tuple(0.5 - difference / 2 for difference in differences),
         evaluated_variant="master",
@@ -163,6 +177,72 @@ def test_a_planned_gate_can_play_every_look_and_select() -> None:
         assert selector.look(CANDIDATE, _evaluation(differences[: look * block]), final=False) is None
     last = selector.look(CANDIDATE, _evaluation(differences), final=True)
     assert last is not None and last.selected
+
+
+# ---------------------------------------------------------------- the gate's blocks and harness moves
+
+
+class _Blocks:
+    """An evaluator that plays the next ``block`` differences on new tasks at every call, or the first again."""
+
+    def __init__(self, differences: list[float], block: int, *, replay: bool = False) -> None:
+        self.differences, self.block, self.replay, self.calls = differences, block, replay, 0
+
+    def evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
+        first = 0 if self.replay else self.calls * self.block
+        self.calls += 1
+        return _evaluation(self.differences[first : first + self.block], first)
+
+
+@pytest.mark.unit
+def test_a_sequential_gate_plays_blocks_until_a_look_decides() -> None:
+    selector = PairedIntervalSelector(looks=4)
+    # 19 wins and a loss clear an interim look's 99.83% interval. Nine and a loss do not.
+    clear = _Blocks([1.0] * 19 + [-1.0] + [0.0] * 60, block=20)
+    evaluation, decision = Gate(clear, selector).judge(CANDIDATE, INCUMBENT)
+    assert (clear.calls, evaluation.task_ids) == (1, TASK_IDS[:20])
+    assert decision.selected and decision.metrics["stopped_early"] == 1.0
+
+    mixed = _Blocks([1.0, -1.0, 0.0, 0.5] * 10, block=10)
+    evaluation, decision = Gate(mixed, selector).judge(CANDIDATE, INCUMBENT)
+    assert (mixed.calls, evaluation.task_ids) == (4, TASK_IDS[:40])
+    assert not decision.selected and decision.metrics["stopped_early"] == 0.0
+
+    # An evaluator that plays the same tasks again would count their rounds twice.
+    with pytest.raises(ContractError, match="scores each task once"):
+        Gate(_Blocks([1.0, -1.0] * 5, block=10, replay=True), selector).judge(CANDIDATE, INCUMBENT)
+
+
+@pytest.mark.unit
+def test_a_harness_move_with_a_method_evaluator_must_pass_both_selectors(tmp_path: Path) -> None:
+    # The verify instruction adds 0.5 to every task's score. The method's win-loss selector decides on its
+    # own two tasks, and the gate's interval selector on twelve, whose interval is [+0.01, +0.70].
+    gate_tasks = tuple(Task(task_id=f"gate{index}", prompt="Answer.") for index in range(12))
+    for min_effect, published in ((0.0, True), (0.1, False)):
+        fixture = build_campaign(
+            tmp_path / str(min_effect),
+            make_runner=lambda world: FakeEpisodeRunner(world, instruction_bonus=0.5),
+            gate_tasks=gate_tasks,
+            harness_selector=PairedIntervalSelector(min_effect),
+            method_tasks=TASKS[:2],
+        )
+        outcome = fixture.campaign.advance(Move(kind="harness"))
+        assert (outcome.release is not None) is published
+        assert outcome.decision is not None and outcome.decision.policy == "win_loss+paired_interval"
+        assert outcome.evaluation is not None and len(outcome.evaluation.task_ids) == len(gate_tasks)
+        record = json.loads(fixture.campaign.chain.record_path.read_text().splitlines()[-1])
+        assert record["candidate"]["method_state"]["accepted"] == int(published)
+
+    # A candidate the method rejects never reaches the gate.
+    fixture = build_campaign(
+        tmp_path / "tie",
+        harness_selector=PairedIntervalSelector(),
+        method_tasks=TASKS[:2],
+        make_runner=lambda world: FakeEpisodeRunner(world, instruction_bonus=0.0),
+    )
+    outcome = fixture.campaign.advance(Move(kind="harness"))
+    assert outcome.decision is not None and outcome.decision.policy == "win_loss" and outcome.release is None
+    assert fixture.runner.runs == 2 * 2  # two tasks, under the candidate and the incumbent
 
 
 # ---------------------------------------------------------------- error rates over 2,000 simulated gates

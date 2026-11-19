@@ -18,6 +18,7 @@ from honing.core import (
     EpisodeRecord,
     EpisodeRunner,
     EvaluationResult,
+    Evaluator,
     EvolveContext,
     EvolveMethod,
     HarnessMoveConfig,
@@ -63,7 +64,15 @@ class CompressionComponents:
 
 @dataclass(frozen=True)
 class HarnessComponents:
-    """The Harness plane a campaign uses. A move's :class:`~honing.core.HarnessMoveConfig` overrides it."""
+    """The Harness plane a campaign uses. A move's :class:`~honing.core.HarnessMoveConfig` overrides it.
+
+    A method's selector replaces the gate's for harness candidates. With
+    ``method_evaluator`` set, both must select instead: the method's selector
+    decides on that evaluator's run, and :meth:`~honing.core.EvolveMethod.record`
+    sees that run, so a method such as GEPA keeps its own fixed validation
+    tasks. A candidate it selects then goes through the gate with the gate's
+    own selector, on the gate's evaluator, which may draw fresh tasks.
+    """
 
     runner: EpisodeRunner
     grader: TaskGrader
@@ -71,6 +80,7 @@ class HarnessComponents:
     tasks: tuple[Task, ...]
     episode_budget: int = 0
     samples_per_task: int = 1
+    method_evaluator: Evaluator | None = None
 
     def __post_init__(self) -> None:
         require(len(self.tasks) > 0, "a campaign needs at least one task")
@@ -104,6 +114,16 @@ def _size_metrics(snapshot: ModelSnapshot) -> dict[str, float]:
 
 def _policy_of(snapshot: ModelSnapshot) -> PolicyRef:
     return PolicyRef(checkpoint=snapshot.checkpoint, architecture=snapshot.architecture, variant="master")
+
+
+def _both(method: SelectionDecision, gate: SelectionDecision) -> SelectionDecision:
+    """The gate's verdict on a candidate the method selected, with both reasons and both sets of metrics."""
+    return SelectionDecision(
+        outcome=gate.outcome,
+        policy=f"{method.policy}+{gate.policy}",
+        reason=f"{method.policy}: {method.reason}; {gate.policy}: {gate.reason}",
+        metrics={**method.metrics, **gate.metrics},
+    )
 
 
 class Campaign:
@@ -320,11 +340,20 @@ class Campaign:
             move_label=config.label,
         )
         self._check_candidate(candidate)
-        evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
-        self._recent_records = evaluation.records
+        if harness.method_evaluator is None:
+            evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
+            method_evaluation = evaluation
+        else:
+            method_gate = Gate(harness.method_evaluator, default_selector=method.selector)
+            method_evaluation, decision = method_gate.judge(candidate, head)
+            evaluation = method_evaluation
+            if decision.selected:
+                evaluation, verdict = self._gate.judge(candidate, head)
+                decision = _both(decision, verdict)
+        self._recent_records = method_evaluation.records
         # The method learns from every verdict, so its new state is attached
         # whether the candidate is published or rejected.
-        settled = replace(candidate, method_state=method.record(result.state, proposal, evaluation, decision))
+        settled = replace(candidate, method_state=method.record(result.state, proposal, method_evaluation, decision))
         return self._publish_or_reject(move, settled, evaluation, decision)
 
     # ------------------------------------------------------------ shared
