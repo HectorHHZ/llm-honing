@@ -29,7 +29,7 @@ def make_space_invaders(*, pooled: bool = True) -> Any:
         import ale_py
         import gymnasium as gym
     except ImportError as exc:
-        raise RuntimeError("Install llm-honing[space-invaders] and provide the ALE Space Invaders ROM") from exc
+        raise RuntimeError("Install llm-honing[space-invaders] to use the ALE Space Invaders environment") from exc
 
     gym.register_envs(ale_py)
     if not pooled:

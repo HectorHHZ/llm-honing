@@ -1,16 +1,16 @@
 # Space Invaders environment and replay
 
 The optional installed module supplies an ALE game environment and an action replay
-validator. It contains no controller, Jev model, training code, checkpoint,
-Atari ROM, or sealed incumbent artifact.
+validator. It contains no controller, Jev model, training code, checkpoint, or
+sealed incumbent artifact.
 
 ## Install and run
 
-Use Python 3.10 or newer. Install `llm-honing[space-invaders]`. ALE must be able
-to load the external Space Invaders ROM. The ROM and its redistribution rights
-are outside this package; obtain it through a lawful source and configure ALE
-according to its installation instructions. The CLI reports an ALE error if the
-ROM is unavailable.
+Use Python 3.10 or newer. Install `llm-honing[space-invaders]`. The pinned
+`ale-py==0.11.2` wheel includes the Space Invaders ROM, so this installation
+does not require a separate ROM download. This repository does not contain ROM
+bytes. A custom ALE build may package ROMs differently; the CLI reports an ALE
+error if its installation cannot load the game.
 
 ```sh
 python -m honing.harness.space_invaders play --seed 61001 --action NOOP --output /tmp/space-invaders.json
@@ -23,8 +23,8 @@ receives the current RGB observation and ALE info and returns one of the six
 native action indices: `NOOP=0`, `FIRE=1`, `RIGHT=2`, `LEFT=3`,
 `RIGHTFIRE=4`, `LEFTFIRE=5`. A caller may turn the observation into model input
 and map the model's choice to an index; no model code lives in this package.
-The package validates the action set at runtime. Separate controller and
-training sources are documented in `integrations/space-invaders/README.md`.
+The package validates the action set at runtime. A caller may provide any
+policy that returns a native action index.
 
 ```python
 from pathlib import Path
@@ -52,11 +52,8 @@ termination with zero lives, and rejects a truncated or decision-capped game.
 The JSON replay contains the seed, ALE/Gymnasium versions, mode and environment constants, each native
 action, observed reward/lives/terminal flags, and a SHA-256 of each returned RGB
 frame. Verification recreates the game and checks every step and the final
-score. Deterministic replay requires compatible ALE, ROM, and Gymnasium builds;
-compare package versions when moving a trace between machines. This trace
-format is an integration-level persisted format. Its merge needs an accepted
-RFC under `CONTRIBUTING.md`.
-
-The final hand-tuned OCAtari controller and its operating instructions are documented
-in `docs/space-invaders-final-harness.md`. Model checkpoints and generated
-experiment data are supplied separately.
+score. Deterministic replay requires compatible ALE and Gymnasium builds,
+including the ROM bytes supplied by ALE. Verification rejects a trace recorded
+with different ALE or Gymnasium versions. This trace is an integration-level
+persisted format governed by RFC #133. It is separate from the inference
+records and training data proposed in RFC #137.
