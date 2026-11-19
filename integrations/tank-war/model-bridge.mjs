@@ -183,6 +183,116 @@ const question = (instructions, options) => ({
     instructions,
     criteria: Object.fromEntries(options.map((o) => [o.id, o.description])),
 });
+// The request for `questions` about `state`, as the model reads it: the notes,
+// the state, then every option's forecast. Laya's native option pointers allow
+// 48 tokens each, so the forecasts stay in the state, whole, and the options
+// point at them.
+export function decisionRequest(body, state, questions, suffix, notes = "") {
+    if (notes) state = notes + "\n\n" + state;
+    state +=
+        "\n\nOPTION FORECASTS:\n" +
+        Object.entries(questions)
+            .map(([head, q]) =>
+                Object.entries(q.criteria)
+                    .map(([id, description]) => `${head}/${id}: ${description}`)
+                    .join("\n"),
+            )
+            .join("\n");
+    return {
+        id: body.id + ":" + suffix,
+        parts: {
+            essential: [state],
+            details: [],
+            memory: [],
+            logs: [],
+        },
+        questions: Object.fromEntries(
+            Object.entries(questions).map(([head, q]) => [
+                head,
+                {
+                    ...q,
+                    criteria: Object.fromEntries(
+                        Object.keys(q.criteria).map((id) => [
+                            id,
+                            `${id}: use the ${head}/${id} forecast in state.`,
+                        ]),
+                    ),
+                },
+            ]),
+        ),
+    };
+}
+// Planned steering's motion question and weapon question, in the harness's text.
+export const motionQuestions = (text, body) => ({
+    motion: question(text.motion, body.motions),
+});
+export const weaponQuestions = (text) => ({
+    weapon: question(text.weapon, [
+        { id: "fire", description: text["weapon.fire"] },
+        { id: "hold", description: text["weapon.hold"] },
+    ]),
+});
+// Raw controls' drive, turn and weapon questions.
+export const controlQuestions = (text, body) =>
+    Object.fromEntries(
+        Object.entries(body.candidates).map(([head, opts]) => [
+            head,
+            question(text[head], opts),
+        ]),
+    );
+// The weapon question's state after one motion: its shot forecast and whether firing is permitted.
+export function weaponContext(body, motionId) {
+    const motion = body.motions.find((m) => m.id === motionId);
+    if (!motion) throw Error(`No motion plan ${motionId}`);
+    const permitted =
+        motion.shot.can_fire &&
+        motion.shot.self_hit_ms === null &&
+        motion.shot.enemy_hit_ms !== null;
+    return {
+        permitted,
+        state:
+            body.weapon_state +
+            `\nSELECTED MOTION ${motionId}: ${motion.description}\nShot forecast ${JSON.stringify(motion.shot)}. Fire permitted=${permitted}. Assess ONLY this selected motion.`,
+    };
+}
+// Every request decide() sends for `body`, in order, with its calls' context:
+// the controls request, or the motion request and then, when `motion` is
+// given, the weapon request for that motion.
+export function decisionRequests(
+    body,
+    { questions: text = DEFAULT_QUESTIONS, notes = "", motion } = {},
+) {
+    if (body.protocol !== "plans-v1")
+        return [
+            decisionRequest(
+                body,
+                body.state,
+                controlQuestions(text, body),
+                "controls",
+                notes,
+            ),
+        ];
+    const requests = [
+        decisionRequest(
+            body,
+            body.state,
+            motionQuestions(text, body),
+            "motion",
+            notes,
+        ),
+    ];
+    if (motion !== undefined)
+        requests.push(
+            decisionRequest(
+                body,
+                weaponContext(body, motion).state,
+                weaponQuestions(text),
+                "weapon",
+                notes,
+            ),
+        );
+    return requests;
+}
 export async function decideWithHoning(
     backend,
     edition,
@@ -222,48 +332,8 @@ export async function decide(
         started = performance.now(),
         pick = choose ?? ((head, p, allowed) => argmax(p, allowed));
     let asked = 0;
-    // The request for `questions` about `state`, as the model reads it.
-    function request(state, questions, suffix) {
-        if (notes) state = notes + "\n\n" + state;
-        // Laya's native option pointers allow 48 tokens each. Preserve every
-        // forecast in the state and use concise pointers, never truncate it.
-        state +=
-            "\n\nOPTION FORECASTS:\n" +
-            Object.entries(questions)
-                .map(([head, q]) =>
-                    Object.entries(q.criteria)
-                        .map(
-                            ([id, description]) =>
-                                `${head}/${id}: ${description}`,
-                        )
-                        .join("\n"),
-                )
-                .join("\n");
-        questions = Object.fromEntries(
-            Object.entries(questions).map(([head, q]) => [
-                head,
-                {
-                    ...q,
-                    criteria: Object.fromEntries(
-                        Object.keys(q.criteria).map((id) => [
-                            id,
-                            `${id}: use the ${head}/${id} forecast in state.`,
-                        ]),
-                    ),
-                },
-            ]),
-        );
-        return {
-            id: body.id + ":" + suffix,
-            parts: {
-                essential: [state],
-                details: [],
-                memory: [],
-                logs: [],
-            },
-            questions,
-        };
-    }
+    const request = (state, questions, suffix) =>
+        decisionRequest(body, state, questions, suffix, notes);
     // The answers `reply` gives to `sent`, checked, and recorded as one call.
     function accept(sent, reply) {
         const state = sent.parts.essential[0],
@@ -316,50 +386,24 @@ export async function decide(
         probabilities,
         extra = {};
     if (body.protocol === "plans-v1") {
-        const motionQuestions = {
-                motion: question(text.motion, body.motions),
-            },
-            weaponQuestions = {
-                weapon: question(text.weapon, [
-                    {
-                        id: "fire",
-                        description: text["weapon.fire"],
-                    },
-                    {
-                        id: "hold",
-                        description: text["weapon.hold"],
-                    },
-                ]),
-            };
-        // The weapon question's state after one motion: its shot forecast and whether firing is permitted.
-        const weaponFor = (motionId) => {
-            const motion = body.motions.find((m) => m.id === motionId),
-                permitted =
-                    motion.shot.can_fire &&
-                    motion.shot.self_hit_ms === null &&
-                    motion.shot.enemy_hit_ms !== null;
-            return {
-                permitted,
-                state:
-                    body.weapon_state +
-                    `\nSELECTED MOTION ${motionId}: ${motion.description}\nShot forecast ${JSON.stringify(motion.shot)}. Fire permitted=${permitted}. Assess ONLY this selected motion.`,
-            };
-        };
+        const motionAsked = motionQuestions(text, body),
+            weaponAsked = weaponQuestions(text),
+            weaponFor = (motionId) => weaponContext(body, motionId);
         const together = branches >= body.admissible_motion_ids.length;
         let a, weaponSent, weaponReplies;
         if (together) {
-            const sent = request(body.state, motionQuestions, "motion");
+            const sent = request(body.state, motionAsked, "motion");
             weaponSent = Object.fromEntries(
                 body.admissible_motion_ids.map((id) => [
                     id,
-                    request(weaponFor(id).state, weaponQuestions, "weapon"),
+                    request(weaponFor(id).state, weaponAsked, "weapon"),
                 ]),
             );
             asked++;
             const reply = await ask({ ...sent, branches: weaponSent });
             a = accept(sent, reply);
             weaponReplies = reply.branches ?? {};
-        } else a = await predict(body.state, motionQuestions, "motion");
+        } else a = await predict(body.state, motionAsked, "motion");
         const raw = a.motion.choice;
         // Sample the policy's full distribution. Safety is an environment action
         // projection, not a second policy with unrecorded conditional probabilities.
@@ -381,7 +425,7 @@ export async function decide(
         const { permitted, state: weaponState } = weaponFor(motionId);
         const w = together
             ? accept(weaponSent[motionId], weaponReplies[motionId])
-            : await predict(weaponState, weaponQuestions, "weapon");
+            : await predict(weaponState, weaponAsked, "weapon");
         const weapon = choose
             ? pick("weapon", w.weapon.probabilities, ["fire", "hold"])
             : w.weapon.choice;
@@ -428,12 +472,7 @@ export async function decide(
     } else {
         const answers = await predict(
             body.state,
-            Object.fromEntries(
-                Object.entries(body.candidates).map(([head, opts]) => [
-                    head,
-                    question(text[head], opts),
-                ]),
-            ),
+            controlQuestions(text, body),
             "controls",
         );
         const chosen = Object.fromEntries(
