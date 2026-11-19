@@ -15,6 +15,8 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass
+from itertools import accumulate, chain, repeat
+from operator import mul, sub, truediv
 from statistics import fmean
 
 from honing.core import EvaluationResult, require
@@ -105,15 +107,15 @@ def _bets(differences: list[float], log_level: float) -> list[float]:
     the capital grow fastest at the mean the bound should just exclude after
     ``n`` tasks (Waudby-Smith and Ramdas's fixed-time choice). ``s2`` starts as
     one imagined task at a spread of 1, the largest a difference in ``[-1, 1]``
-    can have, so the first stakes are small.
+    can have, so the first stakes are small. Like ``_log_capital``, it runs in
+    builtins alone.
     """
-    bets = []
-    total, squares = 0.0, 1.0
-    for count, difference in enumerate(differences, start=1):
-        bets.append(math.sqrt(2.0 * log_level * count / (len(differences) * squares)))
-        total += difference
-        squares += (difference - total / (count + 1)) ** 2
-    return bets
+    tasks = len(differences)
+    means = map(truediv, accumulate(differences), range(2, tasks + 2))
+    deviations = map(sub, differences, means)
+    squares = accumulate(chain((1.0,), map(pow, deviations, repeat(2))))
+    numerators = map(mul, repeat(2.0 * log_level), range(1, tasks + 1))
+    return list(map(math.sqrt, map(truediv, numerators, map(mul, repeat(tasks), squares))))
 
 
 def _low_end(differences: list[float], bets: list[float], log_level: float) -> float:
@@ -153,11 +155,15 @@ def _log_capital(differences: list[float], bets: list[float], mean: float) -> fl
 
     A difference can fall ``1 + mean`` below ``mean``, so a stake of at most
     ``MAX_BET / (1 + mean)`` never loses more than ``MAX_BET`` of the capital.
+
+    The sum runs in builtins alone, with no Python frame per task, because the
+    simulation tests evaluate it millions of times and coverage tracing slows
+    a generator here about fourfold.
     """
     cap = MAX_BET / (1.0 + mean) if mean > -1.0 else math.inf
-    return sum(
-        math.log1p(min(bet, cap) * (difference - mean)) for difference, bet in zip(differences, bets, strict=True)
-    )
+    stakes = map(min, bets, repeat(cap))
+    shifts = map(sub, differences, repeat(mean))
+    return sum(map(math.log1p, map(mul, stakes, shifts)))
 
 
 def gate_metrics(evaluation: EvaluationResult) -> dict[str, float]:
