@@ -427,3 +427,31 @@ jobs:
             ${{ runner.temp }}/pi-check/workspaces/*/agent.log
             ${{ runner.temp }}/pi/summary.json
           if-no-files-found: ignore
+
+  agent-gateway:
+    # The agent gateway's LiteLLM proxy, from its own environment installed from its lock
+    # (integrations/agent_gateway/README.md), in front of a loopback upstream that serves chat completions only,
+    # as SGLang does. No model or key: this catches a lock that no longer installs, a LiteLLM that no longer
+    # carries Anthropic messages and OpenAI responses over to chat completions, or a route outside the agents' own.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Honing and the gateway environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" uv
+          uv venv --python 3.12 integrations/agent_gateway/.venv
+          uv pip install --python integrations/agent_gateway/.venv/bin/python -r integrations/agent_gateway/requirements.txt
+      - name: Test
+        run: python -m pytest tests/test_agent_gateway.py
+        env:
+          # A test that needs the proxy fails rather than skips when its environment is missing.
+          HONING_REQUIRE_GATEWAY: "1"
