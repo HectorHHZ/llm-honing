@@ -14,10 +14,11 @@
 // --sample-seed draws each policy choice from the model's probabilities (an on-policy rollout) instead of
 // taking the most probable one. --teacher plays the agent's seat with the planner teacher and needs no server.
 //
-// states.jsonl holds what a decision was rendered from: a header line with the harness files' text, then one
-// line per agent decision with the raw game state (web/game/snapshot.js), its SHA-256, and the motion the weapon
-// question was asked about. decisions.jsonl rows name their decision by `decision`. scripts/raw-states.mjs
-// re-renders, replays, and labels a run from these files.
+// states.jsonl holds what a decision was rendered from: a header line with the harness files' text and the
+// platform that recorded the round, then one line per agent decision with the raw game state
+// (web/game/snapshot.js), its SHA-256, and the motion the weapon question was asked about. decisions.jsonl rows
+// name their decision by `decision`. scripts/raw-states.mjs re-renders, replays, and labels a run from these
+// files.
 //
 // --out (which must not exist) receives manifest.json, decisions.jsonl (one row per question set the agent was
 // asked, with the state, questions, answers, and executed choice), events.jsonl, and result.json; a run that
@@ -84,6 +85,14 @@ const RTT_MS = 0;
 export const STATES_FILE = "states.jsonl",
     RAW_STATES_FORMAT = "tank-raw-states",
     RAW_STATES_VERSION = 1;
+// The platform a round is recorded or replayed on. The engine's Math results can
+// differ in the last bits between operating systems, CPUs and Node versions, so
+// a replay is bit exact on the platform that recorded the round.
+export const PLATFORM = {
+    os: process.platform,
+    arch: process.arch,
+    node: process.versions.node,
+};
 export const stateHash = (state) => sha256(canonicalJSON(state));
 
 // The controller settings a harness asks for, checked; throws on anything a match would misread.
@@ -324,6 +333,7 @@ export async function playMatch({
             version: RAW_STATES_VERSION,
             seed,
             seat,
+            platform: PLATFORM,
             harness: harness.contents,
         }) + "\n",
     );

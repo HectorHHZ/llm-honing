@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import gzip
 import json
+import math
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from honing.core import ContractError, HarnessFile, HarnessSpec
 REPO = Path(__file__).resolve().parents[1]
 INTEGRATION = REPO / "integrations/tank-war"
 # The round integrations/tank-war/tests/raw_states.test.mjs checks: every file of its run directory, gzipped.
+# It was recorded on one platform, so it serves rendering and labelling. Replay records its own round.
 FIXTURE = INTEGRATION / "tests/fixtures/rollout-s2002-blue.json.gz"
 NODE = shutil.which("node")
 
@@ -75,7 +78,6 @@ def test_a_recorded_round_re_renders_replays_and_is_labelled_from_python(run: Pa
     rows = [json.loads(line) for line in (run / "decisions.jsonl").read_text().splitlines()]
 
     assert tool.round_trip([run]) == [{"run": str(run), "decisions": len(states), "rows": len(rows)}]
-    assert tool.replay(run, to=2) == {"run": str(run), "checked": 3, "to": 2}
 
     # The logged harness is the seed harness: rendering under it from Python gives the logged rows.
     assert harness_files(seed_harness(INTEGRATION)) == header["harness"]
@@ -101,3 +103,29 @@ def test_a_recorded_round_re_renders_replays_and_is_labelled_from_python(run: Pa
     labels_header, labels = read_labels(run)
     assert labels_header["source"] == "planner-teacher"
     assert [line["request_id"] for line in labels] == [row["request_id"] for row in rows]
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(NODE is None, reason="needs Node 22")
+def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recording_platform(tmp_path: Path) -> None:
+    run = tmp_path / "teacher"
+    arguments = ["--seed=2003", "--seat=red", "--teacher", "--seconds=3", f"--out={run}"]
+    subprocess.run(["node", "scripts/match.mjs", *arguments], cwd=INTEGRATION, check=True, capture_output=True)
+    tool = TankRawStates(INTEGRATION)
+    header, states = read_states(run)
+    assert set(header["platform"]) == {"os", "arch", "node"}
+    assert tool.replay(run, to=2) == {"run": str(run), "checked": 3, "to": 2}
+    assert tool.replay(run)["checked"] == len(states)
+
+    # A round from another platform whose state differs in the last bit of one angle (and so in its hash).
+    header["platform"] = {"os": "linux", "arch": "x64", "node": "22.23.5"}
+    tank = states[2]["game"]["tanks"][1]
+    tank["angle"] = math.nextafter(tank["angle"], math.inf)
+    states[2]["state_sha256"] = "0" * 64
+    (run / "states.jsonl").write_text("".join(json.dumps(line) + "\n" for line in [header, *states]))
+    with pytest.raises(ContractError) as raised:
+        tool.replay(run)
+    assert "decision 2: state hash" in str(raised.value)
+    assert "state.tanks.1.angle is" in str(raised.value)
+    assert "Recorded on linux-x64 node 22.23.5, replayed on " in str(raised.value)
+    assert str(raised.value).endswith(": floating point may differ in the last bits.")

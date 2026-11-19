@@ -12,7 +12,9 @@
 // node scripts/raw-states.mjs replay RUN [--to=K]
 //     Plays the round again from its seed with the logged answers and choices fed back, and checks every
 //     decision's state hash and requests against the log, up to decision K. Without --to it plays to the end and
-//     also checks events.jsonl and result.json.
+//     also checks events.jsonl and result.json. Replay is bit exact on the platform that recorded the round. On
+//     another OS, CPU or Node version the engine's floating point can differ in the last bits, and a mismatch
+//     then names both platforms.
 // node scripts/raw-states.mjs label RUN...
 //     Writes labels.jsonl next to decisions.jsonl: the planner teacher's answer to every question of every row.
 //
@@ -29,6 +31,7 @@ import {
     playRound,
     roundResult,
     stateHash,
+    PLATFORM,
     SEATS,
     STATES_FILE,
     RAW_STATES_FORMAT,
@@ -128,9 +131,33 @@ export async function readRun(run) {
     return { manifest, header, harness, states, calls, rows };
 }
 
+const platformName = ({ os, arch, node }) => `${os}-${arch} node ${node}`;
+
+// What to add to a mismatch when the round was recorded on another platform.
+export function platformNote(header) {
+    if (!header.platform)
+        return "The recording names no platform, and floating point may differ in the last bits between platforms.";
+    if (same(header.platform, PLATFORM)) return null;
+    return `Recorded on ${platformName(header.platform)}, replayed on ${platformName(PLATFORM)}: floating point may differ in the last bits.`;
+}
+
+// `check` run on a read run, with the platform note added to any mismatch it reports.
+async function checked(run, check) {
+    const recorded = await readRun(run);
+    try {
+        return await check(recorded);
+    } catch (error) {
+        const note = error instanceof Mismatch && platformNote(recorded.header);
+        if (note) error.message += `. ${note}`;
+        throw error;
+    }
+}
+
 // Every decision re-rendered under the logged harness, checked against its rows.
-export async function roundTrip(run) {
-    const { header, states, calls, rows } = await readRun(run);
+export const roundTrip = (run) =>
+    checked(run, (recorded) => roundTripRun(run, recorded));
+
+async function roundTripRun(run, { header, states, calls, rows }) {
     for (const [k, observed] of states.entries()) {
         const requests = render(observed, header.harness);
         if (requests.length !== calls[k].length)
@@ -167,8 +194,10 @@ function difference(a, b, path = "state") {
 
 // The round played again from its seed with the logged answers and choices fed back. Checks every decision up to
 // `to`, or all of them and then the round's events and result.
-export async function replay(run, { to } = {}) {
-    const { manifest, harness, states, calls } = await readRun(run);
+export const replay = (run, { to } = {}) =>
+    checked(run, (recorded) => replayRun(run, recorded, to));
+
+async function replayRun(run, { manifest, harness, states, calls }, to) {
     const last = to ?? states.length - 1;
     if (!Number.isInteger(last) || last < 0 || last >= states.length)
         throw Error(
@@ -186,7 +215,7 @@ export async function replay(run, { to } = {}) {
         if (hash !== logged.state_sha256)
             throw new Mismatch(
                 decision,
-                `state hash ${hash} is not the logged ${logged.state_sha256}: ${difference(state, logged.game)}`,
+                `state hash ${hash} is not the logged ${logged.state_sha256}: ${difference(state, logged.game) ?? "the state is as logged, but its hash is not"}`,
             );
         const rows = calls[decision];
         let i = 0;

@@ -2,13 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+    cp,
+    mkdir,
+    mkdtemp,
+    readFile,
+    readdir,
+    writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
     playMatch,
     stateHash,
+    PLATFORM,
     CONTROLLER_PATH,
     QUESTIONS_PATH,
 } from "../scripts/match.mjs";
@@ -26,6 +34,8 @@ import { adapter } from "../web/game/adapter.js";
 // A sampled round against a stub model whose option i of n has probability (i + 1) / sum: seed 2002, blue, 8 s,
 // shot after 22 decisions. The fixture holds every file of its run directory in one gzipped JSON object.
 // Regenerate it after a change to what a round records: TANK_RECORD_FIXTURE=1 node --test tests/raw_states.test.mjs
+// Rendering and labelling read the logged state, so the fixture serves them on any platform. Replay plays the
+// round again, which is bit exact only on the platform that recorded it, so the replay tests record their own.
 const FIXTURE = new URL(
     "./fixtures/rollout-s2002-blue.json.gz",
     import.meta.url,
@@ -121,6 +131,33 @@ async function fixture() {
     return run;
 }
 
+// The fixture's round recorded again on this machine, once per test run, and copied for each test.
+let recording;
+async function recorded() {
+    recording ??= (async () => {
+        const server = await stubServer(),
+            out = join(await tmp("recorded"), "run");
+        try {
+            await playMatch({
+                seed: 2002,
+                seat: "blue",
+                out,
+                decisionServer: `http://127.0.0.1:${server.address().port}`,
+                seconds: 8,
+                sampleSeed: 7,
+            });
+        } finally {
+            server.close();
+        }
+        return out;
+    })();
+    const run = join(await tmp("replay"), "run");
+    await cp(await recording, run, { recursive: true });
+    return run;
+}
+const writeLines = (file, rows) =>
+    writeFile(file, rows.map((l) => JSON.stringify(l) + "\n").join(""));
+
 test("every recorded decision re-renders byte for byte under its logged harness", async () => {
     const run = await fixture(),
         { states, rows, manifest } = await readRun(run);
@@ -159,9 +196,10 @@ test("a snapshot restores to the same state, and observing a state leaves the ga
 });
 
 test("replaying to decision k reproduces the logged state hash at every decision up to k", async () => {
-    const run = await fixture(),
-        { states } = await readRun(run),
+    const run = await recorded(),
+        { header, states } = await readRun(run),
         last = states.length - 1;
+    assert.deepEqual(header.platform, PLATFORM);
     for (const to of [0, 1, Math.floor(last / 2), last])
         assert.deepEqual(await replay(run, { to }), {
             run,
@@ -179,26 +217,26 @@ test("replaying to decision k reproduces the logged state hash at every decision
 });
 
 test("replay stops at the first decision that does not reproduce", async () => {
-    // A changed state: the replay names the decision and the field.
-    let run = await fixture();
+    // A changed state: the replay names the decision and the field, and no platform, since this one recorded it.
+    let run = await recorded();
     const states = await lines(join(run, "states.jsonl")),
-        k = 12;
+        k = Math.floor((states.length - 1) / 2);
     states[k + 1].game.tanks[0].x += 1;
     states[k + 1].state_sha256 = stateHash(states[k + 1].game);
-    await writeFile(
-        join(run, "states.jsonl"),
-        states.map((l) => JSON.stringify(l) + "\n").join(""),
-    );
+    await writeLines(join(run, "states.jsonl"), states);
     await assert.rejects(
         replay(run),
-        (e) => e.decision === k && /state\.tanks\.0\.x is/.test(e.message),
+        (e) =>
+            e.decision === k &&
+            /state\.tanks\.0\.x is/.test(e.message) &&
+            !/Recorded on|floating point/.test(e.message),
     );
-    // A changed choice: another admissible motion at decision k changes what the weapon question is about.
-    run = await fixture();
+    // A changed choice: another admissible motion at decision j changes what the weapon question is about.
+    run = await recorded();
     const rows = await lines(join(run, "decisions.jsonl")),
         motion = rows.find(
             (r) =>
-                r.decision >= k &&
+                r.decision >= 1 &&
                 r.questions.motion &&
                 r.constraints.admissible_motion_ids.length > 1 &&
                 !r.constraints.policy_motion_changed,
@@ -207,16 +245,42 @@ test("replay stops at the first decision that does not reproduce", async () => {
             (id) => id !== motion.chosen.motion,
         );
     motion.chosen.motion = other;
-    await writeFile(
-        join(run, "decisions.jsonl"),
-        rows.map((l) => JSON.stringify(l) + "\n").join(""),
-    );
+    await writeLines(join(run, "decisions.jsonl"), rows);
     await assert.rejects(
         replay(run),
         (e) =>
             e.decision === motion.decision &&
             /the context of blue-2002-\d+:weapon differs/.test(e.message),
     );
+});
+
+test("a mismatch on a round recorded on another platform names both platforms", async () => {
+    // As on CI: the round was recorded elsewhere, and one angle differs in its last bit.
+    const run = await recorded(),
+        [header, ...states] = await lines(join(run, "states.jsonl")),
+        k = 3,
+        tank = states[k].game.tanks[1];
+    header.platform = { os: "linux", arch: "x64", node: "22.23.5" };
+    tank.angle =
+        tank.angle === 0 ? Number.MIN_VALUE : tank.angle * (1 + Number.EPSILON);
+    states[k].state_sha256 = stateHash(states[k].game);
+    await writeLines(join(run, "states.jsonl"), [header, ...states]);
+    const here = `${PLATFORM.os}-${PLATFORM.arch} node ${PLATFORM.node}`;
+    await assert.rejects(replay(run), (e) => {
+        assert.equal(e.decision, k);
+        assert.match(e.message, /state\.tanks\.1\.angle is -?[\d.]+, logged/);
+        assert.ok(
+            e.message.endsWith(
+                `, logged ${tank.angle}. Recorded on linux-x64 node 22.23.5, replayed on ${here}: floating point may differ in the last bits.`,
+            ),
+            e.message,
+        );
+        return true;
+    });
+    // A recording from before the header named its platform says so.
+    delete header.platform;
+    await writeLines(join(run, "states.jsonl"), [header, ...states]);
+    await assert.rejects(replay(run), /The recording names no platform/);
 });
 
 test("the teacher labels every question of a model's round, and its own choices on a teacher round", async () => {
