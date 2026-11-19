@@ -46,6 +46,11 @@ class TankRequest(TypedDict):
     questions: dict[str, Any]
 
 
+def _absolute(path: Path) -> str:
+    """``path`` relative to the caller's directory, spelled out for a tool that runs in another one."""
+    return str(Path(path).absolute())
+
+
 def harness_files(spec: HarnessSpec) -> list[dict[str, str]]:
     """A harness as the tool and ``states.jsonl`` hold it: every file's path, kind and text."""
     return [{"path": path, "kind": file.kind, "content": file.content} for path, file in spec.files]
@@ -90,6 +95,8 @@ class TankRawStates:
     def __init__(self, integration_dir: Path, *, node: str = "node", timeout_seconds: float = 300.0) -> None:
         if timeout_seconds <= 0:
             raise ContractError("timeout_seconds must be positive")
+        # The tool runs in the integration directory, so every path it is given is made absolute first.
+        integration_dir = integration_dir.absolute()
         self._tool = integration_dir / "scripts/raw-states.mjs"
         if not self._tool.exists():
             raise ContractError(f"{integration_dir} has no scripts/raw-states.mjs")
@@ -155,16 +162,16 @@ class TankRawStates:
 
     def round_trip(self, runs: Iterable[Path]) -> list[dict[str, Any]]:
         """Re-render every decision of each run under its logged harness, and refuse any row that differs."""
-        return self._run(["roundtrip", *map(str, runs)])
+        return self._run(["roundtrip", *map(_absolute, runs)])
 
     def replay(self, run: Path, *, to: int | None = None) -> dict[str, Any]:
         """Play ``run`` again to decision ``to`` (or to the end, then check its events and result too)."""
-        (report,) = self._run(["replay", str(run), *(() if to is None else (f"--to={to}",))])
+        (report,) = self._run(["replay", _absolute(run), *(() if to is None else (f"--to={to}",))])
         return report
 
     def label(self, runs: Iterable[Path]) -> list[dict[str, Any]]:
         """Write each run's ``labels.jsonl``. On a teacher's round, labels that differ from its choices are refused."""
-        return self._run(["label", *map(str, runs)])
+        return self._run(["label", *map(_absolute, runs)])
 
 
 __all__ = [

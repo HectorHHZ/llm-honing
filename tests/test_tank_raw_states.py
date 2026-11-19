@@ -129,3 +129,16 @@ def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recordin
     assert "state.tanks.1.angle is" in str(raised.value)
     assert "Recorded on linux-x64 node 22.23.5, replayed on " in str(raised.value)
     assert str(raised.value).endswith(": floating point may differ in the last bits.")
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(NODE is None, reason="needs Node 22")
+def test_a_run_named_relative_to_the_callers_directory_is_found(run: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(run.parent)
+    tool = TankRawStates(INTEGRATION)
+
+    (report,) = tool.round_trip([Path(run.name)])
+
+    # Re-rendering is the same on every platform, so this uses the recorded fixture (replay is not).
+    assert report["run"] == str(run)
+    assert tool.label([Path(run.name)])[0]["run"] == str(run)

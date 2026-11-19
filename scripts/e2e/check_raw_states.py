@@ -50,6 +50,7 @@ def record(out: Path, seeds: Sequence[int], seconds: float) -> list[Path]:
     server = DecisionServer(("127.0.0.1", 0), ForecastModel(START_QUALITY))
     serving = threading.Thread(target=server.serve, daemon=True)
     serving.start()
+    out = out.absolute()  # match.mjs runs in the integration directory
     out.mkdir(parents=True)
     jobs = []
     for seed in seeds:
