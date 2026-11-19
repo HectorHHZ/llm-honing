@@ -103,7 +103,7 @@ class EvaluationResult:
             "an evaluation has one candidate and one incumbent score per task",
         )
         scores = (*self.candidate_scores, *self.incumbent_scores)
-        require(all(math.isfinite(score) for score in scores), "evaluation scores must be finite")
+        require(all(map(math.isfinite, scores)), "evaluation scores must be finite")
         require_choice(self.evaluated_variant, get_args(PolicyVariant), "EvaluationResult.evaluated_variant")
 
     @property
