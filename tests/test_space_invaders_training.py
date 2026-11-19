@@ -28,26 +28,26 @@ def test_training_dry_run_needs_no_checkpoint(tmp_path: Path) -> None:
     train.write_text("".join(json.dumps(row(1, label)) + "\n" for label in ("A", "B")))
     validation.write_text("".join(json.dumps(row(2, label)) + "\n" for label in ("A", "B")))
     work = tmp_path / "work"
+    command = [
+        sys.executable,
+        str(script),
+        "--train-records",
+        str(train),
+        "--validation-records",
+        str(validation),
+        "--work-dir",
+        str(work),
+        "--train-per-label",
+        "1",
+        "--validation-per-label",
+        "1",
+        "--validation-seeds",
+        "auto",
+        "--reserved-game-seeds",
+        "3",
+    ]
     result = subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            "--train-records",
-            str(train),
-            "--validation-records",
-            str(validation),
-            "--work-dir",
-            str(work),
-            "--train-per-label",
-            "1",
-            "--validation-per-label",
-            "1",
-            "--validation-seeds",
-            "auto",
-            "--reserved-game-seeds",
-            "3",
-            "--dry-run",
-        ],
+        [*command, "--dry-run"],
         capture_output=True,
         text=True,
         check=True,
@@ -58,3 +58,6 @@ def test_training_dry_run_needs_no_checkpoint(tmp_path: Path) -> None:
     assert audit["baseCheckpoint"] is None
     assert '"trainSeeds"' in result.stdout
     assert not (work / "train-result.json").exists()
+    missing_gpu = subprocess.run(command, capture_output=True, text=True)
+    assert missing_gpu.returncode != 0
+    assert "Training needs --pins, --source-dir, and --gpu" in missing_gpu.stderr

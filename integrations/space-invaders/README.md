@@ -8,10 +8,11 @@ https://github.com/user-attachments/assets/5805ecfb-4bab-4b60-ae7a-12eb712913da
 
 The video is one complete `ALE/SpaceInvaders-v5` game rendered from the game
 engine at 60 fps. The trained NanoJev model made the high-level choices with
-the final `--landing-priority` harness: seed 1047, score 3665, natural game end
-with zero lives. It is a selected demonstration, not an estimate of average
-performance. The video is hosted as a GitHub attachment; no recording is
-committed to this repository.
+the original `--landing-priority` harness: seed 1047, score 3665, natural game
+end with zero lives. It is a selected demonstration from before the model-choice
+override fix in this branch, not verification of this revision or an estimate
+of average performance. The video is hosted as a GitHub attachment; no
+recording is committed to this repository.
 
 `final-harness.json` identifies the one controller configuration presented as
 the final hand-tuned Jev system. The runner is `lane_pilot.py`. NanoJev chooses

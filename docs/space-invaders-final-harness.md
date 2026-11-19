@@ -1,12 +1,14 @@
 # Final hand-tuned Space Invaders harness
 
-`integrations/space-invaders/final-harness.json` is the machine-readable
-identity of the final presented system. It selects the OCAtari lane runner,
+`integrations/space-invaders/final-harness.json` records the machine-readable
+configuration of the previously presented system. It selects the OCAtari lane runner,
 the `--landing-priority` variant, and NanoJev weights with SHA-256
 `287ff07466032fa0a8054783300ac4a3123f6c6a2bc691815a4f60287b36913b`.
 The earlier game that prompted the landing-priority change used a different
-controller configuration. The checkpoint bytes are supplied separately; this
-PR does not contain a model or a game recording. The integration
+controller configuration. The linked demonstration predates this branch's
+model-choice override fix, so it does not verify the changed Jev execution.
+The checkpoint bytes are supplied separately; this PR does not contain a model
+or a game recording. The integration
 [README](../integrations/space-invaders/README.md) links to an externally hosted
 video of the final controller playing one complete Jev game.
 
