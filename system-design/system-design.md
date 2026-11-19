@@ -864,4 +864,5 @@ validation rounds. In its dry run (`configs/e2e/tank_dry_run.json`), GEPA reflec
 the rounds' rendered decision traces, and the scripted chat model refuses a prompt that
 does not show them. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
 real models served through SGLang: the policy and every candidate started on demand by
-`SGLangPolicyEndpoints`, and GEPA reflecting through a chat model on its own engine.
+`SGLangPolicyEndpoints`, and GEPA reflecting on the same rendered traces through a chat
+model on its own engine.
