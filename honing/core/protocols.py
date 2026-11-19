@@ -185,7 +185,8 @@ class TraceSource(Protocol):
     Returns no traces for an episode that left none to read, such as one that
     stopped on an error, and raises ``ContractError`` for an episode whose files
     are not the ones its run recorded. ``release_id`` names the release the
-    episode ran under, when the caller knows it.
+    episode ran under, when the caller knows it, and each trace carries the
+    record's policy checksum.
     """
 
     def traces(self, record: EpisodeRecord, *, release_id: str | None = None) -> tuple[DecisionTrace, ...]: ...

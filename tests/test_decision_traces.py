@@ -278,15 +278,34 @@ def test_a_manifest_without_every_outputs_hash_is_refused(tmp_path: Path, drop: 
 
 
 @pytest.mark.unit
-def test_the_trace_source_reads_an_episodes_run_with_its_grade_and_harness() -> None:
+def test_the_trace_source_reads_an_episodes_run_with_its_grade_harness_and_policy() -> None:
     outcome = EpisodeOutcome("tank-val", "h-1", "c", exit_code=0, workspace_location=str(FIXTURES / SELF_HIT))
     record = EpisodeRecord(outcome=outcome, grade=Grade(score=1.0, feedback="won"))
 
     traces = TankTraceSource().traces(record, release_id="r0002")
 
-    assert traces == load_run(FIXTURES / SELF_HIT, grade=record.grade, release_id="r0002", harness_id="h-1")
-    assert {(t.release_id, t.harness_id, t.grade) for t in traces} == {("r0002", "h-1", record.grade)}
+    assert traces == load_run(
+        FIXTURES / SELF_HIT, grade=record.grade, release_id="r0002", harness_id="h-1", policy_checksum="c"
+    )
+    assert {(t.release_id, t.harness_id, t.grade, t.policy_checksum) for t in traces} == {
+        ("r0002", "h-1", record.grade, "c")
+    }
     assert traces[0].outcome == "the red tank won (hit) after 5.85 s"
+
+
+@pytest.mark.unit
+def test_the_header_names_the_release_or_without_one_the_policy_checksum() -> None:
+    checksum = hashlib.sha256(b"weights").hexdigest()
+    outcome = EpisodeOutcome("tank-val", "h-1", checksum, exit_code=0, workspace_location=str(FIXTURES / SELF_HIT))
+    record = EpisodeRecord(outcome=outcome, grade=Grade(score=1.0))
+
+    # GEPA and Meta-Harness pass no release id: EvolveContext carries none.
+    unreleased = render_traces(TankTraceSource().traces(record))
+    released = render_traces(TankTraceSource().traces(record, release_id="r0002"))
+
+    assert unreleased.startswith(f"Episode {SELF_HIT}: 56 decisions, policy checksum {checksum[:12]}, harness h-1.\n")
+    assert released.startswith(f"Episode {SELF_HIT}: 56 decisions, release r0002, harness h-1.\n")
+    assert render_traces(TankTraceSource().traces(record)) == unreleased
 
 
 @pytest.mark.unit
@@ -532,12 +551,13 @@ def test_gepa_reflects_on_the_rendered_decisions_of_its_minibatch() -> None:
     tasks = tuple(Task(task_id=f"t{index}", prompt=f"Solve problem {index}.") for index in range(3))
     replies = ["```\nSolve the task. Verify the result before answering.\n```"]
     runs = {}
+    policy = _policy(world)
     for traces in (None, FakeTraceSource()):
         model = FakeChatModel(replies)
         method = GEPAMethod(model, GEPAConfig(max_metric_calls=100, minibatch_size=3), ("v0",), traces=traces)
         context = EvolveContext(
             current=SEED_HARNESS,
-            policy=_policy(world),
+            policy=policy,
             tasks=tasks,
             records=(),
             state=method.initial_state(SEED_HARNESS),
@@ -550,11 +570,10 @@ def test_gepa_reflects_on_the_rendered_decisions_of_its_minibatch() -> None:
 
     with_traces, without = runs[False], runs[True]
     assert len(RENDERED_VERIFY.findall(with_traces)) == 3
-    assert sorted(re.findall(r"^Episode (t\d): 1 decision, harness h-", with_traces, re.MULTILINE)) == [
-        "t0",
-        "t1",
-        "t2",
-    ]
+    # GEPA knows no release id, so each header names the policy by its checksum.
+    checksum = policy.checkpoint.checksum[:12]
+    headers = re.findall(r"^Episode (t\d): 1 decision, policy checksum (\S+), harness h-", with_traces, re.MULTILINE)
+    assert sorted(headers) == [("t0", checksum), ("t1", checksum), ("t2", checksum)]
     assert RENDERED_VERIFY.search(without) is None and "verified=0" in without
 
 

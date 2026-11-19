@@ -3,18 +3,19 @@
 GEPA's reflective dataset, Meta-Harness's trace files and System 0 read the
 same rendering, and the same traces and cap always render to the same text.
 
-The text opens with the episode, its outcome, how many key events of each
-label it had and the questions asked. Then come windows of consecutive
-decisions around the key events, measured in episode time. An event's window
-holds the decision it followed and every decision asked from
-``before_seconds`` before the event to ``after_seconds`` after it, and windows
-that overlap or touch merge into one. The defaults are sized for a tank round:
-2 s before an event reaches past a shell's flight of 1.1 to 1.7 s to the
-decisions that could have dodged it, and 0.5 s after shows how the model went
-on. An episode without a key event shows the decisions asked in the last
-``before_seconds`` up to its last one. Each decision shows its time, the
-probability of every option, the choice, what the controller allowed and
-applied, and the events that followed it.
+The text opens with the episode, the release it ran under (or, when no
+release is known, the first characters of the policy checksum), its outcome,
+how many key events of each label it had and the questions asked. Then come
+windows of consecutive decisions around the key events, measured in episode
+time. An event's window holds the decision it followed and every decision
+asked from ``before_seconds`` before the event to ``after_seconds`` after it,
+and windows that overlap or touch merge into one. The defaults are sized for
+a tank round: 2 s before an event reaches past a shell's flight of 1.1 to
+1.7 s to the decisions that could have dodged it, and 0.5 s after shows how
+the model went on. An episode without a key event shows the decisions asked
+in the last ``before_seconds`` up to its last one. Each decision shows its
+time, the probability of every option, the choice, what the controller
+allowed and applied, and the events that followed it.
 
 State is shown by field, a field being one sentence of a line of the state.
 The first decision of each window lists every field, the constraints and the
@@ -55,6 +56,8 @@ from honing.core import DecisionTrace, require
 DEFAULT_MAX_TOKENS = 6000
 DEFAULT_BEFORE_SECONDS = 2.0
 DEFAULT_AFTER_SECONDS = 0.5
+# Enough of a policy checksum to tell policies apart: the tank runner names run directories with as many.
+POLICY_CHECKSUM_CHARS = 12
 CUT_MARK = "[cut at the token cap]"
 _TOKEN = re.compile(r"\w+|[^\w\s]")
 _SENTENCE_END = re.compile(r"(?<=\.)\s+")
@@ -237,7 +240,11 @@ def _intro(traces: Sequence[DecisionTrace]) -> tuple[list[str], bool]:
     """The header's lines on the episode, its outcome and its key events, and whether it had any."""
     first = traces[0]
     names = [_count(len(traces), "decision")]
-    names += [f"release {first.release_id}"] if first.release_id else []
+    if first.release_id:
+        names.append(f"release {first.release_id}")
+    elif first.policy_checksum:
+        # The release names the policy and the harness; without it, the weights' checksum names the policy.
+        names.append(f"policy checksum {first.policy_checksum[:POLICY_CHECKSUM_CHARS]}")
     names += [f"harness {first.harness_id}"] if first.harness_id else []
     score = f" Score {first.grade.score:g}." if first.grade is not None else ""
     counts: Counter[str] = Counter()
@@ -371,6 +378,7 @@ __all__ = [
     "DEFAULT_AFTER_SECONDS",
     "DEFAULT_BEFORE_SECONDS",
     "DEFAULT_MAX_TOKENS",
+    "POLICY_CHECKSUM_CHARS",
     "estimate_tokens",
     "render_traces",
 ]

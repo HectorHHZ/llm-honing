@@ -71,7 +71,9 @@ class DecisionTrace:
     ``constraints`` and ``applied`` are, as JSON text, what the controller
     allowed and what it executed. ``events`` are what happened from this
     decision until the next one, in time order. ``outcome`` and ``grade`` are
-    the episode's, the same on each of its decisions.
+    the episode's, the same on each of its decisions, and so is
+    ``policy_checksum``, the checksum of the weights that made the decisions,
+    which names the policy when the release is not known.
     """
 
     episode_id: str
@@ -84,9 +86,11 @@ class DecisionTrace:
     state_ref: str | None = None
     outcome: str = ""
     grade: Grade | None = None
+    policy_checksum: str | None = None
 
     def __post_init__(self) -> None:
         require(bool(self.episode_id), "DecisionTrace.episode_id must be set")
+        require(self.policy_checksum is None or bool(self.policy_checksum), "a policy checksum must not be empty")
         require(self.step >= 0, f"a decision's step must be >= 0, got {self.step}")
         require(
             math.isfinite(self.time_seconds) and self.time_seconds >= 0.0,

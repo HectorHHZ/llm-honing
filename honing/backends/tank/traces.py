@@ -65,7 +65,11 @@ class TankTraceSource:
         if outcome.failure is not None or outcome.exit_code != 0 or outcome.workspace_location is None:
             return ()
         return load_run(
-            Path(outcome.workspace_location), grade=record.grade, release_id=release_id, harness_id=outcome.spec_id
+            Path(outcome.workspace_location),
+            grade=record.grade,
+            release_id=release_id,
+            harness_id=outcome.spec_id,
+            policy_checksum=record.policy_checksum,
         )
 
 
@@ -93,6 +97,7 @@ def load_run(
     grade: Grade | None = None,
     release_id: str | None = None,
     harness_id: str | None = None,
+    policy_checksum: str | None = None,
 ) -> tuple[DecisionTrace, ...]:
     """Every decision of one finished round, with the events that followed each, its outcome and ``grade``."""
     manifest = verify_outputs(run)
@@ -123,6 +128,7 @@ def load_run(
             applied=_json(row.get("applied")),
             outcome=outcome,
             grade=grade,
+            policy_checksum=policy_checksum,
         )
         for step, row in enumerate(rows)
     )
