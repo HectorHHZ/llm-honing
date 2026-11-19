@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -46,7 +47,14 @@ from honing.core import (
 )
 from honing.harness.methods.meta_harness import Archive, MetaHarnessMethod
 from honing.harness.methods.meta_harness.archive import write_archive
-from honing.harness.traces import CUT_MARK, DEFAULT_MAX_TOKENS, estimate_tokens, render_traces
+from honing.harness.traces import (
+    CUT_MARK,
+    DEFAULT_AFTER_SECONDS,
+    DEFAULT_BEFORE_SECONDS,
+    DEFAULT_MAX_TOKENS,
+    estimate_tokens,
+    render_traces,
+)
 from tests.fakes.harness import (
     SEED_HARNESS,
     FakeChatModel,
@@ -142,14 +150,30 @@ def _trace(
     events: tuple[TraceEvent, ...] = (),
     question: str = "weapon",
     applied: str | None = None,
+    time: float | None = None,
 ) -> DecisionTrace:
+    """A decision asked at ``step`` seconds, or at ``time``."""
     decision = DecisionSample(
         parts=(("state", (state,)),),
         questions=((question, DecisionQuestion("choice", "Fire?", (("fire", "Fire."), ("hold", "Hold.")))),),
         chosen=((question, "hold"),),
         behavior_probs=((question, (("fire", 0.25), ("hold", 0.75))),),
     )
-    return DecisionTrace("e", step, float(step), decision, events=events, applied=applied)
+    return DecisionTrace("e", step, float(step) if time is None else time, decision, events=events, applied=applied)
+
+
+def _turns(count: int, events: dict[int, TraceEvent]) -> list[DecisionTrace]:
+    """``count`` decisions, two per 0.2 s turn as plans-v1 asks them: the motion, then the weapon."""
+    return [
+        _trace(
+            step,
+            state=f"Me at {step}.",
+            events=(events[step],) if step in events else (),
+            question=("motion", "weapon")[step % 2],
+            time=0.2 * (step // 2),
+        )
+        for step in range(count)
+    ]
 
 
 # ------------------------------------------------------------ the loader
@@ -346,14 +370,19 @@ def test_over_the_cap_missed_shots_leave_first_then_state_fields_then_the_text_i
 
     full = render_traces(traces, max_tokens=100_000)
     default = render_traces(traces)
+    two = render_traces(traces, max_tokens=3000)
     deaths_only = render_traces(traces, max_tokens=2000)
     no_fields = render_traces(traces, max_tokens=1000)
     cut = render_traces(traces, max_tokens=100)
 
-    # Windows of 4 decisions before and 2 after each key event: the five missed shots' merge into 7 to 29.
-    assert sorted(_blocks(full)) == [*range(7, 30), *range(53, 58)]
-    # The death's window stays whole, and the last missed shot's decision is the last of its kind to leave.
-    assert sorted(_blocks(default)) == [27, *range(53, 58)]
+    # Windows reach 2 s before each key event and 0.5 s after it. The five missed shots' merge into 0 to 31,
+    # and the death at 6.000 s opens its window at decision 38, the first asked from 4.000 s.
+    assert _windows(full) == [list(range(0, 32)), list(range(38, 58))]
+    assert traces[37].time_seconds < 4.0 <= traces[38].time_seconds
+    # Every missed shot's decision leaves before the death's, and the death's window loses its earliest first.
+    assert sorted(_blocks(default)) == [*range(53, 58)]
+    # The motion asked with the weapon decision the death followed is the last to leave before it.
+    assert sorted(_blocks(two)) == [56, 57] and traces[56].time_seconds == traces[57].time_seconds
     assert sorted(_blocks(deaths_only)) == [57]
     assert "State fields are left out" in no_fields
     assert re.search(r"^  \w+, (?:all|\d+ of) ", no_fields, re.MULTILINE) is None
@@ -379,7 +408,7 @@ def test_a_later_decision_lists_what_changed_and_what_is_gone_since_the_one_show
         _trace(3, "Me at 2."),
     ]
 
-    blocks = _blocks(render_traces(traces))
+    blocks = _blocks(render_traces(traces, before_seconds=3.0))
 
     assert "  state, all 2 fields:\n    Me at 1.\n    Enemy shell incoming.\n" in blocks[0]
     assert "  state, 0 of 1 field changed, 1 gone:\n    gone: Enemy shell incoming.\n" in blocks[1]
@@ -398,7 +427,7 @@ def test_a_window_after_hidden_decisions_starts_with_the_whole_state_and_control
     ]
     traces[10] = _trace(10, question="motion", applied='{"drive":"stop"}')
 
-    text = render_traces(traces, before=1, after=1)
+    text = render_traces(traces, before_seconds=1.5, after_seconds=1.0)
 
     assert _windows(text) == [[1, 2, 3], [8, 9, 10]]
     blocks = _blocks(text)
@@ -427,15 +456,49 @@ def test_key_events_are_counted_by_label_in_priority_order() -> None:
 
 
 @pytest.mark.unit
+def test_windows_reach_back_and_forward_in_episode_time_whatever_the_decisions_per_turn() -> None:
+    # A missed shot follows the weapon decision at 0.4 s, and the death the one at 2.8 s.
+    missed = TraceEvent(0.45, "blue fired", "missed shot", 1)
+    destroyed = TraceEvent(2.85, "red destroyed blue", "agent destroyed", 0)
+    traces = _turns(30, {5: missed, 29: destroyed})
+
+    default = render_traces(traces, max_tokens=100_000)
+    narrow = render_traces(traces, max_tokens=100_000, before_seconds=1.0, after_seconds=0.3)
+
+    assert (DEFAULT_BEFORE_SECONDS, DEFAULT_AFTER_SECONDS) == (2.0, 0.5)
+    # 2 s before the death is from 0.85 s, which decision 10 at 1.0 s opens, and 0.5 s after the missed shot
+    # is to 0.95 s, which decision 9 at 0.8 s closes. The two windows touch, so they merge.
+    assert _windows(default) == [list(range(30))]
+    # 1 s before the death is from 1.85 s (decision 20 at 2.0 s on), and 0.3 s after the missed shot to 0.75 s.
+    assert _windows(narrow) == [list(range(8)), list(range(20, 30))]
+
+
+@pytest.mark.unit
+def test_over_the_cap_a_window_keeps_the_decisions_nearest_in_time_to_the_one_its_event_followed() -> None:
+    traces = _turns(30, {29: TraceEvent(2.85, "red destroyed blue", "agent destroyed", 0)})
+    whole = len(_blocks(render_traces(traces, max_tokens=100_000)))
+
+    shown = {
+        tuple(sorted(_blocks(text)))
+        for text in (render_traces(traces, max_tokens=cap) for cap in range(50, 3000, 5))
+        if "State fields are left out" not in text
+    }
+
+    # Whatever the cap, what stays is the run of decisions up to the death, losing the earliest first.
+    assert shown == {tuple(range(30 - count, 30)) for count in range(1, whole + 1)}
+
+
+@pytest.mark.unit
 def test_an_episode_without_key_events_shows_its_last_decisions() -> None:
     traces = [_trace(step) for step in range(9)]
     traces.append(_trace(9, events=(TraceEvent(9.5, "the round ended (timeout), no winner"),)))
 
     text = render_traces(traces)
 
-    assert "Key events: none.\nShown: 5 decisions at the end of the episode." in text
-    assert "(5 decisions not shown, 0.000 s to 4.000 s)" in text
-    assert sorted(_blocks(text)) == [5, 6, 7, 8, 9]
+    # The last decision was asked at 9 s, and the 2 s before it reach back to decision 7.
+    assert "Key events: none.\nShown: 3 decisions at the end of the episode." in text
+    assert "(7 decisions not shown, 0.000 s to 6.000 s)" in text
+    assert sorted(_blocks(text)) == [7, 8, 9]
     assert "  then 9.500 s: the round ended (timeout), no winner" in text
 
 
@@ -448,6 +511,13 @@ def test_an_empty_episode_renders_as_such_and_mixed_or_unordered_steps_are_refus
         render_traces([_trace(0), DecisionTrace("other", 1, 1.0, _trace(1).decision)])
     with pytest.raises(ContractError):
         render_traces([_trace(0)], max_tokens=5)
+    with pytest.raises(ContractError, match="in time order"):
+        render_traces([_trace(0, time=1.0), _trace(1, time=0.5)])
+    for seconds in (-0.1, math.inf, math.nan):
+        with pytest.raises(ContractError, match="finite and >= 0"):
+            render_traces([_trace(0)], before_seconds=seconds)
+        with pytest.raises(ContractError, match="finite and >= 0"):
+            render_traces([_trace(0)], after_seconds=seconds)
 
 
 # ------------------------------------------------------------ the adapters

@@ -30,7 +30,7 @@ The working directory is the archive:
 - `candidates/<name>/` — every candidate's harness files. `candidates/<name>/harness.json` maps each file's path to its kind (`instructions`, `skill`, `command`, `settings`, `hook`, `program`) and names the agent.
 - `evolution_summary.jsonl` — one row per evaluated candidate: parent, per-task scores in [0, 1], mean, hypothesis, changes, whether it is served, and whether its scores are `stale` (taken under earlier model weights, so not comparable with current ones).
 - `frontier_val.json` — the best candidate per task and `_best`, the best mean, over current scores.
-- `traces/<name>/<task id>/` — the evaluation episode of a candidate on a task: the agent's transcript and the grader's `feedback.txt`. For a decision model, `decisions.txt` renders its decisions compactly: windows around the episode's key events (in a tank round, the agent's death, the opponent's death and missed shots), with the whole state at the start of each window and the state fields that changed or are gone after it, every option's probability, the choice, and the events that followed.
+- `traces/<name>/<task id>/` — the evaluation episode of a candidate on a task: the agent's transcript and the grader's `feedback.txt`. For a decision model, `decisions.txt` renders its decisions compactly: windows from 2 s of episode time before each of the episode's key events (in a tank round, the agent's death, the opponent's death and missed shots) to 0.5 s after it, with the whole state at the start of each window and the state fields that changed or are gone after it, every option's probability, the choice, and the events that followed.
 
 ## CANDIDATE DESIGN
 

@@ -5,12 +5,16 @@ same rendering, and the same traces and cap always render to the same text.
 
 The text opens with the episode, its outcome, how many key events of each
 label it had and the questions asked. Then come windows of consecutive
-decisions around the key events. A window holds ``before`` decisions before
-the one an event followed, that decision, and ``after`` decisions after it,
-and windows that overlap or touch merge into one. An episode without a key
-event shows its last decisions. Each decision shows its time, the probability
-of every option, the choice, what the controller allowed and applied, and the
-events that followed it.
+decisions around the key events, measured in episode time. An event's window
+holds the decision it followed and every decision asked from
+``before_seconds`` before the event to ``after_seconds`` after it, and windows
+that overlap or touch merge into one. The defaults are sized for a tank round:
+2 s before an event reaches past a shell's flight of 1.1 to 1.7 s to the
+decisions that could have dodged it, and 0.5 s after shows how the model went
+on. An episode without a key event shows the decisions asked in the last
+``before_seconds`` up to its last one. Each decision shows its time, the
+probability of every option, the choice, what the controller allowed and
+applied, and the events that followed it.
 
 State is shown by field, a field being one sentence of a line of the state.
 The first decision of each window lists every field, the constraints and the
@@ -28,8 +32,9 @@ before it in its window.
 
 The text never exceeds ``max_tokens`` as :func:`estimate_tokens` counts. Over
 the cap, decisions leave the windows one at a time: those around events with a
-higher priority number first, and among equals the decision farthest from its
-event first, then the earliest. A decision that leaves from inside a window
+higher priority number first, and among equals the decision asked longest
+before or after the one its event followed first, then the one more decisions
+away from it, then the earliest. A decision that leaves from inside a window
 splits it in two. The decision an event of priority 0 followed always stays,
 and in an episode without such an event, the decision that would leave last.
 If those decisions are still over the cap, the windows are filled again
@@ -40,6 +45,7 @@ This module imports only the standard library and :mod:`honing.core`.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from collections.abc import Sequence
@@ -47,8 +53,8 @@ from collections.abc import Sequence
 from honing.core import DecisionTrace, require
 
 DEFAULT_MAX_TOKENS = 6000
-DEFAULT_BEFORE = 4
-DEFAULT_AFTER = 2
+DEFAULT_BEFORE_SECONDS = 2.0
+DEFAULT_AFTER_SECONDS = 0.5
 CUT_MARK = "[cut at the token cap]"
 _TOKEN = re.compile(r"\w+|[^\w\s]")
 _SENTENCE_END = re.compile(r"(?<=\.)\s+")
@@ -71,12 +77,15 @@ def render_traces(
     traces: Sequence[DecisionTrace],
     *,
     max_tokens: int = DEFAULT_MAX_TOKENS,
-    before: int = DEFAULT_BEFORE,
-    after: int = DEFAULT_AFTER,
+    before_seconds: float = DEFAULT_BEFORE_SECONDS,
+    after_seconds: float = DEFAULT_AFTER_SECONDS,
 ) -> str:
     """One episode's traces, in step order, as text of at most ``max_tokens`` estimated tokens."""
     require(max_tokens > estimate_tokens(CUT_MARK), f"max_tokens must exceed {estimate_tokens(CUT_MARK)}")
-    require(before >= 0 and after >= 0, "a window's before and after are counts of decisions, >= 0")
+    require(
+        all(math.isfinite(seconds) and seconds >= 0.0 for seconds in (before_seconds, after_seconds)),
+        "a window's before_seconds and after_seconds are finite and >= 0",
+    )
     if not traces:
         return "No decisions were recorded in this episode.\n"
     require(
@@ -84,9 +93,11 @@ def render_traces(
         and len({trace.episode_id for trace in traces}) == 1,
         "render one episode's traces, every step in order",
     )
-    ranks = _ranks(traces, before, after)
+    times = [trace.time_seconds for trace in traces]
+    require(times == sorted(times), "an episode's decisions are in time order")
+    ranks = _ranks(traces, before_seconds, after_seconds)
     # Highest rank first, and among equal ranks the earliest decision first.
-    leaving = sorted((i for i in ranks if ranks[i] != (0, 0)), key=lambda i: (ranks[i], -i), reverse=True)
+    leaving = sorted((i for i in ranks if ranks[i] != (0, 0.0, 0)), key=lambda i: (ranks[i], -i), reverse=True)
     if len(leaving) == len(ranks):
         leaving.pop()
     fields = [_fields(trace) for trace in traces]
@@ -103,20 +114,34 @@ def render_traces(
     return _cut(text, max_tokens)
 
 
-def _ranks(traces: Sequence[DecisionTrace], before: int, after: int) -> dict[int, tuple[int, int]]:
-    """Every decision in a window, ranked by its event's priority, then by its distance from that event."""
+def _ranks(
+    traces: Sequence[DecisionTrace], before_seconds: float, after_seconds: float
+) -> dict[int, tuple[int, float, int]]:
+    """Every decision in a window, ranked by its event's priority, then by its distance from the decision it followed.
+
+    The distance is first the time between the two decisions, then the number
+    of decisions between them, so the decision an event followed ranks first
+    in its window and one asked at the same time comes next.
+    """
     anchors = [
-        (step, event.priority)
+        (step, event.time_seconds, event.priority)
         for step, trace in enumerate(traces)
         for event in trace.events
         if event.priority is not None
     ]
     if not anchors:
-        anchors = [(len(traces) - 1, 0)]
-    ranks: dict[int, tuple[int, int]] = {}
-    for anchor, priority in anchors:
-        for step in range(max(0, anchor - before), min(len(traces), anchor + after + 1)):
-            rank = (priority, abs(step - anchor))
+        anchors = [(len(traces) - 1, traces[-1].time_seconds, 0)]
+    ranks: dict[int, tuple[int, float, int]] = {}
+    for anchor, time, priority in anchors:
+        first = anchor
+        while first > 0 and traces[first - 1].time_seconds >= time - before_seconds:
+            first -= 1
+        last = anchor
+        while last + 1 < len(traces) and traces[last + 1].time_seconds <= time + after_seconds:
+            last += 1
+        asked = traces[anchor].time_seconds
+        for step in range(first, last + 1):
+            rank = (priority, abs(traces[step].time_seconds - asked), abs(step - anchor))
             ranks[step] = min(ranks.get(step, rank), rank)
     return ranks
 
@@ -341,4 +366,11 @@ def _cut(text: str, max_tokens: int) -> str:
     return f"{text[:end]}\n{CUT_MARK}\n"
 
 
-__all__ = ["CUT_MARK", "DEFAULT_AFTER", "DEFAULT_BEFORE", "DEFAULT_MAX_TOKENS", "estimate_tokens", "render_traces"]
+__all__ = [
+    "CUT_MARK",
+    "DEFAULT_AFTER_SECONDS",
+    "DEFAULT_BEFORE_SECONDS",
+    "DEFAULT_MAX_TOKENS",
+    "estimate_tokens",
+    "render_traces",
+]

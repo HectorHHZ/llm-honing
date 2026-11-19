@@ -413,15 +413,22 @@ engine names the shell on each shot and kill, and one hit ends the round.
 
 `render_traces` (`honing/harness/traces.py`) writes one episode as compact text within a
 token cap, counting each word, number and punctuation mark as one token. It shows
-windows of decisions around the key events. The first decision of each window lists the
-whole state with the controller's constraints and applied action, and each later one
-the state fields that changed or are gone since the decision shown before it with the
-same questions. The same traces and cap always render to the same text. Given a trace
-source, GEPA's reflective dataset shows each minibatch episode's rendering as its
-generated output, and Meta-Harness writes it to a file under its work directory, keeps
-the file's path in its archive state, and copies it as `decisions.txt` beside each search
-trace. The loader and the renderer import only the standard library and `honing.core`,
-so System 0's scheduler (#138) can read the same traces.
+windows of decisions around the key events, measured in episode time: every decision
+asked from 2 s before an event to 0.5 s after it, so a tank death's window reaches past
+the 1.1 to 1.7 s a shell flies. The first decision of each window lists the whole state
+with the controller's constraints and applied action, and each later one the state
+fields that changed or are gone since the decision shown before it with the same
+questions. Over the cap, decisions around events with a higher priority number leave
+first, and within a window the earliest and latest leave before those nearest in time to
+the decision the event followed. The same traces and cap always render to the same text.
+In a tank round, a motion decision's whole state is about 1,300 estimated tokens and a
+weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000, so at the
+default cap of 6,000 it keeps only its last 0.45 to 0.8 s. Given a trace source, GEPA's
+reflective dataset shows each minibatch episode's rendering as its generated output, and
+Meta-Harness writes it to a file under its work directory, keeps the file's path in its
+archive state, and copies it as `decisions.txt` beside each search trace. The loader and
+the renderer import only the standard library and `honing.core`, so System 0's scheduler
+(#138) can read the same traces.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
