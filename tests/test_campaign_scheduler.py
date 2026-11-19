@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from honing.campaign import ScriptedScheduler, restore_scheduler
-from honing.core import CampaignRuleError, CampaignState, ContractError, HarnessMoveConfig, Move
+from honing.core import CampaignRuleError, ContractError, HarnessMoveConfig, Move
 from honing.release import GATE_METRIC_NAMES, read_scheduler_state
 from tests.fakes.builder import build_campaign
 from tests.fakes.scheduler import HistoryScheduler
@@ -83,7 +83,7 @@ def test_every_line_after_the_schedulers_first_choice_carries_its_state(tmp_path
         {"schema_version": 1, "next": 2, "rejected": [0]},
         {"schema_version": 1, "next": 3, "rejected": [0]},
     ]
-    assert fixture.campaign.state().scheduler_state == {"schema_version": 1, "next": 3, "rejected": [0]}
+    assert scheduler.export_state() == lines[-1]["scheduler_state"]
 
 
 @pytest.mark.unit
@@ -217,16 +217,34 @@ def test_a_scheduler_state_that_could_not_be_restored_is_refused_before_the_move
     assert fixture.trainer.jobs == [] and len(_records(fixture.campaign.chain.record_path)) == 1
 
 
+class _LiveStateScheduler(ScriptedScheduler):
+    """Exports its live state, nested list included, so the caller keeps a handle on what it handed over."""
+
+    name = "live"
+
+    def __init__(self) -> None:
+        super().__init__([TRAIN])
+        self.live: dict[str, object] = {"schema_version": 1, "rejected": [0]}
+
+    def export_state(self) -> Mapping[str, object]:
+        return self.live
+
+
 @pytest.mark.unit
-def test_the_state_a_scheduler_reads_cannot_change_what_the_next_line_records(tmp_path: Path) -> None:
+def test_nothing_a_caller_holds_can_change_what_a_later_line_records(tmp_path: Path) -> None:
     fixture = build_campaign(tmp_path)
-    scheduler = HistoryScheduler([TRAIN])
-    fixture.campaign.step(scheduler)
-    state: CampaignState = fixture.campaign.state()
+    campaign = fixture.campaign
+    scheduler = _LiveStateScheduler()
+    campaign.step(scheduler)  # r0001
+    assert not hasattr(campaign.state(), "scheduler_state") and not hasattr(campaign.chain, "scheduler_state")
 
-    with pytest.raises(TypeError):
-        state.scheduler_state["next"] = 99  # type: ignore[index]
-    scheduler._rejected.append(7)  # a scheduler changing its own state after it was written
+    # The review's example on the one object a caller still holds: a nested change, then a rollback.
+    rejected = scheduler.live["rejected"]
+    assert isinstance(rejected, list)
+    rejected.append(99)
+    campaign.rollback("r0000")
 
-    fixture.campaign.rollback("r0000")
-    assert _records(fixture.campaign.chain.record_path)[-1]["scheduler_state"]["rejected"] == []  # type: ignore[index]
+    *_, publish_line, rollback_line = _records(campaign.chain.record_path)
+    assert (publish_line["op"], rollback_line["op"]) == ("publish", "rollback")
+    written = {"schema_version": 1, "rejected": [0]}
+    assert publish_line["scheduler_state"] == rollback_line["scheduler_state"] == written

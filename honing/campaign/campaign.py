@@ -198,7 +198,6 @@ class Campaign:
             releases=self._chain.releases(),
             step=len(self._history),
             history=tuple(self._history),
-            scheduler_state=self._chain.scheduler_state,
         )
 
     def start(self, source: ModelSource, work_dir: Path, harness_seed: HarnessSpec) -> HoneRelease:

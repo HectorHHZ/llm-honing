@@ -88,16 +88,12 @@ class ReleaseChain:
     def record_path(self) -> Path:
         return self._record_path
 
-    @property
-    def scheduler_state(self) -> Mapping[str, object]:
-        """The scheduler state written into each new line, empty until a campaign sets one."""
-        return MappingProxyType(self._scheduler[1] if self._scheduler is not None else {})
-
     def set_scheduler_state(self, scheduler: str, state: Mapping[str, object]) -> None:
         """Write ``state``, and the name of the scheduler it belongs to, into every line from now on.
 
         The scheduler's state is not part of any release, so a rollback keeps
-        it rather than restoring an older one.
+        it rather than restoring an older one. The chain keeps a deep copy and
+        hands it to no one, so nothing a caller holds can change a later line.
         """
         validate_scheduler_state(state)
         # A copy, so a scheduler that keeps changing its own state cannot change what the next line says.

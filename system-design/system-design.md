@@ -516,12 +516,14 @@ published with the next accepted release, whatever its kind.
 move, its label, the head it was built on, the release it published, the reason, and the
 `gate_*` metrics (none for a skip). A scheduler learns from a rejection there, which the
 releases alone never show. Its own state follows the method-state rules: it is JSON-native
-and carries a `schema_version`. After each choice the campaign writes it into every commit
-record line, under `scheduler_state` and the scheduler's `name`. A rejection or a rollback leaves
-it as it is: the scheduler chose the move and keeps what it learned. A restart restores it
-from the record's last line (`restore_scheduler`), and `scheduler_state_schema_matches`
-refuses state another scheduler or schema version wrote. The history itself is in memory.
-Until a chain can be rebuilt from its record, a restarted campaign starts a new one.
+and carries a `schema_version`. The scheduler holds that state, and `CampaignState` does not
+carry it. After each choice the chain takes a deep copy of the exported state, which no
+caller can reach, and writes it into every commit record line under `scheduler_state` and
+the scheduler's `name`. A rejection or a rollback leaves it as it is: the scheduler chose
+the move and keeps what it learned. A restart restores it from the record's last line
+(`restore_scheduler`), and `scheduler_state_schema_matches` refuses state another
+scheduler or schema version wrote. The history itself is in memory. Until a chain can be
+rebuilt from its record, a restarted campaign starts a new one.
 
 **Every runner has the same scheduler slot.** The pipeline, tank, and RA2 configs take an
 optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the

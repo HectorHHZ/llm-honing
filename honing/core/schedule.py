@@ -83,13 +83,11 @@ class CampaignState:
 
     ``head`` and ``releases`` are the published releases. ``history`` is every
     move the campaign advanced, in order, including the rejected and skipped
-    ones, and ``step`` is its length. ``scheduler_state`` is the scheduler
-    state the campaign wrote into the commit record after the previous move,
-    empty before the first.
+    ones, and ``step`` is its length. The scheduler's own state is not here:
+    the scheduler holds it.
     """
 
     head: HoneRelease
     releases: tuple[HoneRelease, ...]
     step: int
     history: tuple[StepRecord, ...] = ()
-    scheduler_state: Mapping[str, object] = field(default_factory=dict)
