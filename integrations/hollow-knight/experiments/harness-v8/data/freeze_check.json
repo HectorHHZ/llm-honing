@@ -1,0 +1,167 @@
+[
+ {
+  "run": "eval_laya_v8_L1L2",
+  "status": "goal reached: Level2 x >= 124",
+  "frozen": false,
+  "freeze_cause": null,
+  "enemy_deaths": 5,
+  "by_sword": 5,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ },
+ {
+  "run": "eval2_laya_v8_L1L2",
+  "status": "goal reached: Level2 x >= 124",
+  "frozen": false,
+  "freeze_cause": null,
+  "enemy_deaths": 5,
+  "by_sword": 5,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ },
+ {
+  "run": "eval_laya_v8_L2",
+  "status": "goal reached: Level2 x >= 124",
+  "frozen": false,
+  "freeze_cause": null,
+  "enemy_deaths": 4,
+  "by_sword": 4,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ },
+ {
+  "run": "eval2_laya_v8_L2",
+  "status": "goal reached: Level2 x >= 124",
+  "frozen": false,
+  "freeze_cause": null,
+  "enemy_deaths": 4,
+  "by_sword": 4,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ },
+ {
+  "run": "eval_first_v8_L1L2",
+  "status": "goal reached: Level2 x >= 124",
+  "frozen": false,
+  "freeze_cause": null,
+  "enemy_deaths": 5,
+  "by_sword": 5,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ },
+ {
+  "run": "orig_first_01_v8_L2",
+  "status": "goal reached: Level2 x >= 124",
+  "frozen": false,
+  "freeze_cause": null,
+  "enemy_deaths": 4,
+  "by_sword": 4,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ },
+ {
+  "run": "laya_02_v8_L1L2",
+  "status": "error: TimeoutError: no new visible observation; see player.log",
+  "frozen": true,
+  "freeze_cause": {
+   "frame": 3429,
+   "window": 774,
+   "enemy": "Enemy (1)",
+   "x": 19.88,
+   "knight_x": 3.89,
+   "scene": "Level2",
+   "on_screen": false,
+   "by": "hazard",
+   "frames_before_end": 63,
+   "earliest_frames_before_end": 70
+  },
+  "enemy_deaths": 5,
+  "by_sword": 4,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 1
+ },
+ {
+  "run": "laya_03_v8_L1L2",
+  "status": "error: TimeoutError: no new visible observation; see player.log",
+  "frozen": true,
+  "freeze_cause": {
+   "frame": 3429,
+   "window": 774,
+   "enemy": "Enemy (1)",
+   "x": 19.88,
+   "knight_x": 3.89,
+   "scene": "Level2",
+   "on_screen": false,
+   "by": "hazard",
+   "frames_before_end": 63,
+   "earliest_frames_before_end": 70
+  },
+  "enemy_deaths": 5,
+  "by_sword": 4,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 1
+ },
+ {
+  "run": "laya_04_v8_L1L2",
+  "status": "error: TimeoutError: no new visible observation; see player.log",
+  "frozen": true,
+  "freeze_cause": {
+   "frame": 3429,
+   "window": 774,
+   "enemy": "Enemy (1)",
+   "x": 19.88,
+   "knight_x": 3.89,
+   "scene": "Level2",
+   "on_screen": false,
+   "by": "hazard",
+   "frames_before_end": 63,
+   "earliest_frames_before_end": 70
+  },
+  "enemy_deaths": 5,
+  "by_sword": 4,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 1
+ },
+ {
+  "run": "random_s1b_v8_L2",
+  "status": "error: TimeoutError: no new visible observation; see player.log",
+  "frozen": true,
+  "freeze_cause": {
+   "frame": 2886,
+   "window": 717,
+   "enemy": "Enemy (1)",
+   "x": 20.55,
+   "knight_x": -3.38,
+   "scene": "Level2",
+   "on_screen": false,
+   "by": "hazard",
+   "frames_before_end": 74,
+   "earliest_frames_before_end": 79
+  },
+  "enemy_deaths": 4,
+  "by_sword": 3,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 1
+ },
+ {
+  "run": "first_02_v8_L2",
+  "status": "error: TimeoutError: no new visible observation; see player.log",
+  "frozen": true,
+  "freeze_cause": {
+   "frame": 264,
+   "window": 72,
+   "enemy": "Enemy (1)",
+   "x": 10.43,
+   "knight_x": 8.39,
+   "scene": "Level2",
+   "on_screen": true,
+   "by": "sword",
+   "frames_before_end": 77,
+   "earliest_frames_before_end": 79
+  },
+  "enemy_deaths": 3,
+  "by_sword": 3,
+  "by_hazard_on_screen": 0,
+  "by_hazard_off_screen": 0
+ }
+]
