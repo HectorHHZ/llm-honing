@@ -514,7 +514,9 @@ published with the next accepted release, whatever its kind.
 **A scheduler sees every move, and keeps its own state.** `CampaignState.history` holds a
 `StepRecord` for every move the campaign advanced, published, rejected, or skipped: the
 move, its label, the head it was built on, the release it published, the reason, and the
-`gate_*` metrics (none for a skip). A scheduler learns from a rejection there, which the
+`gate_*` metrics (none for a skip). `metrics_from` says whose run those metrics come from:
+`"gate"`, or `"method"` when a harness method's own selector rejected the candidate on
+`method_evaluator` and the gate never ran. A scheduler learns from a rejection there, which the
 releases alone never show. Its own state follows the method-state rules: it is JSON-native
 and carries a `schema_version`. The scheduler holds that state, and `CampaignState` does not
 carry it. After each choice the chain takes a deep copy of the exported state, which no

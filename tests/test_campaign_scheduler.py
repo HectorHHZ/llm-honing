@@ -37,6 +37,7 @@ def test_the_history_holds_every_move_with_its_result_and_gate_metrics(tmp_path:
     assert (rejected.release_id, published.release_id, skipped.release_id) == (None, "r0001", None)
     assert (published.label, skipped.label, rejected.label) == ("verify", "verify", None)
     assert skipped.reason == "append_instruction proposed nothing" and skipped.gate_metrics == {}
+    assert (rejected.metrics_from, published.metrics_from, skipped.metrics_from) == ("gate", "gate", None)
     # The history carries the same gate numbers the commit record holds for each candidate.
     _, reject_line, publish_line, _ = _records(fixture.campaign.chain.record_path)
     for record, line in ((rejected, reject_line), (published, publish_line)):
