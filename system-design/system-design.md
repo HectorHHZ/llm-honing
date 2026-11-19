@@ -519,11 +519,20 @@ releases alone never show. Its own state follows the method-state rules: it is J
 and carries a `schema_version`. The scheduler holds that state, and `CampaignState` does not
 carry it. After each choice the chain takes a deep copy of the exported state, which no
 caller can reach, and writes it into every commit record line under `scheduler_state` and
-the scheduler's `name`. A rejection or a rollback leaves it as it is: the scheduler chose
-the move and keeps what it learned. A restart restores it from the record's last line
+the scheduler's `name`. A rejection or a rollback leaves it as it is, because it belongs to
+the scheduler and no release holds it. A restart restores it from the record's last line
 (`restore_scheduler`), and `scheduler_state_schema_matches` refuses state another
-scheduler or schema version wrote. The history itself is in memory. Until a chain can be
-rebuilt from its record, a restarted campaign starts a new one.
+scheduler or schema version wrote.
+
+**The recorded scheduler state does not include the last move's result.** The state on a
+line is taken after the scheduler picks the move and before the result is known. The
+scheduler sees the result in the history at its next choice. The history is only in
+memory, and until a chain can be rebuilt from its record a restarted campaign starts a new
+one, so a restart loses the last result. For example, `HistoryScheduler([TRAIN])` (a test
+fake in `tests/fakes/scheduler.py`) with a trainer that makes the model worse ends with
+`rejected == (0,)` in memory. The record's last line holds `"rejected": []`, and a
+scheduler restored from it never learns that step 0 was rejected. Rebuilding the history
+from the record belongs with rebuilding the chain.
 
 **Every runner has the same scheduler slot.** The pipeline, tank, and RA2 configs take an
 optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the

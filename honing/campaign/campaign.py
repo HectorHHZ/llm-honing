@@ -234,9 +234,13 @@ class Campaign:
     def step(self, scheduler: CoAdaptScheduler) -> StepOutcome | None:
         """Ask ``scheduler`` for the next move and advance it. Returns ``None`` when the scheduler stops.
 
-        The scheduler's state after its choice is checked against its declared
-        schema and written into every record line from here on, so a restart
-        resumes it from its last choice.
+        The scheduler's state is exported right after its choice, before the
+        move's result is known, checked against its declared schema, and
+        written into every record line from here on. The scheduler reads the
+        result in the history at its next choice. The history is only in
+        memory, so a restart resumes the scheduler from its last choice
+        without the last move's result (see
+        :class:`~honing.core.CoAdaptScheduler`).
         """
         move = scheduler.next_move(self.state())
         exported = scheduler.export_state()
