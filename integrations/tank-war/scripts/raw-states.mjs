@@ -18,8 +18,10 @@
 // node scripts/raw-states.mjs label RUN...
 //     Writes labels.jsonl next to decisions.jsonl: the planner teacher's answer to every question of every row.
 //
-// Each run command first checks every saved state against its logged state_sha256. Each prints one JSON line per
-// run. Any mismatch exits 1 and names the first decision it found.
+// Each run command first checks the run's files against the SHA-256 its manifest records when the round ends, then
+// every saved state against its logged state_sha256. Each prints one JSON line per run. Any mismatch exits 1 and
+// names the first decision it found.
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,6 +34,7 @@ import {
     playRound,
     roundResult,
     stateHash,
+    OUTPUTS,
     PLATFORM,
     SEATS,
     STATES_FILE,
@@ -110,12 +113,26 @@ const lines = async (file) =>
         .filter(Boolean)
         .map((l) => JSON.parse(l));
 
-// A recorded round: its manifest, harness, raw states, and decision rows grouped by decision. Every saved state
-// must still hash to its logged state_sha256.
+// A recorded round: its manifest, harness, raw states, and decision rows grouped by decision. Every file the
+// manifest hashes must still match, and every saved state must still hash to its logged state_sha256.
 export async function readRun(run) {
     const manifest = JSON.parse(
         await readFile(join(run, "manifest.json"), "utf8"),
     );
+    for (const name of OUTPUTS) {
+        const recorded = manifest.outputs?.[name];
+        if (typeof recorded !== "string")
+            throw Error(
+                `${run}/manifest.json records no SHA-256 of ${name}. The round did not finish, or an older match wrote it`,
+            );
+        const hash = createHash("sha256")
+            .update(await readFile(join(run, name)))
+            .digest("hex");
+        if (hash !== recorded)
+            throw Error(
+                `${run}/${name} does not match the SHA-256 its manifest records. The run was changed`,
+            );
+    }
     const [header, ...states] = await lines(join(run, STATES_FILE));
     if (header?.format !== RAW_STATES_FORMAT)
         throw Error(`${run}/${STATES_FILE} has no raw-states header`);

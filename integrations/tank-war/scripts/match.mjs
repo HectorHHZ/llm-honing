@@ -23,8 +23,8 @@
 // --out (which must not exist) receives manifest.json, decisions.jsonl (one row per question set the agent was
 // asked, with the state, questions, answers, and executed choice), events.jsonl, and result.json; a run that
 // stops on an error writes error.json and exits 1. When the round ends, the manifest is written again with the
-// SHA-256 of decisions.jsonl, events.jsonl and result.json under "outputs", so a reader can refuse a run whose
-// files changed.
+// SHA-256 of decisions.jsonl, events.jsonl, result.json and states.jsonl under "outputs", so a reader can refuse a
+// run whose files changed.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -75,8 +75,6 @@ const INTERVENTIONS = [
     "plan_veto",
     "plan_intent_retained",
 ];
-// The files whose SHA-256 the manifest records once the round finishes.
-export const OUTPUTS = ["decisions.jsonl", "events.jsonl", "result.json"];
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 // The match asks with no network delay: game time stops while a seat waits.
 const RTT_MS = 0;
@@ -85,6 +83,13 @@ const RTT_MS = 0;
 export const STATES_FILE = "states.jsonl",
     RAW_STATES_FORMAT = "tank-raw-states",
     RAW_STATES_VERSION = 1;
+// The files whose SHA-256 the manifest records once the round finishes.
+export const OUTPUTS = [
+    "decisions.jsonl",
+    "events.jsonl",
+    "result.json",
+    STATES_FILE,
+];
 // The platform a round is recorded or replayed on. The engine's Math results can
 // differ in the last bits between operating systems, CPUs and Node versions, so
 // a replay is bit exact on the platform that recorded the round.

@@ -5,7 +5,10 @@
 platform that recorded the round, and holds the harness files the round was
 played under. Each further line is one agent
 decision: the raw game state the controller built the decision's context from,
-the state's SHA-256, and the motion the weapon question was asked about.
+the state's SHA-256, and the motion the weapon question was asked about. When
+the round ends, the run's manifest records the SHA-256 of the whole file with
+the other outputs, and :func:`read_states` refuses a file that no longer
+matches it.
 
 :class:`TankRawStates` drives ``integrations/tank-war/scripts/raw-states.mjs``,
 one Node process per call, so the context is rendered by the same code a match
@@ -30,6 +33,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
+from honing.backends.tank.traces import verify_outputs
 from honing.core import ContractError, HarnessSpec
 
 STATES_FILE = "states.jsonl"
@@ -61,7 +65,10 @@ def _lines(path: Path) -> list[dict[str, Any]]:
 
 
 def read_states(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """The header and the decision lines of a run's ``states.jsonl``. Another format or version is refused."""
+    """The header and the decision lines of a run's ``states.jsonl``.
+
+    Another format or version is refused, and so is a file that no longer matches the SHA-256 its manifest records.
+    """
     path = run / STATES_FILE
     if not path.exists():
         raise ContractError(f"{run} has no {STATES_FILE}: it was recorded before raw states were logged")
@@ -71,6 +78,7 @@ def read_states(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             f"{path} is {header.get('format')} version {header.get('version')}, and this reads"
             f" {STATES_FORMAT} version {STATES_VERSION}"
         )
+    verify_outputs(run, (STATES_FILE,))
     return header, states
 
 

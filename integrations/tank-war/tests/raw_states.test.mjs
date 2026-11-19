@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import {
@@ -16,6 +17,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import {
     playMatch,
     stateHash,
+    OUTPUTS,
     PLATFORM,
     CONTROLLER_PATH,
     QUESTIONS_PATH,
@@ -157,6 +159,16 @@ async function recorded() {
 }
 const writeLines = (file, rows) =>
     writeFile(file, rows.map((l) => JSON.stringify(l) + "\n").join(""));
+// Record the run's outputs as they are now, as match.mjs does when a round ends. A test that edits a run to stand
+// for another recording reseals it, so the check under test is not the manifest's.
+async function reseal(run) {
+    const manifest = JSON.parse(await readFile(join(run, "manifest.json")));
+    for (const name of OUTPUTS)
+        manifest.outputs[name] = createHash("sha256")
+            .update(await readFile(join(run, name)))
+            .digest("hex");
+    await writeFile(join(run, "manifest.json"), JSON.stringify(manifest));
+}
 
 test("every recorded decision re-renders byte for byte under its logged harness", async () => {
     const run = await fixture(),
@@ -224,6 +236,7 @@ test("replay stops at the first decision that does not reproduce", async () => {
     states[k + 1].game.tanks[0].x += 1;
     states[k + 1].state_sha256 = stateHash(states[k + 1].game);
     await writeLines(join(run, "states.jsonl"), states);
+    await reseal(run);
     await assert.rejects(
         replay(run),
         (e) =>
@@ -246,6 +259,7 @@ test("replay stops at the first decision that does not reproduce", async () => {
         );
     motion.chosen.motion = other;
     await writeLines(join(run, "decisions.jsonl"), rows);
+    await reseal(run);
     await assert.rejects(
         replay(run),
         (e) =>
@@ -254,14 +268,52 @@ test("replay stops at the first decision that does not reproduce", async () => {
     );
 });
 
+test("a run changed after its round ended is refused before replay, re-rendering or labelling reads it", async () => {
+    // The #204 review's two edits: a moved tank whose state_sha256 is rewritten to match, and the weapon motion of
+    // three decisions, which no state hash covers. Neither touches the manifest.
+    const moved = await recorded(),
+        [header, ...states] = await lines(join(moved, "states.jsonl"));
+    states[0].game.tanks[0].x += 10;
+    states[0].state_sha256 = stateHash(states[0].game);
+    await writeLines(join(moved, "states.jsonl"), [header, ...states]);
+    const steered = await recorded(),
+        [steeredHeader, ...steeredStates] = await lines(
+            join(steered, "states.jsonl"),
+        ),
+        weapons = steeredStates.filter((s) => s.motion).slice(0, 3);
+    assert.equal(weapons.length, 3);
+    for (const s of weapons)
+        s.motion = s.motion === "stop_none" ? "forward_none" : "stop_none";
+    await writeLines(join(steered, "states.jsonl"), [
+        steeredHeader,
+        ...steeredStates,
+    ]);
+    for (const run of [moved, steered]) {
+        const changed = `${run}/states.jsonl does not match the SHA-256 its manifest records. The run was changed`;
+        for (const use of [readRun, replay, roundTrip, label])
+            await assert.rejects(use(run), { message: changed });
+        await assert.rejects(readFile(join(run, LABELS_FILE)), {
+            code: "ENOENT",
+        });
+    }
+    // A manifest without the hash is from a round that did not finish, or from before raw states were hashed.
+    const manifest = JSON.parse(await readFile(join(moved, "manifest.json")));
+    delete manifest.outputs["states.jsonl"];
+    await writeFile(join(moved, "manifest.json"), JSON.stringify(manifest));
+    await assert.rejects(readRun(moved), {
+        message: `${moved}/manifest.json records no SHA-256 of states.jsonl. The round did not finish, or an older match wrote it`,
+    });
+});
+
 test("a saved state changed after recording is refused before replay, re-rendering or labelling uses it", async () => {
-    // Only the payload changes. Its logged hash and the decision rows stay as recorded.
+    // Only the payload changes, and the manifest is resealed. Its logged hash and the decision rows stay as recorded.
     const run = await recorded(),
         [header, ...states] = await lines(join(run, "states.jsonl")),
         rows = await readFile(join(run, "decisions.jsonl"), "utf8"),
         logged = states[0].state_sha256;
     states[0].game.tanks[0].x += 10;
     await writeLines(join(run, "states.jsonl"), [header, ...states]);
+    await reseal(run);
     const message = `decision 0: the saved state hashes to ${stateHash(states[0].game)}, not to its logged state_sha256 ${logged}`,
         refused = (e) => e.decision === 0 && e.message === message;
     for (const use of [readRun, replay, roundTrip, label])
@@ -282,6 +334,7 @@ test("a mismatch on a round recorded on another platform names both platforms", 
         tank.angle === 0 ? Number.MIN_VALUE : tank.angle * (1 + Number.EPSILON);
     states[k].state_sha256 = stateHash(states[k].game);
     await writeLines(join(run, "states.jsonl"), [header, ...states]);
+    await reseal(run);
     const here = `${PLATFORM.os}-${PLATFORM.arch} node ${PLATFORM.node}`;
     await assert.rejects(replay(run), (e) => {
         assert.equal(e.decision, k);
@@ -297,6 +350,7 @@ test("a mismatch on a round recorded on another platform names both platforms", 
     // A recording from before the header named its platform says so.
     delete header.platform;
     await writeLines(join(run, "states.jsonl"), [header, ...states]);
+    await reseal(run);
     await assert.rejects(replay(run), /The recording names no platform/);
 });
 

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import math
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -29,6 +31,18 @@ def _tool(tmp_path: Path, source: str, timeout_seconds: float = 10) -> TankRawSt
     (tmp_path / "scripts").mkdir(parents=True)
     (tmp_path / "scripts/raw-states.mjs").write_text(source)
     return TankRawStates(tmp_path, node=sys.executable, timeout_seconds=timeout_seconds)
+
+
+def _reseal(run: Path) -> None:
+    """Record the run's outputs as they are now, as match.mjs does when a round ends."""
+    manifest = json.loads((run / "manifest.json").read_text())
+    for name in manifest["outputs"]:
+        manifest["outputs"][name] = hashlib.sha256((run / name).read_bytes()).hexdigest()
+    (run / "manifest.json").write_text(json.dumps(manifest))
+
+
+def _write_states(run: Path, lines: list[dict[str, Any]]) -> None:
+    (run / "states.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
 
 
 def _state_hash(game: dict[str, object]) -> str:
@@ -136,6 +150,28 @@ def test_a_saved_state_that_no_longer_hashes_to_its_logged_hash_does_not_render(
 
 @pytest.mark.integration
 @pytest.mark.skipif(NODE is None, reason="needs Node 22")
+def test_states_changed_after_the_round_ended_are_refused_before_rendering_or_labelling(run: Path) -> None:
+    # The #204 review's edit: a moved tank whose state_sha256 is rewritten to match. The manifest is not.
+    header, states = read_states(run)
+    states[0]["game"]["tanks"][0]["x"] += 10
+    states[0]["state_sha256"] = _state_hash(states[0]["game"])
+    _write_states(run, [header, *states])
+    changed = r"states\.jsonl does not match the SHA-256 its manifest records\. The run was changed"
+    with pytest.raises(ContractError, match=changed):
+        read_states(run)
+    with pytest.raises(ContractError, match=changed):
+        TankRawStates(INTEGRATION).label([run])
+    assert not (run / "labels.jsonl").exists()
+
+    manifest = json.loads((run / "manifest.json").read_text())
+    del manifest["outputs"]["states.jsonl"]
+    (run / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(ContractError, match=r"records no SHA-256 of \['states\.jsonl'\]"):
+        read_states(run)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(NODE is None, reason="needs Node 22")
 def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recording_platform(tmp_path: Path) -> None:
     run = tmp_path / "teacher"
     arguments = ["--seed=2003", "--seat=red", "--teacher", "--seconds=3", f"--out={run}"]
@@ -151,7 +187,8 @@ def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recordin
     tank = states[2]["game"]["tanks"][1]
     tank["angle"] = math.nextafter(tank["angle"], math.inf)
     states[2]["state_sha256"] = _state_hash(states[2]["game"])
-    (run / "states.jsonl").write_text("".join(json.dumps(line) + "\n" for line in [header, *states]))
+    _write_states(run, [header, *states])
+    _reseal(run)
     with pytest.raises(ContractError) as raised:
         tool.replay(run)
     assert "decision 2: state hash" in str(raised.value)

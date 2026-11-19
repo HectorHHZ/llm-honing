@@ -299,9 +299,9 @@ The output includes `manifest.json` (scenario, model and source/harness hashes),
 `decisions.jsonl` (exact context, questions, probabilities and choices),
 `events.jsonl` and `result.json`. Each `shot` and `kill` event names its shell under
 `shell`, so a reader can tell which shot hit. Use a new output directory for each run. When
-the round ends, the manifest records the SHA-256 of the other three files under
-`outputs`. Honing's trace loader (`honing/backends/tank/traces.py`) refuses a run
-whose files do not match it.
+the round ends, the manifest records the SHA-256 of those three files and of
+`states.jsonl` under `outputs`. Honing's trace loader
+(`honing/backends/tank/traces.py`) refuses a run whose files do not match it.
 
 | Harness file           | Kind         | Purpose                                                             |
 | ---------------------- | ------------ | ------------------------------------------------------------------- |
@@ -368,8 +368,12 @@ node scripts/raw-states.mjs label runs/r1           # write labels.jsonl, the pl
 node scripts/raw-states.mjs render < items.jsonl    # re-render a batch of states under any harness, in one process
 ```
 
-Every command first checks each saved state against its logged SHA-256 and
-refuses a state that no longer matches. `render` rebuilds the observation from
+Every run command first checks the run's files against the SHA-256 its
+manifest records, so an edit to `states.jsonl` or `decisions.jsonl` is refused
+even when it keeps a state and its logged hash consistent. Every command then
+checks each saved state against its logged SHA-256 and refuses a state that no
+longer matches. From Python, `read_states` checks `states.jsonl` against the
+manifest the same way. `render` rebuilds the observation from
 the logged game state under the harness it is given. A changed controller setting, strategy, question text or note
 shows in the context as it would in a match. Without `--to`, `replay` plays the
 whole round and also compares `events.jsonl` and `result.json`. Replay is bit
