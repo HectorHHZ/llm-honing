@@ -346,6 +346,38 @@ integration directory, regenerate the suite with:
 python -m honing.backends.tank.scenarios tasks/suite.jsonl
 ```
 
+### Raw states, replay and teacher labels
+
+Every round also writes `states.jsonl`. Its first line names the format
+(`tank-raw-states`, version 1) and holds the text of every harness file the
+round was played under. Each further line is one agent decision: the game state
+the controller built the decision's context from (`game`: both tanks with their
+commands and their dodge and shot history, every shell, the clock and the
+seats' settings), its SHA-256, the seat, the cadence, and the motion the weapon
+question asked about. Each `decisions.jsonl` row names its decision under
+`decision`, and no other row field changes. A 30 s round with the dry run's
+stand-in model gains about 136 KB, 19% of its run directory.
+
+From this integration directory:
+
+```bash
+node scripts/raw-states.mjs roundtrip runs/r1       # re-render every row's context and compare it byte for byte
+node scripts/raw-states.mjs replay runs/r1 --to=40  # play again from the seed, checking each state hash up to decision 40
+node scripts/raw-states.mjs label runs/r1           # write labels.jsonl, the planner teacher's answer to every question
+node scripts/raw-states.mjs render < items.jsonl    # re-render a batch of states under any harness, in one process
+```
+
+`render` rebuilds the observation from the logged game state under the harness
+it is given. A changed controller setting, strategy, question text or note
+shows in the context as it would in a match. Without `--to`, `replay` plays the
+whole round and also compares `events.jsonl` and `result.json`. The teacher
+answers a weapon question for the motion it asked about, and labels planned
+steering only. From Python, `honing.backends.tank.raw_states.TankRawStates` runs
+each command as one Node process with a timeout.
+`python scripts/e2e/check_raw_states.py --record DIR` (from the repository root)
+plays rounds with the dry run's stand-in model and checks all of this. Given run
+directories instead, it checks rounds recorded elsewhere.
+
 ## Verify
 
 From `integrations/tank-war`:
