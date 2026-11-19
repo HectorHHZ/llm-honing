@@ -10,10 +10,12 @@ from pathlib import Path
 import pytest
 
 from honing.backends.tank.e2e import _move, build, main
+from honing.backends.tank.traces import TankTraceSource
 from honing.core import ContractError
 
 REPO = Path(__file__).resolve().parents[1]
 DRY_RUN = REPO / "configs/e2e/tank_dry_run.json"
+SGLANG = REPO / "configs/e2e/tank_campaign_sglang.json"
 NODE = shutil.which("node")
 
 sys.path.insert(0, str(REPO / "scripts/e2e"))
@@ -48,6 +50,23 @@ def test_a_config_is_refused_before_any_round_when_the_machine_or_the_config_lac
         build(_config(requires={}, components=without_method), REPO, tmp_path / "b")
     with pytest.raises(ContractError, match="unknown task split 'dev'"):
         build(_config(requires={}, gate_tasks={"split": "dev"}), REPO, tmp_path / "c")
+
+
+@pytest.mark.unit
+def test_the_sglang_campaign_builds_gepa_reading_the_rounds_traces_as_the_dry_run_does(tmp_path: Path) -> None:
+    """The config is built as written, except that the slots needing a GPU take the dry run's stand-ins."""
+    pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+    sglang, dry_run = json.loads(SGLANG.read_text()), json.loads(DRY_RUN.read_text())
+    method = sglang["components"]["method"]
+    assert method["args"]["traces"] == dry_run["components"]["method"]["args"]["traces"]
+    on_cpu = {slot: dry_run["components"][slot] for slot in ("model_source", "endpoints", "trainer")}
+    chat = dry_run["components"]["method"]["args"]["chat"]
+    components = {**sglang["components"], **on_cpu, "method": {**method, "args": {**method["args"], "chat": chat}}}
+
+    run = build({**sglang, "requires": {}, "components": components}, REPO, tmp_path / "out")
+
+    assert isinstance(run.context.components["method"].traces, TankTraceSource)  # type: ignore[attr-defined]
+    assert run.context.integration_dir == REPO / "integrations/tank-war"
 
 
 @pytest.mark.unit

@@ -24,7 +24,10 @@ on the kill, and every other shot missed. A run whose kill by the agent's
 shell names no shell was recorded before the engine named shells, and is
 refused.
 
-This module imports only the standard library and :mod:`honing.core`.
+This module imports only the standard library, :mod:`honing.core` and the
+decision log's parser (:mod:`honing.backends.tank.decisions`), and importing it
+loads none of the runner, the grader, the rollouts or the demonstrations, so
+System 0 can read traces without the rest of the backend.
 """
 
 from __future__ import annotations
@@ -36,15 +39,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from honing.core import (
-    ContractError,
-    DecisionQuestion,
-    DecisionSample,
-    DecisionTrace,
-    EpisodeRecord,
-    Grade,
-    TraceEvent,
-)
+from honing.backends.tank.decisions import decision_from_row
+from honing.core import ContractError, DecisionTrace, EpisodeRecord, Grade, TraceEvent
 
 OUTPUTS = ("decisions.jsonl", "events.jsonl", "result.json")
 SEATS = ("blue", "red")
@@ -69,7 +65,11 @@ class TankTraceSource:
         if outcome.failure is not None or outcome.exit_code != 0 or outcome.workspace_location is None:
             return ()
         return load_run(
-            Path(outcome.workspace_location), grade=record.grade, release_id=release_id, harness_id=outcome.spec_id
+            Path(outcome.workspace_location),
+            grade=record.grade,
+            release_id=release_id,
+            harness_id=outcome.spec_id,
+            policy_checksum=record.policy_checksum,
         )
 
 
@@ -97,6 +97,7 @@ def load_run(
     grade: Grade | None = None,
     release_id: str | None = None,
     harness_id: str | None = None,
+    policy_checksum: str | None = None,
 ) -> tuple[DecisionTrace, ...]:
     """Every decision of one finished round, with the events that followed each, its outcome and ``grade``."""
     manifest = verify_outputs(run)
@@ -127,47 +128,9 @@ def load_run(
             applied=_json(row.get("applied")),
             outcome=outcome,
             grade=grade,
+            policy_checksum=policy_checksum,
         )
         for step, row in enumerate(rows)
-    )
-
-
-def decision_from_row(
-    row: Mapping[str, Any],
-    *,
-    reward: float | None,
-    group: str | None,
-    release_id: str | None,
-    harness_id: str | None,
-    behavior: bool,
-) -> DecisionSample:
-    """One row of ``decisions.jsonl``. ``behavior`` keeps the answers' probabilities as behavior probabilities."""
-    questions = row["questions"]
-    return DecisionSample(
-        parts=tuple((name, tuple(lines)) for name, lines in row["contextParts"].items()),
-        questions=tuple(
-            (
-                key,
-                DecisionQuestion(kind=q["type"], instructions=q["instructions"], options=tuple(q["criteria"].items())),
-            )
-            for key, q in questions.items()
-        ),
-        chosen=tuple((key, row["chosen"][key]) for key in questions),
-        behavior_probs=(
-            tuple(
-                (
-                    key,
-                    tuple((option, float(row["answers"][key]["probabilities"][option])) for option in q["criteria"]),
-                )
-                for key, q in questions.items()
-            )
-            if behavior
-            else None
-        ),
-        reward=reward,
-        group=group,
-        source_release=release_id,
-        source_harness=harness_id,
     )
 
 
@@ -239,7 +202,6 @@ __all__ = [
     "OTHER_KEY_PRIORITY",
     "OUTPUTS",
     "TankTraceSource",
-    "decision_from_row",
     "load_run",
     "verify_outputs",
 ]

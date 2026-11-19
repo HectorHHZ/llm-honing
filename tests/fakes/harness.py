@@ -179,6 +179,7 @@ class FakeTraceSource:
                 events=(event,),
                 outcome=record.outcome.final_output,
                 grade=record.grade,
+                policy_checksum=record.policy_checksum,
             ),
         )
 

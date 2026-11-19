@@ -397,11 +397,11 @@ A decision model's episode is read through its decisions. `TraceSource`, a proto
 `honing/core`, reads an episode back as `DecisionTrace`s:
 `traces(record, *, release_id=None)`. Each trace holds one decision: the state the model
 read, every option's probability, the choice, what the controller allowed and applied,
-and the events up to the next decision, with the episode's outcome and grade. A
-`TraceEvent` that a reader should look around first is a key event: the source gives it a
-free-text `label` and an integer `priority`, where a lower number is kept longer under a
-length limit. The source chooses both, so each game names its own events without a change
-to `honing.core`.
+and the events up to the next decision, with the episode's outcome, its grade and the
+checksum of the policy that played it. A `TraceEvent` that a reader should look around
+first is a key event: the source gives it a free-text `label` and an integer `priority`,
+where a lower number is kept longer under a length limit. The source chooses both, so
+each game names its own events without a change to `honing.core`.
 
 `TankTraceSource` (`honing/backends/tank/traces.py`) reads a tank run directory. It
 refuses a run whose `decisions.jsonl`, `events.jsonl` or `result.json` does not match the
@@ -412,16 +412,27 @@ shot. A shot missed when its shell hit no tank, which the round's result settles
 engine names the shell on each shot and kill, and one hit ends the round.
 
 `render_traces` (`honing/harness/traces.py`) writes one episode as compact text within a
-token cap, counting each word, number and punctuation mark as one token. It shows
-windows of decisions around the key events. The first decision of each window lists the
+token cap, counting each word, number and punctuation mark as one token. Its header
+names the release, or, when the caller knows none, the policy by the first 12 characters
+of its checksum: GEPA and Meta-Harness pass no release id, since `EvolveContext` carries
+none. It shows windows of decisions around the key events, measured in episode time:
+every decision asked from 2 s before an event to 0.5 s after it, so a tank death's window
+reaches past the 1.1 to 1.7 s a shell flies. The first decision of each window lists the
 whole state with the controller's constraints and applied action, and each later one
 the state fields that changed or are gone since the decision shown before it with the
-same questions. The same traces and cap always render to the same text. Given a trace
-source, GEPA's reflective dataset shows each minibatch episode's rendering as its
-generated output, and Meta-Harness writes it to a file under its work directory, keeps
-the file's path in its archive state, and copies it as `decisions.txt` beside each search
-trace. The loader and the renderer import only the standard library and `honing.core`,
-so System 0's scheduler (#138) can read the same traces.
+same questions. Over the cap, decisions around events with a higher priority number
+leave first, and within a window the earliest and latest leave before those nearest in
+time to the decision the event followed. The same traces and cap always render to the
+same text. In a tank round, a motion decision's whole state is about 1,300 estimated
+tokens and a weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000, so
+at the default cap of 6,000 it keeps only its last 0.45 to 0.8 s. Given a trace source,
+GEPA's reflective dataset shows each minibatch episode's rendering as its generated
+output, and Meta-Harness writes it to a file under its work directory, keeps the file's
+path in its archive state, and copies it as `decisions.txt` beside each search trace.
+Importing the loader or the renderer loads only the standard library, `honing.core` and
+the tank decision-log parser: `honing.backends.tank` imports its runner, grader, rollouts
+and demonstrations only when one is first used, so System 0's scheduler (#138) can read
+the same traces without the rest of the backend.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
@@ -855,4 +866,5 @@ validation rounds. In its dry run (`configs/e2e/tank_dry_run.json`), GEPA reflec
 the rounds' rendered decision traces, and the scripted chat model refuses a prompt that
 does not show them. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
 real models served through SGLang: the policy and every candidate started on demand by
-`SGLangPolicyEndpoints`, and GEPA reflecting through a chat model on its own engine.
+`SGLangPolicyEndpoints`, and GEPA reflecting on the same rendered traces through a chat
+model on its own engine.

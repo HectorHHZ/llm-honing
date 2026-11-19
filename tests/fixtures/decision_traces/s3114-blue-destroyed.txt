@@ -1,44 +1,11 @@
 Episode s3114-blue-destroyed: 58 decisions.
 Outcome: the blue tank lost (hit) after 6 s.
 Key events: agent destroyed (1), missed shot (5).
-Shown: 6 decisions around the key events. The first in each window lists the whole state, and each later one the state fields that changed since the decision shown before it with the same questions.
+Shown: 5 decisions around the key events. The first in each window lists the whole state, and each later one the state fields that changed since the decision shown before it with the same questions.
 Questions:
   motion, choice of 9 options: Choose joint driving and turning to survive and obtain a verified shot. Every shell is lethal. Prefer safe progress and small heading error. Do not fire yet.
   weapon, choice of 2 options: Decide whether to fire. Own ricochets are lethal. Use the selected motion forecast when present. Fire only with a safe valid shot; otherwise hold.
-(27 decisions not shown, 0.000 s to 2.750 s)
-decision 27 at 2.750 s:
-  essential, all 26 fields:
-    Shot guard=OFF.
-    Local bullet avoidance=ON; active=false; requested=reverse/right, actual=reverse/none.
-    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
-    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
-    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
-    Response-position forecasts resume your original command after a burst expires.
-    Future interventions are unknown.
-    Last avoidance threat=none; forecast hit=none.
-    One hit kills; own shells are lethal.
-    Weapon mechanically available ammo=1/5, cooldown=0ms.
-    Me (221.6,92.7), heading=45.4deg; enemy (565.8,456.9).
-    Verified aim at predicted response position: {"angle":0.8135741856391662,"heading_deg":46.6,"delta_deg":1.3,"turn":"right","turn_ms":9,"hit_ms":1571,"bounces":0,"kind":"direct","self_hit":false}.
-    All 6 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-0","self",628,468.7,220.2,188.7,0,2.9],["1-1-0","enemy",295.7,189.4,-220.2,-188.7,0,3],["1-0-1","self",570.9,424.7,212.2,197.7,0,3.2],["1-1-1","enemy",387.2,261.8,-212.2,-197.7,0,3.6],["1-0-2","self",497.8,353.7,212.2,197.7,0,3.6],["1-0-3","self",357.8,230.6,203.8,206.3,0,4.1]].
-    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
-    All walls were included.
-    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
-    Latest state is checked again before firing.
-    SELECTED MOTION reverse_none: Drive reverse for 650ms; turn none for 0ms; verified hit direction error after 1deg; target progress -82px; existing shell collision none; shot after turn: enemy hit 1587ms, self hit none.
-    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":1587,"fire_after_ms":0}.
-    Fire permitted=true.
-    Assess ONLY this selected motion.
-    OPTION FORECASTS:
-    weapon/fire: Fire after this selected motion turns.
-    Only useful if its new shot is safe and hits the enemy.
-    weapon/hold: Execute this motion without firing.
-    Choose this if the selected shot is unavailable or unsafe.
-  weapon: fire 0.900, hold 0.100; chose fire
-  constraints: {"admissible_motion_ids":["reverse_none"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
-  applied: {"motion_id":"reverse_none","controls":{"drive":"reverse","turn":"none","fire":true},"turn_ms":0,"fire_after_ms":0}
-  then 2.767 s, missed shot: blue fired
-(25 decisions not shown, 2.967 s to 5.550 s)
+(53 decisions not shown, 0.000 s to 5.550 s)
 decision 53 at 5.550 s:
   essential, all 26 fields:
     Shot guard=OFF.
