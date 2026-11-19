@@ -6,7 +6,8 @@ Record on a CPU and check (from the repository root):
 plays every seed from both seats with the tank dry run's stand-in decision model
 (``tests/fakes/tank.py``) against the planner, and the planner teacher's round
 of each scenario, then checks them. To check rounds recorded elsewhere, such as
-a NanoJev round on a GPU:
+a NanoJev round on a GPU, run this on the machine that recorded them, since
+replay is bit exact only on the recording platform:
     python scripts/e2e/check_raw_states.py RUN...
 
 Every run is checked four ways. Each decision re-renders under its logged

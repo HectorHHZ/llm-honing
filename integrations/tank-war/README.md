@@ -349,8 +349,9 @@ python -m honing.backends.tank.scenarios tasks/suite.jsonl
 ### Raw states, replay and teacher labels
 
 Every round also writes `states.jsonl`. Its first line names the format
-(`tank-raw-states`, version 1) and holds the text of every harness file the
-round was played under. Each further line is one agent decision: the game state
+(`tank-raw-states`, version 1) and the platform that recorded the round (OS,
+CPU architecture and Node version), and holds the text of every harness file
+the round was played under. Each further line is one agent decision: the game state
 the controller built the decision's context from (`game`: both tanks with their
 commands and their dodge and shot history, every shell, the clock and the
 seats' settings), its SHA-256, the seat, the cadence, and the motion the weapon
@@ -370,13 +371,20 @@ node scripts/raw-states.mjs render < items.jsonl    # re-render a batch of state
 `render` rebuilds the observation from the logged game state under the harness
 it is given. A changed controller setting, strategy, question text or note
 shows in the context as it would in a match. Without `--to`, `replay` plays the
-whole round and also compares `events.jsonl` and `result.json`. The teacher
+whole round and also compares `events.jsonl` and `result.json`. Replay is bit
+exact on the platform that recorded the round. Another OS, CPU or Node version
+can differ in the last bits of the engine's Math results, so replay a round on
+the machine that recorded it. A mismatch on another platform names both, for
+example `Recorded on linux-x64 node 22.23.5, replayed on darwin-arm64 node
+22.22.0: floating point may differ in the last bits.` Rendering and labelling
+start from the logged state, so they carry across platforms. The teacher
 answers a weapon question for the motion it asked about, and labels planned
 steering only. From Python, `honing.backends.tank.raw_states.TankRawStates` runs
 each command as one Node process with a timeout.
 `python scripts/e2e/check_raw_states.py --record DIR` (from the repository root)
 plays rounds with the dry run's stand-in model and checks all of this. Given run
-directories instead, it checks rounds recorded elsewhere.
+directories instead, it checks rounds recorded elsewhere, on the machine that
+recorded them.
 
 ## Verify
 

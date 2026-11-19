@@ -1,8 +1,9 @@
 """A tank round's raw states, read back through the integration's Node tool.
 
 ``integrations/tank-war/scripts/match.mjs`` writes ``states.jsonl`` next to
-``decisions.jsonl``. Its first line names the format and version and holds the
-harness files the round was played under. Each further line is one agent
+``decisions.jsonl``. Its first line names the format and version and the
+platform that recorded the round, and holds the harness files the round was
+played under. Each further line is one agent
 decision: the raw game state the controller built the decision's context from,
 the state's SHA-256, and the motion the weapon question was asked about.
 
@@ -10,11 +11,13 @@ the state's SHA-256, and the motion the weapon question was asked about.
 one Node process per call, so the context is rendered by the same code a match
 runs:
 
-- :meth:`~TankRawStates.render` re-renders logged states under any harness;
+- :meth:`~TankRawStates.render` re-renders logged states under any harness.
 - :meth:`~TankRawStates.round_trip` checks that the logged harness reproduces
-  every logged ``contextParts`` byte for byte;
+  every logged ``contextParts`` byte for byte.
 - :meth:`~TankRawStates.replay` plays a round again from its seed with the
-  logged choices and checks each decision's state hash;
+  logged choices and checks each decision's state hash. This is bit exact on
+  the platform that recorded the round, and a mismatch on another platform
+  names both.
 - :meth:`~TankRawStates.label` writes ``labels.jsonl``, the planner teacher's
   answer to every question of every row.
 """
