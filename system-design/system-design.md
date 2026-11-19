@@ -426,9 +426,11 @@ weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000, so at 
 default cap of 6,000 it keeps only its last 0.45 to 0.8 s. Given a trace source, GEPA's
 reflective dataset shows each minibatch episode's rendering as its generated output, and
 Meta-Harness writes it to a file under its work directory, keeps the file's path in its
-archive state, and copies it as `decisions.txt` beside each search trace. The loader and
-the renderer import only the standard library and `honing.core`, so System 0's scheduler
-(#138) can read the same traces.
+archive state, and copies it as `decisions.txt` beside each search trace. Importing
+the loader or the renderer loads only the standard library, `honing.core` and the tank
+decision-log parser: `honing.backends.tank` imports its runner, grader, rollouts and
+demonstrations only when one is first used, so System 0's scheduler (#138) can read the
+same traces without the rest of the backend.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
