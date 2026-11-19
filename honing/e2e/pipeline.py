@@ -22,9 +22,9 @@ weights and harness came back. The scheduler chooses every move until it
 stops. A config without one gets a :class:`~honing.campaign.ScriptedScheduler`
 over the moves of ``schedule``. A rollback is the pipeline's own step: it runs
 once as many moves as precede it in ``schedule`` have run, whichever scheduler
-chose them. ``expect`` gives each step's result
-(``published``, ``rolled back``, ``skipped``, or ``restored``); a run whose
-results differ fails. Everything a run wrote goes under ``work_dir``:
+chose them, and a run that ends before it fails. ``expect`` gives each step's
+result (``published``, ``rolled back``, ``skipped``, or ``restored``); a run
+whose results differ fails. Everything a run wrote goes under ``work_dir``:
 ``summary.json``, the release chain, and whatever the runner keeps. An
 optional ``logging`` block logs the run to W&B (:mod:`honing.e2e.tracking`).
 
@@ -315,7 +315,9 @@ def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, A
     """Run the scheduler's moves and the schedule's rollbacks in order, and return the summary.
 
     ``failures`` names any step whose result was unexpected, and a run with
-    ``expect`` fails when it ran another number of steps.
+    ``expect`` fails when it ran another number of steps. A ``rollback`` entry
+    the run never reached, because the scheduler stopped first, is a failure
+    too.
     """
     campaign = pipeline.campaign
     tracker = tracker or NullTracker()
@@ -344,6 +346,13 @@ def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, A
     ]
     if pipeline.expect and len(steps) != len(pipeline.expect):
         failures.append(f"{len(steps)} steps ran, but expect lists {len(pipeline.expect)}")
+    # A rollback the scheduler stopped before would otherwise pass unnoticed, with no step and no failure.
+    first_left = len(pipeline.schedule) - len(entries)
+    failures.extend(
+        f"the run ended before schedule step {first_left + offset + 1} (rollback to {entry['to']}) ran"
+        for offset, entry in enumerate(entries)
+        if entry.get("kind") == "rollback"
+    )
     releases = campaign.chain.releases()
     return {
         "head": head.release_id,

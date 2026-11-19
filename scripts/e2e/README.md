@@ -33,7 +33,7 @@ One script is the exception: `gepa_live.py` calls real model APIs, needs a key, 
 | Gate | `evaluator` (optional), `selectors` | the runner's episodes on `tasks`; win/loss, no regression for compression |
 | Campaign | `scheduler` (optional) | `ScriptedScheduler` over the moves of `schedule` |
 
-`schedule` lists the steps and `expect` their results; a run whose results differ exits 1. A `scheduler` component chooses every move itself, until it stops. A `rollback` entry still runs once the moves before it in `schedule` have run. The tank and RA2 campaign scripts take the same `scheduler` slot. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
+`schedule` lists the steps and `expect` their results; a run whose results differ exits 1. A `scheduler` component chooses every move itself, until it stops. A `rollback` entry still runs once the moves before it in `schedule` have run, and the run fails when the scheduler stops before it. The tank and RA2 campaign scripts take the same `scheduler` slot. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
 
 ## The Slime trainer
 

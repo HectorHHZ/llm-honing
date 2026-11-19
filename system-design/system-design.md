@@ -529,7 +529,7 @@ rebuilt from its record, a restarted campaign starts a new one.
 optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the
 config's `schedule`. In the pipeline a `rollback` entry stays the pipeline's own step: it
 runs once as many moves as precede it in `schedule` have run, whichever scheduler chose
-them.
+them, and the run fails when the scheduler stops before it.
 
 **Phases belong to the scheduler, not to core.** A harness move carries a
 `HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the

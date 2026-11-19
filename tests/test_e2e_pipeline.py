@@ -175,6 +175,21 @@ def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_the
 
 
 @pytest.mark.unit
+def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -> None:
+    config = _config(
+        **_with_scheduler(["train"]),
+        schedule=[{"kind": "train"}, {"kind": "train"}, {"kind": "rollback", "to": "r0000"}],
+        expect=[],
+    )
+
+    summary = run(build(config, REPO, tmp_path / "out"))
+
+    assert [(s["move"], s["result"], s["release"]) for s in summary["steps"]] == [("train", "published", "r0001")]
+    assert summary["head"] == "r0001"
+    assert summary["failures"] == ["the run ended before schedule step 3 (rollback to r0000) ran"]
+
+
+@pytest.mark.unit
 def test_a_run_that_ran_another_number_of_steps_than_expected_fails(tmp_path: Path) -> None:
     config = _config(**_with_scheduler(["train", "train"]), schedule=[{"kind": "train"}], expect=["published"])
 
