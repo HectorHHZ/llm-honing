@@ -5,7 +5,7 @@
 //     [{path, kind, content}], "motion": <optional motion id>}. Each output line is {"requests": [...]} or
 //     {"error": "..."}. The requests are those decide() would send, as {id, parts, questions}, and parts is the
 //     contextParts. The weapon request is about "motion", by default the motion the logged weapon question was
-//     asked about.
+//     asked about. A line whose saved state no longer hashes to its state_sha256 gives an error.
 // node scripts/raw-states.mjs roundtrip RUN...
 //     Re-renders every decision under its logged harness and checks each row's contextParts and questions byte
 //     for byte.
@@ -18,7 +18,8 @@
 // node scripts/raw-states.mjs label RUN...
 //     Writes labels.jsonl next to decisions.jsonl: the planner teacher's answer to every question of every row.
 //
-// Each run command prints one JSON line per run. Any mismatch exits 1 and names the first decision it found.
+// Each run command first checks every saved state against its logged state_sha256. Each prints one JSON line per
+// run. Any mismatch exits 1 and names the first decision it found.
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -51,6 +52,18 @@ export class Mismatch extends Error {
     }
 }
 
+// A decision line's raw state, refused when it no longer hashes to the state_sha256 logged with it. The hash is
+// of the saved JSON, so it does not depend on the platform.
+function savedState(observed) {
+    const hash = stateHash(observed.game);
+    if (hash !== observed.state_sha256)
+        throw new Mismatch(
+            observed.decision,
+            `the saved state hashes to ${hash}, not to its logged state_sha256 ${observed.state_sha256}`,
+        );
+    return observed.game;
+}
+
 // The seat's observation of a logged state under a harness (from harnessFrom),
 // and the request body the match builds from it. The harness's assist and shot
 // guard settings replace the logged ones. The rest of the state is as logged.
@@ -81,6 +94,7 @@ export function observe(observed, harness) {
 // render(observed, harness) -> the requests, each with its contextParts. `harness` is the harness's files,
 // [{path, kind, content}], as states.jsonl's header holds them.
 export function render(observed, files, { motion = observed.motion } = {}) {
+    savedState(observed);
     const harness = harnessFrom(files);
     const { body } = observe(observed, harness);
     return decisionRequests(body, {
@@ -96,7 +110,8 @@ const lines = async (file) =>
         .filter(Boolean)
         .map((l) => JSON.parse(l));
 
-// A recorded round: its manifest, harness, raw states, and decision rows grouped by decision.
+// A recorded round: its manifest, harness, raw states, and decision rows grouped by decision. Every saved state
+// must still hash to its logged state_sha256.
 export async function readRun(run) {
     const manifest = JSON.parse(
         await readFile(join(run, "manifest.json"), "utf8"),
@@ -120,6 +135,7 @@ export async function readRun(run) {
             throw Error(
                 `${run}: state line ${k + 1} is decision ${s.decision}`,
             );
+        savedState(s);
     });
     rows.forEach((row, index) => {
         if (!calls[row.decision])

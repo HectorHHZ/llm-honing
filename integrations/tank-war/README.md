@@ -368,8 +368,9 @@ node scripts/raw-states.mjs label runs/r1           # write labels.jsonl, the pl
 node scripts/raw-states.mjs render < items.jsonl    # re-render a batch of states under any harness, in one process
 ```
 
-`render` rebuilds the observation from the logged game state under the harness
-it is given. A changed controller setting, strategy, question text or note
+Every command first checks each saved state against its logged SHA-256 and
+refuses a state that no longer matches. `render` rebuilds the observation from
+the logged game state under the harness it is given. A changed controller setting, strategy, question text or note
 shows in the context as it would in a match. Without `--to`, `replay` plays the
 whole round and also compares `events.jsonl` and `result.json`. Replay is bit
 exact on the platform that recorded the round. Another OS, CPU or Node version

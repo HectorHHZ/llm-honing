@@ -31,6 +31,22 @@ def _tool(tmp_path: Path, source: str, timeout_seconds: float = 10) -> TankRawSt
     return TankRawStates(tmp_path, node=sys.executable, timeout_seconds=timeout_seconds)
 
 
+def _state_hash(game: dict[str, object]) -> str:
+    """The state_sha256 match.mjs logs for a saved state."""
+    script = (
+        'import { stateHash } from "./scripts/match.mjs"; let text = "";'
+        " for await (const chunk of process.stdin) text += chunk; console.log(stateHash(JSON.parse(text)));"
+    )
+    return subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=INTEGRATION,
+        input=json.dumps(game),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 @pytest.fixture
 def run(tmp_path: Path) -> Path:
     directory = tmp_path / "run"
@@ -107,6 +123,19 @@ def test_a_recorded_round_re_renders_replays_and_is_labelled_from_python(run: Pa
 
 @pytest.mark.integration
 @pytest.mark.skipif(NODE is None, reason="needs Node 22")
+def test_a_saved_state_that_no_longer_hashes_to_its_logged_hash_does_not_render(run: Path) -> None:
+    header, states = read_states(run)
+    states[0]["game"]["tanks"][0]["x"] += 10
+    with pytest.raises(
+        ContractError,
+        match=r"state 0 \(decision 0\) did not render: decision 0: the saved state hashes to [0-9a-f]{64},"
+        r" not to its logged state_sha256 " + states[0]["state_sha256"],
+    ):
+        TankRawStates(INTEGRATION).render(states, header["harness"])
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(NODE is None, reason="needs Node 22")
 def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recording_platform(tmp_path: Path) -> None:
     run = tmp_path / "teacher"
     arguments = ["--seed=2003", "--seat=red", "--teacher", "--seconds=3", f"--out={run}"]
@@ -121,7 +150,7 @@ def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recordin
     header["platform"] = {"os": "linux", "arch": "x64", "node": "22.23.5"}
     tank = states[2]["game"]["tanks"][1]
     tank["angle"] = math.nextafter(tank["angle"], math.inf)
-    states[2]["state_sha256"] = "0" * 64
+    states[2]["state_sha256"] = _state_hash(states[2]["game"])
     (run / "states.jsonl").write_text("".join(json.dumps(line) + "\n" for line in [header, *states]))
     with pytest.raises(ContractError) as raised:
         tool.replay(run)

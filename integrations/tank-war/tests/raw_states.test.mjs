@@ -254,6 +254,23 @@ test("replay stops at the first decision that does not reproduce", async () => {
     );
 });
 
+test("a saved state changed after recording is refused before replay, re-rendering or labelling uses it", async () => {
+    // Only the payload changes. Its logged hash and the decision rows stay as recorded.
+    const run = await recorded(),
+        [header, ...states] = await lines(join(run, "states.jsonl")),
+        rows = await readFile(join(run, "decisions.jsonl"), "utf8"),
+        logged = states[0].state_sha256;
+    states[0].game.tanks[0].x += 10;
+    await writeLines(join(run, "states.jsonl"), [header, ...states]);
+    const message = `decision 0: the saved state hashes to ${stateHash(states[0].game)}, not to its logged state_sha256 ${logged}`,
+        refused = (e) => e.decision === 0 && e.message === message;
+    for (const use of [readRun, replay, roundTrip, label])
+        await assert.rejects(use(run), refused);
+    assert.throws(() => render(states[0], header.harness), refused);
+    assert.equal(await readFile(join(run, "decisions.jsonl"), "utf8"), rows);
+    await assert.rejects(readFile(join(run, LABELS_FILE)), { code: "ENOENT" });
+});
+
 test("a mismatch on a round recorded on another platform names both platforms", async () => {
     // As on CI: the round was recorded elsewhere, and one angle differs in its last bit.
     const run = await recorded(),
