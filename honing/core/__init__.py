@@ -81,8 +81,15 @@ from honing.core.protocols import (
     run_graded,
 )
 from honing.core.release import HoneRelease
-from honing.core.schedule import CampaignState, Move, MoveKind
-from honing.core.state import METHOD_STATE_VERSION_KEY, method_state_version, validate_method_state
+from honing.core.schedule import CampaignState, Move, MoveKind, StepRecord, StepResult
+from honing.core.state import (
+    METHOD_STATE_VERSION_KEY,
+    SCHEDULER_STATE_VERSION_KEY,
+    method_state_version,
+    scheduler_state_version,
+    validate_method_state,
+    validate_scheduler_state,
+)
 from honing.core.structure import (
     ArchitectureSpec,
     AttentionHead,
@@ -121,6 +128,7 @@ __all__ = [
     "LANGUAGE_MODEL_CONTRACTS",
     "MASTER_WEIGHT_FORMAT",
     "METHOD_STATE_VERSION_KEY",
+    "SCHEDULER_STATE_VERSION_KEY",
     "AlgorithmName",
     "AlgorithmRequirements",
     "AlgorithmSupport",
@@ -206,6 +214,8 @@ __all__ = [
     "ServingWeights",
     "SettleMode",
     "SignalKind",
+    "StepRecord",
+    "StepResult",
     "StructureAddress",
     "Task",
     "TaskGrader",
@@ -232,5 +242,7 @@ __all__ = [
     "require_choice",
     "requirements_for",
     "run_graded",
+    "scheduler_state_version",
     "validate_method_state",
+    "validate_scheduler_state",
 ]

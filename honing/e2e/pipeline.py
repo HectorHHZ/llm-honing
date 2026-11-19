@@ -9,6 +9,7 @@ changing one entry. The slots cover every plane:
 - compression: ``scorer``, ``selector``, ``editor``, ``quantizer``, ``telemetry``
 - harness: ``runner``, ``grader``, ``method``
 - gate: ``evaluator`` (optional; the default plays the runner on ``tasks``)
+- campaign: ``scheduler`` (optional; the default replays the moves of ``schedule``)
 
 ``tasks`` and ``harness_seed`` are factories too. ``tasks`` are the gate's;
 an optional ``harness_tasks`` factory gives a harness move its own tasks (a
@@ -17,9 +18,13 @@ what a harness move may spend on its own episodes (default 0: a method that
 runs episodes, as GEPA does, needs it). The ``schedule`` lists moves
 (``train``, ``prune``, ``quantize``, ``harness``) and ``rollback`` steps; each
 move is gated, and a rollback restores an earlier release and checks that its
-weights and harness came back. ``expect`` gives each step's result
-(``published``, ``rolled back``, ``skipped``, or ``restored``); a run whose
-results differ fails. Everything a run wrote goes under ``work_dir``:
+weights and harness came back. The scheduler chooses every move until it
+stops. A config without one gets a :class:`~honing.campaign.ScriptedScheduler`
+over the moves of ``schedule``. A rollback is the pipeline's own step: it runs
+once as many moves as precede it in ``schedule`` have run, whichever scheduler
+chose them, and a run that ends before it fails. ``expect`` gives each step's
+result (``published``, ``rolled back``, ``skipped``, or ``restored``); a run
+whose results differ fails. Everything a run wrote goes under ``work_dir``:
 ``summary.json``, the release chain, and whatever the runner keeps. An
 optional ``logging`` block logs the run to W&B (:mod:`honing.e2e.tracking`).
 
@@ -45,6 +50,7 @@ from typing import Any
 from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, HarnessComponents, StepOutcome
 from honing.core import (
     CandidateSelector,
+    CoAdaptScheduler,
     CompressionBudget,
     ContractError,
     DataProvider,
@@ -73,7 +79,14 @@ from honing.core import (
     TrainJobSpec,
     UpdatePolicy,
 )
-from honing.e2e.components import PipelineContext, build_component, missing_requirements, resolve_references
+from honing.e2e.components import (
+    SCHEDULER_SLOT,
+    PipelineContext,
+    build_component,
+    missing_requirements,
+    resolve_references,
+    scheduler_or_script,
+)
 from honing.e2e.tracking import (
     ChainRecords,
     NullTracker,
@@ -102,8 +115,11 @@ SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("grader", TaskGrader, True),
     ("method", EvolveMethod, True),
     ("evaluator", Evaluator, False),
+    SCHEDULER_SLOT,
 )
 RESULTS = ("published", "rolled back", "skipped", "restored")
+# As in Campaign.run: a scheduler that never stops still ends.
+MAX_MOVES = 1000
 
 
 def _selector(spec: Mapping[str, Any]) -> CandidateSelector:
@@ -185,6 +201,7 @@ class PipelineRun:
     schedule: tuple[Mapping[str, Any], ...]
     expect: tuple[str, ...]
     context: PipelineContext
+    scheduler: CoAdaptScheduler
     tracking: WandbSettings | None = None
 
 
@@ -248,13 +265,12 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     )
     campaign.start(c["model_source"], work, harness_seed=seed)  # type: ignore[arg-type]
     schedule = tuple(config.get("schedule", ()))
-    for entry in schedule:
-        if entry.get("kind") != "rollback":
-            _move(entry)  # refuse a bad step before anything runs
+    # Built here, so a bad step is refused before anything runs.
+    moves = tuple(_move(entry) for entry in schedule if entry.get("kind") != "rollback")
     expect = tuple(config.get("expect", ()))
     if expect and (len(expect) != len(schedule) or set(expect) - set(RESULTS)):
         raise ContractError(f"expect needs one of {list(RESULTS)} per schedule step")
-    return PipelineRun(campaign, schedule, expect, context, tracking)
+    return PipelineRun(campaign, schedule, expect, context, scheduler_or_script(c, moves), tracking)
 
 
 def _tasks(spec: Mapping[str, Any], context: PipelineContext, slot: str) -> tuple[Task, ...]:
@@ -278,39 +294,65 @@ def _step(outcome: StepOutcome) -> dict[str, object]:
     }
 
 
+def _rollback(campaign: Campaign, entry: Mapping[str, Any]) -> dict[str, object]:
+    target = campaign.chain.get(str(entry["to"]))
+    head = campaign.rollback(target.release_id)
+    restored = (
+        head.release_id == target.release_id
+        and head.master == target.master
+        and head.serving == target.serving
+        and head.harness == target.harness
+    )
+    return {
+        "move": "rollback",
+        "result": "restored" if restored else "not restored",
+        "release": head.release_id,
+        "reason": f"head restored to {target.release_id} with its weights and harness",
+    }
+
+
 def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, Any]:
-    """Run every step in order; returns the summary, with ``failures`` naming any step whose result was unexpected."""
+    """Run the scheduler's moves and the schedule's rollbacks in order, and return the summary.
+
+    ``failures`` names any step whose result was unexpected, and a run with
+    ``expect`` fails when it ran another number of steps. A ``rollback`` entry
+    the run never reached, because the scheduler stopped first, is a failure
+    too.
+    """
     campaign = pipeline.campaign
     tracker = tracker or NullTracker()
     records = ChainRecords(campaign.chain.record_path)
     steps: list[dict[str, object]] = []
-    for index, entry in enumerate(pipeline.schedule, start=1):
-        if entry.get("kind") == "rollback":
-            target = campaign.chain.get(str(entry["to"]))
-            head = campaign.rollback(target.release_id)
-            restored = (
-                head.release_id == target.release_id
-                and head.master == target.master
-                and head.serving == target.serving
-                and head.harness == target.harness
-            )
-            steps.append(
-                {
-                    "move": "rollback",
-                    "result": "restored" if restored else "not restored",
-                    "release": head.release_id,
-                    "reason": f"head restored to {target.release_id} with its weights and harness",
-                }
-            )
-        else:
-            steps.append(_step(campaign.advance(_move(entry))))
-        tracker.log_step(index, step_values(steps[-1], records.new()))
+
+    def log(step: dict[str, object]) -> None:
+        steps.append(step)
+        tracker.log_step(len(steps), step_values(step, records.new()))
+
+    entries = list(pipeline.schedule)
+    for _ in range(MAX_MOVES):
+        while entries and entries[0].get("kind") == "rollback":
+            log(_rollback(campaign, entries.pop(0)))
+        if entries:
+            entries.pop(0)  # the move entry this move takes the place of
+        outcome = campaign.step(pipeline.scheduler)
+        if outcome is None:
+            break
+        log(_step(outcome))
     head = campaign.chain.head()
     failures = [
         f"step {index + 1} ({step['move']}): expected {wanted}, got {step['result']}"
         for index, (step, wanted) in enumerate(zip(steps, pipeline.expect, strict=False))
         if step["result"] != wanted
     ]
+    if pipeline.expect and len(steps) != len(pipeline.expect):
+        failures.append(f"{len(steps)} steps ran, but expect lists {len(pipeline.expect)}")
+    # A rollback the scheduler stopped before would otherwise pass unnoticed, with no step and no failure.
+    first_left = len(pipeline.schedule) - len(entries)
+    failures.extend(
+        f"the run ended before schedule step {first_left + offset + 1} (rollback to {entry['to']}) ran"
+        for offset, entry in enumerate(entries)
+        if entry.get("kind") == "rollback"
+    )
     releases = campaign.chain.releases()
     return {
         "head": head.release_id,
