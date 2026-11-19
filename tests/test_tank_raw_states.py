@@ -183,7 +183,9 @@ def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recordin
     assert tool.replay(run)["checked"] == len(states)
 
     # A round from another platform whose state differs in the last bit of one angle (and so in its hash).
-    header["platform"] = {"os": "linux", "arch": "x64", "node": "22.23.5"}
+    # Another OS than this one (Node's process.platform is sys.platform here), so the round is from elsewhere.
+    elsewhere = "darwin" if sys.platform == "linux" else "linux"
+    header["platform"] = {"os": elsewhere, "arch": "x64", "node": "22.23.5"}
     tank = states[2]["game"]["tanks"][1]
     tank["angle"] = math.nextafter(tank["angle"], math.inf)
     states[2]["state_sha256"] = _state_hash(states[2]["game"])
@@ -193,7 +195,7 @@ def test_a_round_replays_where_it_was_recorded_and_a_mismatch_names_the_recordin
         tool.replay(run)
     assert "decision 2: state hash" in str(raised.value)
     assert "state.tanks.1.angle is" in str(raised.value)
-    assert "Recorded on linux-x64 node 22.23.5, replayed on " in str(raised.value)
+    assert f"Recorded on {elsewhere}-x64 node 22.23.5, replayed on " in str(raised.value)
     assert str(raised.value).endswith(": floating point may differ in the last bits.")
 
 

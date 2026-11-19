@@ -329,7 +329,9 @@ test("a mismatch on a round recorded on another platform names both platforms", 
         [header, ...states] = await lines(join(run, "states.jsonl")),
         k = 3,
         tank = states[k].game.tanks[1];
-    header.platform = { os: "linux", arch: "x64", node: "22.23.5" };
+    // Another OS than this one, so the recording is from elsewhere wherever the test runs.
+    const elsewhere = PLATFORM.os === "linux" ? "darwin" : "linux";
+    header.platform = { os: elsewhere, arch: "x64", node: "22.23.5" };
     tank.angle =
         tank.angle === 0 ? Number.MIN_VALUE : tank.angle * (1 + Number.EPSILON);
     states[k].state_sha256 = stateHash(states[k].game);
@@ -341,7 +343,7 @@ test("a mismatch on a round recorded on another platform names both platforms", 
         assert.match(e.message, /state\.tanks\.1\.angle is -?[\d.]+, logged/);
         assert.ok(
             e.message.endsWith(
-                `, logged ${tank.angle}. Recorded on linux-x64 node 22.23.5, replayed on ${here}: floating point may differ in the last bits.`,
+                `, logged ${tank.angle}. Recorded on ${elsewhere}-x64 node 22.23.5, replayed on ${here}: floating point may differ in the last bits.`,
             ),
             e.message,
         );
