@@ -1,0 +1,242 @@
+Episode s3102-red-timeout: 284 decisions.
+Outcome: the red tank drew (timeout) after 30.017 s.
+Key events: missed shot (20).
+Shown: 7 decisions around the key events. The first in each window lists the whole state, and each later one the state fields that changed since the decision shown before it with the same questions.
+Questions:
+  motion, choice of 9 options: Choose joint driving and turning to survive and obtain a verified shot. Every shell is lethal. Prefer safe progress and small heading error. Do not fire yet.
+  weapon, choice of 2 options: Decide whether to fire. Own ricochets are lethal. Use the selected motion forecast when present. Fire only with a safe valid shot; otherwise hold.
+(211 decisions not shown, 0.000 s to 22.000 s)
+decision 211 at 22.000 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=forward/right, actual=forward/right.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=5/5, cooldown=0ms.
+    Me (488.3,410.3), heading=-174.7deg; enemy (488.5,285.9).
+    Verified aim at predicted response position: {"angle":-2.6658500273513583,"heading_deg":-152.7,"delta_deg":19.6,"turn":"right","turn_ms":137,"hit_ms":775,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 2 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-7","enemy",225.8,545,111.9,-267.6,4,1.7],["1-0-8","enemy",463.7,298.5,-259,130.4,0,4.5]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION reverse_right: Drive reverse for 650ms; turn right for 133ms; verified hit direction error after 1deg; target progress -79px; existing shell collision none; shot after turn: enemy hit 833ms, self hit none.
+    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":833,"fire_after_ms":133}.
+    Fire permitted=true.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.900, hold 0.100; chose fire
+  constraints: {"admissible_motion_ids":["reverse_right"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
+  applied: {"motion_id":"reverse_right","controls":{"drive":"reverse","turn":"right","fire":true},"turn_ms":150,"fire_after_ms":150}
+  then 22.000 s: blue fired
+  then 22.167 s, missed shot: red fired
+(7 decisions not shown, 22.217 s to 22.867 s)
+decision 219 at 22.867 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=reverse/none, actual=reverse/none.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=4/5, cooldown=0ms.
+    Me (573.7,471.6), heading=-127deg; enemy (514,261.6).
+    Verified aim at predicted response position: {"angle":-2.603958394232271,"heading_deg":-149.2,"delta_deg":-22.2,"turn":"left","turn_ms":155,"hit_ms":1262,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 5 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-7","enemy",202.9,421.3,-111.9,267.6,6,0.8],["1-0-8","enemy",495,411.5,259,130.4,1,3.6],["1-1-13","self",432.4,312.8,259,-130.5,1,3.8],["1-0-9","enemy",435.9,381.4,259,130.4,1,3.9],["1-0-10","enemy",416.2,322.3,-259,130.4,0,4.3]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION reverse_left: Drive reverse for 650ms; turn left for 150ms; verified hit direction error after 1deg; target progress -79px; existing shell collision none; shot after turn: enemy hit 1333ms, self hit none.
+    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":1333,"fire_after_ms":150}.
+    Fire permitted=true.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.900, hold 0.100; chose fire
+  constraints: {"admissible_motion_ids":["reverse_left"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
+  applied: {"motion_id":"reverse_left","controls":{"drive":"reverse","turn":"left","fire":true},"turn_ms":150,"fire_after_ms":150}
+  then 23.033 s, missed shot: red fired
+(5 decisions not shown, 23.083 s to 23.517 s)
+decision 225 at 23.517 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=forward/right, actual=forward/none.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=2/5, cooldown=300ms.
+    Me (544.1,471.2), heading=-146.1deg; enemy (508.3,245.4).
+    Verified aim at predicted response position: {"angle":-2.5247857944469754,"heading_deg":-144.7,"delta_deg":1.4,"turn":"right","turn_ms":10,"hit_ms":1175,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 7 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-7","enemy",130.2,595.2,-111.9,267.6,6,0.2],["1-0-8","enemy",663.3,496.3,259,130.4,1,3],["1-1-13","self",600.8,228,259,-130.5,1,3.1],["1-0-9","enemy",604.3,466.2,259,130.4,1,3.3],["1-0-10","enemy",486.4,407.1,259,130.4,1,3.6],["1-1-14","self",446.3,397.1,-247.2,-151.6,0,4],["1-1-15","self",521,455.6,-240.7,-161.8,0,4.5]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION forward_right: Drive forward for 644ms; turn right for 17ms; verified hit direction error after 1deg; target progress 56px; existing shell collision none; shot after turn: enemy hit none, self hit none.
+    Shot forecast {"can_fire":false,"self_hit_ms":null,"enemy_hit_ms":null,"fire_after_ms":17}.
+    Fire permitted=false.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.100, hold 0.900; chose hold
+  constraints: {"admissible_motion_ids":["forward_right","forward_none","stop_right","stop_none"],"motion_changed":true,"policy_motion_changed":false,"fire_permitted":false,"fire_vetoed":false}
+  applied: {"motion_id":"forward_right","controls":{"drive":"forward","turn":"right","fire":false},"turn_ms":17,"fire_after_ms":17}
+  then 23.517 s, missed shot: red fired
+  then 23.700 s: blue fired
+(19 decisions not shown, 23.733 s to 25.683 s)
+decision 245 at 25.683 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=forward/none, actual=forward/none.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=2/5, cooldown=0ms.
+    Me (500,429.9), heading=-162.8deg; enemy (496.1,268).
+    Verified aim at predicted response position: {"angle":-2.5864255397275855,"heading_deg":-148.2,"delta_deg":14.6,"turn":"right","turn_ms":102,"hit_ms":892,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 7 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-8","enemy",886.7,607.7,-259,-130.4,7,0.8],["1-1-13","self",772.3,75.2,-259,130.5,5,1],["1-0-9","enemy",614,602,-259,130.4,4,1.1],["1-0-10","enemy",731.4,550,-259,-130.4,3,1.4],["1-1-14","self",602.9,220.2,-247.2,-151.6,4,1.8],["1-1-15","self",511,105.1,-240.7,-161.8,2,2.3],["1-0-11","enemy",551.9,596.2,233.8,171.6,3,2.5]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION reverse_right: Drive reverse for 650ms; turn right for 100ms; verified hit direction error after 0deg; target progress -80px; existing shell collision none; shot after turn: enemy hit 942ms, self hit none.
+    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":942,"fire_after_ms":100}.
+    Fire permitted=true.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.900, hold 0.100; chose fire
+  constraints: {"admissible_motion_ids":["forward_right","reverse_right","stop_right"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
+  applied: {"motion_id":"reverse_right","controls":{"drive":"reverse","turn":"right","fire":true},"turn_ms":100,"fire_after_ms":100}
+  then 25.800 s, missed shot: red fired
+(3 decisions not shown, 25.900 s to 26.117 s)
+decision 249 at 26.117 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=forward/left, actual=forward/none.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=1/5, cooldown=0ms.
+    Me (500.6,428.8), heading=-148.5deg; enemy (514.7,245).
+    Verified aim at predicted response position: {"angle":-2.562616635382324,"heading_deg":-146.8,"delta_deg":1.7,"turn":"right","turn_ms":12,"hit_ms":987,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 8 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-0-8","enemy",774.5,551.1,-259,-130.4,7,0.4],["1-1-13","self",660.1,131.7,-259,130.5,5,0.5],["1-0-9","enemy",591.3,581.9,259,-130.4,6,0.7],["1-0-10","enemy",619.1,600.5,-259,130.4,4,1],["1-1-14","self",495.8,154.5,-247.2,-151.6,4,1.4],["1-1-15","self",508,158.4,240.7,161.8,4,1.9],["1-0-11","enemy",653.2,569.8,233.8,-171.6,4,2.1],["1-1-16","self",411,373.8,-247.2,-151.6,0,4.2]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION forward_right: Drive forward for 650ms; turn right for 17ms; verified hit direction error after 1deg; target progress 62px; existing shell collision none; shot after turn: enemy hit 971ms, self hit none.
+    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":971,"fire_after_ms":17}.
+    Fire permitted=true.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.900, hold 0.100; chose fire
+  constraints: {"admissible_motion_ids":["forward_right","forward_none"],"motion_changed":true,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
+  applied: {"motion_id":"forward_right","controls":{"drive":"forward","turn":"right","fire":true},"turn_ms":17,"fire_after_ms":17}
+  then 26.150 s, missed shot: red fired
+  then 26.167 s: blue fired
+(21 decisions not shown, 26.333 s to 28.500 s)
+decision 271 at 28.500 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=forward/none, actual=forward/none.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=3/5, cooldown=0ms.
+    Me (524.8,442.2), heading=-127deg; enemy (516,245.7).
+    Verified aim at predicted response position: {"angle":-2.573796841393668,"heading_deg":-147.5,"delta_deg":-20.5,"turn":"left","turn_ms":143,"hit_ms":1083,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 3 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-1-16","self",514,164.1,-247.2,-151.6,4,1.8],["1-1-17","self",495.1,163.5,240.7,161.8,4,2.1],["1-0-12","enemy",798.7,431.4,240.7,-161.7,2,2.1]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION forward_left: Drive forward for 650ms; turn left for 150ms; verified hit direction error after 1deg; target progress 72px; existing shell collision none; shot after turn: enemy hit 1017ms, self hit none.
+    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":1017,"fire_after_ms":150}.
+    Fire permitted=true.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.900, hold 0.100; chose fire
+  constraints: {"admissible_motion_ids":["forward_left"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
+  applied: {"motion_id":"forward_left","controls":{"drive":"forward","turn":"left","fire":true},"turn_ms":150,"fire_after_ms":150}
+  then 28.667 s, missed shot: red fired
+(3 decisions not shown, 28.717 s to 28.933 s)
+decision 275 at 28.933 s:
+  essential, all 26 fields:
+    Shot guard=OFF.
+    Local bullet avoidance=ON; active=false; requested=stop/none, actual=stop/none.
+    Level=light; checks every 60ms, forecast 650ms, intervenes only for collision within 480ms.
+    Maximum burst=400ms, cooldown=280ms; remaining cooldown=0ms.
+    It checks ALL existing shells, uses normal hull physics, and cancels pending fire on path override.
+    Response-position forecasts resume your original command after a burst expires.
+    Future interventions are unknown.
+    Last avoidance threat=1-0-7; forecast hit=254ms.
+    One hit kills; own shells are lethal.
+    Weapon mechanically available ammo=2/5, cooldown=33ms.
+    Me (503.7,425.6), heading=-148.5deg; enemy (488.9,290.5).
+    Verified aim at predicted response position: {"angle":-2.6599932474029924,"heading_deg":-152.4,"delta_deg":-3.9,"turn":"left","turn_ms":27,"hit_ms":842,"bounces":1,"kind":"ricochet","self_hit":false}.
+    All 4 bullets [id,owner,x,y,vx,vy,bounces,remaining_s]: [["1-1-16","self",506.8,98.4,247.2,-151.6,5,1.3],["1-1-17","self",599.4,233.6,240.7,161.8,4,1.7],["1-0-12","enemy",703.4,372.8,-240.7,161.7,4,1.7],["1-1-18","self",419.4,373.9,-247.2,-151.6,0,4.2]].
+    Use the SELECTED motion's new-shot forecast, including its turn and fire delay, NOT another candidate or current heading.
+    All walls were included.
+    Enemy held stationary; horizon 3s; movement can invalidate an aim hint.
+    Latest state is checked again before firing.
+    SELECTED MOTION reverse_left: Drive reverse for 650ms; turn left for 33ms; verified hit direction error after 1deg; target progress -81px; existing shell collision none; shot after turn: enemy hit 862ms, self hit none.
+    Shot forecast {"can_fire":true,"self_hit_ms":null,"enemy_hit_ms":862,"fire_after_ms":33}.
+    Fire permitted=true.
+    Assess ONLY this selected motion.
+    OPTION FORECASTS:
+    weapon/fire: Fire after this selected motion turns.
+    Only useful if its new shot is safe and hits the enemy.
+    weapon/hold: Execute this motion without firing.
+    Choose this if the selected shot is unavailable or unsafe.
+  weapon: fire 0.900, hold 0.100; chose fire
+  constraints: {"admissible_motion_ids":["forward_left","reverse_left","stop_left"],"motion_changed":false,"policy_motion_changed":false,"fire_permitted":true,"fire_vetoed":false}
+  applied: {"motion_id":"reverse_left","controls":{"drive":"reverse","turn":"left","fire":true},"turn_ms":33,"fire_after_ms":33}
+  then 28.983 s, missed shot: red fired
+(8 decisions not shown, 29.150 s to 29.800 s)

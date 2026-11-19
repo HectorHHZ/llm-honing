@@ -7,6 +7,7 @@ served by a Jev decision server, and :class:`TankGrader` checks the round and
 turns its result into a grade. :class:`TankRolloutProvider` plays sampled
 rounds for policy gradient, and :class:`TankDemonstrationProvider` labels the
 model's questions with the planner teacher's answers for supervised training.
+:class:`TankTraceSource` reads a played round back as decision traces.
 Nothing here imports the game; it runs as a separate Node process.
 """
 
@@ -17,6 +18,7 @@ from honing.backends.tank.harness import AGENT, CONTROLLER_PATH, QUESTIONS_PATH,
 from honing.backends.tank.rollouts import TankRolloutProvider
 from honing.backends.tank.runner import TankEpisodeRunner
 from honing.backends.tank.scenarios import TankScenario, TankSuite, build_suite, load_suite
+from honing.backends.tank.traces import TankTraceSource
 
 __all__ = [
     "AGENT",
@@ -28,6 +30,7 @@ __all__ = [
     "TankRolloutProvider",
     "TankScenario",
     "TankSuite",
+    "TankTraceSource",
     "build_suite",
     "check_spec",
     "decisions_from_log",

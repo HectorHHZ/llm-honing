@@ -6,6 +6,9 @@
   dependency; Reef is a design reference and is never imported.
 - ``honing/backends/hf_checkpoint.py``, which every backend uses to name a
   checkpoint, imports only the standard library and ``honing.core``.
+- The decision-trace loader (``honing/backends/tank/traces.py``) and renderer
+  (``honing/harness/traces.py``) import only the standard library and
+  ``honing.core``.
 - Only ``honing/harness/models.py`` imports litellm, an optional extra whose
   pin is reviewed on its own.
 - ``honing/backends/slime/sandbox.py`` imports only the standard library, so it
@@ -79,6 +82,20 @@ def test_only_backend_packages_import_a_training_framework(repo_root: Path) -> N
 def test_the_checkpoint_identity_imports_no_backend(repo_root: Path) -> None:
     """Backends name a Hugging Face checkpoint through hf_checkpoint, so it must not import any of them."""
     path = repo_root / "honing" / "backends" / "hf_checkpoint.py"
+    assert imported_top_levels(path) <= set(sys.stdlib_module_names) | {"honing"}
+    honing_imports = [
+        node.module
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("honing")
+    ]
+    assert honing_imports and all(name == "honing.core" for name in honing_imports)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("module", ["honing/backends/tank/traces.py", "honing/harness/traces.py"])
+def test_the_trace_loader_and_renderer_import_only_the_standard_library_and_core(repo_root: Path, module: str) -> None:
+    """GEPA, Meta-Harness and System 0 read traces through these, so they must not pull in a plane or a backend."""
+    path = repo_root / module
     assert imported_top_levels(path) <= set(sys.stdlib_module_names) | {"honing"}
     honing_imports = [
         node.module

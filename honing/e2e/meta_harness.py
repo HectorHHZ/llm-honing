@@ -20,13 +20,18 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from honing.core import ProposerAgent
+from honing.core import ProposerAgent, TraceSource
 from honing.e2e.components import PipelineContext, build_component
 from honing.harness.methods.meta_harness import MetaHarnessMethod
 from honing.harness.proposers import DEFAULT_TOOLS, ClaudeCodeProposer
 
 
-def method(context: PipelineContext, proposer: Mapping[str, Any], work_dir: str | None = None) -> MetaHarnessMethod:
+def method(
+    context: PipelineContext,
+    proposer: Mapping[str, Any],
+    work_dir: str | None = None,
+    traces: Mapping[str, Any] | None = None,
+) -> MetaHarnessMethod:
     """Meta-Harness with the proposer agent ``proposer`` names.
 
     Args:
@@ -36,13 +41,17 @@ def method(context: PipelineContext, proposer: Mapping[str, Any], work_dir: str 
             proposer; defaults to ``meta-harness`` under the run's directory.
             A real proposer should work outside the repository, for example
             in ``{tmp}/meta-harness-{run}``.
+        traces: A component entry whose factory returns a ``TraceSource``, for
+            a decision model's episodes: each trace folder then also holds the
+            episode's rendered decisions.
 
     Returns:
         The method.
     """
     agent = build_component(proposer, context, "proposer", ProposerAgent)
+    source = build_component(traces, context, "traces", TraceSource) if traces else None
     directory = _path(work_dir, context) if work_dir else context.work_dir / "meta-harness"
-    return MetaHarnessMethod(agent, directory)  # type: ignore[arg-type]
+    return MetaHarnessMethod(agent, directory, traces=source)  # type: ignore[arg-type]
 
 
 def claude_code(

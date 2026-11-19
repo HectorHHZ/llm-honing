@@ -75,6 +75,7 @@ from honing.core.protocols import (
     RolloutProvider,
     TaskGrader,
     TelemetryStore,
+    TraceSource,
     Trainer,
     WeightConverter,
     run_graded,
@@ -94,6 +95,7 @@ from honing.core.structure import (
     StructureAddress,
 )
 from honing.core.telemetry import UtilizationTelemetry
+from honing.core.traces import DecisionTrace, TraceEvent
 from honing.core.training import (
     ALGORITHM_REQUIREMENTS,
     DECISION_REQUIREMENTS,
@@ -146,6 +148,7 @@ __all__ = [
     "DecisionKind",
     "DecisionQuestion",
     "DecisionSample",
+    "DecisionTrace",
     "EndpointRuntime",
     "EpisodeOutcome",
     "EpisodeRecord",
@@ -210,6 +213,8 @@ __all__ = [
     "TeacherPlacement",
     "TeacherRef",
     "TelemetryStore",
+    "TraceEvent",
+    "TraceSource",
     "TrainJobSpec",
     "TrainResult",
     "Trainer",
