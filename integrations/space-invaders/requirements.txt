@@ -1,0 +1,3 @@
+# Install from the repository root. The optional extra pins ALE, Gymnasium, and NumPy.
+-e .[space-invaders]
+ocatari==2.2.1
