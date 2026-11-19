@@ -153,8 +153,11 @@ class _Layout:
     """The text of any set of shown decisions. A decision's lines depend on where its window starts.
 
     ``fields`` holds each decision's state fields, or is ``None`` to leave the
-    state out. Each decision's lines and their token count are worked out once
-    per window start, so trying many sets of shown decisions stays cheap.
+    state out. A decision's lines depend on where its window starts only
+    through two facts: whether the window holds the decision before it, and
+    whether it holds the last one before it with the same questions. So each
+    decision's lines and their token count are worked out at most four times,
+    and trying many sets of shown decisions stays cheap.
     """
 
     def __init__(self, traces: Sequence[DecisionTrace], fields: Sequence[Fields] | None) -> None:
@@ -163,7 +166,13 @@ class _Layout:
         self._intro, self._key_events = _intro(traces)
         self._questions = _questions(traces)
         self._fixed_tokens = sum(estimate_tokens(line) for line in (*self._intro, *self._questions))
-        self._blocks: dict[tuple[int, int], tuple[list[str], int]] = {}
+        # For each decision, the last one before it with the same questions, or -1.
+        last: dict[tuple[str, ...], int] = {}
+        self._same_before: list[int] = []
+        for step, trace in enumerate(traces):
+            self._same_before.append(last.get(_asked(trace), -1))
+            last[_asked(trace)] = step
+        self._blocks: dict[tuple[int, bool, bool], tuple[list[str], int]] = {}
 
     def tokens(self, shown: Sequence[int]) -> int:
         """The estimated tokens of :meth:`lines`, which equal the sum of each line's, since no token spans a line."""
@@ -207,10 +216,11 @@ class _Layout:
         return f"Shown: {_count(shown, 'decision')} {around}. {state}"
 
     def _block(self, step: int, start: int) -> tuple[list[str], int]:
-        if (step, start) not in self._blocks:
+        key = (step, step > start, self._same_before[step] >= start)
+        if key not in self._blocks:
             lines = _block(self._traces, self._fields, step, start)
-            self._blocks[step, start] = (lines, sum(estimate_tokens(line) for line in lines))
-        return self._blocks[step, start]
+            self._blocks[key] = (lines, sum(estimate_tokens(line) for line in lines))
+        return self._blocks[key]
 
 
 def _block(traces: Sequence[DecisionTrace], fields: Sequence[Fields] | None, step: int, start: int) -> list[str]:
