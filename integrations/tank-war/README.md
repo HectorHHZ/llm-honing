@@ -21,6 +21,29 @@ model endpoints. We plan to open **Tank War Arena** for bring-your-own-model
 matches. Public model submission is not open yet. You can connect your own
 models to this local integration now.
 
+## Research scope
+
+Primary category: **Competitive decision-making**. Capability tags: opponent response, short-term prediction, control.
+
+Fight another tank in a maze with shells that can bounce and hit their owner.
+
+| Component                 | Responsibility in this configuration                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model                     | In planned mode, rank nine drive/turn plans and answer fire/hold for the selected motion. Raw mode exposes separate controls.                                       |
+| Harness                   | Build tactical context and candidate plans. Filter choices, recheck shots and apply configured geometric dodge assistance. Set decision cadence and action mapping. |
+| Engine and other policies | Apply maze geometry, movement, shell bounces, collisions and round outcomes. The opponent policy acts separately.                                                   |
+
+Forecasts and dodge assistance can supply part of the observed behavior. Arena-only
+context removes forecasts. Record controller mode, context and each
+assistance setting.
+
+Suggested evaluation: Compare matched seeds from both seats under the same
+opponent. Report win/draw/loss and group paired seats by seed. Vary assistance
+separately from model weights.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Quick start
 
 Node.js 22 or newer is enough for local keyboard play. No build, Python, GPU or
