@@ -448,7 +448,10 @@ self-proposer — plug in without infrastructure changes:
    declares; state under another version is refused before the method reads it.
 4. **Evaluations are per task.** `EvaluationResult` keeps score vectors and episode
    records, which Pareto-style selection needs.
-5. **Selection belongs to the method.** Its `selector` replaces the gate's default.
+5. **Selection belongs to the method.** Its `selector` replaces the gate's default, unless
+   the campaign sets `HarnessComponents.method_evaluator`. Then the method's selector decides
+   on that evaluator's run, which can keep the method's own validation tasks, and a candidate
+   it selects must also pass the gate's own selector, so both must select.
 6. **`record` sees every verdict**, accepted or rejected, because archive-based methods
    learn from rejections.
 
@@ -527,7 +530,21 @@ interval is a betting bound that assumes only independent differences in `[-1, 1
 candidate with no effect is selected at most `(1 - confidence) / 2` of the time at any
 gate size, skewed or tied scores included. It decides once, or after each block of a gate
 that plays in blocks and stops when the result is clear, with the confidence split across
-the looks so stopping early does not raise the false-accept rate.
+the looks so stopping early does not raise the false-accept rate. With more than one look
+the gate calls its evaluator once per block, so that evaluator must play new tasks on every
+call, and the decision records `stopped_early`.
+
+**The tank gate never replays a seed.** A loop that reads gate verdicts can overfit rounds it
+sees at every step. The tank gate (`honing/backends/tank/gate.py`) draws every block's seeds
+from a pool of 100,000 validation seeds, in order, so no two gates of a campaign share a seed,
+and records the first and last seed it played (`seed_first`, `seed_last`) beside the
+interval, `rounds` and `stopped_early`. Both seats of a seed play the same maze, so the gate
+scores a seed by the mean of its two seats and the interval counts it once (`tasks`), while
+every seat's episode record stays on the evaluation. The suite file's eight validation
+seeds stay fixed for GEPA's Pareto front. A suite with a task on a pool seed, in any split,
+or under a pool task's id is refused before the campaign starts, so no gate replays a suite
+seed. The held-out tasks, and a second pool of 100,000 held-out seeds, are refused to every
+campaign code path and read only by experiment scripts (`TankSuite.heldout_tasks`).
 
 **Comparisons are paired.** Every score is in `[0, 1]`, and selectors compare candidate and
 incumbent task by task. Every gated candidate, published or rejected, records
@@ -861,8 +878,8 @@ accept, jobs trained on batches drawn as the campaign draws them, new weights in
 release's format, no overwritten checkpoint, and refusal of what it does not declare.
 `scripts/e2e/tank_campaign.py` runs a campaign on real tank rounds
 (`honing/backends/tank`) with a stand-in decision model: a GEPA harness move, SFT on
-planner-teacher demonstrations, and GRPO on sampled rollouts, each gated on the
-validation rounds. In its dry run (`configs/e2e/tank_dry_run.json`), GEPA reflects on
+planner-teacher demonstrations, and GRPO on sampled rollouts, each gated by the
+paired interval selector on fresh validation rounds. In its dry run (`configs/e2e/tank_dry_run.json`), GEPA reflects on
 the rounds' rendered decision traces, and the scripted chat model refuses a prompt that
 does not show them. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
 real models served through SGLang: the policy and every candidate started on demand by
