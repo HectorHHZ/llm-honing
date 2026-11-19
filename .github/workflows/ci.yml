@@ -59,7 +59,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Runner speed varies about 2x: one Python version's job has taken 5 to 15 minutes.
+    # 3.11 also plays the tank dry run.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
