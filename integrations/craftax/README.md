@@ -15,6 +15,29 @@ magic and dungeon traversal. The committed task suite starts with three
 crafting achievements in that full game. Completing those tasks is not a claim
 of full-game victory or general roguelike competence.
 
+## Research scope
+
+Primary category: **Exploration and resource planning**. Capability tags: exploration, resource use, dependent goals.
+
+Collect resources, craft items and survive in the full native game.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose among all 43 native actions, including actions with unmet prerequisites. |
+| Harness | Format public state and task context. Present the native options without solving navigation or adding a hidden-state legality mask. |
+| Engine and other policies | Apply action prerequisites, resource costs, survival rules and achievement transitions. |
+
+The current suite covers three introductory crafting achievements. Success on
+these tasks does not establish full-game victory. A runner, grader and native
+replay are available.
+
+Suggested evaluation: Report success and steps for each achievement, together
+with survival. Use new task suites before making claims about longer goal
+chains.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Setup
 
 Use a separate Python 3.12 environment. From the repository root:

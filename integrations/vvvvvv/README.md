@@ -12,6 +12,27 @@ The demo starts at the original Space Station 1 time trial's first checkpoint,
 in “Welcome Aboard,” after its native countdown. This is a small interface demo,
 with no EpisodeRunner, TaskGrader, training or completion claim.
 
+## Research scope
+
+Primary category: **Precision control**. Capability tags: spatial control, timing.
+
+Move through obstacles and reverse gravity when the native rules permit it.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose movement and gravity-flip inputs. |
+| Harness | Set the starting checkpoint, construct paused observations, validate replies and apply bounded inputs. |
+| Engine and other policies | Decide when gravity can flip. Apply physics, collisions and checkpoint deaths. |
+
+The demo starts at the Space Station 1 time-trial checkpoint. It has no
+EpisodeRunner, TaskGrader or completion result.
+
+Suggested evaluation: Fix a checkpoint and target exit. Measure exit success,
+deaths and retries. Report input duration and inference pauses.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Resources and build
 
 The original source uses a [custom noncommercial license](VVVVVV-LICENSE.md).
