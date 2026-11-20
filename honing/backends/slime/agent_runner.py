@@ -56,6 +56,7 @@ from honing.core import (
     RunnerSupport,
     Task,
 )
+from honing.harness.endpoints import resolve_endpoint
 from honing.harness.tasks import TaskSuite
 
 AGENT = "claude_code"
@@ -394,8 +395,14 @@ class SlimeEpisodeRunner:
             weakref.WeakKeyDictionary()
         )
 
-    def _prepare(self, spec: HarnessSpec, task: Task, policy: PolicyRef, placements: Sequence[Placement]) -> Path:
-        endpoint = self._endpoints.resolve(policy)
+    def _prepare(
+        self,
+        spec: HarnessSpec,
+        task: Task,
+        policy: PolicyRef,
+        endpoint: PolicyEndpoint,
+        placements: Sequence[Placement],
+    ) -> Path:
         # The key's name comes from an optional method, not the PolicyEndpoints protocol (honing.harness.endpoints).
         # Slime's adapter at the pinned commit posts to SGLang with no key and has no way to add one
         # (adapters/common.py: BaseAdapter.__init__, call_sglang_generate), so a server that needs one is refused.
@@ -481,7 +488,8 @@ class SlimeEpisodeRunner:
                 failure=f"The harness was refused before the agent started: {refusal}",
             )
         await self._check_image()
-        directory = self._prepare(spec, task, policy, placements)
+        endpoint = await resolve_endpoint(self._endpoints, policy)
+        directory = self._prepare(spec, task, policy, endpoint, placements)
         command = self._environment.command([self._environment.python, "-m", self._worker_module, str(directory)], {})
         # One semaphore per event loop: a campaign runs each gate in its own asyncio.run.
         slots = self._slots.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(self._concurrency))

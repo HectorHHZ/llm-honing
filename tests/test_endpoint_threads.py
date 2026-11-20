@@ -412,6 +412,18 @@ def _openhands(tmp_path: Path, endpoints: Any) -> tuple[EpisodeRunner, HarnessSp
     return _runner(tmp_path, endpoints=endpoints), SEED, TASK
 
 
+def _pi(tmp_path: Path, endpoints: Any) -> tuple[EpisodeRunner, HarnessSpec, Task]:
+    from tests.test_pi_runner import SEED, TASK, _runner
+
+    return _runner(tmp_path, endpoints=endpoints), SEED, TASK
+
+
+def _slime(tmp_path: Path, endpoints: Any) -> tuple[EpisodeRunner, HarnessSpec, Task]:
+    from tests.test_slime_agent_runner import EVERY_KIND, make_runner
+
+    return make_runner(tmp_path, endpoints=endpoints), EVERY_KIND, Task("t1", "fix main.py")
+
+
 def _workspace(tmp_path: Path, endpoints: Any) -> tuple[EpisodeRunner, HarnessSpec, Task]:
     from honing.e2e.workspace_runner import WorkspaceEpisodeRunner
     from tests.fakes.builder import TASKS
@@ -428,8 +440,10 @@ RUNNERS = {
     "craftax": _craftax,
     "griddly": _griddly,
     "openhands": _openhands,
+    "pi": _pi,
     "ra2": _ra2,
     "rea_issac": _rea_issac,
+    "slime": _slime,
     "tank": _tank,
     "workspace": _workspace,
 }
