@@ -1,0 +1,45 @@
+{
+  "id": 1,
+  "parts": {
+    "essential": [
+      "Play hallowdale, a 2D platformer. Explore and leave each room through an opening at one of its edges. Doors and jars break when struck. Enemies and their projectiles hurt on touch. Spikes hurt and put you back on the last safe ground. The state is what a player sees on the screen right now. rows is that screen as a grid of 40 pixel cells, top row first. Each character is U+0100 plus the sum of what the cell shows: 1 background, 2 solid, 4 platform, 8 hazard, 16 player or enemy, 32 breakable or lever, 64 unknown (off screen or covered), 128 scenery. objects lists [id, kind, look, x, y, width, height] in screen pixels, x right and y down. Each action lasts 12 frames at 30 per second and the game pauses while you choose. Abilities you have not found yet do nothing.",
+      "{\"screen\":[960,523],\"rows\":[\"ŁŁŁŁāāāāāāāāāāāāāāāāāāāā\",\"Łāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāāāāāāāāāāāāāāā\",\"āāāāāāāāāāƁāāāāāāāƁƁāāāā\",\"āāāāāāāāāƁƁāāāāāāāƁƁāāāā\",\"āāāāāāāāāƁƁđāāāāāāƁƁāāāā\",\"ăăăăăăăăăƃƃēăăăăăăƃƃăăăă\",\"ĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂĂ\",\"łłłłłłłłłłłłłłłłłłłłłłłł\"],\"objects\":[[\"f84\",\"wall\",\"terrain\",0,447,960,76],[\"player\",\"player\",\"BRITTA\",445,401,29,46]],\"self\":{\"screen_box\":[449.7,406.11,24.24,41.21],\"facing\":\"right\"},\"hud\":{\"health\":{\"value\":5,\"evidence\":\"hud\"},\"health_max\":{\"value\":5,\"evidence\":\"hud\"},\"soul\":{\"fraction\":1.0,\"evidence\":\"hud gauge\"},\"text\":[{\"kind\":\"corner\",\"blocking\":false,\"content\":\"Press [Z] to jump, press [X] to attack\"}]}}"
+    ]
+  },
+  "questions": {
+    "action": {
+      "type": "choice",
+      "instructions": "Choose the next input to make progress and survive.",
+      "criteria": {
+        "wait": "Do nothing.",
+        "left": "Walk left.",
+        "right": "Walk right.",
+        "up": "Hold up.",
+        "down": "Hold down.",
+        "jump": "Full jump straight up.",
+        "jump_left": "Full jump to the left.",
+        "jump_right": "Full jump to the right.",
+        "short_jump": "Low hop straight up.",
+        "short_jump_left": "Low hop to the left.",
+        "short_jump_right": "Low hop to the right.",
+        "attack": "Strike the way you face.",
+        "attack_left": "Strike left.",
+        "attack_right": "Strike right.",
+        "attack_up": "Strike up.",
+        "attack_down": "Strike down while in the air.",
+        "dash": "Dash the way you face.",
+        "dash_left": "Dash left.",
+        "dash_right": "Dash right.",
+        "interact": "Talk, read or advance text.",
+        "focus": "Hold to heal, using soul.",
+        "cast": "Cast a spell the way you face.",
+        "cast_left": "Cast a spell to the left.",
+        "cast_right": "Cast a spell to the right.",
+        "cast_up": "Cast the upward spell.",
+        "cast_down": "Cast the downward spell.",
+        "c_dash": "Hold to charge a long dash; it launches on release.",
+        "dream_nail": "Hold to swing the dream nail."
+      }
+    }
+  }
+}
