@@ -198,7 +198,7 @@ With several methods, a release's `method_state` holds each method's own state u
 
 So one step is published, by the default method, and every other step leaves a rejection that carries both methods' states. The rounds repeat, as the dry run's do.
 
-`configs/e2e/tank_nanojev_levers.json` is the same idea on real weights: one sft step through the NanoJev trainer and one direction edit, both gated. Its run on one node with 8 H100 is in [`integrations/tank-war/direction-edit.md`](../../integrations/tank-war/direction-edit.md#after-supervised-training): sft was published at 0.5625 against 0.375, and the edit at strength 1 on the sft weights was rolled back. The Jev trainers have config factories in `honing/backends/jev/e2e.py` (`nanojev_trainer`, `kev_trainer`, `laya_trainer`). They hold out validation data by the decisions' group, and a teacher round's group is `tank:<seed>:<seat>`.
+`configs/e2e/tank_nanojev_levers.json` is the same idea on real weights: one sft step through the NanoJev trainer and one direction edit, both gated. Its run on one node with 8 H100 is in [`integrations/tank-war/direction-edit.md`](../../integrations/tank-war/direction-edit.md#after-supervised-training): under the old gate sft was published and the edit at strength 1 on the sft weights was rolled back, and under the fresh-seed gate sft missed its interval by 0.006 and the edit, made on the released weights, was published. The Jev trainers have config factories in `honing/backends/jev/e2e.py` (`nanojev_trainer`, `kev_trainer`, `laya_trainer`). They hold out validation data by the decisions' group, and a teacher round's group is `tank:<seed>:<seat>`.
 
 ## Serving with SGLang
 

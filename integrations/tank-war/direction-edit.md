@@ -242,6 +242,23 @@ training has to choose the strength for the head it edits. This is one run on
 16 rounds, and the two 0.375 scores are different rounds: the edited model
 and the released one differ on 8 of the 16.
 
+The same config ran again under the fresh-seed gate, 64 rounds on 32 seeds
+for each step with a 95% interval, in 81 minutes:
+
+| step                                                | candidate | head  | 95% interval on the difference | gate        |
+| --------------------------------------------------- | --------- | ----- | ------------------------------ | ----------- |
+| sft, 1 epoch on 16 teacher rounds                   | 0.578     | 0.320 | [-0.006, +0.487]               | rolled back |
+| fire direction, strength 1, on the released weights | 0.656     | 0.289 | [+0.131, +0.570]               | published   |
+
+Sft trained as before (validation loss 1.360 to 0.120) and gained 0.26 on
+the gate's seeds, but its interval misses zero by 0.006, so the head stayed
+the released model and the edit was made on it. There one unit of the fire
+direction adds 0.66 logits of margin, against 25.7 on the sft head, and
+leaves the head at cosine 0.43 to the released one. Fire becomes the top
+option on every weapon question, from 42%, and the edit is published, as it
+was in the run above this section. The two runs together say the same thing
+from both sides: strength 1 fits the released head and not the trained one.
+
 ## Limits
 
 - The gain is a repaired failure, not a new ability. The paper's editor could
