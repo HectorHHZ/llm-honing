@@ -13,6 +13,7 @@ Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on
 | `python scripts/e2e/check_runner.py --config configs/e2e/pi.json` (and `honing_pipeline.py`) | the runner checks and the all-planes campaign with pi as the agent, against the stand-in policy; needs Node.js 22.19 or newer and pi, which CI's `pi` job installs from the lock |
 | `python scripts/e2e/check_runner.py --config configs/e2e/pi_officeqa.json` (and `honing_pipeline.py`) | pi on three OfficeQA questions with a real model on Amazon Bedrock; needs `AWS_BEARER_TOKEN_BEDROCK` and fetched data, so CI does not run it |
 | `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json` | a tank campaign on real rounds (the Node match process against the planner opponent, Honing's `DecisionServer`) with a stand-in decision model: a GEPA harness move, sft on planner-teacher demonstrations, and grpo on sampled rollouts |
+| `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_levers_dry_run.json` | two harness methods and two trainers in one tank campaign, on the same real rounds and stand-in model: GEPA, teacher sft, a direction edit with the step's own parameters, Meta-Harness, and sft again on fresh teacher rounds |
 | `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
 | `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, every gated episode's run directory, and no seed played by two gates |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
@@ -178,6 +179,26 @@ The seeds each gate played are on its decision (`seed_first`, `seed_last`), with
 The rounds are deterministic (the game clock stops while a seat waits for its decision), so these results repeat. A change to the game, the planner, or the bridge can change them; if it does, check the new rounds and update the expectations in CI and `tests/test_tank_e2e.py`.
 
 To run a real model, replace `model_source`, `endpoints`, and `trainer` with the Jev ones (`honing/backends/jev`) and `method.args.chat` with a real chat model, or use the SGLang config below.
+
+### Several methods and trainers in one campaign
+
+A campaign has one default trainer and one default harness method, the `trainer` and `method` slots. `components` can also hold `trainers`, an object of named entries, and `methods`, a list of further methods. A train step names its trainer with `"trainer"`, and a harness step names its method with `"method"`, by the method's own name (`gepa`, `meta_harness`). A step that names neither runs the default. A name the config does not build is refused before any round is played. Pipeline configs (`honing_pipeline.py`) take the same two sections.
+
+A `direction_edit` step can carry its own `"direction_edit": {"question": ..., "target": ..., "strength": ...}`, which replaces the trainer's settings for that step, so one trainer serves every edit a schedule asks for.
+
+With several methods, a release's `method_state` holds each method's own state under its name, `{"schema_version": 1, "methods": {"gepa": {...}, "meta_harness": {...}}}`, and `honing.core.method_states` reads it. With one method the state is that method's own, as before.
+
+`configs/e2e/tank_levers_dry_run.json` runs both in CI, on the stand-ins above plus a stand-in direction-edit trainer and a scripted Meta-Harness proposer:
+
+1. harness (`gepa`): as in the dry run above. Its own selector passes on the fixed val tasks, and the gate's 4 fresh seeds give 0.62 against 0: published.
+2. train (sft, the default trainer): as in the dry run, quality 0.5 to 0.7 ties the new head on all 4 seeds, 0.69 against 0.69: rolled back.
+3. train (`direction_edit`, the trainer of that name, strength 1.0): the head is still at quality 0.5, so the edit trains a 0.6 candidate. It scores 0.25 against 0.38 on the next 4 seeds: rolled back.
+4. harness (`meta_harness`): it takes the head GEPA wrote as its starting point, and its proposer sets the dodge assist to `standard` in `tank/controller.json`. The candidate beats the head on the search tasks and passes Meta-Harness's own selector on the fixed val tasks, 1.0 against 0.5. On the gate's fresh seeds it scores 0.75 against 0.50, and the 30% interval, [-0.13, +0.59], does not clear zero: rolled back.
+5. train (sft again): 0.38 against 0.50: rolled back. Its teacher rounds are new ones: every demonstration batch after the first plays seeds that are in no split (`DEMONSTRATION_SEEDS`).
+
+So one step is published, by the default method, and every other step leaves a rejection that carries both methods' states. The rounds repeat, as the dry run's do.
+
+`configs/e2e/tank_nanojev_levers.json` is the same idea on real weights: one sft step through the NanoJev trainer and one direction edit, both gated. The Jev trainers have config factories in `honing/backends/jev/e2e.py` (`nanojev_trainer`, `kev_trainer`, `laya_trainer`). They hold out validation data by the decisions' group, and a teacher round's group is `tank:<seed>:<seat>`.
 
 ## Serving with SGLang
 

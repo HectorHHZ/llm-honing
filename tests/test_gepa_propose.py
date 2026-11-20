@@ -571,3 +571,19 @@ def test_a_template_without_its_placeholders_is_refused() -> None:
         GEPAMethod(
             FakeChatModel([]), GEPAConfig(max_metric_calls=1, reflection_prompt_template="<curr_param>"), VALIDATION
         )
+
+
+@pytest.mark.unit
+def test_a_head_another_method_wrote_is_the_parent_of_the_next_proposal() -> None:
+    fixture = Fixture([IMPROVING])
+    theirs = "Solve the task. Another method wrote this line."
+    head = SEED.with_file(INSTRUCTIONS, HarnessFile(kind="instructions", content=theirs))
+    context = replace(fixture.context(fixture.method.initial_state(SEED)), current=head)
+
+    result = fixture.method.propose(context)
+
+    archive = _archive(result)
+    assert dict(archive.candidates[0].components) == {INSTRUCTIONS: theirs, SKILL: "Run the tests."}
+    assert archive.candidates[0].validation_scores is None and archive.validation_policy is None
+    # The chat model was shown the head's text, not the seed's the archive started from.
+    assert theirs in fixture.chat.conversations[0][-1].content

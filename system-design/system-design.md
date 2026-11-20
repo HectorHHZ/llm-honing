@@ -82,11 +82,11 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `numerics` | `QuantScheme`, `NumericsPolicy` |
 | `weights` | `CheckpointRef`, `ModelSnapshot`, `ServingWeights`, the master weight format |
 | `data` | `DataContract`, `PolicySample`, `PreferencePair`, `DecisionQuestion`, `DecisionSample`, `TrainingBatch` |
-| `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `ALGORITHM_REQUIREMENTS` |
+| `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `DirectionEditSpec`, `ALGORITHM_REQUIREMENTS` |
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
 | `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
 | `traces` | `DecisionTrace`, `TraceEvent`: one decision of an episode and what followed it |
-| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the rules for method and scheduler state (`validate_method_state`, `validate_scheduler_state`) |
+| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the rules for method and scheduler state (`validate_method_state`, `keyed_method_state`, `validate_scheduler_state`) |
 | `candidate` | `UpdateCandidate`, `PolicyRef`, `EvaluationResult`, `SelectionDecision` |
 | `release` | `HoneRelease` |
 | `backend` | `BackendSupport` |
@@ -539,6 +539,20 @@ optional `scheduler` component. Without one, a `ScriptedScheduler` replays the m
 config's `schedule`. In the pipeline a `rollback` entry stays the pipeline's own step: it
 runs once as many moves as precede it in `schedule` have run, whichever scheduler chose
 them, and the run fails when the scheduler stops before it.
+
+**A campaign can hold several trainers and several harness methods.** It has one default
+of each, and a move can name another: `Move.trainer` for a train move or a prune move's
+recovery, and `HarnessMoveConfig.method` for a harness move, by the method's own name. A
+name the campaign does not have is refused before the move draws data or runs an episode.
+A `direction_edit` job can carry a `DirectionEditSpec` (question, target, strength) that
+replaces its trainer's settings for that job, so a scheduler chooses the edit per move.
+
+A release still carries one `method_state`. With one method it is that method's state.
+With several it holds each method's own state under its name (`keyed_method_state`), so a
+rollback restores all of them together. Each method, and its selector, is given only its
+own state. A method that finds a head another method wrote starts from that head:
+Meta-Harness adds it to its archive as a new root, and GEPA restarts its search from the
+head's text, as it does after a weights change.
 
 **Phases belong to the scheduler, not to core.** A harness move carries a
 `HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the

@@ -11,6 +11,12 @@ changing one entry. The slots cover every plane:
 - gate: ``evaluator`` (optional; the default plays the runner on ``tasks``)
 - campaign: ``scheduler`` (optional; the default replays the moves of ``schedule``)
 
+``components`` may also hold ``trainers`` (named entries) and ``methods`` (a
+list). A train or prune step names one with ``"trainer"``, a harness step
+with ``"method"`` (the method's own name); a step that names none runs the
+``trainer`` or ``method`` slot. A ``direction_edit`` train step can carry its
+own ``"direction_edit": {"question": ..., "target": ..., "strength": ...}``.
+
 ``tasks`` and ``harness_seed`` are factories too. ``tasks`` are the gate's;
 an optional ``harness_tasks`` factory gives a harness move its own tasks (a
 method's training split the gate never sees), and ``harness.episode_budget``
@@ -54,6 +60,7 @@ from honing.core import (
     CompressionBudget,
     ContractError,
     DataProvider,
+    DirectionEditSpec,
     EpisodeRunner,
     Evaluator,
     EvolveMethod,
@@ -80,9 +87,12 @@ from honing.core import (
     UpdatePolicy,
 )
 from honing.e2e.components import (
+    METHODS,
     SCHEDULER_SLOT,
+    TRAINERS,
     PipelineContext,
     build_component,
+    build_named_trainers_and_methods,
     missing_requirements,
     resolve_references,
     scheduler_or_script,
@@ -134,7 +144,7 @@ def _selector(spec: Mapping[str, Any]) -> CandidateSelector:
 
 def _job(entry: Mapping[str, Any]) -> TrainJobSpec:
     """A train step's job; ``numerics`` is ``{"mode": ..., "scheme": {...}}`` for quantization-aware training."""
-    teacher, numerics = entry.get("teacher"), entry.get("numerics")
+    teacher, numerics, direction = entry.get("teacher"), entry.get("numerics"), entry.get("direction_edit")
     update = dict(entry.get("update_policy", {}))
     for key in ("lora_targets", "trainable_patterns"):
         if key in update:
@@ -148,6 +158,7 @@ def _job(entry: Mapping[str, Any]) -> TrainJobSpec:
         contract=entry.get("contract"),
         update_policy=UpdatePolicy(**update),
         teacher=TeacherRef(**teacher) if teacher else None,
+        direction_edit=DirectionEditSpec(**direction) if direction is not None else None,
         numerics=(
             NumericsPolicy(
                 mode=numerics["mode"], scheme=QuantScheme(**numerics["scheme"]) if numerics.get("scheme") else None
@@ -182,14 +193,14 @@ def _defaults(config: Mapping[str, Any]) -> CampaignDefaults:
 def _move(entry: Mapping[str, Any]) -> Move:
     kind = entry.get("kind")
     if kind == "train":
-        return Move(kind="train", train=_job(entry))
+        return Move(kind="train", train=_job(entry), trainer=entry.get("trainer"))
     if kind == "prune":
         budget = CompressionBudget(keep_ratio=float(entry["keep_ratio"])) if "keep_ratio" in entry else None
-        return Move(kind="prune", budget=budget)
+        return Move(kind="prune", budget=budget, trainer=entry.get("trainer"))
     if kind == "quantize":
         return Move(kind="quantize", scheme=QuantScheme(**entry["scheme"]) if "scheme" in entry else None)
     if kind == "harness":
-        return Move(kind="harness", harness=HarnessMoveConfig(label=entry.get("label")))
+        return Move(kind="harness", harness=HarnessMoveConfig(label=entry.get("label"), method=entry.get("method")))
     raise ContractError(f"a pipeline schedules train, prune, quantize, harness, and rollback steps, not {kind!r}")
 
 
@@ -219,7 +230,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     work.mkdir(parents=True, exist_ok=False)
     context = PipelineContext(root=root.resolve(), work_dir=work)
     components = config.get("components", {})
-    unknown = set(components) - {slot for slot, _, _ in SLOTS}
+    unknown = set(components) - {slot for slot, _, _ in SLOTS} - {TRAINERS, METHODS}
     if unknown:
         raise ContractError(f"unknown components {sorted(unknown)}")
     for slot, protocol, required in SLOTS:
@@ -227,6 +238,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             context.components[slot] = build_component(components[slot], context, slot, protocol)
         elif required:
             raise ContractError(f"the config names no {slot} component")
+    trainers, methods = build_named_trainers_and_methods(components, context)
     tasks = _tasks(config["tasks"], context, "tasks")
     harness_tasks = _tasks(config["harness_tasks"], context, "harness_tasks") if "harness_tasks" in config else tasks
     seed = build_component(config["harness_seed"], context, "harness_seed", HarnessSpec)
@@ -259,14 +271,18 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             method=c["method"],  # type: ignore[arg-type]
             tasks=harness_tasks,
             episode_budget=episode_budget,
+            methods=methods,
         ),
         defaults=_defaults(config),
         rollout=c.get("rollout"),  # type: ignore[arg-type]
+        trainers=trainers,
     )
     campaign.start(c["model_source"], work, harness_seed=seed)  # type: ignore[arg-type]
     schedule = tuple(config.get("schedule", ()))
     # Built here, so a bad step is refused before anything runs.
     moves = tuple(_move(entry) for entry in schedule if entry.get("kind") != "rollback")
+    for move in moves:
+        campaign.check_move(move)  # a step for a trainer or method the config does not build
     expect = tuple(config.get("expect", ()))
     if expect and (len(expect) != len(schedule) or set(expect) - set(RESULTS)):
         raise ContractError(f"expect needs one of {list(RESULTS)} per schedule step")

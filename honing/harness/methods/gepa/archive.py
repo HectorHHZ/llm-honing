@@ -363,6 +363,23 @@ class Archive:
         seed = ArchiveCandidate(components=served.components, parent=None, component_cursor=served.component_cursor)
         return replace(self, candidates=(seed,), served=0, validation_policy=None)
 
+    def adopt_head(self, components: Mapping[str, str]) -> Archive:
+        """Start the search over from ``components``, the head's text, when another method wrote it.
+
+        GEPA's served candidate is the head's text for as long as GEPA is the
+        only method that changes it. Once another method publishes a harness,
+        every score in the archive belongs to text that is no longer served,
+        so only the head's text is kept, unscored, as the new seed, and the
+        next gate scores it. The budget, the RNG and the minibatch sampler
+        carry on, as in :meth:`restart_from_served`.
+        """
+        served = self.candidates[self.served]
+        head = tuple(sorted(components.items()))
+        if served.components == head:
+            return self
+        seed = ArchiveCandidate(components=head, parent=None, component_cursor=served.component_cursor)
+        return replace(self, candidates=(seed,), served=0, validation_policy=None)
+
     def charge(self, metric_calls: int) -> Archive:
         """Add episodes spent to the budget."""
         require(metric_calls >= 0, f"metric_calls to charge must be >= 0, got {metric_calls}")

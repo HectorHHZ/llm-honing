@@ -14,6 +14,12 @@ Every campaign config has the same optional ``scheduler`` slot
 (:data:`SCHEDULER_SLOT`). A config that names none runs the moves of its
 ``schedule`` through a :class:`~honing.campaign.ScriptedScheduler`
 (:func:`scheduler_or_script`).
+
+Besides its single slots, a ``components`` block may hold ``trainers``, an
+object of entries a train or prune step names with ``"trainer"``, and
+``methods``, a list of entries for further harness methods, which a harness
+step names by the method's own name with ``"method"``
+(:func:`build_named_trainers_and_methods`).
 """
 
 from __future__ import annotations
@@ -27,10 +33,12 @@ from pathlib import Path
 from typing import Any
 
 from honing.campaign import ScriptedScheduler
-from honing.core import CoAdaptScheduler, ContractError, Move
+from honing.core import CoAdaptScheduler, ContractError, EvolveMethod, Move, Trainer
 
 # Built after every other slot, so a scheduler's factory can read all the components.
 SCHEDULER_SLOT: tuple[str, type, bool] = ("scheduler", CoAdaptScheduler, False)
+#: Sections of a ``components`` block that hold several entries instead of one.
+TRAINERS, METHODS = "trainers", "methods"
 
 
 @dataclass
@@ -50,6 +58,8 @@ class PipelineContext:
 
 def build_component(spec: Mapping[str, object], context: object, slot: str, protocol: type) -> object:
     """Call the entry's factory with ``context`` and its args; refuse a result that is not a ``protocol``."""
+    if not isinstance(spec, Mapping):
+        raise ContractError(f"the {slot} component must be an object with a factory, got {type(spec).__name__}")
     target = str(spec.get("factory", ""))
     module_name, _, function_name = target.partition(":")
     if not module_name or not function_name:
@@ -76,6 +86,25 @@ def scheduler_or_script(components: Mapping[str, object], moves: Sequence[Move])
         return ScriptedScheduler(moves)
     assert isinstance(scheduler, CoAdaptScheduler)
     return scheduler
+
+
+def build_named_trainers_and_methods(
+    components: Mapping[str, object], context: object
+) -> tuple[dict[str, Trainer], tuple[EvolveMethod, ...]]:
+    """Build the ``trainers`` and ``methods`` sections of a ``components`` block; both are optional."""
+    trainers = components.get(TRAINERS, {})
+    if not isinstance(trainers, Mapping) or not all(isinstance(name, str) and name for name in trainers):
+        raise ContractError(f"components.{TRAINERS} must be an object of named component entries")
+    methods = components.get(METHODS, [])
+    if not isinstance(methods, list):
+        raise ContractError(f"components.{METHODS} must be a list of component entries")
+    built_trainers: dict[str, Trainer] = {}
+    for name, spec in trainers.items():
+        built_trainers[name] = build_component(spec, context, f"{TRAINERS}.{name}", Trainer)  # type: ignore[assignment]
+    built_methods = [
+        build_component(spec, context, f"{METHODS}[{index}]", EvolveMethod) for index, spec in enumerate(methods)
+    ]
+    return built_trainers, tuple(built_methods)  # type: ignore[arg-type]
 
 
 def missing_requirements(requires: Mapping[str, Sequence[str]]) -> list[str]:

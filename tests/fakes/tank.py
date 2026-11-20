@@ -1,8 +1,10 @@
-"""Fake components for the tank end-to-end dry run (``configs/e2e/tank_dry_run.json``).
+"""Fake components for the tank end-to-end dry runs (``configs/e2e/tank_dry_run.json`` and
+``configs/e2e/tank_levers_dry_run.json``).
 
 The runner, grader, rollouts, demonstrations, match process, decision server,
-and GEPA are the real ones; only the decision model, the trainer, and the chat
-model GEPA reflects with are stand-ins.
+GEPA and Meta-Harness are the real ones; only the decision model, the
+trainers, the chat model GEPA reflects with, and the agent Meta-Harness
+proposes through are stand-ins.
 
 :class:`ForecastModel` reads the forecasts the match sends and answers as a
 model of a given quality would: it prefers motions that avoid every shell and
@@ -25,6 +27,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -33,16 +36,21 @@ from typing import Any
 from honing.backends.jev.server import DecisionServer
 from honing.backends.jev.token_budget import SECTIONS
 from honing.backends.tank.e2e import E2EContext
+from honing.backends.tank.harness import CONTROLLER_PATH
 from honing.core import (
     ArchitectureSpec,
     BackendSupport,
     ChatMessage,
     ChatReply,
     ContractError,
+    ModelSnapshot,
     PolicyEndpoint,
     PolicyRef,
+    TrainingBatch,
+    TrainJobSpec,
+    TrainResult,
 )
-from tests.fakes.harness import FakeChatModel
+from tests.fakes.harness import FakeChatModel, FakeProposerAgent
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld
 
 INTEGRATION = Path(__file__).resolve().parents[2] / "integrations/tank-war"
@@ -56,6 +64,14 @@ DECISION_TRAINER = BackendSupport(
     train_numerics=frozenset({"bf16"}),
     weight_formats=frozenset({"hf_safetensors"}),
     algorithms=(("sft", "native"), ("grpo", "native")),
+    contracts=frozenset({"typed_decisions"}),
+)
+DIRECTION_EDITOR = BackendSupport(
+    name="fake-direction-edit",
+    architectures="uniform",
+    train_numerics=frozenset({"bf16"}),
+    weight_formats=frozenset({"hf_safetensors"}),
+    algorithms=(("direction_edit", "native"),),
     contracts=frozenset({"typed_decisions"}),
 )
 # The reflection GEPA's scripted chat model returns: the default question text with weapon instructions
@@ -202,3 +218,60 @@ def chat(
 ) -> FakeChatModel:
     """GEPA's reflection model: returns ``replies`` in order, and with ``expect_decisions`` checks each prompt."""
     return DecisionReadingChatModel(list(replies)) if expect_decisions else FakeChatModel(list(replies))
+
+
+class FakeDirectionEditTrainer(FakeTrainer):
+    """A direction edit that moves quality by ``gain`` for each unit of the job's strength.
+
+    It refuses a job that does not say which edit to make, so a run that
+    publishes or rejects its candidate shows the move's own question, target
+    and strength reached the trainer.
+    """
+
+    def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult:
+        spec = job.direction_edit
+        if spec is None:
+            raise ContractError("the stand-in direction edit needs the move's question, target and strength")
+        self.jobs.append(job)
+        self.batches.append(batch)
+        quality = self.world.quality[base.checkpoint.checksum] + self.gain * spec.strength
+        snapshot = self.world.snapshot(base.architecture, quality)
+        return TrainResult(snapshot=snapshot, metrics={"strength": spec.strength})
+
+
+def direction_edit_trainer(context: Any, gain: float = 0.1) -> FakeDirectionEditTrainer:
+    return FakeDirectionEditTrainer(_world(context), support=DIRECTION_EDITOR, gain=gain)
+
+
+def proposer(
+    context: object, settings: Sequence[Mapping[str, object]] = ({"assistProfile": "standard"},)
+) -> FakeProposerAgent:
+    """A Meta-Harness proposer that follows the skill's workflow with scripted controller settings.
+
+    Each call copies the served candidate, merges the next entry of
+    ``settings`` into its ``tank/controller.json``, and writes
+    ``pending_eval.json``; with no entry left it exits 1.
+    """
+    queue = [dict(change) for change in settings]
+
+    def script(workdir: Path) -> int:
+        if not queue:
+            return 1
+        change = queue.pop(0)
+        rows = [json.loads(row) for row in (workdir / "evolution_summary.jsonl").read_text().splitlines()]
+        parent = next(row["name"] for row in rows if row["served"])
+        name = f"controller_{len(rows)}"
+        folder = workdir / "candidates" / name
+        shutil.copytree(workdir / "candidates" / parent, folder)
+        controller = folder / CONTROLLER_PATH
+        controller.write_text(json.dumps({**json.loads(controller.read_text()), **change}, indent=2) + "\n")
+        entry = {
+            "name": name,
+            "parent": parent,
+            "hypothesis": f"controller settings {change} win more rounds",
+            "changes": f"set {change} in {CONTROLLER_PATH}",
+        }
+        (workdir / "pending_eval.json").write_text(json.dumps({"iteration": len(rows), "candidates": [entry]}))
+        return 0
+
+    return FakeProposerAgent(script)

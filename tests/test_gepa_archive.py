@@ -317,3 +317,26 @@ def test_from_state_refuses_a_malformed_rng_state() -> None:
         Archive.from_state({**state, "rng_state": [version, [*words[:-1], 10_000], gauss]})
     with pytest.raises(ContractError, match="rng_state version"):
         Archive.from_state({**state, "rng_state": [2, words, gauss]})
+
+
+@pytest.mark.unit
+def test_a_head_another_method_wrote_becomes_the_unscored_seed_and_the_sampler_carries_on() -> None:
+    archive = _archive((0.5, 0.5), (0.9, 0.9)).charge(7)
+    head = {**COMPONENTS, "CLAUDE.md": "written by another method"}
+
+    adopted = archive.adopt_head(head)
+
+    assert len(adopted.candidates) == 1 and adopted.served == 0
+    seed = adopted.candidates[0]
+    assert dict(seed.components) == head and seed.parent is None and seed.validation_scores is None
+    assert adopted.validation_policy is None
+    assert (adopted.metric_calls, adopted.rng_state, adopted.task_ids) == (7, archive.rng_state, archive.task_ids)
+    validate_method_state(adopted.to_state())
+
+
+@pytest.mark.unit
+def test_a_head_that_is_the_served_candidate_changes_nothing() -> None:
+    archive = _archive((0.5, 0.5), (0.9, 0.9))
+    served = dict(archive.candidates[archive.served].components)
+
+    assert archive.adopt_head(served) is archive

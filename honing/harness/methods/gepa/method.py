@@ -192,6 +192,8 @@ class GEPAMethod:
         config = self.config
         archive = Archive.from_state(context.state)
         self._check_components(archive, context)
+        # Another method may have published the head since GEPA last ran.
+        archive = archive.adopt_head(_head_components(archive, context.current))
         # A train, prune or quantize move changed the weights since the archive was
         # scored. Scores under other weights are not comparable, so the search starts
         # over from the served harness before a parent is drawn from them; the next
@@ -414,6 +416,16 @@ def _require_gepa() -> None:
         import gepa  # noqa: F401
     except ImportError as error:
         raise ImportError("GEPA reflection needs the 'gepa' extra: pip install 'llm-honing[gepa]'") from error
+
+
+def _head_components(archive: Archive, head: HarnessSpec) -> dict[str, str]:
+    """The head's text for each of the archive's component paths. :meth:`_check_components` runs first."""
+    components = {}
+    for path in archive.candidates[0].paths:
+        file = head.get(path)
+        assert file is not None
+        components[path] = file.content
+    return components
 
 
 def _spec_of(current: HarnessSpec, candidate: ArchiveCandidate) -> HarnessSpec:
