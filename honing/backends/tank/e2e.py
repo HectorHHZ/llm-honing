@@ -22,7 +22,7 @@ under ``work_dir``.
 list), as a pipeline config's does. A train step names its trainer with
 ``"trainer"`` and a harness step its method with ``"method"``; a step that
 names none runs the ``trainer`` or ``method`` slot. A ``direction_edit`` step
-can carry its own ``"direction_edit"`` question, target and strength.
+can state its own ``"direction_edit"``: question, target and strength, all three.
 ``configs/e2e/tank_levers_dry_run.json`` runs two methods and two trainers in
 one campaign.
 
@@ -66,7 +66,6 @@ from honing.core import (
     CompressionBudget,
     ContractError,
     DataProvider,
-    DirectionEditSpec,
     EpisodeOutcome,
     EpisodeRunner,
     EvolveMethod,
@@ -96,6 +95,7 @@ from honing.e2e.components import (
     TRAINERS,
     build_component,
     build_named_trainers_and_methods,
+    direction_edit_spec,
     missing_requirements,
     scheduler_or_script,
 )
@@ -316,16 +316,14 @@ def _move(entry: Mapping[str, object]) -> Move:
         )
     if kind == "train":
         algorithm = str(entry.get("algorithm", "sft"))
-        direction, trainer = entry.get("direction_edit"), entry.get("trainer")
-        if direction is not None and not isinstance(direction, Mapping):
-            raise ContractError("a train step's direction_edit must be an object")
+        trainer = entry.get("trainer")
         job = TrainJobSpec(
             algorithm=algorithm,  # type: ignore[arg-type]
             steps=int(str(entry.get("steps", 1))),
             contract=entry.get("contract", "typed_decisions"),  # type: ignore[arg-type]
             # On-policy algorithms play under the head's harness: the controller is part of the policy.
             rollout="harness" if algorithm == "grpo" else "none",
-            direction_edit=DirectionEditSpec(**direction) if direction is not None else None,
+            direction_edit=direction_edit_spec(entry.get("direction_edit")),
         )
         return Move(kind="train", train=job, trainer=str(trainer) if trainer is not None else None)
     raise ContractError(f"a tank campaign schedules harness and train moves, not {kind!r}")

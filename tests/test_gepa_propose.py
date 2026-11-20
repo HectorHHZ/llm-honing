@@ -587,3 +587,25 @@ def test_a_head_another_method_wrote_is_the_parent_of_the_next_proposal() -> Non
     assert archive.candidates[0].validation_scores is None and archive.validation_policy is None
     # The chat model was shown the head's text, not the seed's the archive started from.
     assert theirs in fixture.chat.conversations[0][-1].content
+
+
+@pytest.mark.unit
+def test_a_head_that_differs_only_in_a_settings_file_drops_the_scores_taken_under_the_old_one() -> None:
+    fixture = Fixture([IMPROVING])
+    scored = (
+        Archive.from_state(fixture.method.initial_state(SEED))
+        .under_policy(fixture.policy.checkpoint.checksum)
+        .validate(0, VALIDATION, (0.5, 0.75))
+    )
+    assert scored.head_spec == SEED.spec_id
+    theirs = SEED.with_file(SETTINGS, HarnessFile(kind="settings", content='{"model": "another-method"}'))
+
+    kept = _archive(fixture.method.propose(fixture.context(scored.to_state())))
+    dropped = _archive(
+        Fixture([IMPROVING]).method.propose(replace(fixture.context(scored.to_state()), current=theirs))
+    )
+
+    assert kept.candidates[0].validation_scores == (0.5, 0.75) and kept.head_spec == SEED.spec_id
+    assert dropped.candidates[0].validation_scores is None and dropped.validation_policy is None
+    assert dropped.head_spec == theirs.spec_id
+    assert dict(dropped.candidates[0].components) == dict(kept.candidates[0].components)  # the text is the same

@@ -544,15 +544,17 @@ them, and the run fails when the scheduler stops before it.
 of each, and a move can name another: `Move.trainer` for a train move or a prune move's
 recovery, and `HarnessMoveConfig.method` for a harness move, by the method's own name. A
 name the campaign does not have is refused before the move draws data or runs an episode.
-A `direction_edit` job can carry a `DirectionEditSpec` (question, target, strength) that
-replaces its trainer's settings for that job, so a scheduler chooses the edit per move.
+A `direction_edit` job can carry a `DirectionEditSpec` (question, target, strength, all
+three stated) that replaces its trainer's settings for that job, so a scheduler chooses
+the edit per move.
 
 A release still carries one `method_state`. With one method it is that method's state.
 With several it holds each method's own state under its name (`keyed_method_state`), so a
 rollback restores all of them together. Each method, and its selector, is given only its
 own state. A method that finds a head another method wrote starts from that head:
 Meta-Harness adds it to its archive as a new root, and GEPA restarts its search from the
-head's text, as it does after a weights change.
+head's text, as it does after a weights change. GEPA compares the whole harness, not only
+the files it rewrites, because its scores were taken with the other files too.
 
 **Phases belong to the scheduler, not to core.** A harness move carries a
 `HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the

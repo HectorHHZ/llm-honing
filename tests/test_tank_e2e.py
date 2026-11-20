@@ -201,10 +201,15 @@ def test_a_step_names_its_trainer_its_method_and_its_direction_edit() -> None:
     plain = _move({"kind": "train"})
     assert plain.trainer is None and plain.train.direction_edit is None  # type: ignore[union-attr]
     assert _move({"kind": "harness"}).harness.method is None  # type: ignore[union-attr]
-    with pytest.raises(ContractError, match="direction_edit must be an object"):
-        _move({"kind": "train", "algorithm": "direction_edit", "direction_edit": "fire"})
+    whole = {"question": None, "target": "label", "strength": 2.0}
+    every = _move({"kind": "train", "algorithm": "direction_edit", "direction_edit": whole})
+    assert every.train.direction_edit == DirectionEditSpec(None, "label", 2.0)  # type: ignore[union-attr]
+    # A step that states only part of an edit would reset the rest of the trainer's settings without saying so.
+    for partial in ({"strength": 0.5}, {"target": "fire", "strength": 0.5}, {**whole, "steps": 1}, "fire"):
+        with pytest.raises(ContractError, match=r"states exactly \['question', 'strength', 'target'\]"):
+            _move({"kind": "train", "algorithm": "direction_edit", "direction_edit": partial})
     with pytest.raises(ContractError, match="belongs to a direction_edit job"):
-        _move({"kind": "train", "algorithm": "sft", "direction_edit": {"target": "fire"}})
+        _move({"kind": "train", "algorithm": "sft", "direction_edit": whole})
 
 
 @pytest.mark.unit

@@ -440,7 +440,7 @@ def test_the_recorded_state_names_its_weights_and_round_trips_through_json() -> 
     _, state = _judge(method, method.initial_state(_seed()), "Add.", _evaluation((0.75, 0.5, 0.5), (0.5,) * 3))
 
     validate_method_state(state)
-    assert state["schema_version"] == ARCHIVE_SCHEMA_VERSION == 3
+    assert state["schema_version"] == ARCHIVE_SCHEMA_VERSION == 4
     assert state["validation_policy"] == CHECKSUM
     loaded = json.loads(json.dumps(state))
     assert Archive.from_state(loaded) == Archive.from_state(state)
@@ -497,3 +497,19 @@ def test_served_fronts_and_metric_calls_match_upstream_after_every_validation(
         assert served == best == result_best
         assert fronts == upstream_fronts
         assert metric_calls == total_evals
+
+
+@pytest.mark.unit
+def test_a_published_child_becomes_the_head_the_scores_belong_to_and_a_rejected_one_does_not() -> None:
+    method = _method()
+    seed_state = method.initial_state(_seed())
+    assert seed_state["head_spec"] == _seed().spec_id
+
+    _, published = _judge(method, seed_state, "Add.", _evaluation((0.75, 0.5, 0.5), (0.5,) * 3))
+    _, rejected = _judge(method, seed_state, "Add.", _evaluation((0.25, 0.5, 0.5), (0.5,) * 3))
+
+    assert published["head_spec"] == _seed("Add.").spec_id
+    assert rejected["head_spec"] == _seed().spec_id
+    # The next proposal on the published head keeps every score.
+    head = {INSTRUCTIONS_PATH: "Add."}
+    assert Archive.from_state(published).adopt_head(head, _seed("Add.").spec_id) == Archive.from_state(published)

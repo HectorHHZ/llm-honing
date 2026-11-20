@@ -184,7 +184,7 @@ To run a real model, replace `model_source`, `endpoints`, and `trainer` with the
 
 A campaign has one default trainer and one default harness method, the `trainer` and `method` slots. `components` can also hold `trainers`, an object of named entries, and `methods`, a list of further methods. A train step names its trainer with `"trainer"`, and a harness step names its method with `"method"`, by the method's own name (`gepa`, `meta_harness`). A step that names neither runs the default. A name the config does not build is refused before any round is played. Pipeline configs (`honing_pipeline.py`) take the same two sections.
 
-A `direction_edit` step can carry its own `"direction_edit": {"question": ..., "target": ..., "strength": ...}`, which replaces the trainer's settings for that step, so one trainer serves every edit a schedule asks for.
+A `direction_edit` step can state its own `"direction_edit": {"question": ..., "target": ..., "strength": ...}`, which replaces the trainer's settings for that step, so one trainer serves every edit a schedule asks for. It states all three, with `"question": null` for every question: an entry that left one out would reset it without saying so, and is refused.
 
 With several methods, a release's `method_state` holds each method's own state under its name, `{"schema_version": 1, "methods": {"gepa": {...}, "meta_harness": {...}}}`, and `honing.core.method_states` reads it. With one method the state is that method's own, as before.
 
@@ -198,7 +198,7 @@ With several methods, a release's `method_state` holds each method's own state u
 
 So one step is published, by the default method, and every other step leaves a rejection that carries both methods' states. The rounds repeat, as the dry run's do.
 
-`configs/e2e/tank_nanojev_levers.json` is the same idea on real weights: one sft step through the NanoJev trainer and one direction edit, both gated. The Jev trainers have config factories in `honing/backends/jev/e2e.py` (`nanojev_trainer`, `kev_trainer`, `laya_trainer`). They hold out validation data by the decisions' group, and a teacher round's group is `tank:<seed>:<seat>`.
+`configs/e2e/tank_nanojev_levers.json` is the same idea on real weights: one sft step through the NanoJev trainer and one direction edit, both gated. Its run on one node with 8 H100 is in [`integrations/tank-war/direction-edit.md`](../../integrations/tank-war/direction-edit.md#after-supervised-training): sft was published at 0.5625 against 0.375, and the edit at strength 1 on the sft weights was rolled back. The Jev trainers have config factories in `honing/backends/jev/e2e.py` (`nanojev_trainer`, `kev_trainer`, `laya_trainer`). They hold out validation data by the decisions' group, and a teacher round's group is `tank:<seed>:<seat>`.
 
 ## Serving with SGLang
 

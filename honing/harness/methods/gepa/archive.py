@@ -26,8 +26,8 @@ from honing.core.state import METHOD_STATE_VERSION_KEY, method_state_version
 
 # 2: the training-minibatch sampler's state (iteration, train_ids, train_order, train_epoch,
 # train_minibatch_size). 3: validation_policy, the checksum of the weights every validation
-# score was taken under.
-ARCHIVE_SCHEMA_VERSION = 3
+# score was taken under. 4: head_spec, the id of the head harness every score was taken in.
+ARCHIVE_SCHEMA_VERSION = 4
 
 # ``random.Random.getstate()`` for the Mersenne Twister: a version, 624 words
 # of generator state plus the position within them, and a cached Gaussian.
@@ -107,7 +107,13 @@ class Archive:
     moves, and a score from other weights is not comparable, so
     :meth:`restart_from_served` starts the search over under the new weights.
 
-    The last five fields are the training-minibatch sampler's state:
+    ``head_spec`` is the ``spec_id`` of the head harness the archive's scores
+    were taken in, ``None`` until GEPA has seen a head. A candidate holds only
+    the files GEPA rewrites, and its scores also depend on the head's other
+    files, such as settings. When another method publishes a harness, in any
+    file, :meth:`adopt_head` starts the search over from it.
+
+    The five fields before those two are the training-minibatch sampler's state:
     ``iteration`` counts the minibatches drawn (upstream's ``state.i + 1``),
     ``train_ids`` are the training task ids the current epoch was shuffled
     from, ``train_order`` is that epoch's shuffled and padded order,
@@ -127,6 +133,7 @@ class Archive:
     train_epoch: int = -1
     train_minibatch_size: int = 0
     validation_policy: str | None = None
+    head_spec: str | None = None
 
     def __post_init__(self) -> None:
         require(len(self.task_ids) > 0, "a GEPA archive needs at least one validation task")
@@ -176,6 +183,10 @@ class Archive:
             self.validation_policy is None
             or (isinstance(self.validation_policy, str) and self.validation_policy != ""),
             f"validation_policy must be a checksum or None, got {self.validation_policy!r}",
+        )
+        require(
+            self.head_spec is None or (isinstance(self.head_spec, str) and self.head_spec != ""),
+            f"head_spec must be a harness spec id or None, got {self.head_spec!r}",
         )
         # Rebuilding the generator is the only complete check that the state is one it accepts.
         _rng_from_state(self.rng_state)
@@ -363,22 +374,35 @@ class Archive:
         seed = ArchiveCandidate(components=served.components, parent=None, component_cursor=served.component_cursor)
         return replace(self, candidates=(seed,), served=0, validation_policy=None)
 
-    def adopt_head(self, components: Mapping[str, str]) -> Archive:
-        """Start the search over from ``components``, the head's text, when another method wrote it.
+    def adopt_head(self, components: Mapping[str, str], spec_id: str) -> Archive:
+        """Start the search over from the head when another method wrote it.
 
-        GEPA's served candidate is the head's text for as long as GEPA is the
-        only method that changes it. Once another method publishes a harness,
-        every score in the archive belongs to text that is no longer served,
-        so only the head's text is kept, unscored, as the new seed, and the
-        next gate scores it. The budget, the RNG and the minibatch sampler
-        carry on, as in :meth:`restart_from_served`.
+        ``spec_id`` is the head harness's id and ``components`` its text for
+        the files GEPA rewrites. The head is GEPA's own for as long as GEPA is
+        the only method that changes the harness. Once another method
+        publishes one, every score in the archive belongs to a harness that is
+        no longer served, even when the change is in a file GEPA does not
+        rewrite, such as settings. So only the head's text is kept, unscored,
+        as the new seed, and the next gate scores it. The budget, the RNG and
+        the minibatch sampler carry on, as in :meth:`restart_from_served`.
+
+        An archive that has seen no head yet takes this one as its own when
+        the text matches its served candidate.
         """
+        require(bool(spec_id), "a head harness needs a spec id")
+        if self.head_spec == spec_id:
+            return self
         served = self.candidates[self.served]
         head = tuple(sorted(components.items()))
-        if served.components == head:
-            return self
+        if self.head_spec is None and served.components == head:
+            return replace(self, head_spec=spec_id)
         seed = ArchiveCandidate(components=head, parent=None, component_cursor=served.component_cursor)
-        return replace(self, candidates=(seed,), served=0, validation_policy=None)
+        return replace(self, candidates=(seed,), served=0, validation_policy=None, head_spec=spec_id)
+
+    def published_as(self, spec_id: str) -> Archive:
+        """The archive once the gate published its served candidate as the harness ``spec_id``."""
+        require(bool(spec_id), "a head harness needs a spec id")
+        return replace(self, head_spec=spec_id)
 
     def charge(self, metric_calls: int) -> Archive:
         """Add episodes spent to the budget."""
@@ -418,6 +442,7 @@ class Archive:
             "train_epoch": self.train_epoch,
             "train_minibatch_size": self.train_minibatch_size,
             "validation_policy": self.validation_policy,
+            "head_spec": self.head_spec,
         }
 
     @classmethod
@@ -452,6 +477,7 @@ class Archive:
             train_epoch=_int(state.get("train_epoch"), "train_epoch"),
             train_minibatch_size=_int(state.get("train_minibatch_size"), "train_minibatch_size"),
             validation_policy=_optional_str(state.get("validation_policy"), "validation_policy"),
+            head_spec=_optional_str(state.get("head_spec"), "head_spec"),
         )
 
     def _with_candidate(self, index: int, candidate: ArchiveCandidate) -> Archive:

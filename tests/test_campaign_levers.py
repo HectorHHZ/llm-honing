@@ -40,6 +40,7 @@ from honing.core import (
     keyed_method_state,
     method_states,
 )
+from honing.release import AcceptAll
 from tests.fakes.builder import TASKS, build_campaign
 from tests.fakes.harness import INSTRUCTIONS_PATH, SEED_HARNESS, FakeEpisodeRunner, FakeTaskGrader
 from tests.fakes.model import SLIME_LIKE, FakeModelSource, FakeTrainer, FakeWorld, small_moe
@@ -212,7 +213,7 @@ def test_a_moves_direction_edit_reaches_the_trainer_it_names(tmp_path: Path) -> 
 
     fixture = build_campaign(tmp_path, data=_CountingData(), make_trainers=trainers)
     weapon = DirectionEditSpec(question="weapon", target="fire", strength=1.5)
-    motion = DirectionEditSpec(question="motion", strength=-0.5)
+    motion = DirectionEditSpec(question=None, target="label", strength=-0.5)
 
     for spec in (weapon, motion):
         job = TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=spec)
@@ -230,15 +231,19 @@ def test_a_trainer_name_belongs_to_a_train_or_a_prune_move_and_a_direction_to_it
         Move(kind="harness", trainer="second")
     with pytest.raises(ContractError, match="must name a trainer or be None"):
         Move(kind="train", trainer="")
+    spec = DirectionEditSpec(question="weapon", target="fire", strength=1.0)
     with pytest.raises(ContractError, match="belongs to a direction_edit job"):
-        TrainJobSpec("sft", contract="typed_decisions", direction_edit=DirectionEditSpec())
-    with pytest.raises(ContractError, match="finite, nonzero"):
-        DirectionEditSpec(strength=0.0)
+        TrainJobSpec("sft", contract="typed_decisions", direction_edit=spec)
+    for strength in (0.0, float("nan"), float("inf"), True, "1"):
+        with pytest.raises(ContractError, match="finite, nonzero"):
+            DirectionEditSpec(question="weapon", target="fire", strength=strength)  # type: ignore[arg-type]
     with pytest.raises(ContractError, match="'label' or an option id"):
-        DirectionEditSpec(target="")
+        DirectionEditSpec(question="weapon", target="", strength=1.0)
     with pytest.raises(ContractError, match="name a question or be None"):
-        DirectionEditSpec(question="")
-    assert DirectionEditSpec() == DirectionEditSpec(question=None, target="label", strength=1.0)
+        DirectionEditSpec(question="", target="fire", strength=1.0)
+    # No field has a default: a spec replaces all three of the trainer's settings, so it states all three.
+    with pytest.raises(TypeError, match="question"):
+        DirectionEditSpec(target="fire", strength=0.5)  # type: ignore[call-arg]
 
 
 # ------------------------------------------------------------------ methods
@@ -275,6 +280,28 @@ def test_a_methods_selector_is_shown_its_own_state_not_every_methods(tmp_path: P
 
     assert second.selector.shown == [{"schema_version": 1, "method": "second", "proposals": 1, "verdicts": []}]
     assert first.selector.shown == []
+
+
+@pytest.mark.unit
+def test_with_a_method_evaluator_each_method_still_decides_and_records_on_its_own_state(tmp_path: Path) -> None:
+    first, second = NotingMethod("first"), NotingMethod("second", select=False)
+    fixture = build_campaign(
+        tmp_path, method=first, methods=[second], method_tasks=TASKS[:2], harness_selector=AcceptAll()
+    )
+
+    rejected = fixture.campaign.advance(_harness("second"))
+    published = fixture.campaign.advance(_harness("first"))
+
+    # Each method's selector judged the method evaluator's run, on its own state.
+    assert second.selector.shown == [{"schema_version": 1, "method": "second", "proposals": 1, "verdicts": []}]
+    assert first.selector.shown == [{"schema_version": 1, "method": "first", "proposals": 1, "verdicts": []}]
+    assert rejected.release is None and rejected.evaluation is not None
+    assert tuple(rejected.evaluation.task_ids) == tuple(task.task_id for task in TASKS[:2])
+    # The one the method selected then went through the gate's own run and selector.
+    assert published.release is not None and published.decision is not None
+    assert published.decision.policy.startswith("first+") and len(published.evaluation.task_ids) == len(TASKS)  # type: ignore[union-attr]
+    state = fixture.campaign.chain.head().method_state
+    assert _own(state, "second")["verdicts"] == [False] and _own(state, "first")["verdicts"] == [True]
 
 
 @pytest.mark.unit

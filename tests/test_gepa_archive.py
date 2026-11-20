@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -321,22 +322,44 @@ def test_from_state_refuses_a_malformed_rng_state() -> None:
 
 @pytest.mark.unit
 def test_a_head_another_method_wrote_becomes_the_unscored_seed_and_the_sampler_carries_on() -> None:
-    archive = _archive((0.5, 0.5), (0.9, 0.9)).charge(7)
+    archive = _archive((0.5, 0.5), (0.9, 0.9)).charge(7).published_as("h-ours")
     head = {**COMPONENTS, "CLAUDE.md": "written by another method"}
 
-    adopted = archive.adopt_head(head)
+    adopted = archive.adopt_head(head, "h-theirs")
 
     assert len(adopted.candidates) == 1 and adopted.served == 0
     seed = adopted.candidates[0]
     assert dict(seed.components) == head and seed.parent is None and seed.validation_scores is None
-    assert adopted.validation_policy is None
+    assert (adopted.validation_policy, adopted.head_spec) == (None, "h-theirs")
     assert (adopted.metric_calls, adopted.rng_state, adopted.task_ids) == (7, archive.rng_state, archive.task_ids)
     validate_method_state(adopted.to_state())
+    assert Archive.from_state(adopted.to_state()) == adopted
 
 
 @pytest.mark.unit
-def test_a_head_that_is_the_served_candidate_changes_nothing() -> None:
-    archive = _archive((0.5, 0.5), (0.9, 0.9))
+def test_a_head_that_changed_only_in_a_file_gepa_does_not_rewrite_also_starts_the_search_over() -> None:
+    archive = _archive((0.5, 0.5), (0.9, 0.9)).published_as("h-old-settings")
     served = dict(archive.candidates[archive.served].components)
 
-    assert archive.adopt_head(served) is archive
+    adopted = archive.adopt_head(served, "h-new-settings")
+
+    assert len(adopted.candidates) == 1 and dict(adopted.candidates[0].components) == served
+    assert adopted.candidates[0].validation_scores is None
+    assert (adopted.validation_policy, adopted.head_spec) == (None, "h-new-settings")
+
+
+@pytest.mark.unit
+def test_the_head_gepa_last_served_changes_nothing_and_a_first_head_is_only_noted() -> None:
+    scored = _archive((0.5, 0.5), (0.9, 0.9))
+    served = dict(scored.candidates[scored.served].components)
+    assert scored.head_spec is None
+
+    first = scored.adopt_head(served, "h-first")
+
+    assert first == replace(scored, head_spec="h-first")  # the scores are kept
+    assert first.adopt_head(served, "h-first") is first
+    assert first.adopt_head({**served, "CLAUDE.md": "ignored: the id is the same"}, "h-first") is first
+    with pytest.raises(ContractError, match="needs a spec id"):
+        scored.adopt_head(served, "")
+    with pytest.raises(ContractError, match="head_spec must be a harness spec id or None"):
+        replace(scored, head_spec="")

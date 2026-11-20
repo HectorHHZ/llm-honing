@@ -294,7 +294,9 @@ def test_factory_refuses_ambiguous_value_configuration(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_a_trainer_with_a_fixed_modifier_refuses_a_job_that_names_its_own_direction(tmp_path: Path) -> None:
     trainer = WeightEditTrainer(tmp_path / "edits", lambda base, batch: EditPlan(()), algorithm="direction_edit")
-    job = TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=DirectionEditSpec(target="fire"))
+    job = TrainJobSpec(
+        "direction_edit", contract="typed_decisions", direction_edit=DirectionEditSpec(None, "fire", 1.0)
+    )
 
     with pytest.raises(ContractError, match="the job cannot choose the direction"):
         trainer.modifier_for(job)

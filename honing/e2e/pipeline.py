@@ -14,8 +14,9 @@ changing one entry. The slots cover every plane:
 ``components`` may also hold ``trainers`` (named entries) and ``methods`` (a
 list). A train or prune step names one with ``"trainer"``, a harness step
 with ``"method"`` (the method's own name); a step that names none runs the
-``trainer`` or ``method`` slot. A ``direction_edit`` train step can carry its
-own ``"direction_edit": {"question": ..., "target": ..., "strength": ...}``.
+``trainer`` or ``method`` slot. A ``direction_edit`` train step can state its
+own ``"direction_edit": {"question": ..., "target": ..., "strength": ...}``,
+all three together.
 
 ``tasks`` and ``harness_seed`` are factories too. ``tasks`` are the gate's;
 an optional ``harness_tasks`` factory gives a harness move its own tasks (a
@@ -60,7 +61,6 @@ from honing.core import (
     CompressionBudget,
     ContractError,
     DataProvider,
-    DirectionEditSpec,
     EpisodeRunner,
     Evaluator,
     EvolveMethod,
@@ -93,6 +93,7 @@ from honing.e2e.components import (
     PipelineContext,
     build_component,
     build_named_trainers_and_methods,
+    direction_edit_spec,
     missing_requirements,
     resolve_references,
     scheduler_or_script,
@@ -144,7 +145,7 @@ def _selector(spec: Mapping[str, Any]) -> CandidateSelector:
 
 def _job(entry: Mapping[str, Any]) -> TrainJobSpec:
     """A train step's job; ``numerics`` is ``{"mode": ..., "scheme": {...}}`` for quantization-aware training."""
-    teacher, numerics, direction = entry.get("teacher"), entry.get("numerics"), entry.get("direction_edit")
+    teacher, numerics = entry.get("teacher"), entry.get("numerics")
     update = dict(entry.get("update_policy", {}))
     for key in ("lora_targets", "trainable_patterns"):
         if key in update:
@@ -158,7 +159,7 @@ def _job(entry: Mapping[str, Any]) -> TrainJobSpec:
         contract=entry.get("contract"),
         update_policy=UpdatePolicy(**update),
         teacher=TeacherRef(**teacher) if teacher else None,
-        direction_edit=DirectionEditSpec(**direction) if direction is not None else None,
+        direction_edit=direction_edit_spec(entry.get("direction_edit")),
         numerics=(
             NumericsPolicy(
                 mode=numerics["mode"], scheme=QuantScheme(**numerics["scheme"]) if numerics.get("scheme") else None

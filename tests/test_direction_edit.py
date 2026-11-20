@@ -267,5 +267,5 @@ def test_a_job_with_its_own_spec_edits_along_that_direction_and_the_next_job_use
     assert (edit(own)["target"], edit(own)["strength"]) == ("hold", 0.5)
     assert (edit(default)["target"], edit(default)["strength"]) == ("fire", 1.0)
     with pytest.raises(ContractError, match="no question in the batch offers a direction toward 'fire' on question"):
-        other = DirectionEditSpec(question="motion", target="fire")
+        other = DirectionEditSpec(question="motion", target="fire", strength=1.0)
         trainer.train(TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=other), base, _batch())

@@ -223,20 +223,29 @@ class DirectionEditSpec:
     an option id (the direction toward that option, whatever the label).
     ``strength`` multiplies the unit direction. A job that carries a spec
     replaces all three of the trainer's own settings for that job only, so a
-    scheduler can ask for a different edit on every move.
+    scheduler can ask for a different edit on every move. None of the three
+    has a default: a spec that left one out would change that setting without
+    saying so.
     """
 
-    question: str | None = None
-    target: str = "label"
-    strength: float = 1.0
+    question: str | None
+    target: str
+    strength: float
 
     def __post_init__(self) -> None:
         require(
-            self.question is None or bool(self.question), "DirectionEditSpec.question must name a question or be None"
+            self.question is None or (isinstance(self.question, str) and bool(self.question)),
+            "DirectionEditSpec.question must name a question or be None",
         )
-        require(bool(self.target), "DirectionEditSpec.target must be 'label' or an option id")
         require(
-            math.isfinite(self.strength) and self.strength != 0,
+            isinstance(self.target, str) and bool(self.target),
+            "DirectionEditSpec.target must be 'label' or an option id",
+        )
+        require(
+            isinstance(self.strength, (int, float))
+            and not isinstance(self.strength, bool)
+            and math.isfinite(self.strength)
+            and self.strength != 0,
             f"DirectionEditSpec.strength must be a finite, nonzero number, got {self.strength}",
         )
 
