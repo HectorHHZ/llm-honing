@@ -91,11 +91,16 @@ def _motion_utility(description: str) -> float:
 
 
 class ForecastModel:
-    """Satisfies DecisionModel: answers tank questions from the forecasts in the state."""
+    """Satisfies DecisionModel: answers tank questions from the forecasts in the state.
 
-    def __init__(self, quality: float) -> None:
+    ``checksum``, when given, is reported as the served weights' ``weightsSha256``, as a real family reports it.
+    """
+
+    def __init__(self, quality: float, checksum: str | None = None) -> None:
         self.quality = quality
         self.metadata = {"family": "laya", "model": f"forecast-q{quality:.3f}", "revision": "e2e"}
+        if checksum is not None:
+            self.metadata["weightsSha256"] = checksum
 
     def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
         state = "\n".join(str(line) for key in SECTIONS for line in parts.get(key, []))  # type: ignore[attr-defined]
