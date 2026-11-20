@@ -24,18 +24,24 @@ from honing.core import (
     EvolveContext,
     HarnessProposal,
     HarnessSpec,
+    HoneRelease,
     Move,
     MoveCost,
     ProposeResult,
     SelectionDecision,
+    Task,
     TrainJobSpec,
+    UpdateCandidate,
     charging,
 )
 from honing.e2e.components import PipelineContext, build_component
+from honing.e2e.pipeline import _stopped_at_limit
 from honing.e2e.pipeline import main as pipeline_main
 from honing.e2e.tracking import step_values
-from tests.fakes.builder import build_campaign
-from tests.fakes.harness import AppendInstructionMethod, FakeChatModel
+from honing.release import EpisodeEvaluator, PairedIntervalSelector, read_scheduler_state
+from tests.fakes.builder import TASKS, build_campaign
+from tests.fakes.harness import AppendInstructionMethod, FakeChatModel, FakeEpisodeRunner, FakeTaskGrader
+from tests.fakes.scheduler import HistoryScheduler
 
 REPO = Path(__file__).resolve().parents[1]
 ALL_PLANES = REPO / "configs/e2e/all_planes.json"
@@ -413,10 +419,12 @@ def test_every_move_of_the_all_planes_run_has_a_cost_that_sums_to_the_summary(tm
 
 @pytest.mark.unit
 def test_a_budget_limited_pipeline_stops_and_still_checks_out(tmp_path: Path) -> None:
-    work = _all_planes(tmp_path, budget={"unit": "usd", "limit": 1.0, "gpu_hour_usd": 3600.0}, expect=[])
+    # The config's expect lists 9 steps and ends on a rollback. A stop at the limit cuts both short, and is no failure.
+    work = _all_planes(tmp_path, budget={"unit": "usd", "limit": 1.0, "gpu_hour_usd": 3600.0})
 
     summary = json.loads((work / "summary.json").read_text())
     assert [s["move"] for s in summary["steps"]] == ["train"]
+    assert summary["failures"] == []
     assert summary["budget"] == {
         "unit": "usd",
         "limit": 1.0,
@@ -426,6 +434,23 @@ def test_a_budget_limited_pipeline_stops_and_still_checks_out(tmp_path: Path) ->
         "reason": "spent 15.0 of the 1.0 usd budget",
     }
     assert problems(work, []) == []
+
+
+@pytest.mark.unit
+def test_no_rollback_runs_after_the_budget_stops_the_pipeline(tmp_path: Path) -> None:
+    # The first train move spends the whole budget, so the rollback after it, which costs nothing, does not run.
+    schedule = [{"kind": "train", "algorithm": "sft", "steps": 10}, {"kind": "rollback", "to": "r0000"}]
+    work = _all_planes(
+        tmp_path,
+        budget={"unit": "usd", "limit": 1.0, "gpu_hour_usd": 3600.0},
+        schedule=schedule,
+        expect=["published", "restored"],
+    )
+
+    summary = json.loads((work / "summary.json").read_text())
+    assert [s["move"] for s in summary["steps"]] == ["train"]
+    assert summary["head"] == "r0001" and summary["failures"] == []
+    assert [line["op"] for line in _records(work)] == ["publish", "publish"]
 
 
 @pytest.mark.unit
@@ -531,3 +556,155 @@ def test_a_steps_cost_is_logged_as_cost_and_an_unknown_part_is_not_logged() -> N
     assert values["cost/api_usd"] == 0.5 and values["cost/episodes_gate"] == 0.0
     assert "cost/usd" not in values and "cost/gpu_seconds" not in values
     assert "candidate/cost_api_usd" not in values and values["candidate/gate_tasks"] == 3.0
+
+
+# ---------------------------------------------------------------- the scheduler slot and the gate's looks
+
+
+class FreshTaskBlocks:
+    """A gate evaluator that plays ``block`` new tasks at every call, so a sequential gate never replays one."""
+
+    def __init__(self, runner: FakeEpisodeRunner, grader: FakeTaskGrader, block: int) -> None:
+        self._runner, self._grader, self._block = runner, grader, block
+        self.calls = 0
+
+    def evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
+        tasks = tuple(Task(task_id=f"block{self.calls}-{index}", prompt="Answer.") for index in range(self._block))
+        self.calls += 1
+        return EpisodeEvaluator(self._runner, self._grader, tasks).evaluate(candidate, incumbent)
+
+
+def _cost_of(record: Mapping[str, Any]) -> MoveCost:
+    return MoveCost.from_record(record["cost"])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("gain", "blocks", "stopped_early"), [(0.4, 2, 1.0), (0.0, 3, 0.0)])
+def test_a_sequential_gate_is_charged_for_every_block_it_played(
+    gain: float, blocks: int, stopped_early: float, tmp_path: Path
+) -> None:
+    # Every task gains the trainer's gain. A gain of 0.4 clears the second of three looks, on 40 tasks, so the gate
+    # stops a block early; a gain of 0 clears none, and the gate plays all three.
+    evaluators: list[FreshTaskBlocks] = []
+
+    def gate_evaluator(runner: FakeEpisodeRunner, grader: FakeTaskGrader) -> FreshTaskBlocks:
+        evaluators.append(FreshTaskBlocks(runner, grader, block=20))
+        return evaluators[-1]
+
+    fixture = build_campaign(
+        tmp_path, trainer_gain=gain, gate_evaluator=gate_evaluator, default_selector=PairedIntervalSelector(looks=3)
+    )
+    outcome = fixture.campaign.advance(Move(kind="train"))
+
+    assert outcome.decision is not None and outcome.decision.metrics["stopped_early"] == stopped_early
+    assert evaluators[0].calls == blocks
+    assert outcome.cost is not None and dict(outcome.cost.episodes) == _episodes(gate=blocks * 20 * 2)
+    # The charge agrees with the episodes the runner actually ran, every block on both sides.
+    assert fixture.runner.runs == blocks * 20 * 2
+    assert _records(tmp_path)[-1]["cost"]["episodes"]["gate"] == blocks * 20 * 2
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bonus", [0.5, 0.0])
+def test_a_methods_own_validation_run_is_charged_to_the_method_and_the_gate_only_to_the_gate(
+    bonus: float, tmp_path: Path
+) -> None:
+    gate_tasks = tuple(Task(task_id=f"gate{index}", prompt="Answer.") for index in range(12))
+    fixture = build_campaign(
+        tmp_path,
+        make_runner=lambda world: FakeEpisodeRunner(world, instruction_bonus=bonus),
+        gate_tasks=gate_tasks,
+        harness_selector=PairedIntervalSelector(),
+        method_tasks=TASKS[:2],
+    )
+    outcome = fixture.campaign.advance(Move(kind="harness"))
+
+    record = _records(tmp_path)[-1]
+    method_episodes = int(record["candidate"]["metrics"]["method_episodes"])
+    # With a bonus the method's win-loss selects on its 2 tasks and the gate plays its 12; with none, the method
+    # rejects and the gate never runs. Either way the method's validation run counts as the method's.
+    gate = 2 * len(gate_tasks) if bonus else 0
+    assert outcome.decision is not None and (outcome.decision.policy == "win_loss+paired_interval") == bool(bonus)
+    assert record["cost"]["episodes"] == _episodes(gate=gate, method=method_episodes + 2 * 2)
+    assert fixture.runner.runs == method_episodes + 2 * 2 + gate
+    assert outcome.evaluation is not None and (len(outcome.evaluation.records) == gate) == bool(bonus)
+
+
+@pytest.mark.unit
+def test_every_step_record_carries_the_cost_its_commit_line_holds(tmp_path: Path) -> None:
+    # A trainer that reports no GPU time makes the rejected train move's GPU-seconds unknown: None, never 0.
+    fixture = build_campaign(tmp_path, trainer_gain=-0.1, gpu_seconds_per_step=None)
+    scheduler = HistoryScheduler([Move(kind="train"), Move(kind="harness"), Move(kind="harness")])
+
+    outcomes = fixture.campaign.run(scheduler)
+
+    history = fixture.campaign.state().history
+    assert [record.result for record in history] == ["rejected", "published", "skipped"]
+    lines = _records(tmp_path)[1:]
+    assert [line["op"] for line in lines] == ["reject", "publish", "skip"]
+    assert [record.cost for record in history] == [_cost_of(line) for line in lines]
+    assert [record.cost for record in history] == [outcome.cost for outcome in outcomes]
+    assert history[0].cost is not None and history[0].cost.gpu_seconds is None and history[0].cost.usd is None
+    assert history[2].cost is not None and history[2].cost.episodes["gate"] == 0
+    # The scheduler reads the same costs at its last choice, the stop.
+    assert [record.cost for record in scheduler.seen[-1].history] == [record.cost for record in history]
+    assert [len(state.history) for state in scheduler.seen] == [0, 1, 2, 3]
+    with pytest.raises(ContractError, match="MoveCost or None"):
+        replace(history[0], cost=history[0].cost.to_record())  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_a_budget_stop_asks_the_scheduler_for_no_move_and_records_no_choice(tmp_path: Path) -> None:
+    # Each train move costs 15 against a limit of 20, so the third is never admitted.
+    fixture = build_campaign(tmp_path, budget=CampaignBudget("usd", 20.0, gpu_hour_usd=3600.0))
+    scheduler = HistoryScheduler([Move(kind="train")] * 4)
+
+    outcomes = fixture.campaign.run(scheduler)
+
+    assert len(outcomes) == 2 and len(scheduler.seen) == 2
+    assert fixture.campaign.step(scheduler) is None and len(scheduler.seen) == 2
+    report = fixture.campaign.budget_report()
+    assert report is not None and report["stopped"] == "limit"
+    # The last line was written after the scheduler's second choice; no line names a third.
+    assert _records(tmp_path)[-1]["scheduler_state"]["next"] == 2
+    assert [record.cost for record in fixture.campaign.state().history] == [o.cost for o in outcomes]
+
+
+@pytest.mark.unit
+def test_only_a_stop_right_after_the_first_move_to_reach_the_limit_counts_as_a_stop_at_the_limit() -> None:
+    budget = CampaignBudget("usd", 20.0, gpu_hour_usd=3600.0)
+    report = {"stopped": "limit"}
+
+    def train(gpu_seconds: float) -> MoveCost:
+        return MoveCost(gpu_seconds=gpu_seconds, usd=gpu_seconds)
+
+    assert _stopped_at_limit(budget, report, [train(15.0), train(15.0)])
+    # The spend had reached the limit before the last move, so that move ran unadmitted.
+    assert not _stopped_at_limit(budget, report, [train(25.0), train(15.0)])
+    assert not _stopped_at_limit(budget, report, [train(15.0)])  # never reached the limit
+    assert not _stopped_at_limit(budget, {"stopped": "unknown_cost"}, [train(15.0), train(15.0)])
+    assert not _stopped_at_limit(None, report, [train(15.0), train(15.0)])
+    assert not _stopped_at_limit(budget, report, [])
+
+
+@pytest.mark.unit
+def test_the_checker_accepts_lines_with_scheduler_state_and_cost_and_old_lines_with_neither(tmp_path: Path) -> None:
+    work = _all_planes(tmp_path)
+    lines = _records(work)
+    assert all("scheduler_state" in line for line in lines[1:])
+    assert all("cost" in line for line in lines[1:] if line["op"] != "rollback")
+    assert problems(work, []) == []
+
+    def strip_record(record: dict[str, Any]) -> None:
+        for key in ("cost", "scheduler", "scheduler_state"):
+            record.pop(key, None)
+
+    def strip_summary(summary: dict[str, Any]) -> None:
+        for key in ("cost_total", "budget"):
+            summary.pop(key)
+        for step in summary["steps"]:
+            step.pop("cost", None)
+
+    _rewrite(work, strip_record, strip_summary)
+    assert problems(work, []) == []
+    assert read_scheduler_state(work / "releases/commits.jsonl") is None

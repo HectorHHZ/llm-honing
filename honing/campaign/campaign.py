@@ -155,6 +155,8 @@ def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
         release_id=release.release_id if release is not None else None,
         # The same numbers the settled candidate's record holds: the bootstrap is seeded.
         gate_metrics=gate_metrics(evaluation) if evaluation is not None else {},
+        # The cost its commit record line holds, so a scheduler can weigh a move's gain against what it spent.
+        cost=outcome.cost,
     )
 
 
@@ -224,6 +226,11 @@ class Campaign:
             step=len(self._history),
             history=tuple(self._history),
         )
+
+    @property
+    def budget(self) -> CampaignBudget | None:
+        """The budget the campaign keeps to, or ``None`` when it has none."""
+        return self._budget
 
     @property
     def spent(self) -> MoveCost:

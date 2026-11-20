@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 from honing.core.compression import CompressionBudget
+from honing.core.cost import MoveCost
 from honing.core.errors import require, require_choice
 from honing.core.harness import HarnessMoveConfig
 from honing.core.numerics import QuantScheme
@@ -54,6 +55,12 @@ class StepRecord:
     or why a harness method proposed nothing. ``gate_metrics`` are the
     evaluation's numbers that every gated candidate records (the ``gate_*``
     metrics). A skipped move reached no gate, so it has none.
+
+    ``cost`` is what the move spent, the same :class:`~honing.core.MoveCost`
+    its commit record line holds, whatever its result: a skipped move still
+    spent its method's episodes. An amount that could not be known is ``None``
+    inside it, never 0. A campaign always sets it; ``None`` is left for a
+    record built by hand.
     """
 
     step: int
@@ -64,6 +71,7 @@ class StepRecord:
     label: str | None = None
     release_id: str | None = None
     gate_metrics: Mapping[str, float] = field(default_factory=dict)
+    cost: MoveCost | None = None
 
     def __post_init__(self) -> None:
         require(self.step >= 0, f"StepRecord.step must be >= 0, got {self.step}")
@@ -75,6 +83,10 @@ class StepRecord:
         )
         require(self.result != "skipped" or not self.gate_metrics, "a skipped step reached no gate")
         require(all(math.isfinite(value) for value in self.gate_metrics.values()), "gate metrics must be finite")
+        require(
+            self.cost is None or isinstance(self.cost, MoveCost),
+            f"StepRecord.cost must be a MoveCost or None, got {self.cost!r}",
+        )
 
 
 @dataclass(frozen=True)
