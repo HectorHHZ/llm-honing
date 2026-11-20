@@ -72,3 +72,17 @@ def test_component_probe_signatures_stay_separate() -> None:
     assert module.valid_probe("controller", row)
     assert not module.valid_probe("harness", row)
     assert not module.valid_probe("weights", row)
+
+
+@pytest.mark.unit
+def test_native_token_accounting_includes_branches_and_rejects_truncation() -> None:
+    def audit(tokens: int) -> dict:
+        return {"inputTokens": tokens, "maxInputTokens": 8192, "stateTruncated": False}
+
+    call = {
+        "reply": {"tokenAudit": {"motion": audit(100)}, "branches": {"forward": {"tokenAudit": {"weapon": audit(25)}}}}
+    }
+    assert module.model_input_tokens([call]) == 125
+    call["reply"]["branches"]["forward"]["tokenAudit"]["weapon"]["stateTruncated"] = True
+    with pytest.raises(ValueError, match="truncated"):
+        module.model_input_tokens([call])

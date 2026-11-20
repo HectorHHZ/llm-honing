@@ -122,7 +122,7 @@ python3 integrations/tank-war/scripts/package-exp0-v0.py \
   --source /data/xinkaiz/system0/exp0/tank-war/v4-multifamily-progress-20261117 \
   --pins integrations/tank-war/exp0/v0/freeze.json \
   --identity-gate /data/xinkaiz/system0/exp0/tank-war/v0-pilot/pilot2/identity-gate \
-  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-verified
+  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-v2
 ```
 
 The output directory must not exist. The command copies original and paired
@@ -133,13 +133,15 @@ comparison to every original SHA-256:
 
 ```bash
 python3 integrations/tank-war/scripts/package-exp0-v0.py \
-  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-verified
+  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-v2
 ```
 
 Observed stage: 40 episodes (10/10/10/10), 19 seed groups, 2,151 decisions,
 4,302 question records, 1,330 attempts, 40/40 replays, 40/40 saved-state probe
 signatures, 891/891 unchanged-checkpoint identity calls, and 320/320 archived
-diagnoser isolation calls. `DATASET.md` describes the label evidence, ten
+diagnoser isolation calls. The stage summary separately counts 5,860,780 native
+input-token audits for selected games, 4,053,696 for clean pairs, and
+205,047,747 / 135,140,915 original recording bytes. `DATASET.md` describes the label evidence, ten
 checkpoint-name mismatches found by this package check, and the control-set
 limit. This is a private 44 MB stage, not the HF release. The published HF
 revision, fresh-download score check, real API record, and #174 receipt remain

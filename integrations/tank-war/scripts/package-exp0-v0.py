@@ -145,6 +145,19 @@ def valid_probe(layer: str, row: dict[str, Any]) -> bool:
     )
 
 
+def model_input_tokens(calls: list[dict[str, Any]]) -> int:
+    """Sum the native input-token audits for each recorded question, not billing usage."""
+    total = 0
+    for call in calls:
+        reply = call["reply"]
+        for branch in (reply, *reply.get("branches", {}).values()):
+            for audit in branch["tokenAudit"].values():
+                require(not audit["stateTruncated"], "native input was truncated")
+                require(audit["inputTokens"] <= audit["maxInputTokens"], "native input exceeds limit")
+                total += audit["inputTokens"]
+    return total
+
+
 def sanitize_attempt(row: dict[str, Any], unmatched: dict[str, dict[str, Any]]) -> dict[str, Any]:
     status = row["status"]
     if status == "error":
@@ -268,6 +281,8 @@ def audit_diagnoser(source: Path, freeze: dict[str, Any], out: Path) -> dict[str
                         "schema_sha256": attempt["schema_sha256"],
                         "sandbox_command_sha256": digest(json.dumps(command).encode()),
                         "tool_call": False,
+                        "input_tokens": attempt["usage"]["input_tokens"],
+                        "output_tokens": attempt["usage"]["output_tokens"],
                     }
                 )
     require(len(records) == manifest["maximum_calls"] == 320, "diagnosis total differs")
@@ -277,6 +292,8 @@ def audit_diagnoser(source: Path, freeze: dict[str, Any], out: Path) -> dict[str
         "valid": len(records),
         "tool_calls": 0,
         "arms": dict(Counter(row["arm"] for row in records)),
+        "input_tokens": sum(row["input_tokens"] for row in records),
+        "output_tokens": sum(row["output_tokens"] for row in records),
     }
     write_json(out / "checks/diagnoser-isolation-summary.json", result)
     return result
@@ -348,6 +365,10 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
     provenance = []
     probe_checks = []
     replay_checks = []
+    selected_recording_bytes = 0
+    paired_recording_bytes = 0
+    selected_input_tokens = 0
+    paired_input_tokens = 0
     for case in freeze["cases"]:
         episode_id = case["episode_id"]
         layer = case["technical_label"]
@@ -355,6 +376,7 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
         source_run = Path(case["source_run"])
         source_hashes = case["source_hashes"]
         run_files = copy_recordings(source_run, out / "episodes" / episode_id / "run", source_hashes)
+        selected_recording_bytes += sum(record["bytes"] for record in run_files.values())
         manifest = read(source_run / "manifest.json")
         result = read(source_run / "result.json")
         verified_checkpoint_variant = validate_pins(layer, manifest, pins, case["fault_instance"])
@@ -364,8 +386,12 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
         states = jsonl(source_run / "states.jsonl")
         decisions = jsonl(source_run / "decisions.jsonl")
         execution = jsonl(source_run / "execution.jsonl")
+        calls = jsonl(source_run / "model_calls.jsonl")
         require(len(states) == len(execution) == case["decisions"], "decision alignment differs")
         require(len(decisions) == 2 * len(states), "question count differs")
+        require(len(calls) == len(states), "model-call count differs")
+        native_input_tokens = model_input_tokens(calls)
+        selected_input_tokens += native_input_tokens
         require(
             all(
                 states[i]["decision_index"] == execution[i]["decision_index"] == i
@@ -418,6 +444,8 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
             clean_files = copy_recordings(
                 clean_run, out / "episodes" / episode_id / "paired_clean", label["source_hashes"]["clean"]
             )
+            paired_recording_bytes += sum(record["bytes"] for record in clean_files.values())
+            paired_input_tokens += model_input_tokens(jsonl(clean_run / "model_calls.jsonl"))
             validate_pins("no_injection", read(clean_run / "manifest.json"), pins, None)
             clean_result = read(clean_run / "result.json")
             require(
@@ -466,6 +494,8 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
                 "paired_clean_outcome": clean_outcome,
                 "paired_outcome_status": outcome_status,
                 "decision_count": len(states),
+                "native_request_input_tokens": native_input_tokens,
+                "recording_raw_bytes": sum(record["bytes"] for record in run_files.values()),
                 "files": {"run": run_files, "paired_clean": clean_files},
                 "blind_input_sha256": case["input_sha256"],
             }
@@ -476,19 +506,43 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
                 "injection_layer": layer if label else None,
                 "fault_family": label["fault_family"] if label else None,
                 "fault_instance": case["fault_instance"],
+                "changed_artifact_sha256": (
+                    manifest["harness_sha256"]
+                    if layer == "harness"
+                    else (
+                        manifest["controller_sha256"]
+                        if layer == "controller"
+                        else manifest["model"]["weights_sha256"] if layer == "weights" else None
+                    )
+                ),
                 "verified_checkpoint_variant": verified_checkpoint_variant,
                 "source_instance_name_mismatch": (
                     layer == "weights" and verified_checkpoint_variant != case["fault_instance"]
                 ),
                 "verified_component": layer if label else None,
                 "annotation_status": label["annotation_status"] if label else "no_injection_control",
+                "annotator": "full-audit-v5 automated saved-state comparison" if label else "no-injection setup",
+                "verifier": "package-exp0-v0.py pinned-source and probe-signature audit",
                 "verification_procedure": (
                     "saved-state repeat plus recorded replay" if label else "unchanged-checkpoint repeat"
                 ),
                 "reference": reference,
+                "evidence_references": {
+                    "run": f"episodes/{episode_id}/run/",
+                    "paired_clean": f"episodes/{episode_id}/paired_clean/" if label else None,
+                    "probe": f"probes/{episode_id}.json",
+                    "replay_check": "checks/replay.jsonl",
+                },
                 "probe_signature_sha256": file_digest(probe_path),
                 "paired_outcome_status": outcome_status,
                 "sample_id": label["sample_id"] if label else None,
+                "source_label_sha256": digest(json.dumps(label, sort_keys=True).encode()) if label else None,
+                "disagreements": "not_collected; v0 does not require human window review",
+                "label_revision": (
+                    "checkpoint_strength_name_resolved_by_sha256"
+                    if layer == "weights" and verified_checkpoint_variant != case["fault_instance"]
+                    else "source_label_preserved"
+                ),
             }
         )
     require(len(index) == 40 and len({row["episode_id"] for row in index}) == 40, "sample is not 40 distinct games")
@@ -522,8 +576,27 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
             "unit": "complete episode",
             "index": "index.jsonl",
             "labels": "labels.jsonl; development labels only; never mount for diagnosis",
+            "label_fields": [
+                "injection_layer",
+                "fault_family",
+                "fault_instance",
+                "changed_artifact_sha256",
+                "verified_component",
+                "annotation_status",
+                "annotator",
+                "verifier",
+                "verification_procedure",
+                "evidence_references",
+                "reference",
+                "paired_outcome_status",
+                "disagreements",
+                "label_revision",
+            ],
             "attempts": "attempts.jsonl; all 1330 original attempts with paths replaced by opaque IDs",
             "trace_encoding": "UTF-8 JSONL compressed as deterministic gzip; source and package SHA-256 in index",
+            "native_request_input_tokens": (
+                "sum of recorded per-question inputTokens audits; not GPU work or billing usage"
+            ),
             "diagnoser_input_allowlist": ["inputs/<episode_id>.json", "probes/<episode_id>.json"],
             "outcome_statuses": ["paired_outcome_differs", "paired_outcome_same", "untested"],
         },
@@ -539,6 +612,13 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
         "independent_seed_groups": len({row["scenario_reset_group"] for row in index}),
         "decisions": sum(row["decision_count"] for row in index),
         "questions": 2 * sum(row["decision_count"] for row in index),
+        "selected_native_request_input_tokens": selected_input_tokens,
+        "paired_clean_native_request_input_tokens": paired_input_tokens,
+        "historical_diagnoser_input_tokens": isolation["input_tokens"],
+        "historical_diagnoser_output_tokens": isolation["output_tokens"],
+        "selected_recording_raw_bytes": selected_recording_bytes,
+        "paired_clean_recording_raw_bytes": paired_recording_bytes,
+        "package_hashed_file_bytes": sum(path.stat().st_size for path in all_files),
         "all_attempts": len(attempts),
         "attempt_status_counts": dict(Counter(row["status"] for row in attempts)),
         "replays_valid": len(replay_checks),

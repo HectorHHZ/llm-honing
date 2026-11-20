@@ -3,7 +3,7 @@
 This is the 40-episode development and reproducibility sample fixed in
 `freeze.json`. The original recordings remain on ds-serv2. A separate,
 hash-checked staging package is at
-`/data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-verified/`. It has not been
+`/data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-v2/`. It has not been
 uploaded to Hugging Face and is not the #183 public release.
 
 ## Contents and labels
@@ -12,7 +12,12 @@ The package contains 10 complete losses each with a verified harness, weights,
 or controller change, plus 10 unmodified losses. There are 40 episodes, 19
 seed/reset groups, 2,151 agent decisions, and 4,302 question records. Both
 seats of a seed share its group. All selected games lost, including the
-controls; the control set cannot measure behavior on wins.
+controls; the control set cannot measure behavior on wins. The selected games'
+original recording files total 205,047,747 bytes; the 30 paired-clean files
+total another 135,140,915 bytes. The native per-question input-token audits sum
+to 5,860,780 for selected games and 4,053,696 for clean pairs. These are audit
+counts, not billed inference usage. Archived diagnosis usage separately totals
+23,596,241 input and 96,605 output tokens.
 
 `index.jsonl` identifies the game, pinned model/harness/controller hashes,
 native outcome, paired-clean outcome, blind input hash, and compressed raw
@@ -31,7 +36,10 @@ post-selection command. The reference decision is technical evidence, not a
 claim that it caused the loss. The 30 altered games have paired-clean outcomes;
 five differ. That comparison is reported separately from the component label.
 The ten `no_injection` controls have no asserted component label or chance
-label. No human decision-window review is required for v0.
+label. Each row identifies the automated annotator and verifier, changed
+artifact SHA-256, technical reference, probe and trace locations, source label
+hash, and any package revision note. Human disagreements were not collected;
+v0 does not require human decision-window review.
 
 The original weight run directories and sample manifest name the two edited
 checkpoint strengths in reverse: all ten `reverse_strength_3p0-v1` runs record
@@ -71,7 +79,7 @@ Run the validator on ds-serv2 without a GPU:
 
 ```bash
 python3 integrations/tank-war/scripts/package-exp0-v0.py \
-  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-verified
+  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-v2
 ```
 
 The complete staging command is in `RUNBOOK.md`. The stage is not independent
