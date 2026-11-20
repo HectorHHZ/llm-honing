@@ -274,14 +274,18 @@ def test_failed_model_does_not_turn_into_random_play(
 
 
 @pytest.mark.unit
-def test_import_and_help_need_no_game_packages() -> None:
+@pytest.mark.parametrize(
+    ("module", "flag"),
+    [("honing.backends.craftax.match", "--decision-server"), ("integrations.craftax.agent", "--max-steps")],
+)
+def test_import_and_help_need_no_game_packages(module: str, flag: str) -> None:
     code = (
         "import sys; sys.modules['craftax']=None; sys.modules['jax']=None; sys.modules['numpy']=None; "
-        "import honing.backends.craftax; from honing.backends.craftax.match import main; main(['--help'])"
+        f"from {module} import main; main(['--help'])"
     )
     result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert "--decision-server" in result.stdout
+    assert flag in result.stdout
 
 
 @pytest.mark.unit
@@ -357,6 +361,54 @@ def test_native_engine_with_http_decisions(tmp_path: Path, decision_server: Any)
     )
     assert result["steps"] == len(requests) == 2
     assert replay.verify_replay(out)["verified"]
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")
+def test_native_agent_observes_and_steps_the_symbolic_game() -> None:
+    requests = (
+        '{"op":"observe"}',
+        "{",
+        '{"op":"step","action":"UNKNOWN"}',
+        '{"op":"step","action":["UP"]}',
+        '{"op":"observe"}',
+        '{"op":"step","action":"UP"}',
+        '{"op":"step","action":"NOOP"}',
+        '{"op":"step","action":"UP"}',
+        '{"op":"observe"}',
+    )
+    process = subprocess.run(
+        [sys.executable, "-m", "integrations.craftax.agent", "--max-steps", "2"],
+        cwd=ROOT,
+        input="\n".join(requests) + "\n",
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=180,
+    )
+    start, bad_json, bad_action, bad_type, again, next_turn, ended, after, final = map(
+        json.loads, process.stdout.splitlines()
+    )
+    assert start["ok"] is True
+    state = start["observation"]
+    assert state["schema_version"] == 1
+    assert state["game"] == "craftax"
+    assert state["map"]["width"] == 11 and state["map"]["height"] == 9
+    assert len(state["map"]["tiles"]) == len(state["map"]["items"]) == 9
+    assert all(len(row) == 11 for row in state["map"]["tiles"])
+    assert state["player"]["x"] == 5 and state["player"]["y"] == 4
+    assert state["player"]["health"] > 0
+    assert state["inventory"]
+    assert state["action_space"]["choices"] == list(ACTIONS)
+    assert "native_state_hash" not in state
+    assert all(reply["ok"] is False for reply in (bad_json, bad_action, bad_type, after))
+    assert start == again
+    assert next_turn["observation"]["clock"]["value"] == 1
+    assert ended == final
+    assert ended["observation"]["clock"] == {"unit": "turn", "value": 2, "limit": 2}
+    assert ended["observation"]["status"] == "step_limit"
+    assert ended["observation"]["done"] is True
+    assert ended["observation"]["action_space"] is None
 
 
 @pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")

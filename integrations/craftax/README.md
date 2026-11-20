@@ -135,6 +135,40 @@ and observed entity classes are included; hidden world maps, enemy health and
 unidentified potion mappings are not model inputs. Native state hashes are
 recorded for replay integrity and are not shown to the model.
 
+## Observe and control from an AI process
+
+Run the JSON Lines controller from the repository root with the Craftax
+Python environment. Send one object per line on stdin and read one reply on
+stdout. `observe` reads the current state without advancing the game. `step`
+applies one named action and returns the next observation. Replies contain
+`ok: true` and `observation`, or `ok: false` and `error` for an invalid
+request. Close stdin to end the session.
+
+```bash
+printf '%s\n' '{"op":"observe"}' '{"op":"step","action":"UP"}' |
+  integrations/craftax/.venv/bin/python -m integrations.craftax.agent --seed 1 --max-steps 300
+```
+
+`schema_version` is `1`. `map.tiles[y][x]` and `map.items[y][x]` are the
+local 11-column by 9-row view. Coordinates are zero-based, with `x` right
+and `y` down. The window follows the player, whose `x` and `y` are local to
+that view. Unobserved tiles are `null`. `entities` lists visible creatures
+and projectiles with a class, a native type ID and a local position. `player`
+includes health, food, drink, energy and other public character attributes.
+`inventory`, `equipment`, `goals` and `achievements` provide task context.
+
+`action_space.choices` lists all 43 native action names while the game is
+running. Actions are subject to native prerequisites and may have no effect
+on the world. Each accepted action advances `clock.value` by one turn and
+returns the last action's `reward`. `--goals` takes a comma-separated list of
+achievement names and defaults to the introductory crafting tasks above.
+`done` is true when the native game ends, the goals are complete or the step
+limit is reached.
+
+Python callers can wrap a `CraftaxEngine` in `AgentSession` from
+`integrations.craftax.agent` and call `observe_for_ai()` or `step_for_ai(action)`.
+The wrapper resets the engine when created and the caller closes the engine.
+
 ## Tasks, harness and grading
 
 `tasks/suite.jsonl` separates train, validation and heldout world seeds. Each
