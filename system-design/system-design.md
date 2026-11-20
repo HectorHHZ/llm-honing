@@ -448,7 +448,7 @@ the identity probe, the logged requests asked again unchanged, must reproduce th
 probabilities within 0.01, with no change of the most probable option unless the logged top
 two were within 0.01. Requests go in batches, one request and up to the server's
 `maxBranches` more per call. The probe imports only the standard library and `honing.core`;
-`scripts/system0/probe.py` runs it on tank run directories.
+`scripts/system2/probe.py` runs it on tank run directories.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:

@@ -1,6 +1,6 @@
 """Probe a decision model on logged tank decisions: ask again with the text edited or under other weights.
 
-    python scripts/system0/probe.py RUN... --server URL [--policy-checksum SHA]
+    python scripts/system2/probe.py RUN... --server URL [--policy-checksum SHA]
 
 With no variant it runs the identity probe: every logged request asked again
 unchanged, which must reproduce the logged probabilities. A variant is one of:

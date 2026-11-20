@@ -1,6 +1,6 @@
 """Counterfactual probes: ask a decision model again on logged decisions, with one thing changed.
 
-#138's second claim is that System 0 can test a diagnosis instead of only
+#138's second claim is that System 2 can test a diagnosis instead of only
 stating it. A probe does the test. It takes an episode's decision traces,
 rebuilds the ``/v1/decide`` request each decision sent (the rendered parts and
 the questions, exactly as logged), changes one thing, asks again, and reports

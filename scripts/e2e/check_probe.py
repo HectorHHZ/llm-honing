@@ -6,7 +6,7 @@ It unpacks the four rounds kept under ``tests/fixtures/decision_traces`` (played
 by the dry run's stand-in model at quality 0.7), serves that model through
 Honing's real ``DecisionServer`` under a made-up weights checksum, and a weaker
 one (quality 0.5, which holds its fire) under another. Then it runs
-``scripts/system0/probe.py`` as a separate process five times:
+``scripts/system2/probe.py`` as a separate process five times:
 
 1. the identity probe: every logged probability reproduced to within floating-point rounding (the
    rounds were recorded on macOS, and ``math.exp`` can differ in the last bit between platforms);
@@ -60,7 +60,7 @@ def _serve(quality: float, checksum: str) -> DecisionServer:
 
 def _cli(arguments: Sequence[str]) -> tuple[int, dict[str, Any] | None, str]:
     process = subprocess.run(
-        [sys.executable, str(ROOT / "scripts/system0/probe.py"), *arguments],
+        [sys.executable, str(ROOT / "scripts/system2/probe.py"), *arguments],
         cwd=ROOT,
         capture_output=True,
         text=True,
