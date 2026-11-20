@@ -185,13 +185,16 @@ class GEPAMethod:
     def initial_state(self, seed: HarnessSpec) -> Mapping[str, object]:
         components = {path: file.content for path, file in seed.files if file.kind in REWRITABLE_KINDS}
         require(len(components) > 0, "GEPA needs at least one instructions or skill file in the seed harness")
-        return Archive.seed(components, self.validation_task_ids, self.config.rng_seed).to_state()
+        archive = Archive.seed(components, self.validation_task_ids, self.config.rng_seed)
+        return archive.adopt_head(components, seed.spec_id).to_state()
 
     def propose(self, context: EvolveContext) -> ProposeResult:
         """One reflective mutation. ``asyncio.run`` drives the episodes, so call it outside a running loop."""
         config = self.config
         archive = Archive.from_state(context.state)
         self._check_components(archive, context)
+        # Another method may have published the head since GEPA last ran, in any of its files.
+        archive = archive.adopt_head(_head_components(archive, context.current), context.current.spec_id)
         # A train, prune or quantize move changed the weights since the archive was
         # scored. Scores under other weights are not comparable, so the search starts
         # over from the served harness before a parent is drawn from them; the next
@@ -276,7 +279,9 @@ class GEPAMethod:
             raise ContractError(
                 "the proposal is not GEPA's newest candidate; record the state propose returned with it"
             )
-        return settle(archive, evaluation, decision.selected).to_state()
+        settled = settle(archive, evaluation, decision.selected)
+        # A published proposal is the new head, and the scores now belong to it.
+        return (settled.published_as(proposal.spec.spec_id) if decision.selected else settled).to_state()
 
     def _check_components(self, archive: Archive, context: EvolveContext) -> None:
         """Every component must still be a rewritable file the runner declares it can run."""
@@ -414,6 +419,16 @@ def _require_gepa() -> None:
         import gepa  # noqa: F401
     except ImportError as error:
         raise ImportError("GEPA reflection needs the 'gepa' extra: pip install 'llm-honing[gepa]'") from error
+
+
+def _head_components(archive: Archive, head: HarnessSpec) -> dict[str, str]:
+    """The head's text for each of the archive's component paths. :meth:`_check_components` runs first."""
+    components = {}
+    for path in archive.candidates[0].paths:
+        file = head.get(path)
+        assert file is not None
+        components[path] = file.content
+    return components
 
 
 def _spec_of(current: HarnessSpec, candidate: ArchiveCandidate) -> HarnessSpec:

@@ -23,7 +23,10 @@ class Move:
     """One step a scheduler asks for.
 
     The optional fields override the campaign's defaults for this move only, and
-    each belongs to exactly one kind of move.
+    each belongs to exactly one kind of move, except ``trainer``. ``trainer``
+    names the registered trainer that runs a train move's job or a prune move's
+    recovery; ``None`` means the campaign's default trainer. A harness move
+    names its method in ``harness.method``.
     """
 
     kind: MoveKind
@@ -32,6 +35,7 @@ class Move:
     recovery: RecoverySpec | None = None
     scheme: QuantScheme | None = None
     harness: HarnessMoveConfig | None = None
+    trainer: str | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.kind, get_args(MoveKind), "Move.kind")
@@ -42,6 +46,11 @@ class Move:
         )
         require(self.scheme is None or self.kind == "quantize", "a quantization scheme belongs to a quantize move")
         require(self.harness is None or self.kind == "harness", "a harness config belongs to a harness move")
+        require(
+            self.trainer is None or self.kind in ("train", "prune"),
+            "a trainer belongs to a train move, or to a prune move for its recovery",
+        )
+        require(self.trainer is None or bool(self.trainer), "Move.trainer must name a trainer or be None")
 
 
 @dataclass(frozen=True)

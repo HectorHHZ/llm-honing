@@ -1,9 +1,11 @@
-"""The tank campaign script: the dry-run config, its moves, startup checks, and the full dry run (with Node)."""
+"""The tank campaign script: the dry-run configs, their moves, startup checks, and the full dry runs (with Node)."""
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
+import re
 import shutil
 import sys
 from dataclasses import asdict
@@ -16,11 +18,12 @@ from honing.backends.tank.e2e import _move, build, main, tasks
 from honing.backends.tank.scenarios import SEATS, TankScenario, build_suite, write_suite
 from honing.backends.tank.traces import TankTraceSource
 from honing.campaign import ScriptedScheduler
-from honing.core import ContractError
+from honing.core import ContractError, DirectionEditSpec, method_states
 from tests.fakes.scheduler import HistoryScheduler
 
 REPO = Path(__file__).resolve().parents[1]
 DRY_RUN = REPO / "configs/e2e/tank_dry_run.json"
+LEVERS = REPO / "configs/e2e/tank_levers_dry_run.json"
 SGLANG = REPO / "configs/e2e/tank_campaign_sglang.json"
 NODE = shutil.which("node")
 # CI's test job sets this on every Python version but one, because its e2e job plays the same config.
@@ -180,3 +183,129 @@ def test_the_dry_run_publishes_the_gepa_harness_and_rolls_back_both_train_moves_
         if (p / "manifest.json").exists()
     }
     assert kinds == {"evaluation", "rollout", "teacher-demonstration"}
+
+
+@pytest.mark.unit
+def test_a_step_names_its_trainer_its_method_and_its_direction_edit() -> None:
+    edit = _move(
+        {
+            "kind": "train",
+            "algorithm": "direction_edit",
+            "trainer": "direction_edit",
+            "direction_edit": {"question": "weapon", "target": "fire", "strength": 0.5},
+        }
+    )
+    assert edit.trainer == "direction_edit"
+    assert edit.train.direction_edit == DirectionEditSpec("weapon", "fire", 0.5)  # type: ignore[union-attr]
+    assert _move({"kind": "harness", "method": "meta_harness"}).harness.method == "meta_harness"  # type: ignore[union-attr]
+    plain = _move({"kind": "train"})
+    assert plain.trainer is None and plain.train.direction_edit is None  # type: ignore[union-attr]
+    assert _move({"kind": "harness"}).harness.method is None  # type: ignore[union-attr]
+    whole = {"question": None, "target": "label", "strength": 2.0}
+    every = _move({"kind": "train", "algorithm": "direction_edit", "direction_edit": whole})
+    assert every.train.direction_edit == DirectionEditSpec(None, "label", 2.0)  # type: ignore[union-attr]
+    # A step that states only part of an edit would reset the rest of the trainer's settings without saying so.
+    for partial in ({"strength": 0.5}, {"target": "fire", "strength": 0.5}, {**whole, "steps": 1}, "fire"):
+        with pytest.raises(ContractError, match=r"states exactly \['question', 'strength', 'target'\]"):
+            _move({"kind": "train", "algorithm": "direction_edit", "direction_edit": partial})
+    with pytest.raises(ContractError, match="belongs to a direction_edit job"):
+        _move({"kind": "train", "algorithm": "sft", "direction_edit": whole})
+
+
+@pytest.mark.unit
+def test_the_levers_config_builds_two_methods_and_two_trainers_and_refuses_a_step_for_another(
+    tmp_path: Path,
+) -> None:
+    levers = {**json.loads(LEVERS.read_text()), "requires": {}}
+
+    run = build(levers, REPO, tmp_path / "a")
+
+    assert sorted(method_states(run.campaign.chain.head().method_state)) == ["gepa", "meta_harness"]
+    assert [(m.kind, m.trainer, m.harness.method if m.harness else None) for m in run.moves] == [
+        ("harness", None, "gepa"),
+        ("train", None, None),
+        ("train", "direction_edit", None),
+        ("harness", None, "meta_harness"),
+        ("train", None, None),
+    ]
+    with pytest.raises(ContractError, match="trainer 'grpo', but the campaign has 'direction_edit'"):
+        build({**levers, "schedule": [{"kind": "train", "trainer": "grpo"}]}, REPO, tmp_path / "b")
+    with pytest.raises(ContractError, match="method 'reflexion', but the campaign runs 'gepa', 'meta_harness'"):
+        build({**levers, "schedule": [{"kind": "harness", "method": "reflexion"}]}, REPO, tmp_path / "c")
+    broken = {**levers["components"], "trainers": ["direction_edit"]}
+    with pytest.raises(ContractError, match="trainers must be an object"):
+        build({**levers, "components": broken}, REPO, tmp_path / "d")
+    assert not list(tmp_path.glob("*/runs/*"))  # refused before any round
+
+
+@pytest.mark.integration
+def test_the_levers_config_runs_both_methods_and_both_trainers_in_one_campaign(tmp_path: Path) -> None:
+    """The whole config on the stand-in match process, where every round runs out the clock.
+
+    Nothing wins, so nothing is published: this checks what each move was given, not the results. CI's e2e job
+    plays the same config on real rounds and pins its results with ``check_campaign.py``.
+    """
+    levers = json.loads(LEVERS.read_text())
+    levers["requires"] = {}
+    components = levers["components"]
+    components["runner"]["args"] = {"command": ["{python}", "{root}/tests/fakes/tank_match.py"]}
+    # The stand-in match records no hashes of its outputs, so its rounds cannot be read back as decision traces.
+    del components["method"]["args"]["traces"], components["methods"][0]["args"]["traces"]
+    components["method"]["args"]["chat"] = {"factory": "tests.fakes.tank:chat"}
+
+    run = build(levers, REPO, tmp_path / "out")
+    outcomes = run.campaign.run(ScriptedScheduler(run.moves))
+
+    assert [outcome.skipped_reason for outcome in outcomes] == [
+        "gepa proposed nothing",
+        None,
+        None,
+        "meta_harness proposed nothing",
+        None,
+    ]
+    assert all(outcome.release is None for outcome in outcomes)
+    records = [json.loads(line) for line in run.campaign.chain.record_path.read_text().splitlines()]
+    assert [record["op"] for record in records] == ["publish", "skip", "reject", "reject", "skip", "reject"]
+    assert [record.get("method") for record in records] == [None, "gepa", None, None, "meta_harness", None]
+    # Every line carries both methods' states, and a method's move changes only its own.
+    states = [
+        method_states(r["candidate"]["method_state"] if "candidate" in r else r["method_state"]) for r in records
+    ]
+    assert all(sorted(state) == ["gepa", "meta_harness"] for state in states)
+    assert states[1]["gepa"] != states[0]["gepa"] and states[1]["meta_harness"] == states[0]["meta_harness"]
+    assert states[4]["meta_harness"] != states[3]["meta_harness"] and states[4]["gepa"] == states[3]["gepa"]
+    assert states[2] == states[1] and states[5] == states[4]  # a train move changes neither
+    # The default trainer ran both sft steps, and the named one the edit, with the step's own parameters.
+    default, edit = run.context.components["trainer"], run.campaign._trainers["direction_edit"]
+    assert [job.algorithm for job in default.jobs] == ["sft", "sft"]  # type: ignore[attr-defined]
+    assert [job.direction_edit for job in edit.jobs] == [DirectionEditSpec("weapon", "fire", 1.0)]  # type: ignore[attr-defined]
+    # Each of the three steps drew its own teacher rounds, the later two on seeds no task uses.
+    batches = [batch.batch_id for batch in (default.batches[0], edit.batches[0], default.batches[1])]  # type: ignore[attr-defined]
+    assert batches == [f"tank-teacher-demonstrations-{n}" for n in (1, 2, 3)]
+    teacher_seeds = sorted(
+        json.loads((p / "manifest.json").read_text())["seed"]
+        for p in (tmp_path / "out/runs").iterdir()
+        if (p / "manifest.json").exists() and "--teacher--" in p.name
+    )
+    assert teacher_seeds == [1001, 1001, 300000, 300000, 300001, 300001]
+
+
+@pytest.mark.unit
+def test_the_real_weights_levers_config_schedules_one_nanojev_sft_step_and_one_direction_edit() -> None:
+    config = json.loads((REPO / "configs/e2e/tank_nanojev_levers.json").read_text())
+
+    moves = [_move(entry) for entry in config["schedule"]]
+
+    assert [(m.train.algorithm, m.trainer) for m in moves] == [("sft", None), ("direction_edit", "direction_edit")]  # type: ignore[union-attr]
+    assert moves[1].train.direction_edit == DirectionEditSpec("weapon", "fire", 1.0)  # type: ignore[union-attr]
+    components = config["components"]
+    entries = [components[slot] for slot in components if slot != "trainers"] + list(components["trainers"].values())
+    for entry in entries:
+        module, _, name = entry["factory"].partition(":")
+        assert callable(getattr(importlib.import_module(module), name)), entry["factory"]
+    # Held out for validation: the teacher rounds whose seed ends in 0 or 5, in the first batch and in later ones.
+    held_out = re.compile(components["trainer"]["args"]["validation_groups"])
+    seeds = [*range(1001, 1009), *range(300_000, 300_008)]
+    assert [seed for seed in seeds if held_out.search(f"tank:{seed}:blue")] == [1005, 300_000, 300_005]
+    with pytest.raises(ContractError, match="this config needs environment variable HONING_NANOJEV_SOURCE"):
+        build({**config, "requires": {"env": ["HONING_NANOJEV_SOURCE"]}}, REPO, REPO / "runs/never-created")
