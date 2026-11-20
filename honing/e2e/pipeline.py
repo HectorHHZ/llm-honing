@@ -397,7 +397,7 @@ def run(pipeline: PipelineRun, tracker: RunTracker | None = None) -> dict[str, A
         failures.append(f"stopped: {budget['reason']}")
     # A budget that ends the run at its limit is how a budgeted run ends, so the steps it cut short are no failure.
     # Only a stop at the first move whose spend reached the limit counts: one later would mean a move ran unadmitted.
-    if not _stopped_at_limit(pipeline.context.shared.get("budget"), budget, costs):
+    if not _stopped_at_limit(campaign.budget, budget, costs):
         if pipeline.expect and len(steps) != len(pipeline.expect):
             failures.append(f"{len(steps)} steps ran, but expect lists {len(pipeline.expect)}")
         # A rollback the scheduler stopped before would otherwise pass unnoticed, with no step and no failure.
