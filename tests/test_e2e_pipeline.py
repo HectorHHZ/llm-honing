@@ -13,6 +13,7 @@ import json
 import os
 import signal
 import sys
+import warnings
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -150,7 +151,8 @@ def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_the
         expect=[],
     )
 
-    pipeline = build(config, REPO, tmp_path / "out")
+    with pytest.warns(UserWarning, match=r"so the schedule's moves \(harness\) are not run"):
+        pipeline = build(config, REPO, tmp_path / "out")
     summary = run(pipeline)
 
     # The rollback runs after one move, as in the schedule. The scheduler then goes on until it stops.
@@ -175,6 +177,18 @@ def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_the
 
 
 @pytest.mark.unit
+def test_a_scheduler_without_move_entries_in_the_schedule_warns_nothing(tmp_path: Path) -> None:
+    config = _config(**_with_scheduler(["train"]), schedule=[{"kind": "rollback", "to": "r0000"}], expect=[])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pipeline = build(config, REPO, tmp_path / "out")
+
+    assert isinstance(pipeline.scheduler, HistoryScheduler)
+
+
+@pytest.mark.unit
+@pytest.mark.filterwarnings("ignore:the 'history' scheduler chooses every move:UserWarning")
 def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -> None:
     config = _config(
         **_with_scheduler(["train"]),
@@ -190,6 +204,7 @@ def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -
 
 
 @pytest.mark.unit
+@pytest.mark.filterwarnings("ignore:the 'history' scheduler chooses every move:UserWarning")
 def test_a_run_that_ran_another_number_of_steps_than_expected_fails(tmp_path: Path) -> None:
     config = _config(**_with_scheduler(["train", "train"]), schedule=[{"kind": "train"}], expect=["published"])
 
