@@ -1,0 +1,110 @@
+{
+  "before": {
+    "id": 1,
+    "tick": 0,
+    "epoch": 0,
+    "engineFrame": 164,
+    "simulationMilliseconds": 0,
+    "tickMilliseconds": 34,
+    "lastAction": "reset",
+    "lastActionTicks": 0,
+    "room": [
+      113,
+      105
+    ],
+    "player": {
+      "x": 200,
+      "y": 161,
+      "vx": 0,
+      "vy": 0.25,
+      "width": 12,
+      "height": 21,
+      "onGround": 2,
+      "onRoof": -164
+    },
+    "gravity": 0,
+    "deathSequence": -1,
+    "deaths": 0,
+    "flips": 0,
+    "hasControl": true,
+    "checkpoint": [
+      113,
+      105,
+      200,
+      161,
+      0
+    ],
+    "localOriginTiles": [
+      21,
+      16
+    ],
+    "localSolidRows": [
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      ".........",
+      "#########",
+      "#########"
+    ],
+    "entities": []
+  },
+  "after": {
+    "id": 2,
+    "tick": 15,
+    "epoch": 0,
+    "engineFrame": 179,
+    "simulationMilliseconds": 510,
+    "tickMilliseconds": 34,
+    "lastAction": "flip",
+    "lastActionTicks": 15,
+    "room": [
+      113,
+      105
+    ],
+    "player": {
+      "x": 200,
+      "y": 102,
+      "vx": 0,
+      "vy": 0,
+      "width": 12,
+      "height": 21,
+      "onGround": -11,
+      "onRoof": 2
+    },
+    "gravity": 1,
+    "deathSequence": -1,
+    "deaths": 0,
+    "flips": 1,
+    "hasControl": true,
+    "checkpoint": [
+      113,
+      105,
+      200,
+      161,
+      0
+    ],
+    "localOriginTiles": [
+      21,
+      8
+    ],
+    "localSolidRows": [
+      ".....####",
+      ".....####",
+      ".....####",
+      ".....####",
+      ".....####",
+      ".........",
+      ".........",
+      ".........",
+      "........."
+    ],
+    "entities": []
+  },
+  "action": "flip",
+  "ticks": 15,
+  "probability": 0.3403,
+  "responseSha256": "81b181d141dcbc6cf32e917d1eb9699d4638c58eaa63b61491afe9bd60c19bdd"
+}

@@ -15,6 +15,29 @@ The original game's rotating local 7x7 observer is not used as model input.
 Relative controls and all game mechanics remain native. This information
 condition must be named when reporting results.
 
+## Research scope
+
+Primary category: **Spatial and tactical planning**. Capability tags: route planning, hazard avoidance.
+
+Reach the gem while avoiding moving spiders.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose among the current native legal actions, including WAIT. |
+| Harness | Supply the global public-object map, legal choices and configured history. Validate probabilities and apply the declared selection rule. |
+| Engine and other policies | Supply native legality, state transitions, enemies and task outcomes. |
+
+The observation condition is spiders-full-state-v1. Global-map results do not
+establish exploration or memory from a local view. A runner, grader and native
+replay are available.
+
+Suggested evaluation: Measure success, steps and WAIT frequency on fixed and
+unseen levels. Keep the observation condition fixed when comparing model
+versions.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Setup
 
 Use a separate Python 3.10 or 3.11 environment on Windows or Linux x86-64.

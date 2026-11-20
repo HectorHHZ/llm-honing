@@ -3,7 +3,9 @@
 The URL's first path segment picks a behaviour, so one config entry switches a
 model between them: ``/ok/v1`` answers, ``/429/v1`` and ``/401/v1`` always fail
 with that status (and echo the key and the request in the error body, as some
-providers do), ``/slow/v1`` answers after ``SLOW_SECONDS``, and
+providers do), ``/context/v1`` fails with the 400 an OpenAI-compatible server
+sends when the prompt does not fit the model's context window, ``/slow/v1``
+answers after ``SLOW_SECONDS``, and
 ``/window-A-B/v1`` fails policy calls ``A`` to ``B - 1`` (counted from 0) with
 429, so an outage can start and end inside a run.
 
@@ -30,6 +32,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+
+from tests.fakes.sse import send_stream
 
 SUITE = Path(__file__).resolve().parents[2] / "integrations/python-bugfix/tasks"
 SLOW_SECONDS = 5.0
@@ -85,20 +89,26 @@ class _Handler(BaseHTTPRequestHandler):
             echoed = f"{json.dumps(body)} {self.headers.get('Authorization')}"
             self._send(int(mode), {"error": {"message": echoed, "type": "error", "code": mode}})
             return
+        if mode == "context":
+            message = "This model's maximum context length is 8192 tokens. However, your messages resulted in 9000."
+            error = {"message": message, "type": "invalid_request_error", "code": "context_length_exceeded"}
+            self._send(400, {"error": error})
+            return
         if mode == "slow":
             time.sleep(SLOW_SECONDS)
         text = self.server.reflect(str(messages[-1]["content"])) if reflection else _policy_reply(messages)
-        self._send(
-            200,
-            {
-                "id": "chatcmpl-stub",
-                "object": "chat.completion",
-                "created": 1,
-                "model": body.get("model"),
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
-            },
-        )
+        reply = {
+            "id": "chatcmpl-stub",
+            "object": "chat.completion",
+            "created": 1,
+            "model": body.get("model"),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
+        }
+        if body.get("stream"):
+            send_stream(self, reply)
+        else:
+            self._send(200, reply)
 
     def _send(self, status: int, payload: dict[str, Any]) -> None:
         data = json.dumps(payload).encode()

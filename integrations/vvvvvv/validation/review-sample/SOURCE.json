@@ -1,0 +1,30 @@
+{
+  "game": "vvvvvv",
+  "evidence": "Author-side historical real Laya/native first decision, 2026-11-08 PST; pre-review-fix.",
+  "originalPrHead": "b19d576feff3dfd4619cbc6971518cc4d209bb86",
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu"
+  },
+  "originalArtifacts": {
+    "log/20261108_1917_four_game_integrations/vvvvvv/laya-reviewed/000001.request.json": "e66ec549c0e3ab5dfda28080a05a18af4e77f77ea04941552958f2b1d2d476b0",
+    "log/20261108_1917_four_game_integrations/vvvvvv/laya-reviewed/000001.accepted.json": "00ea2bc9663cb87b1f65b7c0efb4560c26727face2f2882d726bd2dab32b62b5",
+    "code/pr/honing-vvvvvv/integrations/vvvvvv/validation.json": "92f458715f4aff928d75a9b62a81f8b07efd70c94474180ec33a1a1499a05bce",
+    "log/20261108_1917_four_game_integrations/vvvvvv/laya-reviewed/000001.response.raw": "81b181d141dcbc6cf32e917d1eb9699d4638c58eaa63b61491afe9bd60c19bdd"
+  },
+  "includedSha256": {
+    "original-author-receipt.json": "92f458715f4aff928d75a9b62a81f8b07efd70c94474180ec33a1a1499a05bce",
+    "request.json": "e66ec549c0e3ab5dfda28080a05a18af4e77f77ea04941552958f2b1d2d476b0",
+    "response.raw": "81b181d141dcbc6cf32e917d1eb9699d4638c58eaa63b61491afe9bd60c19bdd",
+    "transition.json": "00ea2bc9663cb87b1f65b7c0efb4560c26727face2f2882d726bd2dab32b62b5"
+  },
+  "limits": [
+    "The original native bridge and request text differ from the local review fixes.",
+    "This historical sample is not evidence of post-fix native execution or improved policy.",
+    "The four production trace layouts remain unchanged, pending the user's format decision.",
+    "This sample includes no images, video, game assets, model weights, credentials or private conversations.",
+    "The raw response was copied byte-for-byte; request/transition JSON objects were extracted without editing values."
+  ]
+}

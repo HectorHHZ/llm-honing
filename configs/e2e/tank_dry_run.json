@@ -1,9 +1,10 @@
 {
-  "description": "Tank duel campaign with no GPU or model: real rounds (the Node match process against the planner opponent, Honing's DecisionServer) with a stand-in decision model, GEPA reflecting through a scripted chat model, planner-teacher demonstrations for sft and sampled rollouts for grpo, and a fake trainer.",
+  "description": "Tank duel campaign with no GPU or model: real rounds (the Node match process against the planner opponent, Honing's DecisionServer) with a stand-in decision model, GEPA reflecting on the rounds' rendered decision traces through a scripted chat model that checks it was shown them, planner-teacher demonstrations for sft and sampled rollouts for grpo, and a fake trainer. The gate only checks the plumbing. With a stand-in model its level proves nothing, so it plays 8 fresh rounds at a 30% interval, low enough for the GEPA harness to publish and for both train moves to run on the head it published.",
   "integration_dir": "integrations/tank-war",
   "suite": "tasks/suite.jsonl",
   "work_dir": "runs/tank-e2e-dry-run",
-  "gate_tasks": {"split": "val", "limit": 4},
+  "validation_tasks": {"split": "val", "limit": 4},
+  "gate": {"rounds": 8, "looks": 1, "min_effect": 0.0, "confidence": 0.3},
   "harness_tasks": {"split": "train", "limit": 4},
   "episode_budget": 6,
   "samples_per_task": 2,
@@ -24,7 +25,8 @@
     "method": {
       "factory": "honing.backends.tank.e2e:gepa_method",
       "args": {
-        "chat": {"factory": "tests.fakes.tank:chat"},
+        "chat": {"factory": "tests.fakes.tank:chat", "args": {"expect_decisions": true}},
+        "traces": {"factory": "honing.backends.tank.e2e:trace_source"},
         "max_metric_calls": 100,
         "minibatch_size": 3
       }

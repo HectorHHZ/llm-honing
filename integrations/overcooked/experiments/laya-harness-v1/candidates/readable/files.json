@@ -1,0 +1,17 @@
+[
+  {
+    "content": "{\"history_steps\": 4}\n",
+    "kind": "settings",
+    "path": "overcooked/controller.json"
+  },
+  {
+    "content": "{\"action\": \"Choose one native action to cooperate with your teammate and deliver the allowed soups. Face a station before interacting; in manual-cooking mode start a full idle pot with empty hands. Yield narrow paths and avoid duplicating your teammate's work.\"}\n",
+    "kind": "instructions",
+    "path": "overcooked/questions.json"
+  },
+  {
+    "content": "{\"context\": \"readable\", \"choices\": \"static\"}",
+    "kind": "settings",
+    "path": "overcooked/presentation.json"
+  }
+]

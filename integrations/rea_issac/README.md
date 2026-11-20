@@ -16,6 +16,30 @@ resource extractor; a few factual XML values inform the simulation. Room
 layouts, combat behavior, physics, timing, items and all graphics are independent
 implementations. See [ANALYSIS.md](ANALYSIS.md) for the source and scope of that work.
 
+## Research scope
+
+Primary category: **Reactive combat**. Capability tags: room navigation, combat, resource use.
+
+Explore connected rooms and defeat the Warden in the independent Isaac-inspired
+simulation.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose move, shoot and bomb actions. |
+| Harness | Build current-room and discovered-map context with configured history. Validate choices, hold inputs for fixed ticks and pause during inference. |
+| Engine and other policies | Apply room transitions, enemy behavior, collisions, damage and resource costs. The rule baseline acts separately from the model. |
+
+The integration has seeded tasks, a runner, grading and deterministic replay.
+It uses its own simulation and assets. Protocol checks alone do not establish
+model performance.
+
+Suggested evaluation: Measure Warden success, room progress, damage and
+resource use. Compare the model with the rule baseline on matched seeds and the
+same observation configuration.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Play with the UI
 
 Run from the repository root on macOS or Linux (Python 3.10+):

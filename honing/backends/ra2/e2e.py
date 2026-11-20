@@ -8,8 +8,9 @@ the slot's protocol. Components are built in :data:`SLOTS` order, and a
 factory can read the ones built before it from ``context.components``.
 
 The campaign runs the config's ``schedule`` (for example one harness move and
-one train move, each gated on the ``gate_tasks``) and writes the release
-chain, every episode's run directory, and ``summary.json`` under ``work_dir``.
+one train move, each gated on the ``gate_tasks``), or the moves an optional
+``scheduler`` component chooses instead, and writes the release chain, every
+episode's run directory, and ``summary.json`` under ``work_dir``.
 
 ``configs/e2e/ra2_dry_run.json`` plays through the real runner and grader with
 stand-in match and check processes and fake model, trainer, data, and method,
@@ -38,10 +39,10 @@ from honing.campaign import (
     CampaignDefaults,
     CompressionComponents,
     HarnessComponents,
-    ScriptedScheduler,
     StepOutcome,
 )
 from honing.core import (
+    CoAdaptScheduler,
     CompressionBudget,
     ContractError,
     DataProvider,
@@ -65,10 +66,10 @@ from honing.core import (
     TrainJobSpec,
     UtilizationTelemetry,
 )
-from honing.e2e.components import build_component, missing_requirements
+from honing.e2e.components import SCHEDULER_SLOT, build_component, missing_requirements, scheduler_or_script
 from honing.release import EpisodeEvaluator, Gate, ReleaseChain, WinLossSelector
 
-# Built in this order; ``rollout`` and ``evaluator`` are optional.
+# Built in this order; ``rollout``, ``evaluator``, and ``scheduler`` are optional.
 SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("model_source", ModelSource, True),
     ("endpoints", PolicyEndpoints, True),
@@ -79,6 +80,7 @@ SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("rollout", RolloutProvider, False),
     ("method", EvolveMethod, True),
     ("evaluator", Evaluator, False),
+    SCHEDULER_SLOT,
 )
 
 
@@ -198,6 +200,7 @@ class E2ERun:
     campaign: Campaign
     moves: tuple[Move, ...]
     context: E2EContext
+    scheduler: CoAdaptScheduler
 
 
 def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -> E2ERun:
@@ -245,7 +248,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     )
     campaign.start(c["model_source"], work, harness_seed=seed_harness(integration_dir))  # type: ignore[arg-type]
     moves = tuple(_move(entry) for entry in config.get("schedule", ({"kind": "harness"}, {"kind": "train"})))
-    return E2ERun(campaign, moves, context)
+    return E2ERun(campaign, moves, context, scheduler_or_script(c, moves))
 
 
 def summarize(outcomes: Sequence[StepOutcome], run: E2ERun) -> dict[str, object]:
@@ -288,7 +291,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ContractError as error:
         print(f"cannot start: {error}", file=sys.stderr)
         return 2
-    outcomes = run.campaign.run(ScriptedScheduler(run.moves))
+    outcomes = run.campaign.run(run.scheduler)
     summary = summarize(outcomes, run)
     (run.context.work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     for step in summary["steps"]:  # type: ignore[attr-defined]

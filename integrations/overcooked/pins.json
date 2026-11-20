@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/HumanCompatibleAI/overcooked_ai.git",
+  "revision": "739950a079cdaed5a44fcc662efc40244c205d06",
+  "native_sha256": "b80c1bd80f10725ae5354152f52ea0eefc21c3e5a2862e7b3f88f9255526a94a",
+  "observation": "overcooked-full-kitchen-v1",
+  "python": "3.10",
+  "license": "MIT"
+}

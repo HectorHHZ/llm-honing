@@ -1,0 +1,84 @@
+{
+  "kind": "evaluation",
+  "edition": "tank-war",
+  "seed": 3114,
+  "seat": "blue",
+  "opponent": "planner",
+  "seconds": 10,
+  "interval_ms": 200,
+  "opponent_interval_ms": 300,
+  "sample_seed": null,
+  "decision_server": "http://127.0.0.1:63269",
+  "model": {
+    "model": "forecast-q0.700",
+    "instances": [
+      "tank-war-a",
+      "tank-war-b"
+    ],
+    "independent_instances": false,
+    "supported_protocols": [
+      "plans-v1",
+      "controls-v3"
+    ],
+    "family": "laya",
+    "revision": "e2e",
+    "context_limit": null,
+    "branches": 16,
+    "transport": "honing"
+  },
+  "harness": [
+    {
+      "path": "tank/controller.json",
+      "kind": "settings",
+      "role": "controller",
+      "sha256": "f7c778d4f860cc9135204b37ca85a5cd875b9a8e7825b873d29e4022073a8d03"
+    },
+    {
+      "path": "tank/questions.json",
+      "kind": "instructions",
+      "role": "questions",
+      "sha256": "86b1ab377411bcf87c73f470fe3b88df47ef9cc250e8156cee38e8d855b92f3e"
+    }
+  ],
+  "agent_seat": {
+    "controllerMode": "plans",
+    "contextVersion": "full",
+    "assistEnabled": true,
+    "assistProfile": "light",
+    "fireGuardEnabled": false,
+    "strategy": {
+      "id": "baseline",
+      "label": "Planned Steering",
+      "mode": "plans",
+      "status": "baseline",
+      "multiAim": false,
+      "spacingWeight": 0,
+      "description": "Original joint steering with one preferred firing direction."
+    },
+    "decisionVersion": "baseline"
+  },
+  "opponent_seat": {
+    "controllerMode": "plans",
+    "contextVersion": "full",
+    "decisionVersion": "baseline",
+    "assistEnabled": true,
+    "assistProfile": "light",
+    "fireGuardEnabled": false
+  },
+  "sources": {
+    "web/game/engine.js": "35fc0dfdd707b0cd498117678f40cd9f818b6faf251eec333cd4d8eac9436062",
+    "web/game/planner.js": "9ddd57d0208eaa3eaeb663d16a1f9ced680920e2ea548212cedf2a5c0f121ebd",
+    "web/game/adapter.js": "f1b5f9a866657895ea5fd5f54b1ca15422dd8fd66bb403d7c892bd3081aa018c",
+    "web/game/strategies.js": "3d5ac541db905172a45af9db24c9e211571cd1d75057a00d2990189ff959b923",
+    "web/game/teacher.js": "c3b5ffcf455439bd8bda58846a5f8eb7e287146987631f4100e59d4a9457905d",
+    "model-bridge.mjs": "334ba8c1135dee30b77c9e6f3c495f199542726505275969207a2c5153fc7ef3",
+    "scripts/match.mjs": "d772dc96886ffac55350e64ffabf41f394a48fb01b7aff4b7f72f8e47e468d9c"
+  },
+  "node": "v22.22.0",
+  "created_at": "2026-11-15T23:33:40.655Z",
+  "outputs": {
+    "decisions.jsonl": "ed41ee0ecc49786fb63007382f4fd70044314316a681ae4ddabdb8a20ff03122",
+    "events.jsonl": "786257261e1fded9c0ab3d794dacb9772fed2778f27afe9be32c20ac17a1ba60",
+    "result.json": "cee470f0190c552dd42fbe23b215fe07da34478ed06925d20056b76e2ee0aa04"
+  }
+}

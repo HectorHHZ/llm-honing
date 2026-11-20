@@ -11,7 +11,8 @@ import json
 import re
 import shutil
 import sys
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
@@ -21,30 +22,41 @@ from honing.backends.tank import (
     AGENT,
     CONTROLLER_PATH,
     QUESTIONS_PATH,
+    SEED_POOLS,
     TankDemonstrationProvider,
     TankEpisodeRunner,
     TankGrader,
     TankRolloutProvider,
+    TankScenario,
+    TankSuite,
     build_suite,
     check_spec,
+    fresh_seed_gate,
     load_suite,
+    pool_tasks,
     seed_harness,
 )
 from honing.backends.tank.harness import question_keys
 from honing.backends.tank.rollouts import ROLLOUT_CONTRACT
+from honing.backends.tank.scenarios import SPLIT_SEEDS
 from honing.core import (
     CampaignRuleError,
     ContractError,
     DataContract,
+    EpisodeOutcome,
+    EvaluationResult,
+    Grade,
     HarnessFile,
     HarnessSpec,
     HoneRelease,
     PolicyEndpoint,
     PolicyRef,
+    RunnerSupport,
+    Task,
     UpdateCandidate,
     run_graded,
 )
-from honing.release import EpisodeEvaluator
+from honing.release import EpisodeEvaluator, PairedIntervalSelector, ReleaseChain, betting_paired_difference
 from tests.fakes.model import FakeModelSource, FakeWorld
 
 REPO = Path(__file__).resolve().parents[1]
@@ -105,12 +117,26 @@ def test_every_seed_is_played_from_both_seats_and_splits_do_not_share_seeds() ->
     suite = load_suite(SUITE_PATH)
     seeds = {}
     for split in ("train", "val", "heldout"):
-        tasks = suite.tasks(split)  # type: ignore[arg-type]
+        tasks = suite.heldout_tasks() if split == "heldout" else suite.tasks(split)  # type: ignore[arg-type]
         assert [suite.scenario(t.task_id).seat for t in tasks[:2]] == ["blue", "red"]
         seeds[split] = {suite.scenario(t.task_id).seed for t in tasks}
         assert len(tasks) == 2 * len(seeds[split])
     assert not (seeds["train"] & seeds["val"]) and not (seeds["val"] & seeds["heldout"])
     assert suite.tasks("val", limit=4)[3].task_id == "tank-val-s2002-red"
+
+
+@pytest.mark.unit
+def test_the_seed_pools_are_disjoint_from_the_suite_and_from_each_other() -> None:
+    suite_seeds = set().union(*SPLIT_SEEDS.values())
+    assert not set(SEED_POOLS["val"]) & suite_seeds and not set(SEED_POOLS["heldout"]) & suite_seeds
+    assert not set(SEED_POOLS["val"]) & set(SEED_POOLS["heldout"])
+    suite = load_suite(SUITE_PATH)
+    task = pool_tasks("val", [100_123])[1]
+    assert task.task_id == "tank-val-s100123-red"
+    assert (suite.split_of(task.task_id), suite.scenario(task.task_id)) == ("val", TankScenario(100_123, "red"))
+    for unknown in ("tank-val-s99999-blue", "tank-val-s0100000-blue", "tank-train-s100000-blue"):
+        with pytest.raises(ContractError, match="not in the tank suite"):
+            suite.scenario(unknown)
 
 
 @pytest.mark.unit
@@ -265,6 +291,164 @@ def test_the_gate_compares_candidate_and_incumbent_on_the_same_rounds(tmp_path: 
         HoneRelease("r0000", UpdateCandidate("init", None, _snapshot("even"), harness=SEED), None),
     )
     assert evaluation.candidate_scores == (1.0,) * 4 and evaluation.incumbent_scores == (0.5,) * 4
+
+
+# ------------------------------------------------------------------ the gate's seeds
+
+
+def _init(checksum: str) -> UpdateCandidate:
+    return UpdateCandidate("init", None, _snapshot(checksum), harness=SEED)
+
+
+def _trained(checksum: str) -> UpdateCandidate:
+    return UpdateCandidate("train", "r0000", _snapshot(checksum), harness=SEED)
+
+
+class _SeatsAgree:
+    """Runner and grader in one, with no game: a policy scores ``score(checksum, n)`` on the nth pool seed.
+
+    Both seats of a seed get that score, the strongest correlation two seats can have.
+    """
+
+    support = RunnerSupport(agents=frozenset({AGENT}), file_kinds=frozenset({"instructions"}), programmable_loop=False)
+
+    def __init__(self, score: Callable[[str, int], float]) -> None:
+        self.score = score
+        self.suite = load_suite(SUITE_PATH)
+
+    async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
+        return EpisodeOutcome(task.task_id, spec.spec_id, policy.checkpoint.checksum, exit_code=0)
+
+    async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
+        seed = self.suite.scenario(task.task_id).seed
+        return Grade(self.score(outcome.policy_checksum, seed - SEED_POOLS["val"].start))
+
+
+@pytest.mark.unit
+def test_two_consecutive_gates_draw_disjoint_validation_seeds(tmp_path: Path) -> None:
+    suite = load_suite(SUITE_PATH)
+    gate = fresh_seed_gate(_runner(tmp_path), _grader(), suite, rounds=4)
+    incumbent = HoneRelease("r0000", _init("even"), None)
+    played = []
+    for checksum in ("strong", "weak"):
+        evaluation, decision = gate.judge(_trained(checksum), incumbent)
+        seeds = {suite.scenario(record.task_id).seed for record in evaluation.records}
+        assert evaluation.task_ids == tuple(f"tank-val-s{seed}" for seed in sorted(seeds))
+        assert (decision.metrics["seed_first"], decision.metrics["seed_last"]) == (min(seeds), max(seeds))
+        played.append(seeds)
+    assert played == [{100_000, 100_001}, {100_002, 100_003}]
+    assert not set(SPLIT_SEEDS["val"]) & (played[0] | played[1])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "seed_differences", [[0.5] * 6 + [-0.5] * 2, [0.5] * 14 + [-0.5] * 2], ids=["review", "seats-would-select"]
+)
+def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[float]) -> None:
+    # The second seat repeats the first, so it adds no evidence, and the gate must decide as it would on one
+    # difference per seed. The first case is the #197 review's. The second one the interval would select if
+    # every seat counted as its own task.
+    seeds = len(seed_differences)
+    games = _SeatsAgree(lambda policy, seed: 0.5 + seed_differences[seed] if policy == "strong" else 0.5)
+    gate = fresh_seed_gate(games, games, load_suite(SUITE_PATH), rounds=2 * seeds)
+    candidate = _trained("strong")
+    evaluation, decision = gate.judge(candidate, HoneRelease("r0000", _init("even"), None))
+    assert evaluation.task_ids == tuple(f"tank-val-s{100_000 + seed}" for seed in range(seeds))
+    assert len(evaluation.records) == 4 * seeds  # both seats, under the candidate and under the incumbent
+    one_per_seed = betting_paired_difference(
+        EvaluationResult(
+            task_ids=tuple(f"seed{seed}" for seed in range(seeds)),
+            candidate_scores=tuple(0.5 + difference for difference in seed_differences),
+            incumbent_scores=(0.5,) * seeds,
+            evaluated_variant="master",
+        ),
+        confidence=0.95,
+    )
+    assert (decision.metrics["difference_low"], decision.metrics["difference_high"]) == (
+        one_per_seed.low,
+        one_per_seed.high,
+    )
+    assert (decision.metrics["tasks"], decision.metrics["rounds"]) == (seeds, 2 * seeds)
+    assert not decision.selected
+    # The records keep every seat. Counted seat by seat, the second case would be selected.
+    candidate_records, incumbent_records = evaluation.records[: 2 * seeds], evaluation.records[2 * seeds :]
+    seats = EvaluationResult(
+        task_ids=tuple(record.task_id for record in candidate_records),
+        candidate_scores=tuple(record.score for record in candidate_records),
+        incumbent_scores=tuple(record.score for record in incumbent_records),
+        evaluated_variant="master",
+    )
+    assert PairedIntervalSelector().decide(candidate, seats).selected is (seeds == 16)
+
+
+@pytest.mark.unit
+def test_a_release_records_its_gates_seeds_rounds_played_and_early_stop(tmp_path: Path) -> None:
+    games = _SeatsAgree(lambda policy, seed: {"strong": 1.0, "even": 0.5}[policy])
+    gate = fresh_seed_gate(games, games, load_suite(SUITE_PATH), rounds=80, looks=2)
+    chain = ReleaseChain(tmp_path / "releases")
+    initial = chain.initialize(_init("even"))
+    # The candidate wins every round of the first block of 20 seeds, so the interim look selects it.
+    candidate = _trained("strong")
+    _, decision = gate.judge(candidate, initial)
+    release = chain.commit(candidate, decision)
+    recorded = json.loads(chain.record_path.read_text().splitlines()[-1])["decision"]["metrics"]
+    expected = {"seed_first": 100_000.0, "seed_last": 100_019.0, "tasks": 20.0, "rounds": 40.0, "stopped_early": 1.0}
+    for metrics in (release.decision.metrics, recorded):  # type: ignore[union-attr]
+        assert {name: metrics[name] for name in expected} == expected
+    # A tie never clears the interval, so the gate plays both blocks and then rejects.
+    _, tie = gate.judge(_trained("even"), initial)
+    assert not tie.selected
+    assert {name: tie.metrics[name] for name in expected} == {
+        "seed_first": 100_020.0,
+        "seed_last": 100_059.0,
+        "tasks": 40.0,
+        "rounds": 80.0,
+        "stopped_early": 0.0,
+    }
+
+
+@pytest.mark.unit
+def test_no_campaign_code_path_can_request_heldout() -> None:
+    suite = load_suite(SUITE_PATH)
+    with pytest.raises(ContractError, match="experiment scripts"):
+        suite.tasks("heldout")
+    with pytest.raises(ContractError, match="experiment scripts"):
+        pool_tasks("heldout", [200_000])
+    with pytest.raises(ContractError, match="pool must be one of"):
+        pool_tasks("train", [1001])
+    # Experiment scripts read the suite's heldout tasks and the heldout pool.
+    assert len(suite.heldout_tasks()) == 2 * len(SPLIT_SEEDS["heldout"])
+    pooled = suite.heldout_tasks([200_000])
+    assert [task.task_id for task in pooled] == ["tank-heldout-s200000-blue", "tank-heldout-s200000-red"]
+    assert suite.split_of(pooled[0].task_id) == "heldout"
+    with pytest.raises(ContractError, match="not in the heldout pool"):
+        suite.heldout_tasks([100_000])
+
+
+@pytest.mark.unit
+def test_a_gate_whose_rounds_do_not_split_into_whole_seeds_is_refused(tmp_path: Path) -> None:
+    for rounds, looks in ((7, 1), (8, 3), (12, 4)):
+        with pytest.raises(ContractError, match="whole seeds"):
+            fresh_seed_gate(_runner(tmp_path), _grader(), load_suite(SUITE_PATH), rounds=rounds, looks=looks)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("index", "task_id", "seed"),
+    [
+        (0, "tank-train-s150000-blue", 150_000),
+        (32, "tank-val-s150000-blue", 150_000),
+        (48, "tank-heldout-s150000-blue", 150_000),
+        # Named as a pool task, the line is what the runner would play for that pool task: seed 2001.
+        (32, "tank-val-s100000-blue", 2001),
+    ],
+    ids=["train", "val", "heldout", "pool-task-id"],
+)
+def test_a_gate_refuses_a_suite_line_it_could_play(tmp_path: Path, index: int, task_id: str, seed: int) -> None:
+    records = build_suite()
+    records[index] = {**records[index], "task_id": task_id, "tank": asdict(TankScenario(seed, "blue"))}
+    with pytest.raises(ContractError, match=rf"val pool, seeds 100000 to 199999, .*: {task_id} \(seed {seed}\)$"):
+        fresh_seed_gate(_runner(tmp_path), _grader(), TankSuite(tuple(records)), rounds=2)
 
 
 # ------------------------------------------------------------------ training data

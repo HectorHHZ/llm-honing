@@ -1,0 +1,138 @@
+{
+  "scope": "Author-side standalone Celeste Classic2015 community C-port demo; no training/campaign/completion claim",
+  "game": {
+    "repository": "https://github.com/lemon32767/ccleste",
+    "revision": "261d96f15af430b8111abc7a5250229246654f52",
+    "arithmetic": "upstream floating point",
+    "compiler": "gcc11.3.0",
+    "SDL2": "2.0.20",
+    "SDL2_mixer": "2.0.4",
+    "binarySha256": "3129d4f09c09b0da7ddabf6230ebba8d4e51d9f38af69d35b963643b69c42df2",
+    "assets": "upstream local checkout only; no game/asset redistribution"
+  },
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+    "layaVersion": "0.3.20",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu",
+    "maxLen": 2048,
+    "headMaxLen": 512
+  },
+  "nativeModel": {
+    "decisions": 20,
+    "ticksPerDecision": 12,
+    "verifiedRequestActionPairs": 20,
+    "originalUpdateDrawClockChecks": true,
+    "actionCounts": {
+      "dash_up": 20
+    },
+    "initialPlayer": {
+      "x": 8,
+      "y": 96,
+      "vx": 0,
+      "vy": 0,
+      "dashes": 1,
+      "grounded": true
+    },
+    "firstAfterPlayer": {
+      "x": 8,
+      "y": 71,
+      "vx": 0,
+      "vy": -0.45,
+      "dashes": 0,
+      "grounded": false
+    },
+    "finalPlayer": {
+      "x": 8,
+      "y": 96,
+      "vx": 0,
+      "vy": 0,
+      "dashes": 1,
+      "grounded": true
+    },
+    "finalRoom": 0,
+    "deaths": 0,
+    "roomCompletion": false,
+    "wallSeconds": 37.506,
+    "recordedClientSourceSha256": {
+      "build.py": "b748c6124f4ace1de00a9d16b7735e8764b5dd7e405f69fe22c979c8ae6b3c71",
+      "encode.py": "085c7ba2ca46a5e7cf6a24c3240cbfb3eb9e3a1ce87e3bef33a6c0c6d8bb4a9e",
+      "run.py": "51097fa879c39cf9322ab95fdef3bed49f0903d9970a84aa1fd3b229bf9e60c0",
+      "verify_native.py": "1bad98a33a01d898032c91fae9bffe19dff2fcf7a8f0ccae948e11ed5335cd01"
+    }
+  },
+  "video": {
+    "frames": 240,
+    "fps": 30,
+    "simulationSeconds": 8.0,
+    "waitingOmitted": true,
+    "audioIncluded": false,
+    "sha256": "62a47fe0cda4e660743a61e190505e32adf48a96f53680ce6b3c3a694f02588d",
+    "probe": {
+      "width": 512,
+      "height": 512,
+      "r_frame_rate": "30/1",
+      "duration": "8.000000",
+      "nb_read_frames": "240"
+    }
+  },
+  "nativeChecks": {
+    "fixedActions": 15,
+    "all14OptionsCheckedAsFirstInputAfterReset": true,
+    "nativeJumpDashEffectsAsserted": true,
+    "invalidCommandsRejected": 13,
+    "pausedStable": true,
+    "resetSnapshotRestored": true,
+    "injectedInvalidModelFixtureZeroActions": true,
+    "continuousStaleFloodWatchdog": {
+      "elapsedSeconds": 2.147,
+      "rejections": 192,
+      "finalStatus": "watchdog",
+      "gameplayTicks": 0,
+      "nativeUpdates": 60,
+      "nativeDraws": 60
+    }
+  },
+  "ownedProcesses": {
+    "modelRunReaped": true,
+    "nativeCheckReaped": true,
+    "sharedModelUntouched": true
+  },
+  "portableChecks": {
+    "command": "pytest tests/test_celeste_classic.py",
+    "passed": 47,
+    "fixtures": "synthetic; separate from real model/native run"
+  },
+  "repositoryChecks": {
+    "command": "pytest -m 'not gpu'",
+    "passed": 1347,
+    "skipped": 42,
+    "deselected": 1,
+    "xfailed": 1,
+    "subtestsPassed": 6,
+    "preCommitAllFiles": "passed",
+    "mypy": "149 source files: no issues",
+    "scope": "Full suite before cleanup-receipt ownership fix; 47 focused cases and all pre-commit hooks passed after that fix. Native/game/model gate unchanged."
+  },
+  "unverified": [
+    "independent native rerun",
+    "cross-build deterministic replay",
+    "room or whole-game completion",
+    "campaign runner/grader"
+  ],
+  "submittedSourceSha256": {
+    "README.md": "8a701627c9a848aef05c4904b0d4e0ffb98418869a28e1c5ea6e4a66ec8424fd",
+    "integrations/celeste-classic/API.md": "06dad6af806e2b1d83d93709c2ee625c89e81c4cb53cf458e2e8d3624c0d0330",
+    "integrations/celeste-classic/README.md": "d69555219bfc831e9fdfd2aa7861bc7ef807c6e4c3ba6de8756a6403758a1735",
+    "integrations/celeste-classic/build.py": "b748c6124f4ace1de00a9d16b7735e8764b5dd7e405f69fe22c979c8ae6b3c71",
+    "integrations/celeste-classic/encode.py": "085c7ba2ca46a5e7cf6a24c3240cbfb3eb9e3a1ce87e3bef33a6c0c6d8bb4a9e",
+    "integrations/celeste-classic/engine.inc.c": "ca3899bb4ca64dfa9be51b28d55224bc83b56d7e24cd00ec844866c3c18736d1",
+    "integrations/celeste-classic/frontend.inc.c": "c0a33c6829c97b56fba44ebc3d2b02193f1054c1c258df432c75e27d17280fc0",
+    "integrations/celeste-classic/run.py": "22cf4a1544ef5ea051120263d71d8c9b34a00f49199ccd35b89e15d8529a9b66",
+    "integrations/celeste-classic/verify_native.py": "1bad98a33a01d898032c91fae9bffe19dff2fcf7a8f0ccae948e11ed5335cd01",
+    "tests/test_celeste_classic.py": "b258e6757ba8414b9c84f29a58fd5f0b4369d0a306896bca643132ad2e12c3d0"
+  },
+  "postModelRunChange": "run.py only: guard cleanup receipt with output ownership, so refusing an existing output cannot overwrite its prior receipt. New portable regression passes; native binary and accepted model-to-action path unchanged."
+}

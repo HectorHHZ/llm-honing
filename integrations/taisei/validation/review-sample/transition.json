@@ -1,0 +1,44 @@
+{
+  "before": {
+    "id": 1,
+    "frame": 0,
+    "fps": 60,
+    "stage": 1,
+    "gameover": 0,
+    "viewport": [
+      480,
+      560
+    ],
+    "player": {
+      "x": 240.0,
+      "y": 496.0,
+      "lives": 8,
+      "bombs": 3,
+      "score": 0
+    },
+    "visibleEnemyBullets": 0,
+    "nearestBullets": []
+  },
+  "action": "up",
+  "frames": 120,
+  "after": {
+    "id": 2,
+    "frame": 120,
+    "fps": 60,
+    "stage": 1,
+    "gameover": 0,
+    "viewport": [
+      480,
+      560
+    ],
+    "player": {
+      "x": 240.0,
+      "y": 238.875,
+      "lives": 8,
+      "bombs": 3,
+      "score": 420
+    },
+    "visibleEnemyBullets": 0,
+    "nearestBullets": []
+  }
+}

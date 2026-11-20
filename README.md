@@ -9,6 +9,24 @@ infra it runs on is being built here.
 See [game runtime and adapter locations](integrations/README.md) for the
 Python import paths, package contents and replay compatibility.
 
+The games are grouped by the decisions a model must make under a specified
+harness. These categories describe research tasks; measured model ability
+requires evaluation under that configuration.
+
+| Category | Main decision demand | Games |
+| --- | --- | --- |
+| Precision control | Select movement actions in the required sequence and at the required time. | [Celeste Classic](integrations/celeste-classic/README.md#research-scope), [VVVVVV](integrations/vvvvvv/README.md#research-scope) |
+| Reactive combat | Select movement and combat actions as threats change. | [Taisei](integrations/taisei/README.md#research-scope), [Hurrican](integrations/hurrican/README.md#research-scope), [Hollow Knight imitation](integrations/hollow-knight/README.md#research-scope), [Soul Knight student project](integrations/soul-knight/README.md#research-scope), [REA-Issac](integrations/rea_issac/README.md#research-scope), [Ember Vault](integrations/ember-vault/README.md#research-scope) |
+| Spatial and tactical planning | Select routes and account for later action effects. | [Griddly Spiders](integrations/griddly/README.md#research-scope), [Frost Circuit](integrations/frost-circuit/README.md#research-scope) |
+| Exploration and resource planning | Use information and resources to complete dependent goals. | [Craftax](integrations/craftax/README.md#research-scope), [Brogue CE](integrations/brogue_ce/README.md#research-scope) |
+| Competitive decision-making | Select tactics or strategy against an opponent. | [Tank War](integrations/tank-war/README.md#research-scope), [Red Alert 2](integrations/ra2/README.md#research-scope) |
+| Cooperative coordination | Select actions that support a shared task with a teammate. | [Overcooked-AI](integrations/overcooked/README.md#research-scope) |
+
+The [research index and responsibility matrix](integrations/README.md#research-categories)
+explain what the model, harness and engine each supply. Each game link above
+opens its research scope. The [public Tank War site](integrations/tank-war-challenge/README.md#research-scope)
+is a separate configuration of Tank War.
+
 ### Red Alert 2
 
 https://github.com/user-attachments/assets/08a30342-5381-4f22-a8ae-6b438cff2994
@@ -47,6 +65,12 @@ on the model server; the browser needs no GPU.
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
+### Ember Vault
+
+[`integrations/ember-vault/`](integrations/ember-vault/README.md) adds an original
+top-down action roguelike with seeded vaults, a playable browser UI, a rule
+controller and deterministic action replay.
+
 ### Griddly Spiders
 
 [`integrations/griddly/`](integrations/griddly/README.md) adds native Griddly
@@ -58,6 +82,12 @@ from the original local-view task. A project-local launcher and English HTML
 replay support local inspection. The runtime is optional; native HTTP contract
 checks use a rule stand-in. A real NanoJev smoke episode reached the step limit
 after choosing WAIT throughout. Real model training remains to be run.
+
+### Frost Circuit
+
+[`integrations/frost-circuit/`](integrations/frost-circuit/README.md) adds an
+original turn-based roguelike with seeded stations, visible attack warnings,
+browser play, and a headless runner for deterministic action replay.
 
 ### Craftax
 
@@ -80,6 +110,12 @@ engine needs only the Python standard library. It is not the original Isaac
 engine and includes no original game assets. Model integration is checked with
 a local protocol stand-in; no model performance result is claimed yet.
 
+### Brogue CE
+
+[`integrations/brogue_ce/`](integrations/brogue_ce/README.md) connects the
+native WebBrogue keyboard and display interface to Python. Run a seeded
+dungeon and watch its recording in the original graphical client.
+
 ### Bring your own model
 
 The games talk to a model through the same two HTTP routes the decision server
@@ -92,6 +128,11 @@ in the RA2 README runs a match against one.
 A standalone [Hollow Knight imitation demo](integrations/hollow-knight/README.md)
 connects a caller-supplied Unity Mono build to those same routes and records the
 game's rendered frames. It is an input-adapter demo; it has no training or campaign runner.
+
+A standalone [Celeste Classic demo](integrations/celeste-classic/README.md) connects
+an existing C source port of the 2015 game to the same server and records bounded
+native inputs. Its first-room demo has paused observations and strict model
+response checks; it is a different game from commercial Celeste (2018).
 
 Try the hosted human-versus-model game at **[play.honinglab.com](https://play.honinglab.com/play/)**.
 We plan to open **Tank War Arena** for bring-your-own-model matches. Public

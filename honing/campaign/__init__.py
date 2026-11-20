@@ -12,7 +12,7 @@ from honing.campaign.campaign import (
     HarnessComponents,
     StepOutcome,
 )
-from honing.campaign.scheduler import ScriptedScheduler
+from honing.campaign.scheduler import ScriptedScheduler, restore_scheduler
 
 __all__ = [
     "Campaign",
@@ -21,5 +21,6 @@ __all__ = [
     "HarnessComponents",
     "ScriptedScheduler",
     "StepOutcome",
+    "restore_scheduler",
     "rules",
 ]

@@ -9,6 +9,7 @@ from pathlib import Path
 from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, HarnessComponents
 from honing.core import (
     BackendSupport,
+    CandidateSelector,
     CompressionBudget,
     DataProvider,
     EvolveMethod,
@@ -70,10 +71,15 @@ def build_campaign(
     data: DataProvider | None = None,
     make_runner: Callable[[FakeWorld], FakeEpisodeRunner] = FakeEpisodeRunner,
     gate_tasks: Sequence[Task] = TASKS,
+    harness_selector: CandidateSelector | None = None,
+    method_tasks: Sequence[Task] | None = None,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake.
 
     ``gate_tasks`` are the gate's tasks and the harness plane's default tasks.
+    ``harness_selector`` is the gate's selector for harness candidates. With
+    ``method_tasks``, a harness candidate must pass the method's selector on
+    those tasks and then the gate's (``HarnessComponents.method_evaluator``).
     """
     world = FakeWorld()
     trainer = FakeTrainer(world, support=support, gain=trainer_gain)
@@ -88,8 +94,13 @@ def build_campaign(
         EpisodeEvaluator(runner, grader, gate_tasks),
         default_selector=WinLossSelector(),
         # Cost-driven changes need only avoid regressing; quality-driven ones must win.
-        selectors={"prune": NoRegressionSelector(0.05), "quantize": NoRegressionSelector(0.05)},
+        selectors={
+            "prune": NoRegressionSelector(0.05),
+            "quantize": NoRegressionSelector(0.05),
+            **({"harness": harness_selector} if harness_selector is not None else {}),
+        },
     )
+    method_evaluator = EpisodeEvaluator(runner, grader, method_tasks) if method_tasks is not None else None
     campaign = Campaign(
         chain=ReleaseChain(work_dir / "releases"),
         gate=gate,
@@ -102,7 +113,9 @@ def build_campaign(
             quantizer=quantizer,
             telemetry=FixedTelemetryStore(skewed_expert_telemetry(small_moe())),
         ),
-        harness=HarnessComponents(runner=runner, grader=grader, method=method, tasks=tuple(gate_tasks)),
+        harness=HarnessComponents(
+            runner=runner, grader=grader, method=method, tasks=tuple(gate_tasks), method_evaluator=method_evaluator
+        ),
         defaults=CampaignDefaults(
             train=TrainJobSpec(algorithm="sft", steps=10),
             budget=CompressionBudget(keep_ratio=0.75),

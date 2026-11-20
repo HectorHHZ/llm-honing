@@ -13,6 +13,10 @@ Training raises quality, so a train move starts firing. Weapon instructions
 that tell it to fire whenever the shot is permitted make any quality fire, so
 a harness edit changes the score only through what the model is told, as the
 all-planes dry run's verify bonus does.
+
+GEPA's scripted chat model can also check what it is shown: with
+``expect_decisions`` it refuses a reflection prompt in which an example does
+not hold the round's rendered decisions with every option's probability.
 """
 
 from __future__ import annotations
@@ -20,15 +24,24 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import threading
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from honing.backends.jev.server import DecisionServer
 from honing.backends.jev.token_budget import SECTIONS
 from honing.backends.tank.e2e import E2EContext
-from honing.core import ArchitectureSpec, BackendSupport, PolicyEndpoint, PolicyRef
+from honing.core import (
+    ArchitectureSpec,
+    BackendSupport,
+    ChatMessage,
+    ChatReply,
+    ContractError,
+    PolicyEndpoint,
+    PolicyRef,
+)
 from tests.fakes.harness import FakeChatModel
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld
 
@@ -169,6 +182,23 @@ def trainer(context: E2EContext, gain: float = 0.2) -> FakeTrainer:
     return FakeTrainer(_world(context), support=DECISION_TRAINER, gain=gain)
 
 
-def chat(context: object, replies: tuple[str, ...] = (EAGER_QUESTIONS,)) -> FakeChatModel:
-    """GEPA's reflection model: returns ``replies`` in order."""
-    return FakeChatModel(list(replies))
+# A rendered motion and weapon decision (honing/harness/traces.py): each option's probability, then the choice.
+RENDERED_MOTION = re.compile(r"^  motion: (?:\w+ [01]\.\d{3}, ){8}\w+ [01]\.\d{3}; chose \w+$", re.MULTILINE)
+RENDERED_WEAPON = re.compile(r"^  weapon: fire [01]\.\d{3}, hold [01]\.\d{3}; chose (?:fire|hold)$", re.MULTILINE)
+
+
+class DecisionReadingChatModel(FakeChatModel):
+    """A scripted chat model that refuses a reflection prompt unless every example shows rendered decisions."""
+
+    def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int, temperature: float) -> ChatReply:
+        examples = "\n".join(message.content for message in messages).split("# Example ")[1:]
+        if not examples or not all(RENDERED_MOTION.search(e) and RENDERED_WEAPON.search(e) for e in examples):
+            raise ContractError("the reflection prompt does not show each round's decisions with their probabilities")
+        return super().complete(messages, max_tokens=max_tokens, temperature=temperature)
+
+
+def chat(
+    context: object, replies: tuple[str, ...] = (EAGER_QUESTIONS,), expect_decisions: bool = False
+) -> FakeChatModel:
+    """GEPA's reflection model: returns ``replies`` in order, and with ``expect_decisions`` checks each prompt."""
+    return DecisionReadingChatModel(list(replies)) if expect_decisions else FakeChatModel(list(replies))

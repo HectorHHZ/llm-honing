@@ -16,7 +16,8 @@
 //
 // --out (which must not exist) receives manifest.json, decisions.jsonl (one row per question set the agent was
 // asked, with the state, questions, answers, and executed choice), events.jsonl, and result.json; a run that
-// stops on an error writes error.json and exits 1.
+// stops on an error writes error.json and exits 1. When the round ends, the manifest is written again with the
+// SHA-256 of each of the other three files under "outputs", so a reader can refuse a run whose files changed.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
@@ -77,6 +78,8 @@ const INTERVENTIONS = [
     "plan_veto",
     "plan_intent_retained",
 ];
+// The files a finished round writes after the manifest; the manifest records each one's SHA-256.
+export const OUTPUTS = ["decisions.jsonl", "events.jsonl", "result.json"];
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
 // The controller settings a harness asks for, checked; throws on anything a match would misread.
@@ -421,53 +424,48 @@ export async function playMatch({
           ? "rollout"
           : "evaluation";
     const sourceHashes = await sources();
+    const manifest = {
+        kind,
+        edition: "tank-war",
+        seed,
+        seat,
+        opponent,
+        seconds,
+        interval_ms: intervalMs,
+        opponent_interval_ms: opponentIntervalMs,
+        sample_seed: sampleSeed ?? null,
+        decision_server: teacher || replayDir ? null : decisionServer,
+        replay_source: replayDir ?? null,
+        model,
+        critical_fault_sha256: criticalFaultText
+            ? sha256(criticalFaultText)
+            : null,
+        critical_layer: criticalFault?.layer ?? null,
+        critical_checkpoint: alternateModel ?? null,
+        critical_harness_files: alternateHarness?.files ?? null,
+        harness: harness.files,
+        harness_sha256: sha256(JSON.stringify(harness.files)),
+        controller_sha256: sha256(
+            JSON.stringify({
+                engine: sourceHashes["web/game/engine.js"],
+                planner: sourceHashes["web/game/planner.js"],
+                adapter: sourceHashes["web/game/adapter.js"],
+                settings: harness.files.find(
+                    (file) => file.role === "controller",
+                )?.sha256,
+                fault: controllerFaultText ? sha256(controllerFaultText) : null,
+            }),
+        ),
+        agent_seat: { ...harness.seat },
+        opponent_seat: OPPONENT_SEAT,
+        sources: sourceHashes,
+        code_commit: codeCommit(),
+        node: process.version,
+        created_at: new Date().toISOString(),
+    };
     await writeFile(
         join(out, "manifest.json"),
-        JSON.stringify(
-            {
-                kind,
-                edition: "tank-war",
-                seed,
-                seat,
-                opponent,
-                seconds,
-                interval_ms: intervalMs,
-                opponent_interval_ms: opponentIntervalMs,
-                sample_seed: sampleSeed ?? null,
-                decision_server: teacher || replayDir ? null : decisionServer,
-                replay_source: replayDir ?? null,
-                model,
-                critical_fault_sha256: criticalFaultText
-                    ? sha256(criticalFaultText)
-                    : null,
-                critical_layer: criticalFault?.layer ?? null,
-                critical_checkpoint: alternateModel ?? null,
-                critical_harness_files: alternateHarness?.files ?? null,
-                harness: harness.files,
-                harness_sha256: sha256(JSON.stringify(harness.files)),
-                controller_sha256: sha256(
-                    JSON.stringify({
-                        engine: sourceHashes["web/game/engine.js"],
-                        planner: sourceHashes["web/game/planner.js"],
-                        adapter: sourceHashes["web/game/adapter.js"],
-                        settings: harness.files.find(
-                            (file) => file.role === "controller",
-                        )?.sha256,
-                        fault: controllerFaultText
-                            ? sha256(controllerFaultText)
-                            : null,
-                    }),
-                ),
-                agent_seat: { ...harness.seat },
-                opponent_seat: OPPONENT_SEAT,
-                sources: sourceHashes,
-                code_commit: codeCommit(),
-                node: process.version,
-                created_at: new Date().toISOString(),
-            },
-            null,
-            2,
-        ),
+        JSON.stringify(manifest, null, 2),
     );
 
     const game = new adapter.Game(seed);
@@ -828,6 +826,15 @@ export async function playMatch({
         throw Error(
             "Replay did not consume the complete recorded decision trace",
         );
+    manifest.outputs = Object.fromEntries(
+        await Promise.all(
+            OUTPUTS.map(async (f) => [f, sha256(await readFile(join(out, f)))]),
+        ),
+    );
+    await writeFile(
+        join(out, "manifest.json"),
+        JSON.stringify(manifest, null, 2),
+    );
     return result;
 }
 

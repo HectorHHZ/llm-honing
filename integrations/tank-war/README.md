@@ -21,6 +21,29 @@ model endpoints. We plan to open **Tank War Arena** for bring-your-own-model
 matches. Public model submission is not open yet. You can connect your own
 models to this local integration now.
 
+## Research scope
+
+Primary category: **Competitive decision-making**. Capability tags: opponent response, short-term prediction, control.
+
+Fight another tank in a maze with shells that can bounce and hit their owner.
+
+| Component                 | Responsibility in this configuration                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model                     | In planned mode, rank nine drive/turn plans and answer fire/hold for the selected motion. Raw mode exposes separate controls.                                       |
+| Harness                   | Build tactical context and candidate plans. Filter choices, recheck shots and apply configured geometric dodge assistance. Set decision cadence and action mapping. |
+| Engine and other policies | Apply maze geometry, movement, shell bounces, collisions and round outcomes. The opponent policy acts separately.                                                   |
+
+Forecasts and dodge assistance can supply part of the observed behavior. Arena-only
+context removes forecasts. Record controller mode, context and each
+assistance setting.
+
+Suggested evaluation: Compare matched seeds from both seats under the same
+opponent. Report win/draw/loss and group paired seats by seed. Vary assistance
+separately from model weights.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Quick start
 
 Node.js 22 or newer is enough for local keyboard play. No build, Python, GPU or
@@ -297,7 +320,11 @@ performance. The policy acts every 200 ms of game time and the opponent every
 
 The output includes `manifest.json` (scenario, model and source/harness hashes),
 `decisions.jsonl` (exact context, questions, probabilities and choices),
-`events.jsonl` and `result.json`. Use a new output directory for each run.
+`events.jsonl` and `result.json`. Each `shot` and `kill` event names its shell under
+`shell`, so a reader can tell which shot hit. Use a new output directory for each run. When
+the round ends, the manifest records the SHA-256 of the other three files under
+`outputs`. Honing's trace loader (`honing/backends/tank/traces.py`) refuses a run
+whose files do not match it.
 
 | Harness file           | Kind         | Purpose                                                             |
 | ---------------------- | ------------ | ------------------------------------------------------------------- |
@@ -327,12 +354,16 @@ This checks a GEPA move, SFT and GRPO with a CPU stand-in model and trainers. It
 does not demonstrate improved real model weights. For real NanoJev weights,
 `configs/e2e/tank_direction_edit.json` runs a `direction_edit` train move:
 the head moved along one direction read from the planner teacher's rounds,
-with no gradients, then gated on the validation tasks. [direction-edit.md](direction-edit.md)
+with no gradients, then gated on fresh validation seeds. [direction-edit.md](direction-edit.md)
 has the method, the numbers (0.38 to 0.56 or 0.64 on 64 unseen rounds, against
 0.53 for one epoch of SFT) and how to run it. See the
 [campaign guide](../../scripts/e2e/README.md#the-tank-campaign). The task suite
 contains 16 training, 8 validation and 8 held-out seeds, each played from both
-seats. From this integration directory, regenerate it with:
+seats. Every gate draws its rounds from a pool of 100,000 further validation
+seeds, and a pool of 100,000 held-out seeds is read only by experiment scripts
+(`honing/backends/tank/scenarios.py`). A suite with a task on a validation pool
+seed, or under a pool task's id, is refused before a campaign starts. From this
+integration directory, regenerate the suite with:
 
 ```bash
 python -m honing.backends.tank.scenarios tasks/suite.jsonl

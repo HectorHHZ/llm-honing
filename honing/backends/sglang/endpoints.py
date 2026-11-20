@@ -14,10 +14,8 @@ down, and otherwise its health route is probed unless it passed less than
 ``health_ttl_seconds`` ago, with ``health_timeout_seconds`` for an answer. A
 probe that fails is repeated once at once, and the server is down only if both
 fail, so a hung server is found within about twice ``health_timeout_seconds``.
-For ``"jev_decision"`` this checks the decision server's process and its
-``/v1/health`` route only, not the SGLang engine inside it. A server that is
-down is stopped and started again once on the same GPU; if that
-start fails, or the server goes down again after its restart, the call raises
+A server that is down is stopped and started again once on the same GPU; if
+that start fails, or the server goes down again after its restart, the call raises
 :class:`~honing.core.ContractError` naming the checkpoint, and so does every
 later call for it. The one restart belongs to a started server, not to the
 checkpoint: a server stopped to make room and started again later gets a new

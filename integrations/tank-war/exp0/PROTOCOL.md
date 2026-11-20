@@ -1,4 +1,9 @@
-# Tank War Exp 0: registered protocol (draft)
+# Tank War Exp 0: historical scale-up protocol
+
+The current #183 v0 acceptance protocol is [v0/PROTOCOL.md](v0/PROTOCOL.md),
+with fixed versions in [v0/freeze.json](v0/freeze.json) and delivery status in
+[v0/STATUS.md](v0/STATUS.md). This document preserves the earlier study and
+amendments; its scale-up gates do not apply to v0.
 
 Issue: [#183](https://github.com/HectorHHZ/llm-honing/issues/183), under
 [#174](https://github.com/HectorHHZ/llm-honing/issues/174) and

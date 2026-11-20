@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -11,6 +12,7 @@ import {
     parseController,
     CONTROLLER_PATH,
     QUESTIONS_PATH,
+    OUTPUTS,
 } from "../scripts/match.mjs";
 import { DEFAULT_QUESTIONS } from "../model-bridge.mjs";
 import {
@@ -168,6 +170,15 @@ test("a teacher round is recorded and replays exactly", async () => {
         manifest.harness.map((h) => h.role),
         ["controller", "questions"],
     );
+    // The manifest closes the round with the SHA-256 of every other file it wrote.
+    for (const file of OUTPUTS)
+        assert.equal(
+            manifest.outputs[file],
+            createHash("sha256")
+                .update(await readFile(join(runs[0].out, file)))
+                .digest("hex"),
+        );
+    assert.deepEqual(Object.keys(manifest.outputs), OUTPUTS);
     const { result, decisions } = runs[0];
     assert.ok(["hit", "draw", "timeout"].includes(result.reason));
     assert.equal(result.ended, result.reason !== "timeout");

@@ -6,16 +6,22 @@ The config names every component by import path, as RA2's does
 ``function(context, **args)``. Components are built in :data:`SLOTS` order,
 and a factory can read the ones built before it from ``context.components``.
 
-The campaign runs the config's ``schedule`` of harness and train moves. Every
-move is gated on ``gate_tasks`` (the ``val`` split); a harness method draws its
-minibatches from ``harness_tasks`` and rollouts are played on them too (the
-``train`` split). It writes the release chain, every round's run directory,
-and ``summary.json`` under ``work_dir``.
+The campaign runs the config's ``schedule`` of harness and train moves, or the
+moves an optional ``scheduler`` component chooses instead. Every move is gated
+by :func:`~honing.backends.tank.gate.fresh_seed_gate`: the paired interval
+selector on ``val`` pool seeds no earlier gate played, sized by the config's
+``gate`` block (``rounds``, ``looks``, ``min_effect``, ``confidence``). A
+harness move must also pass its method's own selector on ``validation_tasks``,
+the suite file's fixed ``val`` tasks, which GEPA keeps for its Pareto front. A
+harness method draws its minibatches from ``harness_tasks`` and rollouts are
+played on them too (the ``train`` split). No task setting can name ``heldout``.
+It writes the release chain, every round's run directory, and ``summary.json``
+under ``work_dir``.
 
 ``configs/e2e/tank_dry_run.json`` plays real rounds (the Node match process and
 Honing's ``DecisionServer``) with a stand-in decision model, a fake trainer,
-and GEPA reflecting through a scripted chat model, so it runs on a CPU with
-Node and the ``gepa`` extra.
+and GEPA reflecting, through a scripted chat model, on the rounds' rendered
+decision traces, so it runs on a CPU with Node and the ``gepa`` extra.
 
 Run: ``python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json``
 """
@@ -32,27 +38,28 @@ from pathlib import Path
 from typing import Any, get_args
 
 from honing.backends.tank.demonstrations import TankDemonstrationProvider
+from honing.backends.tank.gate import fresh_seed_gate, refuse_pool_overlap
 from honing.backends.tank.grader import TankGrader
 from honing.backends.tank.harness import seed_harness
 from honing.backends.tank.rollouts import TankRolloutProvider
 from honing.backends.tank.runner import TankEpisodeRunner
 from honing.backends.tank.scenarios import Split, TankSuite, load_suite
+from honing.backends.tank.traces import TankTraceSource
 from honing.campaign import (
     Campaign,
     CampaignDefaults,
     CompressionComponents,
     HarnessComponents,
-    ScriptedScheduler,
     StepOutcome,
 )
 from honing.core import (
     ChatModel,
+    CoAdaptScheduler,
     CompressionBudget,
     ContractError,
     DataProvider,
     EpisodeOutcome,
     EpisodeRunner,
-    Evaluator,
     EvolveMethod,
     HarnessMoveConfig,
     HarnessSpec,
@@ -69,17 +76,18 @@ from honing.core import (
     SignalKind,
     Task,
     TaskGrader,
+    TraceSource,
     Trainer,
     TrainJobSpec,
     UtilizationTelemetry,
 )
-from honing.e2e.components import build_component, missing_requirements
-from honing.release import EpisodeEvaluator, Gate, ReleaseChain, WinLossSelector
+from honing.e2e.components import SCHEDULER_SLOT, build_component, missing_requirements, scheduler_or_script
+from honing.release import EpisodeEvaluator, Gate, ReleaseChain
 
 DEFAULT_INTEGRATION = "integrations/tank-war"
 DEFAULT_SUITE = "tasks/suite.jsonl"
 
-# Built in this order; ``rollout`` and ``evaluator`` are optional.
+# Built in this order; ``rollout`` and ``scheduler`` are optional. The gate's evaluator is always the fresh-seed one.
 SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("model_source", ModelSource, True),
     ("endpoints", PolicyEndpoints, True),
@@ -89,7 +97,7 @@ SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("data", DataProvider, True),
     ("rollout", RolloutProvider, False),
     ("method", EvolveMethod, True),
-    ("evaluator", Evaluator, False),
+    SCHEDULER_SLOT,
 )
 
 
@@ -101,7 +109,7 @@ class E2EContext:
     integration_dir: Path
     work_dir: Path
     suite: TankSuite
-    gate_tasks: tuple[Task, ...]
+    validation_tasks: tuple[Task, ...]
     harness_tasks: tuple[Task, ...]
     components: dict[str, object] = field(default_factory=dict)
     shared: dict[str, object] = field(default_factory=dict)
@@ -221,16 +229,29 @@ def demonstrations(context: E2EContext, limit: int | None = None) -> TankDemonst
     )
 
 
-def gepa_method(context: E2EContext, chat: Mapping[str, Any], **config: Any) -> Any:
-    """GEPA validating on the gate's tasks, reflecting through the chat model ``chat`` names."""
+def gepa_method(
+    context: E2EContext, chat: Mapping[str, Any], traces: Mapping[str, Any] | None = None, **config: Any
+) -> Any:
+    """GEPA validating on the fixed validation tasks, reflecting through the chat model ``chat`` names.
+
+    With ``traces``, a component entry for a ``TraceSource``, reflection reads
+    each round's rendered decisions.
+    """
     from honing.harness.methods.gepa import GEPAConfig, GEPAMethod
 
     chat_model = build_component(chat, context, "chat", ChatModel)
-    return GEPAMethod(chat_model, GEPAConfig(**config), [task.task_id for task in context.gate_tasks])  # type: ignore[arg-type]
+    source = build_component(traces, context, "traces", TraceSource) if traces else None
+    validation = [task.task_id for task in context.validation_tasks]
+    return GEPAMethod(chat_model, GEPAConfig(**config), validation, traces=source)  # type: ignore[arg-type]
+
+
+def trace_source(context: object) -> TankTraceSource:
+    """The rounds' decision traces, read from their run directories."""
+    return TankTraceSource()
 
 
 def tasks(context: Any, split: str = "val", limit: int | None = 4) -> tuple[Task, ...]:
-    """Tasks of one split, for a runner check config's ``tasks`` entry."""
+    """Tasks of one split, for a runner check config's ``tasks`` entry. ``heldout`` is refused."""
     _, _, suite = _place(context)
     return _tasks(suite, {"split": split, "limit": limit})
 
@@ -254,6 +275,14 @@ def _tasks(suite: TankSuite, selection: Mapping[str, object]) -> tuple[Task, ...
         raise ContractError(f"unknown task split {split!r}")
     limit = selection.get("limit")
     return suite.tasks(split, limit=int(str(limit)) if limit is not None else None)  # type: ignore[arg-type]
+
+
+def _gate(context: E2EContext, settings: Mapping[str, object]) -> Gate:
+    unknown = set(settings) - {"rounds", "looks", "min_effect", "confidence"}
+    if unknown:
+        raise ContractError(f"unknown gate settings {sorted(unknown)}")
+    runner, grader = context.component("runner"), context.component("grader")
+    return fresh_seed_gate(runner, grader, context.suite, **settings)  # type: ignore[arg-type]
 
 
 def _move(entry: Mapping[str, object]) -> Move:
@@ -287,23 +316,32 @@ class E2ERun:
     campaign: Campaign
     moves: tuple[Move, ...]
     context: E2EContext
+    scheduler: CoAdaptScheduler
 
 
 def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -> E2ERun:
     """Check the environment, build every component, and start the campaign (release 0 is published)."""
+    # No gate reads a task list, so a config that sizes its gate with gate_tasks would run the default gate unwarned.
+    if "gate_tasks" in config:
+        raise ContractError(
+            "gate_tasks is replaced by two settings: validation_tasks, the fixed val tasks a harness method"
+            " validates on, and gate, which sizes the fresh-seed gate (rounds, looks, min_effect, confidence)"
+        )
     missing = missing_requirements(config.get("requires", {}))
     if missing:
         raise ContractError("this config needs " + ", ".join(missing))
     integration_dir = (root / config.get("integration_dir", DEFAULT_INTEGRATION)).resolve()
+    suite = load_suite(integration_dir / config.get("suite", DEFAULT_SUITE))
+    # The gate refuses this suite too, but only once the work directory and the components exist.
+    refuse_pool_overlap(suite)
     work = (work_dir or root / config.get("work_dir", "runs/tank-e2e")).resolve()
     work.mkdir(parents=True, exist_ok=False)
-    suite = load_suite(integration_dir / config.get("suite", DEFAULT_SUITE))
     context = E2EContext(
         root=root.resolve(),
         integration_dir=integration_dir,
         work_dir=work,
         suite=suite,
-        gate_tasks=_tasks(suite, config.get("gate_tasks", {"split": "val", "limit": 4})),
+        validation_tasks=_tasks(suite, config.get("validation_tasks", {"split": "val", "limit": 4})),
         harness_tasks=_tasks(suite, config.get("harness_tasks", {"split": "train", "limit": 8})),
     )
     components = config.get("components", {})
@@ -316,11 +354,10 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     if unknown:
         raise ContractError(f"unknown components {sorted(unknown)}")
     c = context.components
-    evaluator = c.get("evaluator") or EpisodeEvaluator(c["runner"], c["grader"], context.gate_tasks)  # type: ignore[arg-type]
     none = NoCompression()
     campaign = Campaign(
         chain=ReleaseChain(work / "releases"),
-        gate=Gate(evaluator, default_selector=WinLossSelector()),  # type: ignore[arg-type]
+        gate=_gate(context, config.get("gate", {})),
         trainer=c["trainer"],  # type: ignore[arg-type]
         data=c["data"],  # type: ignore[arg-type]
         compression=CompressionComponents(scorer=none, selector=none, editor=none, quantizer=none, telemetry=none),
@@ -331,6 +368,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             tasks=context.harness_tasks,
             episode_budget=int(config.get("episode_budget", 0)),
             samples_per_task=int(config.get("samples_per_task", 1)),
+            method_evaluator=EpisodeEvaluator(c["runner"], c["grader"], context.validation_tasks),  # type: ignore[arg-type]
         ),
         defaults=CampaignDefaults(
             train=TrainJobSpec("sft", steps=1, contract="typed_decisions"),
@@ -342,7 +380,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     )
     campaign.start(c["model_source"], work, harness_seed=seed_harness(integration_dir))  # type: ignore[arg-type]
     moves = tuple(_move(entry) for entry in config.get("schedule", ({"kind": "harness"}, {"kind": "train"})))
-    return E2ERun(campaign, moves, context)
+    return E2ERun(campaign, moves, context, scheduler_or_script(c, moves))
 
 
 def summarize(outcomes: Sequence[StepOutcome], run: E2ERun) -> dict[str, object]:
@@ -385,7 +423,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ContractError as error:
         print(f"cannot start: {error}", file=sys.stderr)
         return 2
-    outcomes = run.campaign.run(ScriptedScheduler(run.moves))
+    outcomes = run.campaign.run(run.scheduler)
     summary = summarize(outcomes, run)
     (run.context.work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     for step in summary["steps"]:  # type: ignore[attr-defined]
@@ -417,4 +455,5 @@ __all__ = [
     "rollouts",
     "summarize",
     "tasks",
+    "trace_source",
 ]
