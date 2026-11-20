@@ -111,7 +111,36 @@ python -m pytest -q tests/test_tank_harness_fault_builder.py tests/test_tank_wei
 cd integrations/tank-war && npm test && npm run format:check
 ```
 
-The next work item is the 40-episode delivery package. It starts only after
-the independent item-1 PR merges. The published HF revision, fresh-download
-score check, real API call record and #174 receipt have their own later
-checklist rows in [STATUS.md](STATUS.md).
+## Stage and verify the existing 40 episodes
+
+PR #186 merged on 2026-11-20. The dataset package was then staged on ds-serv2
+using the already frozen sample. From a checkout containing this script and
+`freeze.json`, run:
+
+```bash
+python3 integrations/tank-war/scripts/package-exp0-v0.py \
+  --source /data/xinkaiz/system0/exp0/tank-war/v4-multifamily-progress-20261117 \
+  --pins integrations/tank-war/exp0/v0/freeze.json \
+  --identity-gate /data/xinkaiz/system0/exp0/tank-war/v0-pilot/pilot2/identity-gate \
+  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-verified
+```
+
+The output directory must not exist. The command copies original and paired
+clean trace bytes into deterministic gzip files, checks the frozen file hashes
+and component evidence, and writes a file-hash manifest. It never changes the
+source recordings. For a later read-only check, including decompression and
+comparison to every original SHA-256:
+
+```bash
+python3 integrations/tank-war/scripts/package-exp0-v0.py \
+  --out /data/xinkaiz/system0/exp0/tank-war/v0-stage-20261120-verified
+```
+
+Observed stage: 40 episodes (10/10/10/10), 19 seed groups, 2,151 decisions,
+4,302 question records, 1,330 attempts, 40/40 replays, 40/40 saved-state probe
+signatures, 891/891 unchanged-checkpoint identity calls, and 320/320 archived
+diagnoser isolation calls. `DATASET.md` describes the label evidence, ten
+checkpoint-name mismatches found by this package check, and the control-set
+limit. This is a private 44 MB stage, not the HF release. The published HF
+revision, fresh-download score check, real API record, and #174 receipt remain
+later checklist items in [STATUS.md](STATUS.md).
