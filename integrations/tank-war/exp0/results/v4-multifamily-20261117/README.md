@@ -1,5 +1,11 @@
 # #183 second prospective Tank War component-attribution test
 
+This is the archived November 17 diagnostic result. The later [v0 scope](../../v0/PROTOCOL.md)
+scores one component per episode and does not require human review of a decisive
+window. References below to a pending human-review gate describe the earlier
+plan, not a current v0 acceptance requirement. The current delivery status is
+in [v0/STATUS.md](../../v0/STATUS.md).
+
 ## Result and scope
 
 On the pre-frozen 40-game test, `gpt-6-sol` at `high` effort correctly classified
@@ -8,8 +14,9 @@ with controlled same-state probes. The paired gain is **11/30, or 36.7 percentag
 points**; the pre-registered instance-and-reset-group bootstrap 95% interval is
 **+19.2 to +51.5 points**. The pre-registered technical-component go rule passes.
 This is a result for the sampled constructed faults, not a finding that each
-intervention caused its game's final loss. A full #183 go/no-go remains pending
-independent human review of decision relevance and the limits below.
+intervention caused its game's final loss. Under the earlier scale-up plan,
+full go/no-go was deferred for human decision review. The current v0 release
+instead requires a real API run and a delivery receipt.
 
 The comparison used the same 30 fault losses and 10 unmodified losses in every
 mode. Each fault class contributed 10 games. The 40 games span 19 reset seeds;
@@ -72,8 +79,9 @@ covered all **2,151** recorded decisions. The probe audit passed 10/10 cases
 for each fault class and 10/10 unmodified controls at the fixed 0.01
 probability tolerance. At each of the ten edited-weight reference decisions,
 the model input stayed identical and the selected action changed. The
-probability-shift ranges were 0.386–0.412 for strength 3.0 and 0.436–0.470
-for strength 4.0. None of the 481 control decisions crossed 0.01 or changed
+original run names assigned the 3.0/4.0 strengths in reverse; use the actual
+frozen checkpoint digests in the [v0 dataset card](../../v0/DATASET.md) for
+strength-specific analysis. None of the 481 control decisions crossed 0.01 or changed
 selected action under the same checkpoint repeat. See
 [weight-probe-analysis.json](weight-probe-analysis.json).
 
@@ -130,11 +138,13 @@ command was:
 python3 /data/xinkaiz/system0/exp0/tank-war/v4-multifamily-progress-20261117/tools/run-tank183-v4-blind-main-v4.py
 ```
 
-It invoked the repository's `prepare-multifamily-blind.py`,
+The archived run invoked `prepare-multifamily-blind.py`,
 `replay-multifamily-blind.py`, `build-critical-probes.py`,
 `audit-sustained-probes.py`, `analyze-multifamily-weight-probes.py`,
 `freeze-multifamily-diagnosis.py`, `run-critical-episode-only.py`, and
-`score-multifamily-diagnosis.py` in that order. Exact arguments, logs,
+`score-multifamily-diagnosis.py` in that order. These historical tools remain in
+the experiment branch's Git history and the private source store; the current
+v0 packaging command is in [RUNBOOK.md](../../v0/RUNBOOK.md). Exact arguments, logs,
 source hashes, the 40-case frozen manifest, per-case requests and replies,
 probe files, and raw games remain in the private store. Only aggregate
 summaries are committed here.

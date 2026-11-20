@@ -19,7 +19,6 @@
 // stops on an error writes error.json and exits 1. When the round ends, the manifest is written again with the
 // SHA-256 of each of the other three files under "outputs", so a reader can refuse a run whose files changed.
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -28,16 +27,6 @@ import { adapter } from "../web/game/adapter.js";
 import { rng, blocked } from "../web/game/engine.js";
 import { strategyFrom } from "../web/game/strategies.js";
 import { plannerTeacher, TEACHER_MODEL } from "../web/game/teacher.js";
-import { snapshotGame, stateHash } from "./state-replay.mjs";
-import {
-    parseCriticalIntervention,
-    criticalCandidate,
-} from "./critical-intervention.mjs";
-import {
-    parseControllerFault,
-    beforeControllerApply,
-    afterControllerApply,
-} from "./controller-faults.mjs";
 import {
     decide,
     healthFor,
@@ -196,9 +185,6 @@ async function sources() {
         "web/game/teacher.js",
         "model-bridge.mjs",
         "scripts/match.mjs",
-        "scripts/state-replay.mjs",
-        "scripts/controller-faults.mjs",
-        "scripts/critical-intervention.mjs",
     ];
     return Object.fromEntries(
         await Promise.all(
@@ -208,18 +194,6 @@ async function sources() {
             ]),
         ),
     );
-}
-
-function codeCommit() {
-    try {
-        return execFileSync("git", ["rev-parse", "HEAD"], {
-            cwd: new URL("../../../", import.meta.url),
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-        }).trim();
-    } catch {
-        return null;
-    }
 }
 
 export async function playMatch({
@@ -235,9 +209,6 @@ export async function playMatch({
     sampleSeed,
     teacher = false,
     token,
-    replayDir,
-    controllerFaultFile,
-    criticalFaultFile,
 }) {
     if (!Number.isInteger(seed) || seed < 0)
         throw Error("--seed must be a non-negative integer");
@@ -251,17 +222,8 @@ export async function playMatch({
     ])
         if (!(Number.isFinite(v) && v > 0))
             throw Error(`${name} must be positive`);
-    if (!teacher && !decisionServer && !replayDir)
+    if (!teacher && !decisionServer)
         throw Error("--decision-server is required unless --teacher");
-    if (replayDir && (teacher || decisionServer || sampleSeed !== undefined))
-        throw Error("Replay accepts only --replay-dir as its decision source");
-    if (
-        criticalFaultFile &&
-        (teacher || controllerFaultFile || sampleSeed !== undefined)
-    )
-        throw Error(
-            "Critical intervention requires a model and one fault layer",
-        );
     if (existsSync(out)) throw Error(`--out ${out} already exists`);
     await mkdir(out, { recursive: true });
     const harness = await loadHarness(harnessDir).catch((error) => {
@@ -269,110 +231,10 @@ export async function playMatch({
         error.harness = true;
         throw error;
     });
-    const controllerFaultText = controllerFaultFile
-        ? await readFile(controllerFaultFile, "utf8")
-        : null;
-    const controllerFault = controllerFaultText
-        ? parseControllerFault(controllerFaultText)
-        : null;
-    const criticalFaultText = criticalFaultFile
-        ? await readFile(criticalFaultFile, "utf8")
-        : null;
-    const criticalFault = criticalFaultText
-        ? parseCriticalIntervention(criticalFaultText)
-        : null;
-    const alternateHarness =
-        criticalFault?.layer === "harness"
-            ? await loadHarness(criticalFault.alternate_harness_dir)
-            : null;
-    if (alternateHarness) {
-        if (alternateHarness.notes !== harness.notes)
-            throw Error("Critical harness fault cannot change operating notes");
-        if (criticalFault.kind === "one_turn_questions") {
-            if (
-                JSON.stringify(alternateHarness.seat) !==
-                    JSON.stringify(harness.seat) ||
-                JSON.stringify(alternateHarness.questions) ===
-                    JSON.stringify(harness.questions)
-            )
-                throw Error(
-                    "Critical question fault must change questions only",
-                );
-        } else {
-            const withoutStrategy = (seatSettings) =>
-                Object.fromEntries(
-                    Object.entries(seatSettings).filter(
-                        ([key]) =>
-                            !["strategy", "decisionVersion"].includes(key),
-                    ),
-                );
-            if (
-                JSON.stringify(alternateHarness.questions) !==
-                    JSON.stringify(harness.questions) ||
-                JSON.stringify(withoutStrategy(alternateHarness.seat)) !==
-                    JSON.stringify(withoutStrategy(harness.seat)) ||
-                JSON.stringify(alternateHarness.seat.strategy) ===
-                    JSON.stringify(harness.seat.strategy)
-            )
-                throw Error(
-                    "Critical settings fault must change only the strategy",
-                );
-        }
-    }
     const me = SEATS.indexOf(seat),
         them = 1 - me;
-    let model, ask, alternateModel, alternateBackend;
-    let replayCalls = [],
-        replayStates = [],
-        replayCursor = 0,
-        sourceManifest;
-    if (replayDir) {
-        sourceManifest = JSON.parse(
-            await readFile(join(replayDir, "manifest.json"), "utf8"),
-        );
-        if (
-            (sourceManifest.critical_fault_sha256 ?? null) !==
-            (criticalFaultText ? sha256(criticalFaultText) : null)
-        )
-            throw Error("Critical replay fault manifest differs");
-        replayCalls = (
-            await readFile(join(replayDir, "model_calls.jsonl"), "utf8")
-        )
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line));
-        replayStates = (await readFile(join(replayDir, "states.jsonl"), "utf8"))
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line));
-        if (
-            sourceManifest.seed !== seed ||
-            sourceManifest.seat !== seat ||
-            sourceManifest.seconds !== seconds ||
-            sourceManifest.interval_ms !== intervalMs ||
-            sourceManifest.opponent_interval_ms !== opponentIntervalMs ||
-            JSON.stringify(sourceManifest.harness) !==
-                JSON.stringify(harness.files) ||
-            JSON.stringify(sourceManifest.agent_seat) !==
-                JSON.stringify(harness.seat)
-        )
-            throw Error("Replay settings differ from the recorded match");
-        model = sourceManifest.model;
-        if (criticalFault?.layer === "weights") {
-            alternateModel = sourceManifest.critical_checkpoint;
-        }
-        ask = async (request) => {
-            const recorded = replayCalls[replayCursor++];
-            if (
-                !recorded ||
-                JSON.stringify(recorded.request) !== JSON.stringify(request)
-            )
-                throw Error(
-                    `Replay model request differs at call ${replayCursor}`,
-                );
-            return recorded.reply;
-        };
-    } else if (teacher) {
+    let model, ask;
+    if (teacher) {
         if (harness.seat.controllerMode !== "plans")
             throw Object.assign(
                 Error("The planner teacher plays planned steering only"),
@@ -396,34 +258,11 @@ export async function playMatch({
                 AbortSignal.timeout(300000),
             );
     }
-    if (criticalFault?.layer === "weights" && !replayDir) {
-        alternateBackend = {
-            url: criticalFault.alternate_decision_server.replace(/\/$/, ""),
-            token,
-            transport: "honing",
-        };
-        alternateModel = (
-            await healthFor(
-                alternateBackend,
-                "tank-war",
-                AbortSignal.timeout(60000),
-            )
-        ).metadata;
-        if (
-            !model.weights_sha256 ||
-            !alternateModel.weights_sha256 ||
-            model.weights_sha256 === alternateModel.weights_sha256
-        )
-            throw Error(
-                "Critical weights fault requires a different real checkpoint hash",
-            );
-    }
     const kind = teacher
         ? "teacher-demonstration"
         : sampleSeed !== undefined
           ? "rollout"
           : "evaluation";
-    const sourceHashes = await sources();
     const manifest = {
         kind,
         edition: "tank-war",
@@ -434,32 +273,12 @@ export async function playMatch({
         interval_ms: intervalMs,
         opponent_interval_ms: opponentIntervalMs,
         sample_seed: sampleSeed ?? null,
-        decision_server: teacher || replayDir ? null : decisionServer,
-        replay_source: replayDir ?? null,
+        decision_server: teacher ? null : decisionServer,
         model,
-        critical_fault_sha256: criticalFaultText
-            ? sha256(criticalFaultText)
-            : null,
-        critical_layer: criticalFault?.layer ?? null,
-        critical_checkpoint: alternateModel ?? null,
-        critical_harness_files: alternateHarness?.files ?? null,
         harness: harness.files,
-        harness_sha256: sha256(JSON.stringify(harness.files)),
-        controller_sha256: sha256(
-            JSON.stringify({
-                engine: sourceHashes["web/game/engine.js"],
-                planner: sourceHashes["web/game/planner.js"],
-                adapter: sourceHashes["web/game/adapter.js"],
-                settings: harness.files.find(
-                    (file) => file.role === "controller",
-                )?.sha256,
-                fault: controllerFaultText ? sha256(controllerFaultText) : null,
-            }),
-        ),
         agent_seat: { ...harness.seat },
         opponent_seat: OPPONENT_SEAT,
-        sources: sourceHashes,
-        code_commit: codeCommit(),
+        sources: await sources(),
         node: process.version,
         created_at: new Date().toISOString(),
     };
@@ -486,129 +305,32 @@ export async function playMatch({
     const next = [0, 0],
         decisions = [0, 0];
     let serial = 0;
-    let pendingExecution = null;
-    let criticalUsed = false;
-
-    async function recordedAsk(request, useAlternate = false) {
-        const reply =
-            useAlternate && !replayDir
-                ? await upstream(
-                      alternateBackend,
-                      "/v1/decide",
-                      request,
-                      AbortSignal.timeout(300000),
-                  )
-                : await ask(request);
-        await appendFile(
-            join(out, "model_calls.jsonl"),
-            JSON.stringify({
-                request,
-                reply,
-                ...(criticalFault
-                    ? {
-                          checkpoint_sha256: useAlternate
-                              ? alternateModel.weights_sha256
-                              : model.weights_sha256,
-                      }
-                    : {}),
-            }) + "\n",
-        );
-        return reply;
-    }
 
     async function turn(player) {
-        const agent = player === me;
-        const rawState = agent ? snapshotGame(game) : null;
-        const rawHash = agent ? stateHash(rawState) : null;
-        const s = seats[player];
-        const baseObserved = adapter.observe(game, player, { ...s, rtt: 0 });
-        const candidate =
-            agent &&
-            criticalFault &&
-            !criticalUsed &&
-            (criticalFault.decision_index === undefined ||
-                decisions[player] === criticalFault.decision_index)
-                ? criticalCandidate(
-                      game,
-                      player,
-                      baseObserved,
-                      criticalFault.trigger,
-                  )
-                : null;
-        const criticalNow = candidate && criticalFault.layer !== "controller";
-        if (criticalNow) criticalUsed = true;
-        const activeSeat =
-            criticalNow && criticalFault.kind === "one_turn_settings"
-                ? { ...alternateHarness.seat, interval: s.interval }
-                : s;
-        const observed =
-            activeSeat === s
-                ? baseObserved
-                : adapter.observe(game, player, { ...activeSeat, rtt: 0 });
-        const body = {
-            ...observed.request,
-            id: `${seat}-${seed}-${++serial}`,
-            player,
-            round_id: game.roundSerial,
-            map_revision: game.maze.revision,
-        };
-        validateRequest(body, "tank-war");
-        if (agent) {
-            const stateIndex = decisions[player];
-            const stateRecord = {
-                decision_index: stateIndex,
-                time: Math.round(game.elapsed * 1000) / 1000,
+        const s = seats[player],
+            observed = adapter.observe(game, player, { ...s, rtt: 0 }),
+            body = {
+                ...observed.request,
+                id: `${seat}-${seed}-${++serial}`,
                 player,
-                state_hash: rawHash,
-                raw_state: rawState,
-                observation: observed,
-                request: body,
+                round_id: game.roundSerial,
+                map_revision: game.maze.revision,
             };
-            if (replayDir) {
-                const expected = replayStates[stateIndex];
-                if (
-                    !expected ||
-                    expected.state_hash !== rawHash ||
-                    JSON.stringify(expected.request) !== JSON.stringify(body)
-                )
-                    throw Error(
-                        `Replay state differs at decision ${stateIndex}`,
-                    );
-            }
-            await appendFile(
-                join(out, "states.jsonl"),
-                JSON.stringify(stateRecord) + "\n",
-            );
-        }
+        validateRequest(body, "tank-war");
+        const agent = player === me;
         const response =
             agent && !teacher
                 ? await decide(
                       {
-                          model:
-                              criticalNow && criticalFault.layer === "weights"
-                                  ? alternateModel.model
-                                  : model.model,
+                          model: model.model,
                           agentIds: ["agent", "agent"],
                           contextLimit: null,
-                          branches:
-                              criticalNow && criticalFault.layer === "weights"
-                                  ? alternateModel.branches
-                                  : model.branches,
-                          ask: (request) =>
-                              recordedAsk(
-                                  request,
-                                  !!(
-                                      criticalNow &&
-                                      criticalFault.layer === "weights"
-                                  ),
-                              ),
+                          branches: model.branches,
+                          ask,
                       },
                       body,
                       {
-                          questions:
-                              criticalNow && criticalFault.layer === "harness"
-                                  ? alternateHarness.questions
-                                  : harness.questions,
+                          questions: harness.questions,
                           notes: harness.notes,
                           choose,
                       },
@@ -630,90 +352,9 @@ export async function playMatch({
                   );
         if (!adapter.validControls(response, observed))
             throw Error("The decision has invalid controls");
-        const projected = agent
-            ? beforeControllerApply(response, observed, controllerFault)
-            : null;
-        const applied = adapter.apply(
-            game,
-            player,
-            projected?.response ?? response,
-            activeSeat,
-        );
-        const executionFault = agent
-            ? afterControllerApply(
-                  game,
-                  player,
-                  applied,
-                  controllerFault ||
-                      (candidate &&
-                      criticalFault?.layer === "controller" &&
-                      applied.controls.fire
-                          ? criticalFault
-                          : null),
-              )
-            : null;
-        if (
-            candidate &&
-            criticalFault?.layer === "controller" &&
-            executionFault
-        )
-            criticalUsed = true;
-        if (
-            criticalNow ||
-            (candidate &&
-                criticalFault?.layer === "controller" &&
-                executionFault)
-        ) {
-            await appendFile(
-                join(out, "private_critical_event.jsonl"),
-                JSON.stringify({
-                    decision_index: decisions[player],
-                    state_hash: rawHash,
-                    time: Math.round(game.elapsed * 1000) / 1000,
-                    candidate,
-                    layer: criticalFault.layer,
-                    kind: criticalFault.kind,
-                    instance: criticalFault.instance,
-                    clean_checkpoint_sha256: model.weights_sha256,
-                    alternate_checkpoint_sha256:
-                        alternateModel?.weights_sha256 ?? null,
-                    selected_action: {
-                        motion: response.policy_motion_id ?? null,
-                        weapon:
-                            response.weapon_choice ??
-                            response.chosen?.weapon ??
-                            null,
-                    },
-                    acknowledged_command: applied,
-                    execution_change: executionFault ?? null,
-                }) + "\n",
-            );
-        }
-        if (projected || executionFault) {
-            await appendFile(
-                join(out, "private_fault_events.jsonl"),
-                JSON.stringify({
-                    decision_index: decisions[player],
-                    kind: (controllerFault ?? criticalFault).kind,
-                    instance: (controllerFault ?? criticalFault).instance,
-                    before: projected?.before ?? executionFault.before,
-                    after: projected?.after ?? executionFault.after,
-                }) + "\n",
-            );
-        }
+        const applied = adapter.apply(game, player, response, s);
         decisions[player]++;
         if (!agent) return;
-        pendingExecution = {
-            decision_index: decisions[player] - 1,
-            accepted_time: Math.round(game.elapsed * 1000) / 1000,
-            selected_action: {
-                motion: response.policy_motion_id ?? null,
-                weapon:
-                    response.weapon_choice ?? response.chosen?.weapon ?? null,
-            },
-            acknowledged_command: applied,
-            shot_count_before_step: game.shots[player],
-        };
         const executed =
             body.protocol === "plans-v1"
                 ? {
@@ -725,8 +366,6 @@ export async function playMatch({
             time: Math.round(game.elapsed * 1000) / 1000,
             round: game.round,
             protocol: body.protocol,
-            decision_index: decisions[player] - 1,
-            state_hash: rawHash,
             request_id: call.id,
             contextParts: {
                 essential: [call.stateText],
@@ -744,7 +383,6 @@ export async function playMatch({
             ),
             constraints: response.constraints ?? null,
             applied,
-            input_acknowledgement: { accepted: true, command: applied },
         }));
         await appendFile(
             join(out, "decisions.jsonl"),
@@ -760,24 +398,6 @@ export async function playMatch({
                 await turn(player);
             }
         game.step(STEP);
-        if (pendingExecution) {
-            const tank = game.tanks[me];
-            await appendFile(
-                join(out, "execution.jsonl"),
-                JSON.stringify({
-                    ...pendingExecution,
-                    executed_time: Math.round(game.elapsed * 1000) / 1000,
-                    executed_action: {
-                        drive: tank.executedDrive,
-                        turn: tank.executedTurn,
-                        shot_fired:
-                            game.shots[me] >
-                            pendingExecution.shot_count_before_step,
-                    },
-                }) + "\n",
-            );
-            pendingExecution = null;
-        }
         for (const t of game.tanks)
             if (blocked(game.maze, t.x, t.y)) throw Error("Wall penetration");
     }
@@ -818,14 +438,6 @@ export async function playMatch({
         game.events.map((e) => JSON.stringify(e) + "\n").join(""),
     );
     await writeFile(join(out, "result.json"), JSON.stringify(result, null, 2));
-    if (
-        replayDir &&
-        (replayCursor !== replayCalls.length ||
-            decisions[me] !== replayStates.length)
-    )
-        throw Error(
-            "Replay did not consume the complete recorded decision trace",
-        );
     manifest.outputs = Object.fromEntries(
         await Promise.all(
             OUTPUTS.map(async (f) => [f, sha256(await readFile(join(out, f)))]),
@@ -858,9 +470,6 @@ function parse(argv) {
         "opponent-interval-ms",
         "sample-seed",
         "teacher",
-        "replay-dir",
-        "controller-fault-file",
-        "critical-fault-file",
     ];
     const unknown = Object.keys(args).filter((k) => !known.includes(k));
     if (unknown.length) throw Error(`Unknown option --${unknown[0]}`);
@@ -877,12 +486,6 @@ function parse(argv) {
         opponentIntervalMs: number("opponent-interval-ms"),
         sampleSeed: number("sample-seed"),
         teacher: args.teacher === true,
-        replayDir: args["replay-dir"] && resolve(args["replay-dir"]),
-        controllerFaultFile:
-            args["controller-fault-file"] &&
-            resolve(args["controller-fault-file"]),
-        criticalFaultFile:
-            args["critical-fault-file"] && resolve(args["critical-fault-file"]),
         token: process.env.HONING_TOKEN,
     };
 }

@@ -1,8 +1,0 @@
-{
-  "primary_dataset": "v4-multifamily-20261117",
-  "primary_dataset_role": "combined fault-attribution index with a second prospective 40-game blind test",
-  "historical_diagnosis": "v1-critical-window-20261115",
-  "historical_diagnosis_role": "completed diagnosis on earlier one-decision faults; scores do not transfer to v4",
-  "private_dataset_root": "/data/xinkaiz/system0/exp0/tank-war/v4-multifamily-progress-20261117/full-audit-v5/",
-  "blind_test_status": "pre-frozen 40-game, eight-mode Sol high and Astra medium comparison complete; scoped technical-component go, human decision-relevance review pending"
-}

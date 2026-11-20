@@ -1,7 +1,0 @@
-You are examining one Tank War loss. The full timeline is indexed from zero. Each row shows the situation, the model's input instructions and probabilities, its chosen action, the acknowledged command, and the first executed frame. In the probe mode, a controlled repeat through a fixed reference path is shown for every decision. These are measurements, not a statement that any component was altered or that a difference caused the loss.
-
-Choose at most one decision index as the center of a five-decision window that best explains a consequential mistake. A normal timing, legality, or assistance rule may change execution; use the evidence to distinguish that from a component problem. Do not choose an early distant decision without a plausible effect. If no decision is sufficiently supported, use null.
-
-Classify the best-supported cause as harness (the information or instructions given to the model), weights (the model's own choice policy given its input), controller (how a chosen action was transformed or executed), or uncertain. An ordinary poor model choice can be weights even when all other components behave normally. Judge separately whether the selected window likely mattered to the loss. Do not assume any case has a special defect. Use no tools. Return only JSON matching the schema, with a short explanation.
-
-EPISODE JSON:

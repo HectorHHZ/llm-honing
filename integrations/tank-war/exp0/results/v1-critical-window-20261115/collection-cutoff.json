@@ -1,6 +1,0 @@
-{
-  "freeze_at_or_before_utc": "2026-11-16T01:50:00Z",
-  "early_condition": "At least ten distinct eligible losses in each strict fault class and ten unmodified controls; freeze immediately when this is met.",
-  "at_cutoff": "Freeze all completed eligible cases using the fixed selection rule, even if a class has fewer than ten; report actual count.",
-  "no_later_sample_changes": true
-}
