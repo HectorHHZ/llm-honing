@@ -160,6 +160,37 @@ Axes accept only integers -1/0/1; diagonal vectors are normalized. The HTTP
 interface is for local interactive tools. Headless model evaluations use the
 isolated runner, so a UI tab cannot change their game clock.
 
+## Observe and control from an AI process
+
+Run the JSON Lines controller from the repository root. Send one object per
+line on stdin and read one reply on stdout. `observe` reads the current state
+without advancing the clock. `step` applies an action and returns the next
+observation. Replies contain `ok: true` and `observation`, or `ok: false` and
+`error` for an invalid request. Close stdin to end the session.
+
+```bash
+printf '%s\n' '{"op":"observe"}' \
+  '{"op":"step","action":{"move_x":1,"shoot_x":1},"frames":3}' |
+  python3 -m integrations.rea_issac.agent --seed 7 --max-ticks 6000
+```
+
+`schema_version` is `1`. The `map` contains the current room, obstacles,
+doors and the discovered room grid in `known_rooms`. A door carries its
+destination, screen position and open state. Room positions in `known_rooms`
+are dungeon grid coordinates. Within a room, `x` points right and `y` points
+down in pixels. Obstacles are `[x, y, width, height]` rectangles. The engine's
+public map marks unvisited room kinds as `unknown`.
+
+`player`, `enemies`, `projectiles`, `bombs`, `pickups` and `events` describe
+the current run. `clock.value` counts ticks at 30 ticks per simulation second.
+`action_space` describes movement and shooting axes, fire and bomb readiness
+on the next tick, and the allowed `frames` range (1 to 300, default 1). An
+empty action `{}` waits. Set `bomb` to `false` before trying to place another
+bomb. `done` is true after victory, death or the tick limit.
+
+Python callers can pass an `Engine` to `observe_for_ai(engine)` and
+`step_for_ai(engine, action, frames)` from `integrations.rea_issac.agent`.
+
 ## Checks
 
 ```bash
