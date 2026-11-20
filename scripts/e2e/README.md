@@ -15,6 +15,7 @@ Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on
 | `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json` | a tank campaign on real rounds (the Node match process against the planner opponent, Honing's `DecisionServer`) with a stand-in decision model: a GEPA harness move, sft on planner-teacher demonstrations, and grpo on sampled rollouts |
 | `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
 | `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, every gated episode's run directory, and no seed played by two gates |
+| `python scripts/e2e/check_probe.py` | the counterfactual probe CLI (`scripts/system2/probe.py`) on the recorded tank rounds against stand-in decision servers: the identity probe, a text variant, a weights variant, and the refusals of wrong weights |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
 | `node scripts/e2e/tank-war.mjs` | a decision server, Tank War's HTTP bridge, and both decision interfaces; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each interface plays |
 

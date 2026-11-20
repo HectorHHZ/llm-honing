@@ -336,6 +336,8 @@ jobs:
           python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json --work-dir "$RUNNER_TEMP/tank-campaign"
           python scripts/e2e/check_campaign.py "$RUNNER_TEMP/tank-campaign" \
             --expect harness=published --expect train="rolled back" --expect train="rolled back"
+      - name: Counterfactual probe end to end (the probe CLI on recorded tank rounds, against stand-in decision servers)
+        run: python scripts/e2e/check_probe.py
       - name: Tank harness runner contract
         run: python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json --work-dir "$RUNNER_TEMP/tank-runner-check"
       - name: Serving end to end (decision server process, the match's Node client stack)
