@@ -136,6 +136,10 @@ class FakeChatModel:
         self._cost = cost_per_call
         self.conversations: list[tuple[ChatMessage, ...]] = []
 
+    def prices_replies(self) -> bool:
+        """Whether every reply carries a price, which a dollar budget needs."""
+        return self._cost is not None
+
     def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int, temperature: float) -> ChatReply:
         if not self._replies:
             raise ContractError("the fake chat model has no scripted replies left")

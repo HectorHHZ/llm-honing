@@ -29,6 +29,15 @@ from honing.core.compression import (
     TransformKind,
     TransformManifest,
 )
+from honing.core.cost import (
+    EPISODE_PURPOSES,
+    CostSink,
+    EpisodePurpose,
+    MoveCost,
+    charge_chat,
+    charge_episode,
+    charging,
+)
 from honing.core.data import (
     ContractKind,
     DataContract,
@@ -125,6 +134,7 @@ from honing.core.weights import MASTER_WEIGHT_FORMAT, CheckpointRef, ModelSnapsh
 __all__ = [
     "ALGORITHM_REQUIREMENTS",
     "DECISION_REQUIREMENTS",
+    "EPISODE_PURPOSES",
     "LANGUAGE_MODEL_CONTRACTS",
     "MASTER_WEIGHT_FORMAT",
     "METHOD_STATE_VERSION_KEY",
@@ -151,6 +161,7 @@ __all__ = [
     "ContractError",
     "ContractKind",
     "CostDelta",
+    "CostSink",
     "DataContract",
     "DataProvider",
     "DecisionKind",
@@ -159,6 +170,7 @@ __all__ = [
     "DecisionTrace",
     "EndpointRuntime",
     "EpisodeOutcome",
+    "EpisodePurpose",
     "EpisodeRecord",
     "EpisodeRunner",
     "EvaluationResult",
@@ -187,6 +199,7 @@ __all__ = [
     "ModelSnapshot",
     "ModelSource",
     "Move",
+    "MoveCost",
     "MoveKind",
     "NumericsMode",
     "NumericsPolicy",
@@ -237,6 +250,9 @@ __all__ = [
     "UtilizationTelemetry",
     "WeightConverter",
     "WeightFormat",
+    "charge_chat",
+    "charge_episode",
+    "charging",
     "method_state_version",
     "require",
     "require_choice",

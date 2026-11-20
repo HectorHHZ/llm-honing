@@ -117,6 +117,10 @@ class LiteLLMChatModel:
             "seed": self.seed,
         }
 
+    def prices_replies(self) -> bool:
+        """Whether replies carry a price: no ``api_base``, and litellm prices ``model`` above zero."""
+        return self.api_base is None and completion_cost_usd(self.model, 0, 0) is not None
+
     def complete(self, messages: Sequence[ChatMessage], *, max_tokens: int, temperature: float) -> ChatReply:
         # Read once, when litellm is first imported: without it litellm downloads
         # the latest price map from GitHub. Set first to choose otherwise.

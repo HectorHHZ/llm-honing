@@ -13,6 +13,7 @@ import math
 import os
 import re
 import shutil
+import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -131,6 +132,8 @@ class WeightEditTrainer:
         )
 
     def train(self, job: TrainJobSpec, base: ModelSnapshot, batch: TrainingBatch | None) -> TrainResult:
+        # An edit may read the model on a GPU (the direction edit does), so its whole run is charged as one GPU's time.
+        started = time.monotonic()
         if job.algorithm != self.algorithm:
             raise ContractError(f"this trainer runs {self.algorithm}, not {job.algorithm}")
         rules.algorithm_requirements_met(job, self.support)
@@ -195,7 +198,7 @@ class WeightEditTrainer:
             base,
             checkpoint=CheckpointRef(str(checkpoint.resolve()), "hf_safetensors", checksum),
         )
-        return TrainResult(snapshot=snapshot, metrics=metrics)
+        return TrainResult(snapshot=snapshot, metrics=metrics, gpu_seconds=time.monotonic() - started)
 
     def _write(self, parent: Path, checkpoint: Path, plan: EditPlan) -> tuple[dict[str, float], list[dict[str, Any]]]:
         import torch

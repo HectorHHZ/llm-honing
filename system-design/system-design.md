@@ -546,6 +546,20 @@ campaign's defaults for that move only. The campaign records the label on the ca
 `move_label` and never interprets it. Which phase comes next, and each phase's total
 budget, are decided by the scheduler, which reads the labels back from the releases.
 
+**Every move is charged, in one budget unit (#167).** Each move records a `MoveCost`:
+episodes by purpose (gate, method, rollout, demonstration), GPU-seconds, chat tokens and
+dollars, and wall-clock seconds. Episodes are charged where they run, by `run_graded`, to
+the move in progress; trainers report elapsed time × GPUs; a metered chat model charges each
+call. A harness method's own validation run (`HarnessComponents.method_evaluator`) counts
+as the method's, so `gate` episodes are the campaign gate's alone, the same overhead for
+every move kind. An amount that cannot be known is recorded as unknown, never as 0, so an
+unpriced move cannot look free. A rejected or skipped move is charged like a published one,
+and its cost is on its `StepRecord` too. A campaign may carry a budget in dollars (GPU-hours
+at a fixed price plus chat cost) or in wall-clock seconds; `Campaign.step` admits no move
+once the spend reaches the limit, before it asks the scheduler, so it overshoots by at most
+one move and the scheduler's state records no choice for a move that does not run. Under a
+dollar budget a move it cannot price stops the run.
+
 The default scheduling policy (planned): pre-training harness pass → *N* training commits
 → when utilization is stable, prune with recovery → retune the harness → repeat until the
 capacity floor → quantize → post-training harness pass.
@@ -605,7 +619,9 @@ Rollback restores all of it.
 **The commit record is written before the head moves (P3).** `ReleaseChain` appends each
 publish, rejection, skip, and rollback to a JSON-lines record and flushes it to disk first.
 A value JSON cannot represent exactly is an error, never a string. Once a scheduler has
-chosen a move, every line also carries its state (`scheduler`, `scheduler_state`).
+chosen a move, every line also carries its state (`scheduler`, `scheduler_state`). Publish,
+rejection and skip records also carry the move's cost; a record written before costs were
+recorded has none.
 Rebuilding a chain from that record is not implemented yet; the ordering that makes it
 possible is, and is tested.
 

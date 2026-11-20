@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from honing.campaign import Campaign, CampaignDefaults, CompressionComponents, HarnessComponents
+from honing.campaign.cost import CampaignBudget
 from honing.core import (
     BackendSupport,
     CandidateSelector,
     CompressionBudget,
     DataProvider,
+    Evaluator,
     EvolveMethod,
     PruneSelector,
     QuantScheme,
@@ -73,6 +75,10 @@ def build_campaign(
     gate_tasks: Sequence[Task] = TASKS,
     harness_selector: CandidateSelector | None = None,
     method_tasks: Sequence[Task] | None = None,
+    budget: CampaignBudget | None = None,
+    gpu_seconds_per_step: float | None = 1.5,
+    gate_evaluator: Callable[[FakeEpisodeRunner, FakeTaskGrader], Evaluator] | None = None,
+    default_selector: CandidateSelector | None = None,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake.
 
@@ -80,9 +86,12 @@ def build_campaign(
     ``harness_selector`` is the gate's selector for harness candidates. With
     ``method_tasks``, a harness candidate must pass the method's selector on
     those tasks and then the gate's (``HarnessComponents.method_evaluator``).
+    ``gate_evaluator`` builds the gate's evaluator from the runner and grader in
+    place of the episodes on ``gate_tasks``, and ``default_selector`` replaces
+    the gate's win-loss selector for train candidates.
     """
     world = FakeWorld()
-    trainer = FakeTrainer(world, support=support, gain=trainer_gain)
+    trainer = FakeTrainer(world, support=support, gain=trainer_gain, gpu_seconds_per_step=gpu_seconds_per_step)
     runner = make_runner(world)
     grader = FakeTaskGrader()
     method = method if method is not None else AppendInstructionMethod()
@@ -91,8 +100,8 @@ def build_campaign(
     data = data if data is not None else ListDatasetProvider([token_batch()])
 
     gate = Gate(
-        EpisodeEvaluator(runner, grader, gate_tasks),
-        default_selector=WinLossSelector(),
+        gate_evaluator(runner, grader) if gate_evaluator is not None else EpisodeEvaluator(runner, grader, gate_tasks),
+        default_selector=default_selector if default_selector is not None else WinLossSelector(),
         # Cost-driven changes need only avoid regressing; quality-driven ones must win.
         selectors={
             "prune": NoRegressionSelector(0.05),
@@ -127,6 +136,7 @@ def build_campaign(
             scheme=INT4_G128,
         ),
         rollout=rollout,
+        budget=budget,
     )
     campaign.start(FakeModelSource(world), work_dir, harness_seed=SEED_HARNESS)
     return CampaignFixture(campaign, world, trainer, editor, quantizer, runner, grader, method, data)

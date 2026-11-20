@@ -88,12 +88,22 @@ class FakeModelSource:
 
 
 class FakeTrainer:
-    """Every job moves quality by ``gain`` and remembers which scheme a QAT job trained for."""
+    """Every job moves quality by ``gain`` and remembers which scheme a QAT job trained for.
 
-    def __init__(self, world: FakeWorld, support: BackendSupport = SLIME_LIKE, gain: float = 0.1) -> None:
+    Each job reports ``gpu_seconds_per_step`` times its steps of GPU time; ``None`` reports none.
+    """
+
+    def __init__(
+        self,
+        world: FakeWorld,
+        support: BackendSupport = SLIME_LIKE,
+        gain: float = 0.1,
+        gpu_seconds_per_step: float | None = 1.5,
+    ) -> None:
         self.world = world
         self.support = support
         self.gain = gain
+        self.gpu_seconds_per_step = gpu_seconds_per_step
         self.jobs: list[TrainJobSpec] = []
         self.batches: list[TrainingBatch | None] = []
 
@@ -103,7 +113,8 @@ class FakeTrainer:
         snapshot = self.world.snapshot(base.architecture, self.world.quality[base.checkpoint.checksum] + self.gain)
         if job.numerics.mode == "fake_quant_qat" and job.numerics.scheme is not None:
             self.world.trained_scheme[snapshot.checkpoint.checksum] = job.numerics.scheme
-        return TrainResult(snapshot=snapshot, metrics={"train_steps": float(job.steps)})
+        gpu_seconds = None if self.gpu_seconds_per_step is None else self.gpu_seconds_per_step * job.steps
+        return TrainResult(snapshot=snapshot, metrics={"train_steps": float(job.steps)}, gpu_seconds=gpu_seconds)
 
 
 class IdentityConverter:
