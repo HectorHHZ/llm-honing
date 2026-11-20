@@ -27,7 +27,7 @@ refused.
 This module imports only the standard library, :mod:`honing.core` and the
 decision log's parser (:mod:`honing.backends.tank.decisions`), and importing it
 loads none of the runner, the grader, the rollouts or the demonstrations, so
-System 0 can read traces without the rest of the backend.
+System 2 can read traces without the rest of the backend.
 """
 
 from __future__ import annotations

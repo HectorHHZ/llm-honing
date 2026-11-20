@@ -124,7 +124,7 @@ algorithm declares the `DataContract` it consumes — token sequences, on-policy
 grouped on-policy samples, or preference pairs — and the campaign checks the batch against
 it before training starts.
 
-A decision model (a Jev-style System One model) trains on `typed_decisions`. Each
+A decision model (a Jev-style System 1 model) trains on `typed_decisions`. Each
 `DecisionSample` holds the state, the typed questions asked about it with their options, and the
 option chosen. A rollout's samples also hold the behavior probabilities, the reward, and a group. `sft` and `grpo` accept this
 contract when a job names it (`TrainJobSpec.contract`), and run on a local trainer. A backend
@@ -431,7 +431,7 @@ output, and Meta-Harness writes it to a file under its work directory, keeps the
 path in its archive state, and copies it as `decisions.txt` beside each search trace.
 Importing the loader or the renderer loads only the standard library, `honing.core` and
 the tank decision-log parser: `honing.backends.tank` imports its runner, grader, rollouts
-and demonstrations only when one is first used, so System 0's scheduler (#138) can read
+and demonstrations only when one is first used, so System 2's scheduler (#138) can read
 the same traces without the rest of the backend.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
