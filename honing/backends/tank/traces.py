@@ -35,7 +35,7 @@ from __future__ import annotations
 import hashlib
 import json
 from bisect import bisect_right
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -73,16 +73,19 @@ class TankTraceSource:
         )
 
 
-def verify_outputs(run: Path) -> Mapping[str, object]:
-    """The run's manifest, once every file it hashes matches. Raises ``ContractError`` otherwise."""
+def verify_outputs(run: Path, names: Sequence[str] = OUTPUTS) -> Mapping[str, object]:
+    """The run's manifest, once it hashes each of ``names`` and each still matches. Raises ``ContractError`` otherwise.
+
+    The manifest may hash more files than ``names``: a round that logs raw states also hashes ``states.jsonl``.
+    """
     manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
     outputs = manifest.get("outputs")
-    if not isinstance(outputs, dict) or sorted(outputs) != sorted(OUTPUTS):
+    if not isinstance(outputs, dict) or not set(names) <= set(outputs):
         raise ContractError(
-            f"{run}/manifest.json records no SHA-256 of {list(OUTPUTS)}. The round did not finish,"
+            f"{run}/manifest.json records no SHA-256 of {list(names)}. The round did not finish,"
             " or an older match wrote it"
         )
-    for name in OUTPUTS:
+    for name in names:
         path = run / name
         if not path.is_file():
             raise ContractError(f"{path} is missing, but its manifest records it")
