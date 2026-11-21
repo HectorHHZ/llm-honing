@@ -21,8 +21,7 @@ documentation must change. Do not post to #174 until the final receipt is ready.
 
 The existing sample and diagnostic results are in draft
 [PR #187](https://github.com/HectorHHZ/llm-honing/pull/187), with private raw
-evidence on ds-serv2. That PR's old acceptance table predates the issue's v0
-scope correction. Do not treat its draft status or aggregate report as the HF
+evidence on ds-serv2. Do not treat its draft status or aggregate report as the HF
 release required by items 5 and 6. The 40 cases reuse previously inspected
 episodes, so v0 is a development/reproducibility result, not an independent
 confirmatory test.

@@ -103,7 +103,7 @@ The clean release digest is checked against recorded match metadata here; a
 source-side clean checkpoint manifest can also be passed with
 `--clean-manifest` to verify the symmetric edit against local files.
 
-## Local verification for this PR
+## Local verification for protocol PR #186
 
 ```bash
 python3 integrations/tank-war/scripts/check-v0-pins.py --repo .
