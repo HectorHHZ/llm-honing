@@ -1,0 +1,77 @@
+{
+  "version": "tank183-v4-prospective-episode-attribution-v4",
+  "question": "Can System 0 attribute a whole losing game to harness, weights, or controller, and do same-state probes improve that attribution?",
+  "unit": "one complete game",
+  "primary_model": {
+    "id": "gpt-6-sol",
+    "effort": "high"
+  },
+  "secondary_model": {
+    "id": "gpt-6-astra",
+    "effort": "medium"
+  },
+  "modes": [
+    "read",
+    "read+fewshot",
+    "probe",
+    "probe+fewshot"
+  ],
+  "primary_comparison": "Sol high probe minus Sol high read on identical cases; abstentions count wrong",
+  "secondary_comparisons": [
+    "Sol high probe+fewshot minus read+fewshot",
+    "Astra medium probe minus read",
+    "Astra medium probe+fewshot minus read+fewshot"
+  ],
+  "prompt_sha256": {
+    "bare": "ed1a9cad5121344e95a7dad749c16a231e927b2b5e4fa6ba3e017b3cf524f45d",
+    "fewshot": "e4a4624dbe88b52976445b9542ddabbcfe65e58ab080eecf1a36fef96f0e822b"
+  },
+  "schema_sha256": "baa9e60aacc52415c531fe80a92ecb57a98cfa5648e0ebff5d8cec74ff79728e",
+  "development_examples_sha256": "bf05e326c600caa181c8670b02341e95d7d13e863b8dc2be4dac52fa19cf8a83",
+  "sampling": {
+    "target_faults_per_layer": 10,
+    "target_no_injection_controls": 10,
+    "eligible": "verified same-state local difference and fault-game loss; no-injection control losses separately; recorded match source hashes must equal the pinned replay checkout",
+    "excluded_seed_positions_source_sha256": "ec03d6cca3ad1a6f2bc5a19ce2f194440ca69f5a636dce5820c22746f413486f",
+    "rank": "SHA-256 of fixed version, layer, instance, seed, seat; alternate instances before filling remaining quota",
+    "grouping": "A reset seed and both seats are one resampling group; cases may share a seed across fault instances because only 20 unexposed seed blocks remain",
+    "insufficient": "Use every eligible case up to the fixed quotas and report shortfall; never select by model answers",
+    "replay_source_gate": "Compare every manifest source hash with /data/xinkaiz/system0/exp0/tank-war/v0-pilot/repo before deterministic case ranking",
+    "primary_dataset_cutoff": "full-audit-v3 after fixed extreme_standoff final_test positions 30:80; optional wrong_legal_projection remains separate"
+  },
+  "analysis": {
+    "paired_bootstrap_resamples": 10000,
+    "bootstrap_seed": 183,
+    "resample_unit": "seed blocks, with fault instance stratification",
+    "majority_baseline": 0.3333333333333333,
+    "controls": "report unsupported harness/controller calls and weights calls separately",
+    "weight_probe": "report same-input probability deltas separately by edited checkpoint and on no-injection controls",
+    "interpretation": "technical changed-layer accuracy is separate from whether the change caused the final loss"
+  },
+  "limits": {
+    "cases": 40,
+    "calls_per_case": 8,
+    "maximum_calls": 320,
+    "maximum_input_tokens_per_model_mode": 4000000,
+    "maximum_output_tokens_per_model_mode": 100000,
+    "no_retries_based_on_answer": true,
+    "cli_model_snapshot_and_temperature": "not independently verifiable with ChatGPT login"
+  },
+  "blinding": "Input excludes seed, source path, manifests, fault names, technical reference, labels, and any statement that a fault was injected.",
+  "pre_answer_amendment": {
+    "supersedes_sha256": "839f4f783fa5065d65cf6f963ca6aead3d9db07a2b2b29de908ce250e28b468c",
+    "reason": "A legacy controller recording has a different controller-faults source hash than the pinned replay checkout. Exclude source-incompatible games before deterministic ranking and before any new model answer; retain them in the audit.",
+    "answer_status": "no new model answers have been run"
+  },
+  "pre_answer_cutoff_amendment": {
+    "supersedes_sha256": "cf52ba68dc3508c505d8f6ab8f31f520ee4b1b50a0f547df46358c895e78a995",
+    "reason": "The optional wrong_legal_projection screen is running independently and may finish hours after the core three-layer audit. Freeze the primary blind sample from full-audit-v1 after the already queued core instances finish; report the optional controller candidate separately.",
+    "answer_status": "no new model answers or blind sample have been produced"
+  },
+  "pre_answer_extension_amendment": {
+    "supersedes_sha256": "15766ace8aa36ee38c70cb420a08e24fd74cd74fba430a39ee14474eb6ab204a",
+    "archived_pre_answer_sample_sha256": "48fe37dab7fc1c16137d4b61fead5f039948c5d0fff7076600b5b7d69ce37e72",
+    "reason": "The archived sample had only 3 harness games. Before any diagnostic answers, fixed final_test seed positions 30:80 were queued for the already retained extreme_standoff harness instance. Use the complete extension audit for a new blind dataset version; preserve the archived freeze and partial probes.",
+    "answer_status": "no new model answers exist"
+  }
+}
