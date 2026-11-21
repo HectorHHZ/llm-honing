@@ -104,6 +104,7 @@ def build(source: Path, game_app: Path, unity: Path, output: Path) -> dict[str, 
                 *["-r:" + str(path) for path in references],
                 *[str(path) for path in scripts],
                 str(HERE / "HoningBridge.cs"),
+                str(HERE / "VisibleObservation.cs"),
             ],
             check=True,
         )

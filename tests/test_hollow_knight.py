@@ -600,3 +600,45 @@ def test_http_episode_retains_rejections_without_executing_them(demo, tmp_path: 
         assert raw_path.read_bytes() == responses[0]
         with pytest.raises(ProcessLookupError):
             os.kill(int((session / "pid.txt").read_text()), 0)
+
+
+@pytest.mark.unit
+def test_visible_profile_is_opt_in_in_the_bridge(repo_root: Path) -> None:
+    source = (repo_root / "integrations/hollow-knight/HoningBridge.cs").read_text()
+    assert 'visibleProfile = Environment.GetEnvironmentVariable("HONING_OBSERVATION_PROFILE") == "visible";' in source
+    observe = source[source.index("    void Observe()") : source.index("    // Diagnostic inventory")]
+    enabled, default = observe.split("} else {")
+    assert "VisibleObservation.Capture" in enabled and 'WriteJson("observation.json", visible)' in enabled
+    assert "Visible" not in default.replace("visibleProfile", "") and 'WriteJson("observation.json", obs)' in default
+    assert observe.index("if (visibleProfile) {") < observe.index("VisibleObservation.Capture")
+    assert "if (visibleProfile) yield return new WaitForEndOfFrame();" in source
+    assert "else Observe();" in source[source.index("    void LateUpdate()") :]
+
+
+@pytest.mark.unit
+def test_builder_compiles_the_visible_source(tmp_path: Path, monkeypatch) -> None:
+    builder = load_script("integrations/hollow-knight/build.py")
+    scripts = tmp_path / "source/Hollow Knight/Assets/Scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "PlayerController.cs").write_text("class PlayerController {" + 'Input.GetAxis("x");' * 7 + "}")
+    (scripts / "Menu.cs").write_text("public class Menu : MonoBehaviour {}")
+    managed = tmp_path / "Game.app/Contents/Resources/Data/Managed"
+    managed.mkdir(parents=True)
+    (managed / "Assembly-CSharp.dll").write_bytes(b"original")
+    unity = tmp_path / "Unity.app/Contents/MonoBleedingEdge"
+    (unity / "bin").mkdir(parents=True)
+    (unity / "bin/mono").touch()
+    (unity / "lib/mono/4.5").mkdir(parents=True)
+    (unity / "lib/mono/4.5/csc.exe").touch()
+    commands = []
+
+    def compiler(command, **_kwargs):
+        commands.append(command)
+        target = next(value.removeprefix("-out:") for value in command if value.startswith("-out:"))
+        Path(target).write_bytes(b"demo")
+
+    monkeypatch.setattr(builder, "verify_source", lambda _source, revision: revision)
+    monkeypatch.setattr(builder.subprocess, "run", compiler)
+    builder.build(tmp_path / "source", tmp_path / "Game.app", tmp_path / "Unity.app", tmp_path / "Demo.app")
+    names = [Path(value).name for value in commands[0]]
+    assert "HoningBridge.cs" in names and "VisibleObservation.cs" in names
