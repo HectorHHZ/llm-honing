@@ -221,7 +221,8 @@ def test_offline_verifier_rejects_failed_identity_calls(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_offline_verifier_rejects_failed_diagnoser_calls(tmp_path: Path) -> None:
+@pytest.mark.parametrize("alteration", ["failed_call", "changed_probe"])
+def test_offline_verifier_rejects_invalid_diagnoser_evidence(tmp_path: Path, alteration: str) -> None:
     out = tmp_path / "package"
     index = {f"e{i}": {"blind_input_sha256": "a" * 64} for i in range(40)}
     probes = dict.fromkeys(index, "b" * 64)
@@ -241,7 +242,10 @@ def test_offline_verifier_rejects_failed_diagnoser_calls(tmp_path: Path) -> None
         for mode in modes
         for episode_id in index
     ]
-    rows[0]["valid"] = False
+    if alteration == "failed_call":
+        rows[0]["valid"] = False
+    else:
+        probes["e0"] = "c" * 64
     module.write_jsonl(out / "checks/diagnoser-isolation.jsonl", rows)
     with pytest.raises(ValueError, match="diagnoser evidence differs"):
         module.verify_diagnoser_checks(out, index, probes, {"diagnoser_isolation_calls_valid": 320})
