@@ -26,6 +26,13 @@ SOURCE_FILES = (
     "model_calls.jsonl",
 )
 FORBIDDEN_INPUT_TERMS = ("inject", "fault", "clean", "gold", "manifest", "source_run", "seed")
+DIAGNOSIS_MODES = {
+    "sol-bare": ("read", "probe"),
+    "sol-fewshot": ("read+fewshot", "probe+fewshot"),
+    "astra-bare": ("read", "probe"),
+    "astra-fewshot": ("read+fewshot", "probe+fewshot"),
+}
+DEFAULT_PINS = Path(__file__).resolve().parents[1] / "exp0/v0/freeze.json"
 
 
 def read(path: Path) -> Any:
@@ -89,6 +96,29 @@ def copy_recordings(source: Path, target: Path, expected: dict[str, str]) -> dic
 
 
 def validate_pins(layer: str, manifest: dict[str, Any], pins: dict[str, Any], instance: str | None) -> str | None:
+    expected_settings = {
+        "kind": "evaluation",
+        "edition": "tank-war",
+        "opponent": pins["game"]["opponent"],
+        "seconds": pins["game"]["sim_seconds"],
+        "interval_ms": pins["game"]["model_interval_ms"],
+        "opponent_interval_ms": pins["game"]["opponent_interval_ms"],
+        "sample_seed": None,
+        "node": pins["game"]["node_version"],
+    }
+    for field, expected in expected_settings.items():
+        require(field in manifest and manifest[field] == expected, f"match setting differs: {field}")
+    seat_settings = {
+        "controllerMode": pins["clean_harness"]["controller_mode"],
+        "contextVersion": pins["clean_harness"]["context_version"],
+        "assistEnabled": pins["clean_harness"]["assist_enabled"],
+        "assistProfile": pins["clean_harness"]["assist_profile"],
+        "fireGuardEnabled": pins["clean_harness"]["fire_guard_enabled"],
+    }
+    for field, expected in seat_settings.items():
+        require(manifest["agent_seat"][field] == expected, f"agent seat setting differs: {field}")
+        require(manifest["opponent_seat"][field] == expected, f"opponent seat setting differs: {field}")
+    require(manifest["opponent_seat"]["decisionVersion"] == "baseline", "opponent decision version differs")
     require(manifest["code_commit"] == pins["game"]["recorded_code_commit"], "game revision differs")
     require(manifest["sources"] == pins["game"]["sources_sha256"], "game source hashes differ")
     model = manifest["model"]
@@ -185,7 +215,9 @@ def sanitize_attempt(row: dict[str, Any], unmatched: dict[str, dict[str, Any]]) 
     }
 
 
-def audit_diagnoser(source: Path, freeze: dict[str, Any], out: Path) -> dict[str, Any]:
+def audit_diagnoser(
+    source: Path, freeze: dict[str, Any], out: Path, packaged_probe_sha256: dict[str, str]
+) -> dict[str, Any]:
     diagnosis = source / "prospective-diagnosis-v2"
     manifest = read(diagnosis / "manifest.json")
     require(
@@ -193,6 +225,8 @@ def audit_diagnoser(source: Path, freeze: dict[str, Any], out: Path) -> dict[str
         "diagnosis sample differs",
     )
     records = []
+    require(set(manifest["runs"]) == set(DIAGNOSIS_MODES), "diagnosis arms differ")
+    frozen_cases = {case["episode_id"]: case for case in freeze["cases"]}
     for arm, arm_spec in manifest["runs"].items():
         arm_root = diagnosis / arm
         arm_freeze = read(arm_root / "freeze.json")
@@ -202,6 +236,14 @@ def audit_diagnoser(source: Path, freeze: dict[str, Any], out: Path) -> dict[str
             "diagnosis cases differ",
         )
         arm_cases = {case["episode_id"]: case for case in arm_freeze["cases"]}
+        require(len(arm_cases) == len(freeze["cases"]), "diagnosis cases duplicate")
+        require(set(arm_spec["modes"]) == set(DIAGNOSIS_MODES[arm]), "diagnosis modes differ")
+        for episode_id, case in arm_cases.items():
+            require(case["input_sha256"] == frozen_cases[episode_id]["input_sha256"], "diagnosis input freeze differs")
+            require(
+                case["probes_sha256"] == packaged_probe_sha256[episode_id],
+                f"packaged probe differs from diagnosis: {episode_id}",
+            )
         for mode in arm_spec["modes"]:
             mode_root = arm_root / mode
             require(
@@ -219,9 +261,7 @@ def audit_diagnoser(source: Path, freeze: dict[str, Any], out: Path) -> dict[str
                 require(attempt["input_sha256"] == case["input_sha256"], "diagnosis input differs")
                 require(attempt["prompt_sha256"] == file_digest(arm_root / "prompt.txt"), "diagnosis prompt differs")
                 require(attempt["schema_sha256"] == file_digest(arm_root / "schema.json"), "diagnosis schema differs")
-                expected_checks = (
-                    arm_cases[episode_id]["probes_sha256"] if mode.startswith("probe") else digest(b"null")
-                )
+                expected_checks = packaged_probe_sha256[episode_id] if mode.startswith("probe") else digest(b"null")
                 require(attempt["checks_sha256"] == expected_checks, "diagnosis checks differ")
                 require(attempt["usage"]["input_tokens"] > 0, "diagnosis usage missing")
                 require((call_root / "answer.json").is_file(), "diagnosis answer missing")
@@ -365,6 +405,7 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
     provenance = []
     probe_checks = []
     replay_checks = []
+    packaged_probe_sha256 = {}
     selected_recording_bytes = 0
     paired_recording_bytes = 0
     selected_input_tokens = 0
@@ -405,8 +446,10 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
             "state or question alignment differs",
         )
         input_path = blind / "inputs" / f"{episode_id}.json"
-        require(file_digest(input_path) == case["input_sha256"], f"blind input differs: {episode_id}")
-        serialized_input = input_path.read_text()
+        require(input_path.is_file() and not input_path.is_symlink(), f"blind input missing or linked: {episode_id}")
+        input_bytes = input_path.read_bytes()
+        require(digest(input_bytes) == case["input_sha256"], f"blind input differs: {episode_id}")
+        serialized_input = input_bytes.decode()
         require(
             not any(term in serialized_input.lower() for term in FORBIDDEN_INPUT_TERMS)
             and str(case["seed"]) not in serialized_input
@@ -414,13 +457,16 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
             f"blind input leaks construction metadata: {episode_id}",
         )
         (out / "inputs").mkdir(exist_ok=True)
-        shutil.copyfile(input_path, out / "inputs" / f"{episode_id}.json")
+        (out / "inputs" / f"{episode_id}.json").write_bytes(input_bytes)
         probe_path = blind / "probes" / episode_id / "probes.json"
-        probe = read(probe_path)
+        require(probe_path.is_file() and not probe_path.is_symlink(), f"probe missing or linked: {episode_id}")
+        probe_bytes = probe_path.read_bytes()
+        probe = json.loads(probe_bytes)
         indices = probe["indices"]
         require([row["decision_index"] for row in indices] == list(range(len(states))), "probe coverage differs")
         (out / "probes").mkdir(exist_ok=True)
-        shutil.copyfile(probe_path, out / "probes" / f"{episode_id}.json")
+        (out / "probes" / f"{episode_id}.json").write_bytes(probe_bytes)
+        packaged_probe_sha256[episode_id] = digest(probe_bytes)
         if layer == "no_injection":
             require(all(valid_probe(layer, row) for row in indices), f"control probe differs: {episode_id}")
             label = None
@@ -446,7 +492,24 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
             )
             paired_recording_bytes += sum(record["bytes"] for record in clean_files.values())
             paired_input_tokens += model_input_tokens(jsonl(clean_run / "model_calls.jsonl"))
-            validate_pins("no_injection", read(clean_run / "manifest.json"), pins, None)
+            clean_manifest = read(clean_run / "manifest.json")
+            validate_pins("no_injection", clean_manifest, pins, None)
+            require(
+                all(
+                    clean_manifest[field] == manifest[field]
+                    for field in (
+                        "seed",
+                        "seat",
+                        "opponent",
+                        "seconds",
+                        "interval_ms",
+                        "opponent_interval_ms",
+                        "sample_seed",
+                    )
+                )
+                and clean_manifest["opponent_seat"] == manifest["opponent_seat"],
+                "paired match settings differ",
+            )
             clean_result = read(clean_run / "result.json")
             require(
                 clean_result["seed"] == case["seed"] and clean_result["seat"] == case["seat"], "clean identity differs"
@@ -475,7 +538,7 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
                 "valid": True,
                 "decisions": len(indices),
                 "identity_tolerance": probe["identity_tolerance"],
-                "probe_sha256": file_digest(probe_path),
+                "probe_sha256": packaged_probe_sha256[episode_id],
             }
         )
         index.append(
@@ -533,7 +596,7 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
                     "probe": f"probes/{episode_id}.json",
                     "replay_check": "checks/replay.jsonl",
                 },
-                "probe_signature_sha256": file_digest(probe_path),
+                "probe_signature_sha256": packaged_probe_sha256[episode_id],
                 "paired_outcome_status": outcome_status,
                 "sample_id": label["sample_id"] if label else None,
                 "source_label_sha256": digest(json.dumps(label, sort_keys=True).encode()) if label else None,
@@ -567,7 +630,7 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
     shutil.copyfile(blind / "protocol.json", out / "protocol.json")
     shutil.copyfile(blind / "prompt.txt", out / "prompt.txt")
     shutil.copyfile(blind / "schema.json", out / "diagnosis-schema.json")
-    isolation = audit_diagnoser(source, freeze, out)
+    isolation = audit_diagnoser(source, freeze, out, packaged_probe_sha256)
     identity = audit_identity(identity_gate, pins, out)
     write_json(
         out / "schema.json",
@@ -636,61 +699,360 @@ def stage(source: Path, pins_path: Path, identity_gate: Path, out: Path) -> dict
     return summary
 
 
-def verify(out: Path) -> dict[str, Any]:
+def rows_by_episode(path: Path, episode_ids: set[str]) -> dict[str, dict[str, Any]]:
+    rows = jsonl(path)
+    by_episode = {row["episode_id"]: row for row in rows}
+    require(len(rows) == len(by_episode) and set(by_episode) == episode_ids, f"episode rows differ: {path}")
+    return by_episode
+
+
+def verified_recording(
+    out: Path, episode_id: str, kind: str, files: dict[str, Any], expected_hashes: dict[str, str]
+) -> dict[str, bytes]:
+    require(set(files) == set(SOURCE_FILES), f"recording files incomplete: {episode_id}/{kind}")
+    contents = {}
+    for name in SOURCE_FILES:
+        record = files[name]
+        relative = f"episodes/{episode_id}/{kind}/{name}{'.gz' if name.endswith('.jsonl') else ''}"
+        require(record["path"] == relative, f"recording path differs: {episode_id}/{kind}/{name}")
+        path = out / relative
+        require(record["package_sha256"] == expected_hashes[relative], f"recording package hash differs: {relative}")
+        payload = path.read_bytes()
+        contents[name] = gzip.decompress(payload) if name.endswith(".jsonl") else payload
+        require(digest(contents[name]) == record["source_sha256"], f"recording source hash differs: {relative}")
+        require(len(contents[name]) == record["bytes"], f"recording byte count differs: {relative}")
+    return contents
+
+
+def decoded_jsonl(data: bytes) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in data.splitlines() if line]
+
+
+def verify_diagnoser_checks(
+    out: Path, index_by_episode: dict[str, dict[str, Any]], probe_sha256: dict[str, str], summary: dict[str, Any]
+) -> None:
+    diagnosis = jsonl(out / "checks/diagnoser-isolation.jsonl")
+    expected_calls = {
+        (arm, mode, episode_id)
+        for arm, modes in DIAGNOSIS_MODES.items()
+        for mode in modes
+        for episode_id in index_by_episode
+    }
+    require(
+        len(diagnosis) == summary["diagnoser_isolation_calls_valid"] == 320
+        and {(row["arm"], row["mode"], row["episode_id"]) for row in diagnosis} == expected_calls,
+        "diagnoser isolation calls differ",
+    )
+    require(
+        all(
+            row["valid"] is True
+            and row["tool_call"] is False
+            and row["input_sha256"] == index_by_episode[row["episode_id"]]["blind_input_sha256"]
+            and row["checks_sha256"]
+            == (probe_sha256[row["episode_id"]] if row["mode"].startswith("probe") else digest(b"null"))
+            for row in diagnosis
+        ),
+        "diagnoser evidence differs",
+    )
+    diagnosis_summary = read(out / "checks/diagnoser-isolation-summary.json")
+    require(
+        diagnosis_summary["calls"] == diagnosis_summary["valid"] == 320
+        and diagnosis_summary["tool_calls"] == 0
+        and diagnosis_summary["arms"] == Counter(row["arm"] for row in diagnosis)
+        and diagnosis_summary["input_tokens"]
+        == summary["historical_diagnoser_input_tokens"]
+        == sum(row["input_tokens"] for row in diagnosis)
+        and diagnosis_summary["output_tokens"]
+        == summary["historical_diagnoser_output_tokens"]
+        == sum(row["output_tokens"] for row in diagnosis),
+        "diagnoser summary differs",
+    )
+
+
+def verify_identity_checks(out: Path, pins: dict[str, Any], summary: dict[str, Any]) -> None:
+    identity = jsonl(out / "checks/identity-calls.jsonl")
+    identity_summary = read(out / "checks/identity-summary.json")
+    tolerance = pins["diagnosis"]["probability_identity_tolerance"]
+    require(
+        len(identity) == summary["identity_calls_valid"] == identity_summary["calls"] == 891
+        and identity_summary["failed_calls"] == 0
+        and identity_summary["tolerance"] == tolerance
+        and identity_summary["maximum_probability_difference"] <= tolerance
+        and all(
+            row["passed"] is True
+            and row["too_long"] is False
+            and row["truncated"] is False
+            and row["maximum_probability_difference"] <= tolerance
+            for row in identity
+        ),
+        "identity calls failed",
+    )
+
+
+def verify(out: Path, pins_path: Path = DEFAULT_PINS) -> dict[str, Any]:
     summary = read(out / "stage-summary.json")
+    pins = read(pins_path)
+    require(file_digest(pins_path) == summary["source_pin_file_sha256"], "frozen pin file differs")
+    require(summary["sample_sha256"] == pins["existing_sample"]["sample_sha256"], "sample pin differs")
     hashes = read(out / "file-hashes.json")
+    actual_files = {str(path.relative_to(out)) for path in out.rglob("*") if path.is_file() or path.is_symlink()}
+    require(actual_files == set(hashes) | {"file-hashes.json", "stage-summary.json"}, "package file list incomplete")
     for name, expected in hashes.items():
+        relative = Path(name)
+        require(not relative.is_absolute() and ".." not in relative.parts, f"unsafe package path: {name}")
         path = out / name
-        require(path.is_file() and file_digest(path) == expected, f"package file differs: {name}")
+        require(
+            path.is_file() and not path.is_symlink() and file_digest(path) == expected, f"package file differs: {name}"
+        )
     require(file_digest(out / "file-hashes.json") == summary["file_hashes_sha256"], "file hash list differs")
     index = jsonl(out / "index.jsonl")
     labels = jsonl(out / "labels.jsonl")
     require(len(index) == len(labels) == summary["episodes"] == 40, "index/label count differs")
+    index_by_episode = {row["episode_id"]: row for row in index}
+    episode_ids = set(index_by_episode)
+    require(len(episode_ids) == 40, "duplicate episode in index")
     require(
-        Counter(row["verified_component"] or "no_injection" for row in labels) == summary["counts"],
+        all(Path(episode_id).name == episode_id and episode_id not in {".", ".."} for episode_id in episode_ids),
+        "unsafe episode id",
+    )
+    label_by_episode = {row["episode_id"]: row for row in labels}
+    require(len(label_by_episode) == 40 and set(label_by_episode) == episode_ids, "label episodes differ")
+    selection = read(out / "sample-selection.json")
+    selected = {case["episode_id"]: case for case in selection["cases"]}
+    require(
+        len(selection["cases"]) == len(selected) == 40 and set(selected) == episode_ids, "selection episodes differ"
+    )
+    require(selection["source_sample_sha256"] == summary["sample_sha256"], "selection hash differs")
+    require(selection["counts"] == pins["existing_sample"]["counts"], "selection composition differs")
+    require(
+        selection["independent_seed_blocks"] == pins["existing_sample"]["independent_seed_blocks"],
+        "selection seed groups differ",
+    )
+    require(
+        Counter(case["technical_label"] for case in selected.values()) == pins["existing_sample"]["counts"],
+        "selected technical labels differ",
+    )
+    require(
+        Counter(row["verified_component"] or "no_injection" for row in labels)
+        == summary["counts"]
+        == pins["existing_sample"]["counts"],
         "label composition differs",
     )
+    replay = rows_by_episode(out / "checks/replay.jsonl", episode_ids)
+    probe_checks = rows_by_episode(out / "checks/probe-identity.jsonl", episode_ids)
+    replay_summary = read(out / "checks/replay-summary.json")
+    probe_summary = read(out / "checks/probe-summary.json")
+    probe_audit = read(out / "checks/probe-audit.json")
+    require(all(row["valid"] is True for row in replay.values()), "replay check failed")
+    require(all(row["valid"] is True for row in probe_checks.values()), "saved-state probe check failed")
+    require(replay_summary["valid"] == 40 and not replay_summary["invalid"], "replay summary failed")
+    require(probe_summary["cases"] == 40 and probe_summary["decisions"] == 2151, "probe summary failed")
+    require(probe_audit["valid"] == 40 and not probe_audit["invalid"], "probe audit failed")
+    require(summary["replays_valid"] == summary["probe_cases_valid"] == 40, "episode check count differs")
+    probe_sha256 = {}
+    selected_bytes = paired_bytes = selected_tokens = paired_tokens = 0
     for row in index:
-        for files in row["files"].values():
-            if files is None:
-                continue
-            for name, record in files.items():
-                path = out / record["path"]
-                data = gzip.decompress(path.read_bytes()) if name.endswith(".jsonl") else path.read_bytes()
-                require(digest(data) == record["source_sha256"], f"unpacked source differs: {path}")
-    require(len(jsonl(out / "attempts.jsonl")) == summary["all_attempts"] == 1330, "attempt count differs")
-    require(len(jsonl(out / "checks/replay.jsonl")) == summary["replays_valid"] == 40, "replay count differs")
+        episode_id = row["episode_id"]
+        case = selected[episode_id]
+        label = label_by_episode[episode_id]
+        layer = case["technical_label"]
+        require(layer in LAYERS, f"unknown technical label: {episode_id}")
+        require(
+            row["seed"] == case["seed"]
+            and row["seat"] == case["seat"]
+            and row["scenario_reset_group"] == str(case["seed"])
+            and row["decision_count"] == case["decisions"]
+            and row["blind_input_sha256"] == case["input_sha256"],
+            f"index selection differs: {episode_id}",
+        )
+        require(
+            label["verified_component"] == (None if layer == "no_injection" else layer), f"label differs: {episode_id}"
+        )
+        require(label["injection_layer"] == label["verified_component"], f"injection label differs: {episode_id}")
+        require(label["paired_outcome_status"] == row["paired_outcome_status"], f"outcome label differs: {episode_id}")
+        require(replay[episode_id]["source_hashes"] == case["source_hashes"], f"replay source differs: {episode_id}")
+        require(
+            {name: record["source_sha256"] for name, record in row["files"]["run"].items()} == case["source_hashes"],
+            f"selected source hashes differ: {episode_id}",
+        )
+        run = verified_recording(out, episode_id, "run", row["files"]["run"], hashes)
+        selected_bytes += sum(record["bytes"] for record in row["files"]["run"].values())
+        manifest = json.loads(run["manifest.json"])
+        result = json.loads(run["result.json"])
+        verified_variant = validate_pins(layer, manifest, pins, case["fault_instance"])
+        require(
+            manifest["seed"] == result["seed"] == row["seed"] and manifest["seat"] == result["seat"] == row["seat"],
+            f"run identity differs: {episode_id}",
+        )
+        require(
+            result["ended"] and not result["truncated"] and result["outcome"][row["seat"]] == -1,
+            f"selected outcome differs: {episode_id}",
+        )
+        require(
+            row["native_outcome"] == -1
+            and row["game_commit"] == manifest["code_commit"]
+            and row["checkpoint_sha256"] == manifest["model"]["weights_sha256"]
+            and row["harness_sha256"] == manifest["harness_sha256"]
+            and row["controller_sha256"] == manifest["controller_sha256"]
+            and row["verified_checkpoint_variant"] == label["verified_checkpoint_variant"] == verified_variant,
+            f"run metadata differs: {episode_id}",
+        )
+        states = decoded_jsonl(run["states.jsonl"])
+        decisions = decoded_jsonl(run["decisions.jsonl"])
+        execution = decoded_jsonl(run["execution.jsonl"])
+        calls = decoded_jsonl(run["model_calls.jsonl"])
+        require(
+            len(states) == len(execution) == len(calls) == row["decision_count"],
+            f"decision count differs: {episode_id}",
+        )
+        require(len(decisions) == 2 * len(states), f"question count differs: {episode_id}")
+        require(
+            all(
+                states[i]["decision_index"] == execution[i]["decision_index"] == i
+                and all(
+                    decisions[2 * i + question]["decision_index"] == i
+                    and decisions[2 * i + question]["state_hash"] == states[i]["state_hash"]
+                    for question in (0, 1)
+                )
+                for i in range(len(states))
+            ),
+            f"decision alignment differs: {episode_id}",
+        )
+        native_tokens = model_input_tokens(calls)
+        selected_tokens += native_tokens
+        require(row["native_request_input_tokens"] == native_tokens, f"native token count differs: {episode_id}")
+        require(
+            row["recording_raw_bytes"] == sum(record["bytes"] for record in row["files"]["run"].values()),
+            f"recording byte count differs: {episode_id}",
+        )
+        probe_path = out / "probes" / f"{episode_id}.json"
+        probe_sha256[episode_id] = file_digest(probe_path)
+        probe = read(probe_path)
+        indices = probe["indices"]
+        require(
+            [item["decision_index"] for item in indices] == list(range(len(states))),
+            f"probe coverage differs: {episode_id}",
+        )
+        require(
+            probe["identity_tolerance"]
+            == probe_checks[episode_id]["identity_tolerance"]
+            == pins["diagnosis"]["probability_identity_tolerance"],
+            f"probe tolerance differs: {episode_id}",
+        )
+        require(
+            probe_checks[episode_id]["decisions"] == row["decision_count"]
+            and probe_checks[episode_id]["probe_sha256"]
+            == label["probe_signature_sha256"]
+            == probe_sha256[episode_id],
+            f"probe hash or count differs: {episode_id}",
+        )
+        input_path = out / "inputs" / f"{episode_id}.json"
+        require(file_digest(input_path) == row["blind_input_sha256"], f"blind input differs: {episode_id}")
+        require(
+            not any(term in input_path.read_text().lower() for term in FORBIDDEN_INPUT_TERMS),
+            f"blind input leaks construction metadata: {episode_id}",
+        )
+        if layer == "no_injection":
+            require(row["files"]["paired_clean"] is None, f"control has clean pair: {episode_id}")
+            require(
+                row["paired_clean_outcome"] is None and row["paired_outcome_status"] == "untested",
+                f"control outcome differs: {episode_id}",
+            )
+            require(all(valid_probe(layer, item) for item in indices), f"control probe differs: {episode_id}")
+            require(label["reference"] is None, f"control reference differs: {episode_id}")
+            continue
+        require(label["annotation_status"] == "machine_verified", f"label provenance differs: {episode_id}")
+        reference = label["reference"]
+        position = case["technical_reference_index"]
+        require(
+            reference["verified"] is True
+            and reference["decision_index"] == position
+            and states[position]["state_hash"] == reference["state_hash"]
+            and valid_probe(layer, indices[position]),
+            f"local component evidence differs: {episode_id}",
+        )
+        clean_files = row["files"]["paired_clean"]
+        require(isinstance(clean_files, dict), f"clean recording missing: {episode_id}")
+        clean = verified_recording(out, episode_id, "paired_clean", clean_files, hashes)
+        paired_bytes += sum(record["bytes"] for record in clean_files.values())
+        paired_tokens += model_input_tokens(decoded_jsonl(clean["model_calls.jsonl"]))
+        clean_manifest = json.loads(clean["manifest.json"])
+        clean_result = json.loads(clean["result.json"])
+        validate_pins("no_injection", clean_manifest, pins, None)
+        require(
+            all(
+                clean_manifest[field] == manifest[field]
+                for field in (
+                    "seed",
+                    "seat",
+                    "opponent",
+                    "seconds",
+                    "interval_ms",
+                    "opponent_interval_ms",
+                    "sample_seed",
+                )
+            )
+            and clean_manifest["opponent_seat"] == manifest["opponent_seat"],
+            f"paired match settings differ: {episode_id}",
+        )
+        require(
+            clean_result["seed"] == row["seed"] and clean_result["seat"] == row["seat"],
+            f"clean identity differs: {episode_id}",
+        )
+        require(clean_result["ended"] and not clean_result["truncated"], f"clean match incomplete: {episode_id}")
+        clean_outcome = clean_result["outcome"][row["seat"]]
+        expected_status = "paired_outcome_differs" if clean_outcome != -1 else "paired_outcome_same"
+        require(
+            row["paired_clean_outcome"] == clean_outcome and row["paired_outcome_status"] == expected_status,
+            f"paired outcome differs: {episode_id}",
+        )
+    require(summary["all_selected_outcomes"] == "loss", "selected outcome summary differs")
     require(
-        sum(row["decisions"] for row in jsonl(out / "checks/probe-identity.jsonl"))
-        == summary["probe_decisions"]
-        == 2151,
+        summary["independent_seed_groups"] == len({row["seed"] for row in index}) == 19, "seed group total differs"
+    )
+    require(summary["decisions"] == sum(row["decision_count"] for row in index) == 2151, "decision total differs")
+    require(summary["questions"] == 2 * summary["decisions"], "question total differs")
+    require(summary["selected_recording_raw_bytes"] == selected_bytes, "selected recording bytes differ")
+    require(summary["paired_clean_recording_raw_bytes"] == paired_bytes, "paired recording bytes differ")
+    require(summary["selected_native_request_input_tokens"] == selected_tokens, "selected native tokens differ")
+    require(summary["paired_clean_native_request_input_tokens"] == paired_tokens, "paired native tokens differ")
+    require(
+        summary["paired_outcome_differs"]
+        == sum(row["paired_outcome_status"] == "paired_outcome_differs" for row in index),
+        "paired outcome total differs",
+    )
+    require(
+        summary["checkpoint_name_mismatches"] == sum(row["source_instance_name_mismatch"] for row in labels),
+        "checkpoint mismatch total differs",
+    )
+    attempts = jsonl(out / "attempts.jsonl")
+    require(len(attempts) == summary["all_attempts"] == 1330, "attempt count differs")
+    require(Counter(row["status"] for row in attempts) == summary["attempt_status_counts"], "attempt statuses differ")
+    require(
+        sum(row["decisions"] for row in probe_checks.values()) == summary["probe_decisions"] == 2151,
         "probe count differs",
     )
-    require(
-        len(jsonl(out / "checks/diagnoser-isolation.jsonl")) == summary["diagnoser_isolation_calls_valid"] == 320,
-        "diagnoser isolation count differs",
-    )
-    require(
-        len(jsonl(out / "checks/identity-calls.jsonl")) == summary["identity_calls_valid"] == 891,
-        "identity count differs",
-    )
+    verify_diagnoser_checks(out, index_by_episode, probe_sha256, summary)
+    verify_identity_checks(out, pins, summary)
     return summary
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, help="Existing v4 private source root; stage only")
-    parser.add_argument("--pins", type=Path, help="Merged v0 freeze.json; stage only")
+    parser.add_argument(
+        "--pins", type=Path, help="Merged v0 freeze.json; defaults to the checked-in file for verification"
+    )
     parser.add_argument("--identity-gate", type=Path, help="Archived clean-checkpoint identity gate; stage only")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    if args.source or args.pins or args.identity_gate:
+    if args.source or args.identity_gate:
         require(
             args.source is not None and args.pins is not None and args.identity_gate is not None,
             "stage needs --source, --pins, and --identity-gate",
         )
         stage(args.source, args.pins, args.identity_gate, args.out)
-    print(json.dumps(verify(args.out), indent=2, sort_keys=True))
+    print(json.dumps(verify(args.out, args.pins or DEFAULT_PINS), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

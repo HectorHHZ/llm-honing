@@ -127,9 +127,11 @@ python3 integrations/tank-war/scripts/package-exp0-v0.py \
 
 The output directory must not exist. The command copies original and paired
 clean trace bytes into deterministic gzip files, checks the frozen file hashes
-and component evidence, and writes a file-hash manifest. It never changes the
+and component evidence, binds the copied probe bytes to the historical
+diagnosis freeze, and writes a file-hash manifest. It never changes the
 source recordings. For a later read-only check, including decompression and
-comparison to every original SHA-256:
+comparison to every original SHA-256, complete recordings, match settings,
+probe receipts, and each archived check result:
 
 ```bash
 python3 integrations/tank-war/scripts/package-exp0-v0.py \

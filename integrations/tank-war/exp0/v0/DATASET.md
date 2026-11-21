@@ -75,6 +75,17 @@ hash, frozen prompt/schema, one per-case Bubblewrap work mount, and no tool
 call. This checks the historical diagnostic boundary only. It does not count
 as the real API read/probe run required by #183 item 7.
 
+Staging now compares the exact probe bytes copied into the package with every
+historical diagnosis arm's frozen probe hash before accepting those 320 calls.
+The offline verifier checks the complete file inventory, all seven recording
+files per run, the frozen match settings of both sides of every pair, the
+archived success flags, and the links among probes, labels, inputs, and
+diagnosis receipts. It recomputes the package totals rather than treating
+record counts as proof of success. A fresh temporary rebuild from the original
+private records produced the same file-hash manifest and stage summary as this
+stage. These checks validate archived evidence; they do not re-execute the
+matches or replace the later real API experiment.
+
 Run the validator on ds-serv2 without a GPU:
 
 ```bash
