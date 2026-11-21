@@ -238,9 +238,14 @@ def test_unreachable_decision_server_is_a_rejection(laya, tmp_path: Path) -> Non
 # ---- run loop: the model's choice is executed exactly, a rejection executes nothing ---------------
 
 
-def scripted_run(runner: ModuleType, monkeypatch, tmp_path: Path, row: dict, response: dict) -> SimpleNamespace:
-    """Run the real decision loop for one decision around a fake game, agent and model service."""
-    seen = SimpleNamespace(executed=[], closed=0, out=tmp_path / "run")
+def scripted_run(
+    runner: ModuleType, monkeypatch, tmp_path: Path, row: dict, response: dict, error: BaseException | None = None
+) -> SimpleNamespace:
+    """Run the real decision loop for one decision around a fake game, agent and model service.
+
+    With `error`, executing the chosen option raises it, as a failing game or a stop signal would.
+    """
+    seen = SimpleNamespace(executed=[], closed=0, out=tmp_path / "run", exit_code=None)
     menu = {
         "essential": row["request"]["parts"]["essential"],
         "instructions": row["request"]["questions"]["action"]["instructions"],
@@ -274,6 +279,8 @@ def scripted_run(runner: ModuleType, monkeypatch, tmp_path: Path, row: dict, res
 
         def execute(self, choice: str, index: int, label: str, probability: float) -> dict:
             seen.executed.append((choice, index, label, probability))
+            if error is not None:
+                raise error
             return {"reason": "done", "windows": 0}
 
     class Client:
@@ -289,7 +296,7 @@ def scripted_run(runner: ModuleType, monkeypatch, tmp_path: Path, row: dict, res
     monkeypatch.setattr(runner, "importlib", SimpleNamespace(import_module=lambda _name: SimpleNamespace(Agent=Agent)))
     arguments = ["run_agent.py", "--harness", "v8", "--max-decisions", "1", "--no-video", "--out", str(seen.out)]
     monkeypatch.setattr(sys, "argv", arguments)
-    runner.main()
+    seen.exit_code = runner.main()
     return seen
 
 
@@ -301,6 +308,7 @@ def test_the_validated_argmax_is_the_option_executed(runner, monkeypatch, tmp_pa
     record = json.loads((seen.out / "session/decisions.jsonl").read_text())
     assert (record["choice"], record["probabilities"]) == (row["choice"], row["probabilities"])
     assert seen.closed == 1
+    assert seen.exit_code == 0
 
 
 @pytest.mark.integration
@@ -315,6 +323,36 @@ def test_a_rejected_response_executes_nothing_and_is_recorded(runner, monkeypatc
     assert json.loads((seen.out / "session/responses/0001.raw").read_text()) == response
     assert json.loads((seen.out / "summary.json").read_text())["status"].startswith("guard rejection at decision 1")
     assert seen.closed == 1
+    assert seen.exit_code == 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("error", "code"), [(RuntimeError("the game stopped"), 1), (SystemExit(143), 143), (KeyboardInterrupt(), 130)]
+)
+def test_a_run_stopped_by_an_error_exits_nonzero_and_still_writes_its_summary(
+    runner, monkeypatch, tmp_path: Path, decisions, error: BaseException, code: int
+) -> None:
+    row = decisions[0]
+    seen = scripted_run(runner, monkeypatch, tmp_path, row, json.loads(row["responseRaw"]), error=error)
+    assert seen.exit_code == code
+    assert json.loads((seen.out / "summary.json").read_text())["status"].startswith(f"error: {type(error).__name__}")
+    assert seen.closed == 1
+
+
+@pytest.mark.integration
+def test_the_command_exits_nonzero_when_no_game_is_named(tmp_path: Path) -> None:
+    """Without HONING_HK_GAME no game starts: the summary says why, and the process exits with 1."""
+    pytest.importorskip("numpy")  # the real harness is imported
+    environment = {name: value for name, value in os.environ.items() if name != "HONING_HK_GAME"}
+    out = tmp_path / "run"
+    command = [sys.executable, str(EXPERIMENT / "run_agent.py"), "--harness", "v8", "--policy", "first", "--no-video"]
+    completed = subprocess.run(
+        [*command, "--out", str(out)], env=environment, capture_output=True, text=True, timeout=120
+    )
+    assert completed.returncode == 1, completed.stderr
+    status = json.loads((out / "summary.json").read_text())["status"]
+    assert status.startswith("error: RuntimeError: Set HONING_HK_GAME")
 
 
 @pytest.mark.integration

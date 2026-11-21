@@ -17,6 +17,11 @@ The debug trace is read only by EpisodeWatch for progress printing and to end th
 Added 2026-11-17 (round 2, additive; the defaults behave as before): `--goal SCENE:X` ends the episode when the
 debug trace shows the knight in SCENE at x >= X (Level2 has no exit object), `--through` keeps the episode going
 across a scene change (one continuous run Level1 -> Level2). Both are evaluation-side only.
+
+Changed 2026-11-20 (after the runs; nothing else changed): the exit status tells a failed run from a finished one.
+0: the episode ended at the goal, at a scene change or at a decision or frame budget. 1: the run failed, either by an
+error (for example HONING_HK_GAME is not set) or by a guard rejection. A run stopped by SIGTERM exits with 143, by
+Ctrl-C with 130. summary.json is written in every case, and its `status` says how the run ended.
 """
 from __future__ import annotations
 
@@ -37,7 +42,16 @@ from core.evalwatch import EpisodeWatch            # noqa: E402
 from core.laya import GuardRejection, LayaClient, build_request, checked_choice  # noqa: E402
 
 
-def main() -> None:
+def exit_status(error: BaseException) -> int:
+    """Exit status of a run that `error` stopped: a stop signal keeps its usual status, any other error gives 1."""
+    if isinstance(error, SystemExit) and isinstance(error.code, int) and error.code != 0:
+        return error.code                            # SIGTERM arrives as SystemExit(143), see main()
+    if isinstance(error, KeyboardInterrupt):
+        return 130
+    return 1
+
+
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--harness", default="v1")
     ap.add_argument("--out", type=Path, required=True)
@@ -83,6 +97,7 @@ def main() -> None:
     shutil.copytree(HERE / "harness" / args.harness, out / "harness_snapshot" / args.harness,
                     ignore=shutil.ignore_patterns("__pycache__"))
     status = "running"
+    exit_code = 0
     summary = {}
     try:
         env.start()
@@ -120,6 +135,7 @@ def main() -> None:
                     with (session / "decisions.jsonl").open("a") as log:
                         log.write(json.dumps(record) + "\n")
                     status = f"guard rejection at decision {index}: {error}"
+                    exit_code = 1
                     print(status, flush=True)
                     break
                 record.update({"choice": choice, "probability": probability, "probabilities": probabilities,
@@ -180,6 +196,7 @@ def main() -> None:
             status = "decision budget reached"
     except BaseException as error:
         status = f"error: {type(error).__name__}: {error}"
+        exit_code = exit_status(error)
         traceback.print_exc()
     finally:
         try:
@@ -196,7 +213,8 @@ def main() -> None:
                 encode_video(env.session, out / "gameplay.mp4")
             except Exception as error:
                 print("video encoding failed:", error, flush=True)
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

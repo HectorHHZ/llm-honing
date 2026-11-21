@@ -351,6 +351,10 @@ Each run writes its trace, a copy of the harness source, `summary.json` and, whe
 `--out`. The runner starts its own `Xvfb` and game and stops both on every exit path. A response that fails the guard stops the
 run before anything is executed, and the raw bytes stay in `session/responses/`.
 
+The exit status is 0 when the episode ends at the goal, at a scene change or at a decision or frame budget. It is 1 when the run
+fails: by an error, for example when `HONING_HK_GAME` is not set, or by a guard rejection. A run stopped by `SIGTERM` exits
+with 143. `summary.json` is written in every case, and its `status` says how the run ended.
+
 ### 4. Check the committed evidence offline
 
 ```sh
@@ -387,7 +391,8 @@ inputs, 132 frames, 7 rejected commands), and all 11 fixed-input steps match a p
 
 | Path | Content |
 | --- | --- |
-| `run_agent.py`, `harness/v8/`, `core/evalwatch.py`, `tools/freeze_check.py` | The code that produced the results, byte for byte apart from three formatter directives at the top of each file |
+| `harness/v8/`, `core/evalwatch.py`, `tools/freeze_check.py` | The code that produced the results, byte for byte apart from three formatter directives at the top of each file |
+| `run_agent.py` | The runner that produced the results, with the same three directives. Changed after the runs only in its exit status: a failed run now exits with 1 instead of 0 |
 | `core/env.py` | Launcher. Changed from the run's version only in how it finds the player and `ffmpeg` and in its handling of failed starts |
 | `core/laya.py` | Laya client and response guard, now built on the shared receiver [`integrations/_shared/decision.py`](../../../_shared/decision.py). All 47 recorded responses give the same choice and probabilities through it |
 | `tools/decision_table.py`, `tools/make_cut.py` | Evaluation and video tools. They also read compressed traces and write the small demo |
