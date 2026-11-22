@@ -62,8 +62,7 @@ def run_preflight(
         raise ValueError("a preflight may inject only one component fault")
     if controller_fault and not agent_controller:
         raise ValueError("controller fault needs the model-backed agent controller")
-    if harness_fault or controller_fault:
-        verify_clean_baseline()
+    frozen = verify_clean_baseline() if harness_fault or controller_fault else None
     if output.exists():
         raise FileExistsError(output)
     pinned = json.loads(PINS.read_text())["nanojevModels"]["nanojev"]["revision"]
@@ -74,6 +73,10 @@ def run_preflight(
         raise ValueError("decision service does not attest the requested checkpoint revision and weight checksum")
     if expected_weights_sha256 is not None and metadata["weightsSha256"] != expected_weights_sha256:
         raise ValueError("decision service weights differ from the requested checksum")
+    if frozen and (
+        metadata["revision"] != frozen["checkpoint_sha256"] or metadata["weightsSha256"] != frozen["checkpoint_sha256"]
+    ):
+        raise ValueError("harness or controller fault needs the frozen clean checkpoint")
     # Validate the entire fixed task list before creating any output or making a model call.
     scenarios = [ReaIssacScenario(seed, max_ticks, decision_frames) for seed in seeds]
     output.mkdir(parents=True)

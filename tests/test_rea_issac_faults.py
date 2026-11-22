@@ -99,13 +99,14 @@ def test_same_state_probe_checks_component_boundary_and_excludes_teacher_labels(
 ) -> None:
     dataset = tmp_path / "demos"
     build_dataset(dataset, per_seed=60, max_state_chars=12000, selection="balanced_rooms")
+    selected = json.loads((AGENT / "fault_freeze.json").read_text())["checkpoint_sha256"]
 
     class FakeClient:
         def __init__(self, url: str) -> None:
             self.url = url
 
         def health(self) -> dict[str, Any]:
-            revision = "b" * 64 if self.url == "weights" else "a" * 64
+            revision = "b" * 64 if self.url == "weights" else selected
             return {"metadata": {"revision": revision, "weightsSha256": revision}}
 
         def decide(self, request: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -132,12 +133,12 @@ def test_same_state_probe_checks_component_boundary_and_excludes_teacher_labels(
 
     monkeypatch.setattr(fault_probe, "DecisionClient", FakeClient)
     clean, harness, weights = (tmp_path / name for name in ("clean", "harness", "weights"))
-    fault_probe.record_probes(dataset, clean, decision_server="clean", expected_revision="a" * 64)
+    fault_probe.record_probes(dataset, clean, decision_server="clean", expected_revision=selected)
     fault_probe.record_probes(
         dataset,
         harness,
         decision_server="clean",
-        expected_revision="a" * 64,
+        expected_revision=selected,
         harness_fault="harness-reverse-move-v1",
     )
     fault_probe.record_probes(dataset, weights, decision_server="weights", expected_revision="b" * 64)

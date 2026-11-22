@@ -9,6 +9,9 @@ The existing game, public observation, and action files remain fixed by
 `agent_frozen.json`. Fault-building code is on a separate branch based on
 this commit. This is a candidate-validation stage, not the 40-episode v0
 dataset.
+`fault_freeze.json` pins the clean agent files and checkpoint; fault runners
+check those hashes and reject a harness or controller fault served by other
+weights.
 
 | Component | Single change | Required local evidence |
 | --- | --- | --- |

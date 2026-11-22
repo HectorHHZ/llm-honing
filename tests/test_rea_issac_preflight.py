@@ -150,6 +150,10 @@ class ModelPreflightTests(unittest.TestCase):
                 audit_agent_run(run)
 
     def test_controller_fault_records_clean_and_swapped_actions(self) -> None:
+        selected = json.loads((PINS.parents[2] / "honing/backends/rea_issac_agent/fault_freeze.json").read_text())[
+            "checkpoint_sha256"
+        ]
+        self.metadata.update(revision=selected, weightsSha256=selected)
         with tempfile.TemporaryDirectory() as directory:
             run = Path(directory) / "controller-fault"
             summary = run_preflight(
@@ -158,6 +162,7 @@ class ModelPreflightTests(unittest.TestCase):
                 seeds=(1002,),
                 max_ticks=72,
                 agent_controller=NAVIGATE_EMPTY_ROOMS,
+                expected_revision=selected,
                 controller_fault=CONTROLLER_SWAP_MOVE_AXES,
             )
             assert summary["controller_fault"] == CONTROLLER_SWAP_MOVE_AXES
@@ -173,6 +178,10 @@ class ModelPreflightTests(unittest.TestCase):
             assert audit_agent_run(run / "s1002-model")["fault_triggers"] > 0
 
     def test_harness_fault_changes_rendered_request(self) -> None:
+        selected = json.loads((PINS.parents[2] / "honing/backends/rea_issac_agent/fault_freeze.json").read_text())[
+            "checkpoint_sha256"
+        ]
+        self.metadata.update(revision=selected, weightsSha256=selected)
         with tempfile.TemporaryDirectory() as directory:
             run = Path(directory) / "harness-fault"
             summary = run_preflight(
@@ -180,10 +189,19 @@ class ModelPreflightTests(unittest.TestCase):
                 run,
                 seeds=(1002,),
                 max_ticks=6,
+                expected_revision=selected,
                 harness_fault=HARNESS_REVERSE_MOVE,
             )
             assert summary["harness_fault"] == HARNESS_REVERSE_MOVE
             assert "Movement controls are inverted" in self.requests[0]["questions"]["move"]["instructions"]
+
+    def test_harness_fault_rejects_a_changed_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "wrong-model"
+            with self.assertRaisesRegex(ValueError, "frozen clean checkpoint"):
+                run_preflight(self.url, output, seeds=(1002,), harness_fault=HARNESS_REVERSE_MOVE)
+            self.assertFalse(output.exists())
+            self.assertFalse(self.requests)
 
     def test_mixed_faults_are_rejected_before_a_model_call(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

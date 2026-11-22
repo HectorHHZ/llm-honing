@@ -55,7 +55,9 @@ def record_probes(
         raise FileExistsError(out)
     if harness_fault not in (None, HARNESS_REVERSE_MOVE):
         raise ValueError("unsupported harness fault")
-    verify_clean_baseline()
+    frozen = verify_clean_baseline()
+    if harness_fault and expected_revision != frozen["checkpoint_sha256"]:
+        raise ValueError("harness probe needs the frozen clean checkpoint")
     client = DecisionClient(decision_server)
     metadata = client.health()["metadata"]
     if metadata.get("revision") != expected_revision or metadata.get("weightsSha256") != expected_revision:
