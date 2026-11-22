@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from honing.backends.rea_issac.model import DecisionClient, validate_reply
-from honing.backends.rea_issac_agent.faults import HARNESS_REVERSE_MOVE, REVERSED_MOVE_INSTRUCTION
+from honing.backends.rea_issac_agent.faults import (
+    HARNESS_REVERSE_MOVE,
+    REVERSED_MOVE_INSTRUCTION,
+    verify_clean_baseline,
+)
 from honing.backends.rea_issac_agent.train_agent import load_batch
 
 FORMAT = "rea-issac-agent-fault-probe-v1"
@@ -51,6 +55,7 @@ def record_probes(
         raise FileExistsError(out)
     if harness_fault not in (None, HARNESS_REVERSE_MOVE):
         raise ValueError("unsupported harness fault")
+    verify_clean_baseline()
     client = DecisionClient(decision_server)
     metadata = client.health()["metadata"]
     if metadata.get("revision") != expected_revision or metadata.get("weightsSha256") != expected_revision:

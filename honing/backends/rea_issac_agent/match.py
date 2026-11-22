@@ -17,7 +17,7 @@ from honing.backends.rea_issac.model import DecisionClient, validate_reply
 from honing.backends.rea_issac.replay import audit_run
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
 from honing.backends.rea_issac_agent.controller import AgentController
-from honing.backends.rea_issac_agent.faults import CONTROLLER_SWAP_MOVE_AXES, swap_move_axes
+from honing.backends.rea_issac_agent.faults import CONTROLLER_SWAP_MOVE_AXES, swap_move_axes, verify_clean_baseline
 from honing.core import HarnessSpec
 
 FORMAT = "rea-issac-agent-record-v1"
@@ -136,6 +136,8 @@ def run_agent_match(
     controller_fault: str | None = None,
 ) -> dict[str, Any]:
     """Keep v1 match/replay unchanged; save the original model replies beside its recording."""
+    if controller_fault:
+        verify_clean_baseline()
     upstream = DecisionClient(decision_server)
     with _agent_server(upstream, controller_mode, out / "agent_decisions.jsonl", controller_fault) as proxy:
         result = run_match(scenario, out, spec, policy="model", decision_server=proxy, policy_checksum=policy_checksum)

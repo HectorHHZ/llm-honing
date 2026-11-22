@@ -1,0 +1,14 @@
+{
+  "format": "rea-issac-agent-fault-freeze-v1",
+  "baseline_commit": "ed5c9642bb5a1894084965ddc8be4c11e25a68f0",
+  "checkpoint_sha256": "a60db30eb906b46e89499e284a40f31f7e1ea1a790f4a2ac744253b9f90a1c51",
+  "controller_mode": "model-assisted-combat-v2",
+  "harness_spec_id": "h-c2d1d7d325930098",
+  "decision_frames": 3,
+  "files": {
+    "honing/backends/rea_issac_agent/controller.py": "fd48086821ae6d198569fd1364c26eeb4c38457f38b0bbe43a2d0a27cd112353",
+    "honing/backends/rea_issac_agent/config/controller.json": "76b5329804a4736bd08f21db5035d73a271ea2c1d44ace57e1b09ab0b0e8af49",
+    "honing/backends/rea_issac_agent/config/questions.json": "b763af3190531b33e6f6c29a28d6348362349a93dcc81cf90c81fc48a139e833",
+    "honing/backends/rea_issac_agent/checkpoint_pin.json": "9ac6fddbc686c93d2c6a16a81a04bf66570fb1c877111dc80cf73ff83a742627"
+  }
+}

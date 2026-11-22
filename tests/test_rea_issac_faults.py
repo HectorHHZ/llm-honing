@@ -12,7 +12,7 @@ from honing.backends.rea_issac.catalog import OPTIONS, action_for
 from honing.backends.rea_issac.harness import parse_harness, seed_harness
 from honing.backends.rea_issac.model import make_request
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
-from honing.backends.rea_issac_agent import fault_probe
+from honing.backends.rea_issac_agent import fault_probe, faults
 from honing.backends.rea_issac_agent.faults import (
     OPPOSITE,
     WEIGHTS_REVERSE_MOVE,
@@ -26,6 +26,23 @@ from integrations.rea_issac.engine import Engine
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "honing/backends/rea_issac_agent"
+
+
+@pytest.mark.unit
+def test_fault_freeze_rejects_changed_clean_agent_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    frozen = json.loads((AGENT / "fault_freeze.json").read_text())
+    for name in frozen["files"]:
+        copied = tmp_path / name
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes((ROOT / name).read_bytes())
+    package = tmp_path / "honing/backends/rea_issac_agent"
+    (package / "fault_freeze.json").write_text(json.dumps(frozen))
+    monkeypatch.setattr(faults, "PACKAGE", package)
+    monkeypatch.setattr(faults, "ROOT", tmp_path)
+    assert faults.verify_clean_baseline()["baseline_commit"] == frozen["baseline_commit"]
+    (package / "config/questions.json").write_text("{}")
+    with pytest.raises(ValueError, match="frozen REA-Issac agent file changed"):
+        faults.verify_clean_baseline()
 
 
 @pytest.mark.unit

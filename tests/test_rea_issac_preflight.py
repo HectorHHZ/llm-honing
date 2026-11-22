@@ -102,6 +102,20 @@ class ModelPreflightTests(unittest.TestCase):
             self.assertFalse(output.exists())
             self.assertFalse(self.requests)
 
+    def test_wrong_weight_checksum_is_rejected_before_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "preflight"
+            with self.assertRaisesRegex(ValueError, "weights differ"):
+                run_preflight(
+                    self.url,
+                    output,
+                    seeds=(7,),
+                    max_ticks=6,
+                    expected_weights_sha256="b" * 64,
+                )
+            self.assertFalse(output.exists())
+            self.assertFalse(self.requests)
+
     def test_model_controller_pair_is_audited(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "agent-preflight"
@@ -170,6 +184,21 @@ class ModelPreflightTests(unittest.TestCase):
             )
             assert summary["harness_fault"] == HARNESS_REVERSE_MOVE
             assert "Movement controls are inverted" in self.requests[0]["questions"]["move"]["instructions"]
+
+    def test_mixed_faults_are_rejected_before_a_model_call(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "mixed"
+            with self.assertRaisesRegex(ValueError, "only one component fault"):
+                run_preflight(
+                    self.url,
+                    output,
+                    seeds=(1002,),
+                    agent_controller=NAVIGATE_EMPTY_ROOMS,
+                    harness_fault=HARNESS_REVERSE_MOVE,
+                    controller_fault=CONTROLLER_SWAP_MOVE_AXES,
+                )
+            self.assertFalse(output.exists())
+            self.assertFalse(self.requests)
 
 
 if __name__ == "__main__":

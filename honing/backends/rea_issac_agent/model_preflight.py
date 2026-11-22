@@ -20,6 +20,7 @@ from honing.backends.rea_issac_agent.faults import (
     CONTROLLER_SWAP_MOVE_AXES,
     HARNESS_REVERSE_MOVE,
     reverse_movement_harness,
+    verify_clean_baseline,
 )
 from honing.backends.rea_issac_agent.match import audit_agent_run, run_agent_match
 
@@ -47,6 +48,7 @@ def run_preflight(
     max_ticks: int = 900,
     decision_frames: int = 3,
     expected_revision: str | None = None,
+    expected_weights_sha256: str | None = None,
     agent_controller: str | None = None,
     harness_fault: str | None = None,
     controller_fault: str | None = None,
@@ -60,6 +62,8 @@ def run_preflight(
         raise ValueError("a preflight may inject only one component fault")
     if controller_fault and not agent_controller:
         raise ValueError("controller fault needs the model-backed agent controller")
+    if harness_fault or controller_fault:
+        verify_clean_baseline()
     if output.exists():
         raise FileExistsError(output)
     pinned = json.loads(PINS.read_text())["nanojevModels"]["nanojev"]["revision"]
@@ -68,6 +72,8 @@ def run_preflight(
     metadata = health["metadata"]
     if metadata.get("revision") != revision or not isinstance(metadata.get("weightsSha256"), str):
         raise ValueError("decision service does not attest the requested checkpoint revision and weight checksum")
+    if expected_weights_sha256 is not None and metadata["weightsSha256"] != expected_weights_sha256:
+        raise ValueError("decision service weights differ from the requested checksum")
     # Validate the entire fixed task list before creating any output or making a model call.
     scenarios = [ReaIssacScenario(seed, max_ticks, decision_frames) for seed in seeds]
     output.mkdir(parents=True)
@@ -135,6 +141,7 @@ def main() -> None:
     parser.add_argument("--max-ticks", type=int, default=900)
     parser.add_argument("--decision-frames", type=int, default=3)
     parser.add_argument("--expected-revision", help="default: pinned public NanoJev revision")
+    parser.add_argument("--expected-weights-sha256")
     parser.add_argument("--agent-controller", choices=CONTROLLER_MODES)
     parser.add_argument("--harness-fault", choices=(HARNESS_REVERSE_MOVE,))
     parser.add_argument("--controller-fault", choices=(CONTROLLER_SWAP_MOVE_AXES,))
@@ -146,6 +153,7 @@ def main() -> None:
         max_ticks=args.max_ticks,
         decision_frames=args.decision_frames,
         expected_revision=args.expected_revision,
+        expected_weights_sha256=args.expected_weights_sha256,
         agent_controller=args.agent_controller,
         harness_fault=args.harness_fault,
         controller_fault=args.controller_fault,

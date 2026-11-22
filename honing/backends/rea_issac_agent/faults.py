@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from honing.backends.rea_issac.catalog import DIRECTIONS
-from honing.backends.rea_issac.harness import QUESTIONS_PATH, parse_harness
+from honing.backends.rea_issac.harness import QUESTIONS_PATH, parse_harness, seed_harness
+from honing.backends.rea_issac_agent.make_agent_demos import verify_frozen
 from honing.backends.rea_issac_agent.train_agent import load_batch
 from honing.core import HarnessFile, HarnessSpec
 
@@ -28,10 +29,29 @@ OPPOSITE = {
     name: next(other for other, candidate in DIRECTIONS.items() if candidate == (-vector[0], -vector[1]))
     for name, vector in DIRECTIONS.items()
 }
+PACKAGE = Path(__file__).resolve().parent
+ROOT = PACKAGE.parents[2]
+
+
+def verify_clean_baseline() -> dict[str, Any]:
+    """Refuse a changed game, agent controller, harness, or selected checkpoint pin."""
+    frozen = json.loads((PACKAGE / "fault_freeze.json").read_text())
+    if frozen.get("format") != "rea-issac-agent-fault-freeze-v1":
+        raise ValueError("unknown REA-Issac fault freeze")
+    verify_frozen()
+    for name, expected in frozen["files"].items():
+        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
+            raise ValueError(f"frozen REA-Issac agent file changed: {name}")
+    if seed_harness(PACKAGE).spec_id != frozen["harness_spec_id"]:
+        raise ValueError("frozen REA-Issac agent harness changed")
+    return frozen
 
 
 def reverse_movement_harness(clean: HarnessSpec) -> HarnessSpec:
     """Change only the model-facing movement instruction, never the observed state or option IDs."""
+    frozen = verify_clean_baseline()
+    if clean.spec_id != frozen["harness_spec_id"]:
+        raise ValueError("harness fault must start from the frozen clean agent")
     original = clean.get(QUESTIONS_PATH)
     if original is None or original.kind != "instructions":
         raise ValueError("clean REA-Issac harness has no movement instructions")
@@ -53,6 +73,7 @@ def swap_move_axes(action: dict[str, Any]) -> dict[str, Any]:
 
 def build_reversed_move_dataset(source: Path, output: Path) -> dict[str, Any]:
     """Train only the move question, with a deliberately opposite label for every nonzero move."""
+    verify_clean_baseline()
     _, summary = load_batch(source)
     if output.exists():
         raise FileExistsError(output)

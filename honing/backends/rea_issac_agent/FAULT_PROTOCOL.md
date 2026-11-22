@@ -54,6 +54,8 @@ every attempted training run, including rejected checkpoints and reason.
 Use `model_preflight --harness-fault harness-reverse-move-v1` or
 `--controller-fault controller-swap-move-axes-v1` for a bounded real-model
 pilot. The preflight rejects simultaneous harness and controller faults.
+Pass both `--expected-revision` and `--expected-weights-sha256` for the
+intended service; a mismatch stops before episode collection.
 Supply a clean or trained decision service separately; never reuse a faulted
 service for the harness or controller-only comparison. Preserve clean and
 faulted matched-state requests and probabilities before deciding whether a
