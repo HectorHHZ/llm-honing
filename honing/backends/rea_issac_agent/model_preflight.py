@@ -16,6 +16,11 @@ from honing.backends.rea_issac.model import DecisionClient
 from honing.backends.rea_issac.replay import audit_run
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
 from honing.backends.rea_issac_agent.controller import CONTROLLER_MODES
+from honing.backends.rea_issac_agent.faults import (
+    CONTROLLER_SWAP_MOVE_AXES,
+    HARNESS_REVERSE_MOVE,
+    reverse_movement_harness,
+)
 from honing.backends.rea_issac_agent.match import audit_agent_run, run_agent_match
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -43,10 +48,18 @@ def run_preflight(
     decision_frames: int = 3,
     expected_revision: str | None = None,
     agent_controller: str | None = None,
+    harness_fault: str | None = None,
+    controller_fault: str | None = None,
 ) -> dict[str, Any]:
     """Require checkpoint identity, run matched seeds, and audit each saved game."""
     if not seeds or len(set(seeds)) != len(seeds) or any(type(seed) is not int for seed in seeds):
         raise ValueError("seeds must be distinct integers")
+    if harness_fault not in (None, HARNESS_REVERSE_MOVE) or controller_fault not in (None, CONTROLLER_SWAP_MOVE_AXES):
+        raise ValueError("unsupported REA-Issac fault")
+    if harness_fault and controller_fault:
+        raise ValueError("a preflight may inject only one component fault")
+    if controller_fault and not agent_controller:
+        raise ValueError("controller fault needs the model-backed agent controller")
     if output.exists():
         raise FileExistsError(output)
     pinned = json.loads(PINS.read_text())["nanojevModels"]["nanojev"]["revision"]
@@ -59,9 +72,13 @@ def run_preflight(
     scenarios = [ReaIssacScenario(seed, max_ticks, decision_frames) for seed in seeds]
     output.mkdir(parents=True)
     spec = seed_harness(INTEGRATION)
+    if harness_fault:
+        spec = reverse_movement_harness(spec)
     summary: dict[str, Any] = {
         "purpose": "rea-issac-exp0-model-capability-preflight",
         "agent_controller": agent_controller,
+        "harness_fault": harness_fault,
+        "controller_fault": controller_fault,
         "revision": revision,
         "weights_sha256": metadata["weightsSha256"],
         "source_commit": metadata.get("sourceCommit"),
@@ -85,6 +102,7 @@ def run_preflight(
                         decision_server=server_url,
                         policy_checksum=metadata["weightsSha256"],
                         controller_mode=agent_controller,
+                        controller_fault=controller_fault,
                     )
                     audit_agent_run(run_dir)
                 else:
@@ -118,6 +136,8 @@ def main() -> None:
     parser.add_argument("--decision-frames", type=int, default=3)
     parser.add_argument("--expected-revision", help="default: pinned public NanoJev revision")
     parser.add_argument("--agent-controller", choices=CONTROLLER_MODES)
+    parser.add_argument("--harness-fault", choices=(HARNESS_REVERSE_MOVE,))
+    parser.add_argument("--controller-fault", choices=(CONTROLLER_SWAP_MOVE_AXES,))
     args = parser.parse_args()
     result = run_preflight(
         args.decision_server,
@@ -127,6 +147,8 @@ def main() -> None:
         decision_frames=args.decision_frames,
         expected_revision=args.expected_revision,
         agent_controller=args.agent_controller,
+        harness_fault=args.harness_fault,
+        controller_fault=args.controller_fault,
     )
     print(json.dumps(result, sort_keys=True))
 

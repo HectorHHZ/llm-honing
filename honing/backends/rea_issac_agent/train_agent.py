@@ -41,7 +41,7 @@ def decision_sample(row: dict[str, Any], harness_id: str) -> DecisionSample:
         questions=questions,
         chosen=tuple(row["chosen"].items()),
         group=row["group"],
-        source_release="rea-issac-scripted-baseline-v1",
+        source_release=row.get("source_release", "rea-issac-scripted-baseline-v1"),
         source_harness=harness_id,
     )
 

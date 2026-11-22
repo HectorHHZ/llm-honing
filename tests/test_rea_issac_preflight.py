@@ -13,6 +13,7 @@ from typing import Any
 
 from honing.backends.rea_issac.catalog import OPTIONS
 from honing.backends.rea_issac_agent.controller import NAVIGATE_EMPTY_ROOMS
+from honing.backends.rea_issac_agent.faults import CONTROLLER_SWAP_MOVE_AXES, HARNESS_REVERSE_MOVE
 from honing.backends.rea_issac_agent.match import audit_agent_run
 from honing.backends.rea_issac_agent.model_preflight import PINS, run_preflight
 
@@ -133,6 +134,42 @@ class ModelPreflightTests(unittest.TestCase):
             (run / "agent.json").write_text(json.dumps(evidence))
             with self.assertRaisesRegex(ValueError, "agent selected/executed record"):
                 audit_agent_run(run)
+
+    def test_controller_fault_records_clean_and_swapped_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory) / "controller-fault"
+            summary = run_preflight(
+                self.url,
+                run,
+                seeds=(1002,),
+                max_ticks=72,
+                agent_controller=NAVIGATE_EMPTY_ROOMS,
+                controller_fault=CONTROLLER_SWAP_MOVE_AXES,
+            )
+            assert summary["controller_fault"] == CONTROLLER_SWAP_MOVE_AXES
+            records = [
+                json.loads(line) for line in (run / "s1002-model/agent_decisions.jsonl").read_text().splitlines()
+            ]
+            assert any(record["fault_triggered"] for record in records)
+            assert all(
+                record["controller_before_fault"] != record["executed_action"]
+                for record in records
+                if record["fault_triggered"]
+            )
+            assert audit_agent_run(run / "s1002-model")["fault_triggers"] > 0
+
+    def test_harness_fault_changes_rendered_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory) / "harness-fault"
+            summary = run_preflight(
+                self.url,
+                run,
+                seeds=(1002,),
+                max_ticks=6,
+                harness_fault=HARNESS_REVERSE_MOVE,
+            )
+            assert summary["harness_fault"] == HARNESS_REVERSE_MOVE
+            assert "Movement controls are inverted" in self.requests[0]["questions"]["move"]["instructions"]
 
 
 if __name__ == "__main__":
