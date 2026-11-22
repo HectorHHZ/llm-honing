@@ -47,6 +47,9 @@ intended wrong policy. The clean and fault checkpoints were each served on
 one GPU at different times. A separate 18 GiB project reservation remained
 on a second GPU, within this task's three-GPU cap. The fault model service
 was stopped after validation.
+Weights & Biases was not configured for this run; the trainer's saved report
+contains the example counts, held-out split, losses, accuracy, source checkpoint
+hash, training dataset hash, and trained checkpoint hash listed here.
 
 The probe JSONL SHA-256 values are:
 
