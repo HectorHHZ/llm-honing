@@ -79,8 +79,8 @@ def _agent_server(upstream: DecisionClient, mode: str, records: Path, controller
                 request = json.loads(self.rfile.read(length))
                 selected, original = upstream.decide(request)
                 before_fault, reason = controller.apply(_observation(request), selected)
+                before_fault = {**before_fault, "bomb": before_fault.get("bomb", False)}
                 executed = swap_move_axes(before_fault) if controller_fault else before_fault
-                executed = {**executed, "bomb": executed.get("bomb", False)}
                 response = _proxy_reply(original, executed)
                 validate_reply(request, response)
                 record = {
@@ -178,8 +178,8 @@ def audit_agent_run(out: Path) -> dict[str, Any]:
         request = decision["request"]
         selected = validate_reply(request, record["model_response"])
         before_fault, reason = controller.apply(_observation(request), selected)
+        before_fault = {**before_fault, "bomb": before_fault.get("bomb", False)}
         executed = swap_move_axes(before_fault) if controller_fault else before_fault
-        executed = {**executed, "bomb": executed.get("bomb", False)}
         if controller_fault and (
             record.get("controller_fault") != controller_fault
             or record.get("controller_before_fault") != before_fault

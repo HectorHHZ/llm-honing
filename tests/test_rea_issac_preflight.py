@@ -171,6 +171,12 @@ class ModelPreflightTests(unittest.TestCase):
             ]
             assert any(record["fault_triggered"] for record in records)
             assert all(
+                record["fault_triggered"]
+                == (record["controller_before_fault"]["move_x"] != record["controller_before_fault"]["move_y"])
+                for record in records
+            )
+            assert all("bomb" in record["controller_before_fault"] for record in records)
+            assert all(
                 record["controller_before_fault"] != record["executed_action"]
                 for record in records
                 if record["fault_triggered"]
