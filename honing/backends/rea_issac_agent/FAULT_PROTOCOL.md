@@ -12,6 +12,8 @@ dataset.
 `fault_freeze.json` pins the clean agent files and checkpoint; fault runners
 check those hashes and reject a harness or controller fault served by other
 weights.
+The completed candidate checks and their limits are recorded in
+[`FAULT_VALIDATION.md`](FAULT_VALIDATION.md).
 
 | Component | Single change | Required local evidence |
 | --- | --- | --- |
