@@ -1,0 +1,12 @@
+{
+  "base_commit": "fdde1534",
+  "files": {
+    "honing/backends/rea_issac/catalog.py": "a7f02160a4be7d95738ba77670277bd6b7d4b8529fd79e4a184663253c1d9375",
+    "honing/backends/rea_issac/model.py": "25b31612eb732f4054a1edb2e54348f25deb4d4019ff58c5fcdba15ce7ec9f94",
+    "honing/backends/rea_issac/scenarios.py": "60020759d9e4de02b81684ecee6c4915d0c2b9f69d570cc7573af4a1c3cfa464",
+    "integrations/rea_issac/engine.py": "36b71568a5016503ed619d85df365f66ce810966d04cb111afd24ce70082e651",
+    "integrations/rea_issac/source_facts.json": "54bd5bacadfdce807b9d9b2302221a872f47c4be22fac74b4a76f916e9b34b91",
+    "integrations/rea_issac/tasks/suite.jsonl": "724e0de907077ad1ca88bcf143cb53c27cb31f135ecc1bb3f3c095b82f410336"
+  },
+  "scope": "Game implementation, public observation and action schema, and existing task definitions remain fixed while the agent harness, controller, and weights change."
+}

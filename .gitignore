@@ -31,3 +31,5 @@ work/
 runs/
 *.ckpt
 *.safetensors
+integrations/rea_issac/artifacts/
+honing/backends/rea_issac_agent/artifacts/

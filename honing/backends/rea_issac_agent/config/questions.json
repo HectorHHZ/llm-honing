@@ -1,0 +1,5 @@
+{
+  "move": "In a room with enemies, keep distance from nearby enemies and hostile bullets. Do not walk into enemies. Move toward safe open space; choose NONE when moving would cause contact damage.",
+  "shoot": "Read the player and nearest visible enemy coordinates. Shoot along the axis with the larger coordinate difference: E or W for horizontal, S or N for vertical. Choose NONE if there is no enemy. Avoid diagonal shooting.",
+  "bomb": "Choose NO by default. Choose YES only when a bomb is available, an enemy is close enough to be hit, and the player can move outside the blast. Release with NO before placing another bomb."
+}
