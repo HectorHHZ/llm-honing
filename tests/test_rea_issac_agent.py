@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from honing.backends.jev.nanojev import NanoJevSettings, resolve_checkpoint
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
+from honing.backends.rea_issac_agent.checkpoint import CHECKPOINT_PIN, PINS, prepare_checkpoint
 from honing.backends.rea_issac_agent.controller import (
     MODEL_ASSISTED_COMBAT,
     MODEL_ASSISTED_COMBAT_V2,
@@ -37,6 +39,47 @@ def test_agent_harness_does_not_change_default_game_harness() -> None:
     agent = json.loads((ROOT / "honing/backends/rea_issac_agent/config/controller.json").read_text())
     assert default == {"history_steps": 4}
     assert agent == {"history_steps": 0}
+
+
+@pytest.mark.unit
+def test_downloaded_checkpoint_can_be_verified_and_relocated(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "downloaded" / "checkpoint"
+    checkpoint.mkdir(parents=True)
+    pins = json.loads(PINS.read_text())["nanojevModels"]["nanojev"]
+    files = {
+        "best.safetensors": b"test weights",
+        "config.json": json.dumps({"model": pins["base"], "resolved_model_revision": pins["baseRevision"]}).encode(),
+        "backbone_config/config.json": b"{}",
+        "tokenizer/chat_template.jinja": b"template",
+        "tokenizer/tokenizer.json": b"{}",
+        "tokenizer/tokenizer_config.json": b"{}",
+    }
+    for name, content in files.items():
+        path = checkpoint / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    pin = json.loads(CHECKPOINT_PIN.read_text())
+    pin["files"] = {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}
+    pin["weights_sha256"] = pin["files"]["best.safetensors"]
+    pin_path = tmp_path / "pin.json"
+    pin_path.write_text(json.dumps(pin))
+
+    manifest_path = prepare_checkpoint(checkpoint, checkpoint_pin=pin_path)
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["path"] == str(checkpoint.resolve())
+    assert manifest["weightsSha256"] == pin["weights_sha256"]
+    all_pins = json.loads(PINS.read_text())
+    resolved = resolve_checkpoint(
+        NanoJevSettings(PINS, tmp_path, checkpoint_manifest=manifest_path),
+        all_pins,
+        all_pins["nanojevSource"]["revision"],
+    )
+    assert resolved["path"] == str(checkpoint.resolve())
+    assert resolved["weightsSha256"] == pin["weights_sha256"]
+    assert manifest_path == prepare_checkpoint(checkpoint, checkpoint_pin=pin_path)
+    (checkpoint / "tokenizer/tokenizer.json").write_bytes(b"changed")
+    with pytest.raises(ValueError, match=r"tokenizer/tokenizer\.json"):
+        prepare_checkpoint(checkpoint, checkpoint_pin=pin_path)
 
 
 @pytest.mark.unit

@@ -98,9 +98,8 @@ the exclusive occupancy check before loading. The watcher runs the two-seed,
 900-tick preflight with a 60-minute limit, then terminates the service. It
 does not train a model or reserve a GPU while waiting.
 
-The job's status and logs are under
-`/data/xinkaiz/rea-issac-exp0-preflight-20261120/` on the server. The watcher
-script's SHA-256 is
+The job's status and logs were retained in the private server run directory.
+The watcher script's SHA-256 is
 `26186be6bda14441e6e11d9d42c36055754d4b7941da0788cde482ee2ab299a9`;
 the staged preflight runner's SHA-256 is
 `51911d0a6200c912d48b80dd5e0def9780c4ccec529256ce152cf7a8153a9186`.
@@ -146,7 +145,7 @@ margin until combat-state memory is measured.
 
 The complete archive, including all four audited runs, the excluded partial
 reference attempt, launch scripts, and logs, is
-`/data/xinkaiz/rea-issac-agent-20261121/evidence_archives/exp0_preflight_20261120.tar.gz` on `ds-serv2.ucsd.edu` (SHA-256
+`exp0_preflight_20261120.tar.gz` in the private evidence store (SHA-256
 `859304a0fcc21fe8dcb2ebb4ff5faaf7cad0f5a1cbd0760e2c3cfeb2e4dd3709`).
 All four replays passed on the server's Python 3.12.13 x86_64 environment.
 After extracting the archive on a Python 3.12.1 arm64 host, both model runs

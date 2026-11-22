@@ -1,9 +1,9 @@
 # REA-Issac NanoJev agent development
 
-The experiment evidence archives are stored on `ds-serv2.ucsd.edu` under
-`/data/xinkaiz/rea-issac-agent-20261121/evidence_archives/`. They are not
-part of this repository. Archive names and SHA-256 checksums below identify
-the retained server copies.
+The experiment evidence archives are retained privately, outside this
+repository. Archive names and SHA-256 checksums below identify those
+historical copies; they are not public downloads. To run the selected agent
+from a portable checkpoint directory, follow [REPRODUCE.md](REPRODUCE.md).
 
 The current agent code lives in `honing/backends/rea_issac_agent/`. It supplies
 its own harness configuration, controller, data and training scripts, and a
@@ -71,9 +71,9 @@ examples. Validation loss fell from `1.8457` to `1.3656`; validation choice
 accuracy was `0.45`. The clean and trained checkpoint SHA-256 values are
 `f68c47d66998231b86b7e91b4ed5e82ae23acf104c8b7cd6d165c3ac7b7ffe1b`
 and `37029ae8f19d05813adb45c0ab719feb6949556557b40dfd792c80dfc29d9754`.
-The trained checkpoint and full training manifest are on `ds-serv2.ucsd.edu`
-under `/data/xinkaiz/rea-issac-agent-20261121/train_v1/`. This run did not
-use wandb; the checkpoint manifest, loss history, validation metrics, and
+The first trained checkpoint and full training manifest are retained with the
+private run evidence. This run did not use wandb; the checkpoint manifest,
+loss history, validation metrics, and
 audited game traces provide the equivalent measurements for this pilot.
 
 The trained agent was evaluated on seeds `3001` and `3002` with the original
@@ -102,7 +102,8 @@ Training metadata and complete first-evaluation recordings are in
 `agent_train_and_first_eval.tar.gz` (SHA-256
 `e035c3eacd15d910b9c8608034a68ff7b66e1170c3755b214a0b0b90941001e2`).
 The 2.3 GB checkpoint weights are excluded from this archive; their checksum
-and UCSD storage path are recorded above.
+is recorded above.
+
 With the trained checkpoint and assisted controller on the two development
 seeds, the model-backed agent won at ticks `806` and `736`, while the paired
 rule runs were truncated at `900` and won at `785`. The complete recordings
@@ -207,8 +208,8 @@ checkpoint (`37029ae8…d9754`) and produced an independently hashed checkpoint
 `a60db30eb906b46e89499e284a40f31f7e1ea1a790f4a2ac744253b9f90a1c51`.
 Validation loss fell from `1.5313` to `1.3667`; validation choice accuracy was
 `0.5056` on 180 question examples. It trained on 900 question examples with
-an 8,192-token limit. The checkpoint and full manifest are on `ds-serv2`
-under `/data/xinkaiz/rea-issac-agent-20261121/train_v3/`. The compact
+an 8,192-token limit. The checkpoint and full manifest are retained with the
+private run evidence. The compact
 training metadata archive is `agent_train_v3_metadata.tar.gz`
 (SHA-256 `97ef977a74aa9f9372b96834adfc8fdd343935390de160cbfdf73110424e8842`);
 it excludes the 2.3 GB weight file. GPU 2's 18 GiB idle hold was restored.
@@ -280,16 +281,18 @@ the selected weights.
 
 The selected agent uses the `model-assisted-combat-v2` agent controller,
 the harness in `config/controller.json` and `config/questions.json` (spec ID
-`h-c2d1d7d325930098`), and the multiroom SFT NanoJev checkpoint on
-`ds-serv2.ucsd.edu` at
-`/data/xinkaiz/rea-issac-agent-20261121/train_v3/training/train-a0c04192dc98/checkpoint.json`.
+`h-c2d1d7d325930098`), and the multiroom SFT NanoJev checkpoint. Place the
+six selected checkpoint files in `work/rea_issac_agent/checkpoint/` or pass
+another directory with `--checkpoint-dir`; [REPRODUCE.md](REPRODUCE.md)
+describes the layout, verification, and launch commands.
 The weight file has SHA-256
 `a60db30eb906b46e89499e284a40f31f7e1ea1a790f4a2ac744253b9f90a1c51`.
 Inference uses the NanoJev tree decision service with an 8,192-token limit;
 the game executes each choice for 3 ticks and uses each task's native tick
 limit. The frozen game and public interface hashes remain in
-`agent_frozen.json`. Reproduction launchers, checkpoint metadata, raw
-responses, and complete replay records are in the archives listed above.
+`agent_frozen.json`. The historical archives listed above retain the original
+checkpoint metadata, raw responses, and complete replay records; they are not
+included in this PR. The portable launch commands are in `REPRODUCE.md`.
 Exact replay of the new `7004` Linux trace on macOS stopped at tick `120`
 because the frozen engine's floating-point state diverged across platforms;
 the Linux recorder's exact replay passed. This is the same cross-OS audit

@@ -128,13 +128,12 @@ def train(
         "heldout_seeds": HELDOUT_SEEDS,
         "base_checksum": base.checkpoint.checksum,
         "trained_checksum": result.snapshot.checkpoint.checksum,
-        "checkpoint_manifest": str(checkpoint.parent / "checkpoint.json"),
+        "checkpoint_manifest": str((checkpoint.parent / "checkpoint.json").resolve().relative_to(output.resolve())),
         "metrics": dict(result.metrics),
         "update_policy": "decision heads only",
         "steps": epochs,
         "batch_questions": 1,
         "max_length": max_length,
-        "base_checkpoint": str(base_checkpoint) if base_checkpoint else None,
     }
     (output / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n")
     return report
