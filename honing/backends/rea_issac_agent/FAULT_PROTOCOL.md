@@ -25,6 +25,15 @@ excluded because reversing them would not change the target. The dataset
 builder rejects a changed source manifest, and the trainer checks split
 groups. The data and trained checkpoint stay outside Git.
 
+The UCSD Linux regeneration produced the same 360 seed/tick pairs and all
+360 movement labels, but its source file SHA-256 was
+`9f465df760e5200e4f7755bf8101c5b21437f681c12f88b0f8f0256a7556cce4`.
+In 56 requests, engine floating-point text differed by about `1e-14`; the
+other 304 requests were equal. That regeneration is an excluded attempt,
+not a replacement for the pinned training input. The exact pinned v3 and
+fault datasets were transferred to UCSD and verified there by SHA-256 and
+`load_batch` before training.
+
 Generate and inspect the weights-fault data from the repository root:
 
 ```sh
@@ -51,3 +60,14 @@ faulted matched-state requests and probabilities before deciding whether a
 candidate is valid. A component-change label does not by itself establish
 that the fault caused an episode loss. No reference action is asserted from
 the scripted teacher.
+
+`fault_probe.py` preselects the first two saved requests in each seed/room
+group, stopping after 32, before it sees model replies. Record the clean
+selected checkpoint once, then record the same checkpoint with
+`--harness-fault harness-reverse-move-v1`. For weights, record the same
+requests with the independently hashed fault checkpoint. `compare` requires
+identical source requests, confirms only the declared component changed,
+and reports selected-action changes and probability deltas above the initial
+0.01 tolerance. These probes validate a candidate; they do not establish a
+whole-episode score drop. Logs and incomplete/rejected attempts remain in
+the experiment run store, outside Git.

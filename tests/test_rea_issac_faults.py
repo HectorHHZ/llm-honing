@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from honing.backends.rea_issac.catalog import OPTIONS, action_for
 from honing.backends.rea_issac.harness import parse_harness, seed_harness
 from honing.backends.rea_issac.model import make_request
 from honing.backends.rea_issac.scenarios import ReaIssacScenario
+from honing.backends.rea_issac_agent import fault_probe
 from honing.backends.rea_issac_agent.faults import (
     OPPOSITE,
     WEIGHTS_REVERSE_MOVE,
@@ -71,3 +74,62 @@ def test_weights_fault_dataset_has_real_wrong_move_labels_and_separate_hash(tmp_
         assert row["chosen"] == {"move": OPPOSITE[clean["chosen"]["move"]]}
         assert row["chosen"]["move"] != clean["chosen"]["move"]
         assert row["source_release"] == WEIGHTS_REVERSE_MOVE
+
+
+@pytest.mark.unit
+def test_same_state_probe_checks_component_boundary_and_excludes_teacher_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = tmp_path / "demos"
+    build_dataset(dataset, per_seed=60, max_state_chars=12000, selection="balanced_rooms")
+
+    class FakeClient:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+        def health(self) -> dict[str, Any]:
+            revision = "b" * 64 if self.url == "weights" else "a" * 64
+            return {"metadata": {"revision": revision, "weightsSha256": revision}}
+
+        def decide(self, request: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+            move = (
+                "N"
+                if self.url == "weights"
+                else "W" if "Movement controls are inverted" in request["questions"]["move"]["instructions"] else "E"
+            )
+            choices = {"move": move, "shoot": "NONE", "bomb": "NO"}
+            reply = {
+                "id": request["id"],
+                "stateText": request["parts"]["essential"][0],
+                "trimmed": [],
+                "tokenAudit": {},
+                "answers": {
+                    name: {
+                        "choice": choices[name],
+                        "probabilities": {option: float(option == choices[name]) for option in options},
+                    }
+                    for name, options in OPTIONS.items()
+                },
+            }
+            return action_for(choices), reply
+
+    monkeypatch.setattr(fault_probe, "DecisionClient", FakeClient)
+    clean, harness, weights = (tmp_path / name for name in ("clean", "harness", "weights"))
+    fault_probe.record_probes(dataset, clean, decision_server="clean", expected_revision="a" * 64)
+    fault_probe.record_probes(
+        dataset,
+        harness,
+        decision_server="clean",
+        expected_revision="a" * 64,
+        harness_fault="harness-reverse-move-v1",
+    )
+    fault_probe.record_probes(dataset, weights, decision_server="weights", expected_revision="b" * 64)
+    assert fault_probe.compare_probes(clean, harness, component="harness")["selected_action_changes"] > 0
+    assert fault_probe.compare_probes(clean, weights, component="weights")["selected_action_changes"] > 0
+    assert "chosen" not in json.loads((clean / "probes.jsonl").read_text().splitlines()[0])
+    with pytest.raises(ValueError, match="clean probe has a harness fault"):
+        fault_probe.compare_probes(harness, weights, component="weights")
+    with (weights / "probes.jsonl").open("a") as stream:
+        stream.write("{}\n")
+    with pytest.raises(ValueError, match="checksum"):
+        fault_probe.compare_probes(clean, weights, component="weights")
