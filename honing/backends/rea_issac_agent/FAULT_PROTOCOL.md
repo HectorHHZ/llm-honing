@@ -54,6 +54,19 @@ free GPU index as `--gpu` to `train_agent`. The clean checkpoint must be
 downloaded separately; its distribution URL is pending in PR #221. Record
 every attempted training run, including rejected checkpoints and reason.
 
+```sh
+python -m honing.backends.rea_issac_agent.train_agent \
+  --dataset work/rea_issac_agent/fault-demos-reversed-move \
+  --out work/rea_issac_agent/train-reversed-move \
+  --nanojev-source work/rea_issac_agent/NanoJev \
+  --base-checkpoint work/rea_issac_agent/checkpoint \
+  --gpu 0 --max-length 8192 --epochs 1
+```
+
+The v3 demonstration input must match the hash above. The game engine's
+floating-point serialization can otherwise produce different byte streams
+on different hosts; do not silently substitute a newly generated dataset.
+
 Use `model_preflight --harness-fault harness-reverse-move-v1` or
 `--controller-fault controller-swap-move-axes-v1` for a bounded real-model
 pilot. The preflight rejects simultaneous harness and controller faults.
@@ -72,7 +85,35 @@ selected checkpoint once, then record the same checkpoint with
 `--harness-fault harness-reverse-move-v1`. For weights, record the same
 requests with the independently hashed fault checkpoint. `compare` requires
 identical source requests, confirms only the declared component changed,
-and reports selected-action changes and probability deltas above the initial
-0.01 tolerance. These probes validate a candidate; they do not establish a
+and reports movement-choice changes and movement-probability deltas above the
+initial 0.01 tolerance, alongside any other answer changes. These probes
+validate a candidate; they do not establish a
 whole-episode score drop. Logs and incomplete/rejected attempts remain in
 the experiment run store, outside Git.
+
+With a clean decision service started as in `REPRODUCE.md`, record its two
+probe arms from the same fixed dataset:
+
+```sh
+python -m honing.backends.rea_issac_agent.fault_probe record \
+  --dataset work/rea_issac_agent/demos-v3 \
+  --out work/rea_issac_agent/probe-clean \
+  --decision-server http://127.0.0.1:8000 \
+  --expected-revision a60db30eb906b46e89499e284a40f31f7e1ea1a790f4a2ac744253b9f90a1c51
+python -m honing.backends.rea_issac_agent.fault_probe record \
+  --dataset work/rea_issac_agent/demos-v3 \
+  --out work/rea_issac_agent/probe-harness \
+  --decision-server http://127.0.0.1:8000 \
+  --expected-revision a60db30eb906b46e89499e284a40f31f7e1ea1a790f4a2ac744253b9f90a1c51 \
+  --harness-fault harness-reverse-move-v1
+python -m honing.backends.rea_issac_agent.fault_probe compare \
+  --clean work/rea_issac_agent/probe-clean \
+  --fault work/rea_issac_agent/probe-harness --component harness
+```
+
+After serving the separately trained fault checkpoint, record a third arm
+with the same dataset, a new output directory, and its actual weight SHA as
+`--expected-revision`; compare that arm with `probe-clean` using
+`--component weights`. The probe runner never sends the demonstration labels
+to either model. Use a new output directory for each attempt so rejected
+settings and incomplete runs remain inspectable.

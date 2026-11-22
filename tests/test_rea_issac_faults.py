@@ -142,8 +142,8 @@ def test_same_state_probe_checks_component_boundary_and_excludes_teacher_labels(
         harness_fault="harness-reverse-move-v1",
     )
     fault_probe.record_probes(dataset, weights, decision_server="weights", expected_revision="b" * 64)
-    assert fault_probe.compare_probes(clean, harness, component="harness")["selected_action_changes"] > 0
-    assert fault_probe.compare_probes(clean, weights, component="weights")["selected_action_changes"] > 0
+    assert fault_probe.compare_probes(clean, harness, component="harness")["selected_move_changes"] > 0
+    assert fault_probe.compare_probes(clean, weights, component="weights")["move_probability_effects_over_0_01"] > 0
     assert "chosen" not in json.loads((clean / "probes.jsonl").read_text().splitlines()[0])
     with pytest.raises(ValueError, match="clean probe has a harness fault"):
         fault_probe.compare_probes(harness, weights, component="weights")

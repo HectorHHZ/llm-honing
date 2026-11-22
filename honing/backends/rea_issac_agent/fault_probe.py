@@ -167,19 +167,33 @@ def compare_probes(clean: Path, fault: Path, *, component: str) -> dict[str, Any
             for name in old["questions"]
             for option in old["questions"][name]["criteria"]
         )
+        move_delta = max(
+            abs(
+                before["reply"]["answers"]["move"]["probabilities"][option]
+                - after["reply"]["answers"]["move"]["probabilities"][option]
+            )
+            for option in old["questions"]["move"]["criteria"]
+        )
         changes.append(
             {
                 "request_id": before["request_id"],
                 "max_probability_delta": max_delta,
+                "max_move_probability_delta": move_delta,
                 "selected_action_changed": before["selected_action"] != after["selected_action"],
+                "selected_move_changed": any(
+                    before["selected_action"][axis] != after["selected_action"][axis] for axis in ("move_x", "move_y")
+                ),
             }
         )
     return {
         "component": component,
         "states": len(changes),
         "probability_effects_over_0_01": sum(change["max_probability_delta"] > 0.01 for change in changes),
+        "move_probability_effects_over_0_01": sum(change["max_move_probability_delta"] > 0.01 for change in changes),
         "selected_action_changes": sum(change["selected_action_changed"] for change in changes),
+        "selected_move_changes": sum(change["selected_move_changed"] for change in changes),
         "max_probability_delta": max((change["max_probability_delta"] for change in changes), default=0),
+        "max_move_probability_delta": max((change["max_move_probability_delta"] for change in changes), default=0),
         "changes": changes,
     }
 
