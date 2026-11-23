@@ -17,6 +17,7 @@ def test_ai_observation_uses_public_room_data() -> None:
     public = engine.observe()
     state = observe_for_ai(engine)
     assert state == observe_for_ai(engine)
+    assert "seed" not in state
     assert state["map"]["known_rooms"] == public["map"]
     assert len(state["map"]["known_rooms"]) < public["total_rooms"]
     assert state["map"]["obstacles"] == public["room"]["rocks"]
@@ -60,6 +61,7 @@ def test_agent_cli_returns_one_snapshot_per_valid_request() -> None:
     assert start["ok"] is True
     assert start["observation"]["schema_version"] == 1
     assert start["observation"]["game"] == "rea-issac"
+    assert all("seed" not in reply["observation"] for reply in (start, again, ended, final))
     assert all(reply["ok"] is False for reply in (bad_json, bad_action, bad_frames, after))
     assert start == again
     assert ended == final

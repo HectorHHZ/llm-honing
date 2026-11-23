@@ -29,7 +29,6 @@ def _observation(engine: Engine, public: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "game": "rea-issac",
-        "seed": str(public["seed"]),
         "status": public["status"],
         "done": done,
         "clock": {"unit": "tick", "value": tick, "ticks_per_second": public["fps"], "limit": public["max_ticks"]},

@@ -155,7 +155,8 @@ doors and the discovered room grid in `known_rooms`. A door carries its
 destination, screen position and open state. Room positions in `known_rooms`
 are dungeon grid coordinates. Within a room, `x` points right and `y` points
 down in pixels. Obstacles are `[x, y, width, height]` rectangles. The engine's
-public map marks unvisited room kinds as `unknown`.
+public map marks unvisited room kinds as `unknown`. Set the world seed with
+`--seed` for a repeatable session. Observations omit the seed.
 
 `player`, `enemies`, `projectiles`, `bombs`, `pickups` and `events` describe
 the current run. `clock.value` counts ticks at 30 ticks per simulation second.
