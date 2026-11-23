@@ -39,7 +39,6 @@ class AgentSession:
             {
                 "schema_version": 1,
                 "game": "craftax",
-                "seed": str(scenario.seed),
                 "status": frame["status"],
                 "done": done,
                 "clock": {"unit": "turn", "value": frame["step"], "limit": scenario.max_steps},
@@ -59,6 +58,7 @@ class AgentSession:
                 },
                 "inventory": public["inventory"],
                 "equipment": public["equipment"],
+                "progress": self._engine.public_progress(),
                 "entities": [
                     {
                         "x": entity["column"],

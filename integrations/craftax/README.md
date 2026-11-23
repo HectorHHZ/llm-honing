@@ -133,12 +133,16 @@ that view. Unobserved tiles are `null`. `entities` lists visible creatures
 and projectiles with a class, a native type ID and a local position. `player`
 includes health, food, drink, energy and other public character attributes.
 `inventory`, `equipment`, `goals` and `achievements` provide task context.
+`progress` reports `ladder_down_unlocked` for the current floor,
+`boss_vulnerable`, and the overworld `light_level`, using native symbolic signals.
+Set the world seed with `--seed` for a repeatable session. Observations omit it.
 
 `action_space.choices` lists all 43 native action names while the game is
 running. Actions are subject to native prerequisites and may have no effect
 on the world. Each accepted action advances `clock.value` by one turn and
 returns the last action's `reward`. `--goals` takes a comma-separated list of
 achievement names and defaults to the introductory crafting tasks above.
+Select later dungeon or combat achievements for deeper play.
 `done` is true when the native game ends, the goals are complete or the step
 limit is reached.
 
