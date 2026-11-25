@@ -499,3 +499,15 @@ def test_the_real_worker_passes_the_runner_checks_against_the_stand_in_policy(tm
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "runner check: ok" in result.stdout
+
+
+@pytest.mark.unit
+def test_endpoints_metered_by_a_pipeline_still_give_the_runner_the_gateway_key_and_prices(tmp_path: Path) -> None:
+    from honing.campaign.cost import MeteredPolicyEndpoints
+
+    policy = _policy()
+    endpoint = GatewayEndpoints(MODEL).resolve(policy)
+    plain = _runner(tmp_path)._access(policy, endpoint)
+    metered = _runner(tmp_path, endpoints=MeteredPolicyEndpoints(GatewayEndpoints(MODEL)))._access(policy, endpoint)
+
+    assert metered == plain and metered["api_key_env"] == "HONING_TEST_KEY" and "cost" in metered

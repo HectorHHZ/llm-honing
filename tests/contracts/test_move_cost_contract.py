@@ -1,8 +1,10 @@
-"""The two core contracts a move's cost rests on (#167): run_graded charges every episode, trainers report GPU time.
+"""The core contracts a move's cost rests on (#167): run_graded charges every episode, trainers report GPU time,
+and endpoints report the GPUs serving them.
 
 Every episode a campaign spends goes through :func:`honing.core.run_graded`, so its charge is what makes the
 gate's, a method's and a rollout's episodes countable at all. ``TrainResult.gpu_seconds`` is the only way a
-trainer's GPU time reaches the move, and ``None`` must stay distinct from 0 so an unreported job never looks free.
+trainer's GPU time reaches the move, and ``PolicyEndpoint.gpus`` the only way a server's does. In both, ``None``
+must stay distinct from 0 so an unreported job or server never looks free.
 """
 
 from __future__ import annotations
@@ -16,10 +18,12 @@ from honing.core import (
     ContractError,
     EpisodeOutcome,
     HarnessSpec,
+    PolicyEndpoint,
     PolicyRef,
     Task,
     TrainJobSpec,
     TrainResult,
+    charge_endpoint,
     charging,
     protocols,
     run_graded,
@@ -35,12 +39,16 @@ class CountingSink:
     def __init__(self) -> None:
         self.episodes = 0
         self.chat_calls = 0
+        self.endpoints: list[PolicyEndpoint] = []
 
     def charge_episode(self) -> None:
         self.episodes += 1
 
     def charge_chat(self, model: str | None, input_tokens: int, output_tokens: int, cost_usd: float | None) -> None:
         self.chat_calls += 1
+
+    def charge_endpoint(self, endpoint: PolicyEndpoint) -> None:
+        self.endpoints.append(endpoint)
 
 
 class FailingRunner(FakeEpisodeRunner):
@@ -139,3 +147,29 @@ def test_the_trainer_fake_reports_gpu_seconds_through_the_trainer_protocol() -> 
     result = trainer.train(TrainJobSpec(algorithm="sft", steps=3), base, None)
 
     assert result.gpu_seconds == 6.0
+
+
+@pytest.mark.unit
+def test_an_endpoints_gpus_default_to_unknown_not_zero() -> None:
+    assert PolicyEndpoint("http://server", "tokenizer", "model").gpus is None
+    assert PolicyEndpoint("http://api", "remote", "model", runtime="openai_chat", gpus=0).gpus == 0
+    assert PolicyEndpoint("http://server", "tokenizer", "model", gpus=4).gpus == 4
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("gpus", [-1, 1.0, True, "2"])
+def test_an_endpoints_gpus_must_be_a_whole_number_of_gpus(gpus: object) -> None:
+    with pytest.raises(ContractError, match="gpus"):
+        PolicyEndpoint("http://server", "tokenizer", "model", gpus=gpus)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_charge_endpoint_reaches_the_installed_sink_only() -> None:
+    endpoint = PolicyEndpoint("http://server", "tokenizer", "model", gpus=2)
+    sink = CountingSink()
+    charge_endpoint(endpoint)  # no sink: charged nowhere
+    with charging(sink):
+        charge_endpoint(endpoint)
+    charge_endpoint(endpoint)
+
+    assert sink.endpoints == [endpoint]

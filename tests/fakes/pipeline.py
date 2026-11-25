@@ -231,6 +231,7 @@ class FakePolicyEndpoints:
             tokenizer_location="fake",
             served_model="fake-policy",
             runtime="sglang",
+            gpus=1,
         )
 
 

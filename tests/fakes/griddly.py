@@ -58,7 +58,7 @@ class StandInEndpoints:
         self.thread.start()
 
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
-        return PolicyEndpoint(self.server.url, "test-tokenizer", "stand-in", runtime="jev_decision")
+        return PolicyEndpoint(self.server.url, "test-tokenizer", "stand-in", runtime="jev_decision", gpus=1)
 
     def close(self) -> None:
         self.server.stop()

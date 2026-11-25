@@ -196,7 +196,10 @@ def test_the_dry_run_publishes_the_gepa_harness_and_rolls_back_both_train_moves_
     # The summary's episodes are the gate's, so they match the gate count, not the method's validation run.
     assert [step["episodes"] for step in summary["steps"]] == [cost["episodes"]["gate"] for cost in costs]
     assert [cost["api_usd"] for cost in costs] == [0.002, 0.0, 0.0]
-    assert [cost["gpu_seconds"] for cost in costs] == [0.0, 1.5, 1.5]
+    # Training GPU time is exact; serving is the fake decision servers' (1 GPU each) time over every window
+    # whose episodes played them, so each move, the harness one included, is charged some.
+    assert [cost["gpu_seconds"] - cost["serving_gpu_seconds"] for cost in costs] == pytest.approx([0.0, 1.5, 1.5])
+    assert all(cost["serving_gpu_seconds"] > 0 for cost in costs)
     assert summary["budget"]["unit"] == "usd" and summary["budget"]["stopped"] is None
     kinds = {
         json.loads((p / "manifest.json").read_text())["kind"]

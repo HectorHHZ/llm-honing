@@ -65,7 +65,7 @@ class QualityEndpoints:
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
         better = self._world.quality[policy.checkpoint.checksum] > START_QUALITY
         url = "http://strong:1" if better else "http://even:1"
-        return PolicyEndpoint(url, "fake-tokenizer", "laya", runtime="jev_decision")
+        return PolicyEndpoint(url, "fake-tokenizer", "laya", runtime="jev_decision", gpus=1)
 
 
 def endpoints(context: E2EContext) -> QualityEndpoints:

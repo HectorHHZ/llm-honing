@@ -187,7 +187,7 @@ class QualityServers:
                 threading.Thread(target=server.serve, daemon=True).start()
                 self._servers[quality] = server
             url = self._servers[quality].url
-        return PolicyEndpoint(url, "fake-tokenizer", f"forecast-q{quality:.3f}", runtime="jev_decision")
+        return PolicyEndpoint(url, "fake-tokenizer", f"forecast-q{quality:.3f}", runtime="jev_decision", gpus=1)
 
 
 def endpoints(context: Any) -> QualityServers:
