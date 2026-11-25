@@ -514,7 +514,9 @@ published with the next accepted release, whatever its kind.
 **A scheduler sees every move, and keeps its own state.** `CampaignState.history` holds a
 `StepRecord` for every move the campaign advanced, published, rejected, or skipped: the
 move, its label, the head it was built on, the release it published, the reason, and the
-`gate_*` metrics (none for a skip). A scheduler learns from a rejection there, which the
+`gate_*` metrics (none for a skip). `metrics_from` says whose run those metrics come from:
+`"gate"`, or `"method"` when a harness method's own selector rejected the candidate on
+`method_evaluator` and the gate never ran. A scheduler learns from a rejection there, which the
 releases alone never show. Its own state follows the method-state rules: it is JSON-native
 and carries a `schema_version`. The scheduler holds that state, and `CampaignState` does not
 carry it. After each choice the chain takes a deep copy of the exported state, which no
@@ -536,7 +538,10 @@ from the record belongs with rebuilding the chain.
 
 **Every runner has the same scheduler slot.** The pipeline, tank, and RA2 configs take an
 optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the
-config's `schedule`. In the pipeline a `rollback` entry stays the pipeline's own step: it
+config's `schedule`, and its state names the script by a digest of its moves' kinds and
+labels, so a restart refuses another script of the same length. With a scheduler, the
+`schedule`'s moves are not run, and building the run warns that they are ignored. In the
+pipeline a `rollback` entry stays the pipeline's own step: it
 runs once as many moves as precede it in `schedule` have run, whichever scheduler chose
 them, and the run fails when the scheduler stops before it.
 
@@ -579,7 +584,10 @@ on every call, and the decision records `stopped_early`.
 sees at every step. The tank gate (`honing/backends/tank/gate.py`) draws every block's seeds
 from a pool of 100,000 validation seeds, in order, so no two gates of a campaign share a seed,
 and records the first and last seed it played (`seed_first`, `seed_last`) beside the
-interval, `rounds` and `stopped_early`. Both seats of a seed play the same maze, so the gate
+interval, `rounds` and `stopped_early`. The first gate starts at the pool's first seed, or at
+the config's `gate.first_seed`: campaigns that start at the same seed play the same gates,
+which pairs two arms of an experiment, and repeats of one arm start elsewhere. Both seats of
+a seed play the same maze, so the gate
 scores a seed by the mean of its two seats and the interval counts it once (`tasks`), while
 every seat's episode record stays on the evaluation. The suite file's eight validation
 seeds stay fixed for GEPA's Pareto front. A suite with a task on a pool seed, in any split,

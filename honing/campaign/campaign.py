@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from honing.campaign import rules
@@ -25,6 +25,7 @@ from honing.core import (
     HarnessSpec,
     HoneRelease,
     ImportanceScorer,
+    MetricsSource,
     ModelEditor,
     ModelSnapshot,
     ModelSource,
@@ -101,13 +102,21 @@ class CampaignDefaults:
 
 @dataclass(frozen=True)
 class StepOutcome:
-    """What one move produced. ``release`` is set only when the candidate was published."""
+    """What one move produced. ``release`` is set only when the candidate was published.
+
+    ``gate_metrics`` are the gate's numbers the settled candidate's record
+    holds, computed once, so the history and the record cannot disagree.
+    ``metrics_from`` says whose run they come from, as on
+    :class:`~honing.core.StepRecord`.
+    """
 
     move: Move
     decision: SelectionDecision | None
     evaluation: EvaluationResult | None
     release: HoneRelease | None
     skipped_reason: str | None = None
+    gate_metrics: Mapping[str, float] = field(default_factory=dict)
+    metrics_from: MetricsSource | None = None
 
 
 def _size_metrics(snapshot: ModelSnapshot) -> dict[str, float]:
@@ -129,7 +138,7 @@ def _both(method: SelectionDecision, gate: SelectionDecision) -> SelectionDecisi
 
 
 def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
-    decision, release, evaluation = outcome.decision, outcome.release, outcome.evaluation
+    decision, release = outcome.decision, outcome.release
     result: StepResult
     if decision is None:
         result, reason = "skipped", outcome.skipped_reason or ""
@@ -143,8 +152,8 @@ def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
         reason=reason,
         label=outcome.move.harness.label if outcome.move.harness is not None else None,
         release_id=release.release_id if release is not None else None,
-        # The same numbers the settled candidate's record holds: the bootstrap is seeded.
-        gate_metrics=gate_metrics(evaluation) if evaluation is not None else {},
+        gate_metrics=outcome.gate_metrics,
+        metrics_from=outcome.metrics_from,
     )
 
 
@@ -407,21 +416,22 @@ class Campaign:
             move_label=config.label,
         )
         self._check_candidate(candidate)
+        metrics_from: MetricsSource = "gate"
         if harness.method_evaluator is None:
             evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
             method_evaluation = evaluation
         else:
             method_gate = Gate(harness.method_evaluator, default_selector=method.selector)
             method_evaluation, decision = method_gate.judge(candidate, head)
-            evaluation = method_evaluation
+            evaluation, metrics_from = method_evaluation, "method"
             if decision.selected:
                 evaluation, verdict = self._gate.judge(candidate, head)
-                decision = _both(decision, verdict)
+                decision, metrics_from = _both(decision, verdict), "gate"
         self._recent_records = method_evaluation.records
         # The method learns from every verdict, so its new state is attached
         # whether the candidate is published or rejected.
         settled = replace(candidate, method_state=method.record(result.state, proposal, method_evaluation, decision))
-        return self._publish_or_reject(move, settled, evaluation, decision)
+        return self._publish_or_reject(move, settled, evaluation, decision, metrics_from)
 
     # ------------------------------------------------------------ shared
 
@@ -433,18 +443,32 @@ class Campaign:
         return self._publish_or_reject(move, candidate, evaluation, decision)
 
     def _publish_or_reject(
-        self, move: Move, candidate: UpdateCandidate, evaluation: EvaluationResult, decision: SelectionDecision
+        self,
+        move: Move,
+        candidate: UpdateCandidate,
+        evaluation: EvaluationResult,
+        decision: SelectionDecision,
+        metrics_from: MetricsSource = "gate",
     ) -> StepOutcome:
         # Published and rejected candidates both carry the gate result, so the
         # record shows how close a rejection was, not only that it happened.
-        candidate = replace(candidate, metrics={**candidate.metrics, **gate_metrics(evaluation)})
+        metrics = gate_metrics(evaluation)
+        candidate = replace(candidate, metrics={**candidate.metrics, **metrics})
+        release: HoneRelease | None = None
         if decision.selected:
             release = self._chain.commit(candidate, decision)
             self._pending_method_state = None
-            return StepOutcome(move=move, decision=decision, evaluation=evaluation, release=release)
-        self._chain.record_rejection(candidate, decision)
-        self._pending_method_state = candidate.method_state
-        return StepOutcome(move=move, decision=decision, evaluation=evaluation, release=None)
+        else:
+            self._chain.record_rejection(candidate, decision)
+            self._pending_method_state = candidate.method_state
+        return StepOutcome(
+            move=move,
+            decision=decision,
+            evaluation=evaluation,
+            release=release,
+            gate_metrics=metrics,
+            metrics_from=metrics_from,
+        )
 
     @staticmethod
     def _check_candidate(candidate: UpdateCandidate) -> None:
