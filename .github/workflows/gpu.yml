@@ -1,0 +1,76 @@
+name: gpu
+
+# The GPU check (scripts/gpu/check.sh) runs on a GPU machine when a reviewer asks, not on GitHub's runners.
+#
+# - Every push to a pull request sets its commit status `gpu`: success when no path in scripts/gpu/paths.txt
+#   changed, otherwise pending until the check passes.
+# - A comment whose first line is `/gpu`, by someone with write access, on a pull request from a branch of this
+#   repository, labels it `gpu-queued` and marks the status queued. The GPU runner (scripts/gpu/README.md) picks
+#   the label up, runs the check on the head commit, and sets the status to its result.
+#
+# Neither job checks out or runs the pull request's code, so pull_request_target's write token stays safe.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  status:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7 # the base branch, for scripts/gpu/needs_gpu.py and paths.txt
+        with:
+          persist-credentials: false
+      - name: Set the gpu status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          path=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | python3 scripts/gpu/needs_gpu.py)
+          if [ -z "$path" ]; then
+            state=success description="No model or engine code changed"
+          else
+            state=pending description="Changes $path. A reviewer comments /gpu to run the GPU check"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state="$state" -f context=gpu \
+            -f description="${description:0:140}" > /dev/null
+
+  queue:
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Queue the pull request for the GPU runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          WHO: ${{ github.event.comment.user.login }}
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          [ "$(printf '%s\n' "$BODY" | head -n 1 | tr -d '[:space:]')" = "/gpu" ] || exit 0
+          role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$WHO/permission" --jq .permission)
+          case "$role" in
+            admin | maintain | write) ;;
+            *) echo "::error::@$WHO has $role access; /gpu needs write"; exit 1 ;;
+          esac
+          read -r head sha < <(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" \
+            --json headRepositoryOwner,headRepository,headRefOid \
+            --jq '"\(.headRepositoryOwner.login)/\(.headRepository.name) \(.headRefOid)"')
+          if [ "$head" != "$GITHUB_REPOSITORY" ]; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body \
+              "The GPU runner only runs branches of this repository. Run scripts/gpu/check.sh and report it instead."
+            exit 1
+          fi
+          gh label create gpu-queued --repo "$GITHUB_REPOSITORY" --color FBCA04 \
+            --description "Waiting for the GPU runner" 2> /dev/null || true
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label gpu-queued > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$sha" -f state=pending -f context=gpu \
+            -f description="Queued for the GPU runner by @$WHO" > /dev/null

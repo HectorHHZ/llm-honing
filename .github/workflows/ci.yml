@@ -294,8 +294,8 @@ jobs:
 
   e2e:
     # End to end on every pull request: the processes a run starts, talking as they do in a run, with no GPU, game
-    # files, or model weights. GPU and in-game checks of a model or engine change are run by hand and reported in the
-    # pull request's End-to-end section.
+    # files, or model weights. A model or engine change also needs the GPU check, which a reviewer's /gpu comment
+    # runs (gpu.yml, scripts/gpu/README.md). In-game checks are run by hand and reported in the End-to-end section.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
