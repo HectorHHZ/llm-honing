@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import json
 import re
 import subprocess
@@ -126,6 +127,28 @@ def test_importing_a_trace_reader_loads_only_core_and_the_modules_it_names(repo_
     core = {name for name in honing if name == "honing.core" or name.startswith("honing.core.")}
     assert honing - core == TRACE_READERS[module]
     assert {name.split(".")[0] for name in loaded - honing} <= set(sys.stdlib_module_names)
+
+
+@pytest.mark.unit
+def test_every_public_tank_name_is_listed_alike_in_all_three_places_and_resolves(repo_root: Path) -> None:
+    """``honing.backends.tank`` names each public name in its ``TYPE_CHECKING`` imports, in the table its lazy
+    ``__getattr__`` reads, and in ``__all__``. A merge that adds a name to one place can miss another."""
+    tank = importlib.import_module("honing.backends.tank")
+    tree = ast.parse((repo_root / "honing/backends/tank/__init__.py").read_text(encoding="utf-8"))
+    checked = {
+        alias.asname or alias.name: statement.module.rsplit(".", 1)[-1]
+        for node in tree.body
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+        for statement in node.body
+        if isinstance(statement, ast.ImportFrom) and statement.module
+        for alias in statement.names
+    }
+    table = tank._MODULES
+
+    assert checked == table
+    assert sorted(tank.__all__) == sorted(table)
+    for name, module in table.items():
+        assert getattr(tank, name) is getattr(importlib.import_module(f"honing.backends.tank.{module}"), name)
 
 
 @pytest.mark.unit

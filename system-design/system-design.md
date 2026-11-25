@@ -424,8 +424,12 @@ same questions. Over the cap, decisions around events with a higher priority num
 leave first, and within a window the earliest and latest leave before those nearest in
 time to the decision the event followed. The same traces and cap always render to the
 same text. In a tank round, a motion decision's whole state is about 1,300 estimated
-tokens and a weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000, so
-at the default cap of 6,000 it keeps only its last 0.45 to 0.8 s. Given a trace source,
+tokens and a weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000. The
+default cap of 12,000 keeps its last 1.3 to 1.8 s, longer than the shortest flight of a
+shell, where 6,000 kept only 0.45 to 0.8 s. GEPA and Meta-Harness take the cap and both
+window spans from their config (`trace_max_tokens`, `trace_before_seconds`,
+`trace_after_seconds`), so a reflection model with a small context lowers the cap and a
+game with another clock sets its own spans. Given a trace source,
 GEPA's reflective dataset shows each minibatch episode's rendering as its generated
 output, and Meta-Harness writes it to a file under its work directory, keeps the file's
 path in its archive state, and copies it as `decisions.txt` beside each search trace.
