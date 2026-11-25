@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -75,7 +76,10 @@ def spool_job(spool: Path, job_id: str, logs: list[Path], submitted_at: str) -> 
         ],
     }
     spool.mkdir(parents=True, exist_ok=True)
-    (spool / f"{job_id}.json").write_text(json.dumps(job))
+    # As integrations/reef/backend.py does: a provider polling the spool never sees a half-written job.
+    partial = spool / f"{job_id}.json.tmp"
+    partial.write_text(json.dumps(job))
+    os.replace(partial, spool / f"{job_id}.json")
     return job
 
 
