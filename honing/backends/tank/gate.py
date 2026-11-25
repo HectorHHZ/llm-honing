@@ -46,19 +46,31 @@ class FreshSeedEvaluator:
     starts after them. Seeds are taken before their rounds are played, so a
     gate that fails partway never hands its seeds to the next. The count lives
     in memory: one evaluator serves one campaign.
+
+    ``first_seed`` is where the first gate starts, the start of the pool by
+    default. Campaigns that start at the same seed play the same gates, which
+    pairs two arms of an experiment. Repeats of one arm start elsewhere.
     """
 
-    def __init__(self, runner: EpisodeRunner, grader: TaskGrader, suite: TankSuite, rounds: int) -> None:
+    def __init__(
+        self, runner: EpisodeRunner, grader: TaskGrader, suite: TankSuite, rounds: int, first_seed: int | None = None
+    ) -> None:
         require(
             rounds > 0 and rounds % 2 == 0,
             f"each seed is played from both seats, so rounds must be even, got {rounds}",
+        )
+        pool = SEED_POOLS["val"]
+        first = pool.start if first_seed is None else first_seed
+        require(
+            not isinstance(first, bool) and isinstance(first, int) and first in pool,
+            f"first_seed must be a seed of the val pool, {pool.start} to {pool.stop - 1}, got {first_seed!r}",
         )
         refuse_pool_overlap(suite)
         self._runner = runner
         self._grader = grader
         self._suite = suite
         self._rounds = rounds
-        self._next_seed = SEED_POOLS["val"].start
+        self._next_seed = first
 
     def evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
         seeds = range(self._next_seed, self._next_seed + self._rounds // 2)
@@ -94,6 +106,7 @@ def fresh_seed_gate(
     looks: int = 1,
     min_effect: float = 0.0,
     confidence: float = 0.95,
+    first_seed: int | None = None,
 ) -> Gate:
     """``rounds`` fresh rounds in ``looks`` blocks, settled by :class:`~honing.release.PairedIntervalSelector`.
 
@@ -106,11 +119,13 @@ def fresh_seed_gate(
     direction edit's gate measured a seed standard deviation of 0.42, at which
     that is enough for 80% power only on a gain near 0.32, and a
     ``min_effect`` of 0 selects any gain whose interval clears zero.
+    ``first_seed`` is the val pool seed the first gate starts at
+    (:class:`FreshSeedEvaluator`).
     """
     selector = PairedIntervalSelector(min_effect=min_effect, confidence=confidence, looks=looks)
     require(
         rounds % (2 * looks) == 0,
         f"{rounds} rounds do not split into {looks} blocks of whole seeds, each played from both seats",
     )
-    evaluator = FreshSeedEvaluator(runner, grader, suite, rounds // looks)
+    evaluator = FreshSeedEvaluator(runner, grader, suite, rounds // looks, first_seed)
     return Gate(evaluator, default_selector=selector, metrics=evaluator.metrics)
