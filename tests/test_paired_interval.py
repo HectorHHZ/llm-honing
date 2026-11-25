@@ -232,6 +232,9 @@ def test_a_harness_move_with_a_method_evaluator_must_pass_both_selectors(tmp_pat
         assert outcome.evaluation is not None and len(outcome.evaluation.task_ids) == len(gate_tasks)
         record = json.loads(fixture.campaign.chain.record_path.read_text().splitlines()[-1])
         assert record["candidate"]["method_state"]["accepted"] == int(published)
+        # The gate ran, so the history's gate metrics are its twelve tasks.
+        (step,) = fixture.campaign.state().history
+        assert (step.metrics_from, step.gate_metrics["gate_tasks"]) == ("gate", 12.0)
 
     # A candidate the method rejects never reaches the gate.
     fixture = build_campaign(
@@ -243,6 +246,9 @@ def test_a_harness_move_with_a_method_evaluator_must_pass_both_selectors(tmp_pat
     outcome = fixture.campaign.advance(Move(kind="harness"))
     assert outcome.decision is not None and outcome.decision.policy == "win_loss" and outcome.release is None
     assert fixture.runner.runs == 2 * 2  # two tasks, under the candidate and the incumbent
+    # The history's gate metrics then come from the method's two tasks, and it says so.
+    (step,) = fixture.campaign.state().history
+    assert (step.result, step.metrics_from, step.gate_metrics["gate_tasks"]) == ("rejected", "method", 2.0)
 
 
 # ---------------------------------------------------------------- error rates over 2,000 simulated gates
