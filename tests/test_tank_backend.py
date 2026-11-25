@@ -368,12 +368,12 @@ def test_a_first_seed_outside_the_val_pool_is_refused(tmp_path: Path, first_seed
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "seed_differences", [[0.5] * 6 + [-0.5] * 2, [0.5] * 14 + [-0.5] * 2], ids=["review", "seats-would-select"]
+    "seed_differences", [[0.5] * 6 + [-0.5] * 2, [-0.5] * 2 + [0.5] * 14], ids=["review", "sixteen-seeds"]
 )
 def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[float]) -> None:
     # The second seat repeats the first, so it adds no evidence, and the gate must decide as it would on one
-    # difference per seed. The first case is the #197 review's. The second one the interval would select if
-    # every seat counted as its own task.
+    # difference per seed. The first case is the #197 review's. The second has more seeds and its losses first, so
+    # its interval per seed reaches just below zero.
     seeds = len(seed_differences)
     games = _SeatsAgree(lambda policy, seed: 0.5 + seed_differences[seed] if policy == "strong" else 0.5)
     gate = fresh_seed_gate(games, games, load_suite(SUITE_PATH), rounds=2 * seeds)
@@ -396,7 +396,7 @@ def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[flo
     )
     assert (decision.metrics["tasks"], decision.metrics["rounds"]) == (seeds, 2 * seeds)
     assert not decision.selected
-    # The records keep every seat. Counted seat by seat, the second case would be selected.
+    # The records keep every seat. Counted seat by seat, both cases would be selected.
     candidate_records, incumbent_records = evaluation.records[: 2 * seeds], evaluation.records[2 * seeds :]
     seats = EvaluationResult(
         task_ids=tuple(record.task_id for record in candidate_records),
@@ -404,7 +404,7 @@ def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[flo
         incumbent_scores=tuple(record.score for record in incumbent_records),
         evaluated_variant="master",
     )
-    assert PairedIntervalSelector().decide(candidate, seats).selected is (seeds == 16)
+    assert PairedIntervalSelector().decide(candidate, seats).selected
 
 
 @pytest.mark.unit

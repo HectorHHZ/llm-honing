@@ -574,10 +574,15 @@ selects when the interval on the mean paired difference lies above a minimum eff
 interval is a betting bound that assumes only independent differences in `[-1, 1]`, so a
 candidate with no effect is selected at most `(1 - confidence) / 2` of the time at any
 gate size, skewed or tied scores included. It decides once, or after each block of a gate
-that plays in blocks and stops when the result is clear, with the confidence split across
-the looks so stopping early does not raise the false-accept rate. With more than one look
-the gate calls its evaluator once per block, so that evaluator must play new tasks on every
-call, and the decision records `stopped_early`.
+that plays in blocks and stops when the result is clear. Every look continues one betting
+process with stakes tuned to the planned rounds, and the bound covers the capital's running
+maximum, so every look uses the full confidence and stopping early does not raise the
+false-accept rate. Because each end keeps the furthest the capital reached, tasks whose
+differences change with their order can leave the ends crossed, and such an interval never
+selects. To detect a gain of 0.10 with 80% power at a paired standard deviation
+of 0.5, a four-look gate plans 280 rounds and plays about 205 on average. With more than
+one look the gate calls its evaluator once per block, so that evaluator must play new tasks
+on every call, and the decision records `stopped_early`.
 
 **The tank gate never replays a seed.** A loop that reads gate verdicts can overfit rounds it
 sees at every step. The tank gate (`honing/backends/tank/gate.py`) draws every block's seeds
