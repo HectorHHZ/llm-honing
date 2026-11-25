@@ -1,0 +1,25 @@
+# Reef for Honing's tank decisions: records and reports in, job data spooled for Honing.
+# Start from the repository root, in Reef's Python 3.12 environment:
+#   REEF_TOKEN=reef-local PYTHONPATH=. reef serve -c integrations/reef/deployment.yaml
+reef:
+  host: 127.0.0.1
+  port: 8977
+  token: ${REEF_TOKEN}
+# Reef serves no model here: the decision server answers, and Honing's chain publishes.
+inference:
+  backend: none
+  model-path: honing
+recipe:
+  implementation: integrations.reef.recipe:HoningDecisionRecipe
+pipeline:
+  sample2job:
+    config:
+      job_samples: 1
+training:
+  backend: integrations.reef.backend:Deployment
+  options:
+    spool-dir: .reef/honing-spool
+storage:
+  artifact-work-dir: .reef/artifact-work
+  artifact-cache-dir: .reef/artifact-cache
+  agent-record-dir: .reef/agent-record
