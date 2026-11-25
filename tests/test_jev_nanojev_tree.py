@@ -19,6 +19,8 @@ import pytest
 from honing.backends.jev import nanojev
 from honing.backends.jev.nanojev import NanoJevSettings, checked_answer
 from honing.backends.jev.nanojev_tree import (
+    FLEX_KERNEL,
+    FLEX_KERNELS,
     HEAD_ROWS,
     HEAD_SLOTS,
     GraphForward,
@@ -26,6 +28,7 @@ from honing.backends.jev.nanojev_tree import (
     TokenTree,
     TreeScorer,
     common_prefix_length,
+    flex_kernel,
     nanojev_segments,
     padded_size,
     slot_layout,
@@ -466,3 +469,16 @@ def test_on_a_gpu_the_tree_stays_as_close_to_fp32_as_the_reference(tmp_path: Pat
         assert largest < max(2 * reference, 0.005)
         # A choice may differ from fp32 only where fp32's top two options are closer than the rounding moved them.
         assert all(d["fp32_top2_gap"] <= 2 * largest for d in summary[mode]["choices_differing_from_fp32"])
+
+
+@pytest.mark.unit
+def test_flex_attention_tiles_follow_the_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    capability = {"cuda:0": (9, 0), "cuda:1": (8, 6)}
+    torch = types.SimpleNamespace(
+        device=lambda name: types.SimpleNamespace(type=name.split(":")[0], name=name),
+        cuda=types.SimpleNamespace(get_device_capability=lambda device: capability[device.name]),
+    )
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    assert flex_kernel("cuda:0") == FLEX_KERNELS[(9, 0)] != FLEX_KERNEL
+    assert flex_kernel("cuda:1") == FLEX_KERNEL
+    assert flex_kernel("cpu") == FLEX_KERNEL
