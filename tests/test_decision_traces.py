@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from honing.backends.tank.traces import OUTPUTS, TankTraceSource, load_run
+from honing.backends.tank.traces import OUTPUTS, UNNAMED_SHELLS, TankTraceSource, load_run
 from honing.core import (
     ChatMessage,
     ContractError,
@@ -231,16 +231,28 @@ def test_the_hit_is_the_shell_the_kill_names_even_when_later_shots_were_fired(ru
 
 
 @pytest.mark.unit
-def test_a_kill_by_the_agents_shell_that_names_no_shell_is_refused(tmp_path: Path, runs: dict[str, Path]) -> None:
-    run = _copy(tmp_path, runs[KILL])
+@pytest.mark.parametrize(
+    ("name", "key_events"), [(KILL, {"opponent destroyed": 1}), (DESTROYED, {"agent self-hit": 1})]
+)
+def test_a_round_recorded_before_the_engine_named_shells_loads_with_no_shot_marked_missed(
+    tmp_path: Path, runs: dict[str, Path], name: str, key_events: dict[str, int]
+) -> None:
+    # A win by a hit, and the #198 review's case: s3114's death rewritten as a self-hit. Such rounds name no
+    # shell, so which shot hit is unknown.
+    run = _copy(tmp_path, runs[name])
     events = _lines(run / "events.jsonl")
     for event in events:
         event.pop("shell", None)
+        if name == DESTROYED and event["type"] == "kill":
+            event.update(player=event["victim"], self=True)
     (run / "events.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events))
     _rehash(run)
 
-    with pytest.raises(ContractError, match="names no shell"):
-        load_run(run)
+    traces = load_run(run)
+
+    assert Counter(event.label for trace in traces for event in trace.events if event.label) == key_events
+    assert all(trace.outcome.endswith(f". {UNNAMED_SHELLS}") for trace in traces)
+    assert f"Outcome: {traces[0].outcome}." in render_traces(traces)
 
 
 @pytest.mark.unit
@@ -437,6 +449,19 @@ def test_a_later_decision_lists_what_changed_and_what_is_gone_since_the_one_show
     assert "  state, 1 of 1 field changed:\n    Me at 2.\n  weapon" in blocks[2]
     assert "  state, 0 of 1 field changed\n" in blocks[3]
     assert "  weapon: fire 0.250, hold 0.750; chose hold" in blocks[3]
+
+
+@pytest.mark.unit
+def test_a_new_field_replaces_the_old_one_with_its_name_that_it_starts_most_like() -> None:
+    # The #198 review's case: two enemies share the name "Enemy", and only the second is left.
+    traces = [_trace(0, "Enemy 1 at 3. Enemy 2 at 7."), _trace(1, "Enemy 2 at 8.")]
+    later = _blocks(render_traces(traces, before_seconds=3.0))[1]
+    assert "  state, 1 of 1 field changed, 1 gone:\n    Enemy 2 at 8.\n    gone: Enemy 1 at 3.\n" in later
+
+    # On a tie the earliest old field is replaced, and a field of another name never is.
+    traces = [_trace(0, "Enemy 1 at 3. Enemy 2 at 3. Me at 1."), _trace(1, "Enemy 9 at 3. Me at 1.")]
+    later = _blocks(render_traces(traces, before_seconds=3.0))[1]
+    assert "  state, 1 of 2 fields changed, 1 gone:\n    Enemy 9 at 3.\n    gone: Enemy 2 at 3.\n" in later
 
 
 @pytest.mark.unit
