@@ -25,6 +25,7 @@ import re
 import shutil
 import tarfile
 from collections import Counter
+from collections.abc import Sequence
 from itertools import pairwise
 from pathlib import Path
 
@@ -410,8 +411,10 @@ def test_over_the_cap_missed_shots_leave_first_then_state_fields_then_the_text_i
     # and the death at 6.000 s opens its window at decision 38, the first asked from 4.000 s.
     assert _windows(full) == [list(range(0, 32)), list(range(38, 58))]
     assert traces[37].time_seconds < 4.0 <= traces[38].time_seconds
-    # Every missed shot's decision leaves before the death's, and the death's window loses its earliest first.
-    assert sorted(_blocks(default)) == [*range(53, 58)]
+    # Every missed shot's decision leaves before the death's, and the death's window loses its earliest first. At the
+    # default cap the rest reach 1.3 s before the death, longer than a shell's shortest flight of 1.1 s.
+    assert sorted(_blocks(default)) == [*range(45, 58)]
+    assert 6.0 - traces[45].time_seconds > 1.1
     # The motion asked with the weapon decision the death followed is the last to leave before it.
     assert sorted(_blocks(two)) == [56, 57] and traces[56].time_seconds == traces[57].time_seconds
     assert sorted(_blocks(deaths_only)) == [57]
@@ -637,6 +640,67 @@ def test_meta_harness_writes_each_search_episodes_rendered_decisions_for_the_pro
     for folder, task in zip(folders, tasks, strict=True):
         unavailable = (tmp_path / "again/traces/seed" / folder / "decisions.unavailable").read_text(encoding="utf-8")
         assert unavailable == f"{archive.get('seed').traces[task.task_id].decisions}\n"
+
+
+@pytest.mark.unit
+def test_both_methods_render_with_the_window_and_cap_their_config_sets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The defaults suit a tank round, so a game with another clock sets the window in the method's config (#211)."""
+    pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+    from honing.harness.methods import gepa
+    from honing.harness.methods.meta_harness import method as meta_harness
+
+    settings = {"max_tokens": 900, "before_seconds": 6.0, "after_seconds": 1.5}
+    calls: list[dict[str, object]] = []
+
+    def spy(traces: Sequence[DecisionTrace], **kwargs: object) -> str:
+        calls.append(kwargs)
+        return render_traces(traces, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(gepa.method, "render_traces", spy)
+    monkeypatch.setattr(meta_harness, "render_traces", spy)
+    world = FakeWorld()
+    tasks = (Task(task_id="t0", prompt="Add."),)
+    config = gepa.GEPAConfig(
+        max_metric_calls=100,
+        minibatch_size=1,
+        trace_max_tokens=900,
+        trace_before_seconds=6.0,
+        trace_after_seconds=1.5,
+    )
+    methods = [
+        gepa.GEPAMethod(FakeChatModel(["```\nSolve it.\n```"]), config, ("v0",), traces=FakeTraceSource()),
+        MetaHarnessMethod(
+            FakeProposerAgent(),
+            tmp_path / "mh",
+            traces=FakeTraceSource(),
+            trace_max_tokens=900,
+            trace_before_seconds=6.0,
+            trace_after_seconds=1.5,
+        ),
+    ]
+    for method in methods:
+        calls.clear()
+        method.propose(
+            EvolveContext(
+                current=SEED_HARNESS,
+                policy=_policy(world),
+                tasks=tasks,
+                records=(),
+                state=method.initial_state(SEED_HARNESS),
+                runner=FakeEpisodeRunner(world),
+                grader=FakeTaskGrader(),
+                episode_budget=100,
+            )
+        )
+        assert calls and all(call == settings for call in calls)
+
+    for seconds in (-0.1, math.inf, math.nan):
+        with pytest.raises(ContractError, match="finite and >= 0"):
+            gepa.GEPAConfig(max_metric_calls=1, trace_before_seconds=seconds)
+        with pytest.raises(ContractError, match="finite and >= 0"):
+            MetaHarnessMethod(FakeProposerAgent(), tmp_path / "bad", trace_after_seconds=seconds)
 
 
 @pytest.mark.unit

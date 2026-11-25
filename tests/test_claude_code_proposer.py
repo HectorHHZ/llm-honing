@@ -186,3 +186,13 @@ def test_the_pipeline_factories_write_the_settings_and_place_the_archive(tmp_pat
     }
     assert built.work_dir == Path(tempfile.gettempdir()) / "meta-harness-run-7"
     assert isinstance(built.proposer, ClaudeCodeProposer)
+    assert (built.trace_max_tokens, built.trace_before_seconds, built.trace_after_seconds) == (12000, 2.0, 0.5)
+
+    sized = method(
+        context,
+        {"factory": "honing.e2e.meta_harness:claude_code", "args": {"model": "opus"}},
+        trace_max_tokens=3000,
+        trace_before_seconds=5.0,
+        trace_after_seconds=1.0,
+    )
+    assert (sized.trace_max_tokens, sized.trace_before_seconds, sized.trace_after_seconds) == (3000, 5.0, 1.0)

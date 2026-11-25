@@ -12,7 +12,8 @@ asked from ``before_seconds`` before the event to ``after_seconds`` after it,
 and windows that overlap or touch merge into one. The defaults are sized for
 a tank round: 2 s before an event reaches past a shell's flight of 1.1 to
 1.7 s to the decisions that could have dodged it, and 0.5 s after shows how
-the model went on. An episode without a key event shows the decisions asked
+the model went on. GEPA and Meta-Harness take both spans and the cap from
+their config. An episode without a key event shows the decisions asked
 in the last ``before_seconds`` up to its last one. Each decision shows its
 time, the probability of every option, the choice, what the controller
 allowed and applied, and the events that followed it.
@@ -57,7 +58,7 @@ from collections.abc import Sequence
 
 from honing.core import DecisionTrace, require
 
-DEFAULT_MAX_TOKENS = 6000
+DEFAULT_MAX_TOKENS = 12000
 DEFAULT_BEFORE_SECONDS = 2.0
 DEFAULT_AFTER_SECONDS = 0.5
 # Enough of a policy checksum to tell policies apart: the tank runner names run directories with as many.
@@ -80,6 +81,14 @@ def estimate_tokens(text: str) -> int:
     return len(_TOKEN.findall(text))
 
 
+def check_window(before_seconds: float, after_seconds: float) -> None:
+    """Refuse a window that does not reach a finite time >= 0 before and after its event."""
+    require(
+        all(math.isfinite(seconds) and seconds >= 0.0 for seconds in (before_seconds, after_seconds)),
+        "a window's before_seconds and after_seconds are finite and >= 0",
+    )
+
+
 def render_traces(
     traces: Sequence[DecisionTrace],
     *,
@@ -89,10 +98,7 @@ def render_traces(
 ) -> str:
     """One episode's traces, in step order, as text of at most ``max_tokens`` estimated tokens."""
     require(max_tokens > estimate_tokens(CUT_MARK), f"max_tokens must exceed {estimate_tokens(CUT_MARK)}")
-    require(
-        all(math.isfinite(seconds) and seconds >= 0.0 for seconds in (before_seconds, after_seconds)),
-        "a window's before_seconds and after_seconds are finite and >= 0",
-    )
+    check_window(before_seconds, after_seconds)
     if not traces:
         return "No decisions were recorded in this episode.\n"
     require(
@@ -400,6 +406,7 @@ __all__ = [
     "DEFAULT_BEFORE_SECONDS",
     "DEFAULT_MAX_TOKENS",
     "POLICY_CHECKSUM_CHARS",
+    "check_window",
     "estimate_tokens",
     "render_traces",
 ]
