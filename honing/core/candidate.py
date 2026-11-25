@@ -49,7 +49,9 @@ class UpdateCandidate:
     rest of the release; see :mod:`honing.core.state` for what it may hold.
     ``move_label`` is the scheduler's label for the move that built the
     candidate, such as a harness phase, so a scheduler can read it back from
-    the releases.
+    the releases. ``batch_id`` names the training batch a train move (or a
+    recovery after pruning) used, so the commit record says which data
+    trained the candidate.
     """
 
     kind: CandidateKind
@@ -62,10 +64,12 @@ class UpdateCandidate:
     method_state: Mapping[str, object] = field(default_factory=dict)
     metrics: Mapping[str, float] = field(default_factory=dict)
     move_label: str | None = None
+    batch_id: str | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.kind, get_args(CandidateKind), "UpdateCandidate.kind")
         require(self.move_label is None or bool(self.move_label), "UpdateCandidate.move_label must be a name or None")
+        require(self.batch_id is None or bool(self.batch_id), "UpdateCandidate.batch_id must be a name or None")
         require((self.kind == "init") == (self.parent_id is None), "only the initial candidate has no parent")
         require(all(math.isfinite(value) for value in self.metrics.values()), "candidate metrics must be finite")
         validate_method_state(self.method_state)

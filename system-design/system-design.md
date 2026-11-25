@@ -661,7 +661,8 @@ publish, rejection, skip, and rollback to a JSON-lines record and flushes it to 
 A value JSON cannot represent exactly is an error, never a string. Once a scheduler has
 chosen a move, every line also carries its state (`scheduler`, `scheduler_state`). Publish,
 rejection and skip records also carry the move's cost; a record written before costs were
-recorded has none.
+recorded has none. A trained candidate names the batch it trained on (`batch_id`), so a move
+that trained on Reef's job data names that job.
 Rebuilding a chain from that record is not implemented yet; the ordering that makes it
 possible is, and is tested.
 

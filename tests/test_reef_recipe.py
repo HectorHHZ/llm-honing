@@ -13,18 +13,23 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from honing.backends.reef import EpisodeReport, RecordedDecision, batches
+from honing.backends.reef import EpisodeReport, RecordedDecision, batches, decisions_from_job
 from honing.backends.tank.decisions import decisions_from_log
 from honing.core import DecisionSample
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/reef"))
+from import_tank_runs import main as import_runs
 
 REEF = os.environ.get("HONING_REEF_BIN")
 pytestmark = pytest.mark.skipif(not REEF, reason="HONING_REEF_BIN names no Reef executable")
@@ -33,7 +38,6 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = sorted((ROOT / "tests" / "fixtures" / "decision_traces").glob("*/decisions.jsonl"))
 TOKEN = "reef-test"
 SCENARIO = "tank"
-DECISION_KEYS = ("format", "version", "request_id", "branch", "parts", "questions", "answers")
 
 
 class Reef:
@@ -143,27 +147,8 @@ def push_episode(reef: Reef, log: Path, episode_tags: dict[str, str], report: di
 
 
 def samples_of(job: dict[str, Any]) -> list[DecisionSample]:
-    """The decision samples one spooled job holds, read the way Honing's data provider (#227) reads them."""
-    (sample,) = job["samples"]
-    trajectory = sample["trajectory"]
-    episode = trajectory["extra"]["honing"]
-    decisions = []
-    for step in trajectory["steps"]:
-        honing = step["extra"]["honing"]
-        record = RecordedDecision.from_payload(
-            {"honing": {key: honing[key] for key in DECISION_KEYS}, "metadata": {"tags": episode["tags"]}}
-        )
-        decisions.append(
-            record.sample(
-                honing["chosen"],
-                reward=trajectory["extra"]["reef"]["reward"],
-                group=sample["group_id"],
-                release_id=episode["tags"]["release"],
-                harness_id=episode["tags"]["harness"],
-                behavior=True,
-            )
-        )
-    return decisions
+    """The decision samples one spooled job holds, read as Honing's data provider (#227) reads them."""
+    return list(decisions_from_job(job, behavior=True))
 
 
 def test_episodes_reach_the_spool_once_and_reef_publishes_nothing(reef: Reef) -> None:
@@ -222,3 +207,35 @@ def test_a_report_of_another_format_trains_nothing(reef: Reef) -> None:
     time.sleep(5)
     (job,) = reef.spooled()
     assert job["samples"][0]["trajectory"]["extra"]["honing"]["episode"] == FIXTURES[1].parent.name
+
+
+def test_runs_imported_with_reef_client_train_as_decisions_from_log(reef: Reef, tmp_path: Path) -> None:
+    """``scripts/reef/import_tank_runs.py``: runs played before recording reach the provider unchanged."""
+    from honing.backends.reef import ReefDataProvider
+    from honing.backends.reef.tank import run_tags
+    from honing.core import DataContract
+
+    reef.call("POST", "/reef/scenarios", {"name": SCENARIO}, scenario=False)
+    runs = [log.parent for log in FIXTURES]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("REEF_TOKEN", TOKEN)
+        url = f"http://127.0.0.1:{reef.port}"
+        argv = [*map(str, runs), "--out", str(tmp_path / "records.jsonl"), "--release", "r1", "--harness", "h1"]
+        assert import_runs([*argv, "--url", url, "--scenario", SCENARIO]) == 0
+
+    provider = ReefDataProvider(reef.spool, wait_s=60, poll_s=0.5)
+    drawn = []
+    for _ in runs:
+        batch = provider.next_batch(DataContract("typed_decisions"))
+        assert batch is not None
+        drawn.append(batch)
+    for batch in drawn:
+        episode = batch.decisions[0].group
+        (run,) = [run for run in runs if run_tags(run)["task"] == episode]
+        assert list(batch.decisions) == [
+            replace(decision, reward=batch.decisions[0].reward)
+            for decision in decisions_from_log(
+                run, reward=None, group=episode, release_id="r1", harness_id="h1", behavior=False
+            )
+        ]
+    wait(lambda: set(reef.jobs().values()) == {"finished"}, 60, "consumed jobs did not finish")
