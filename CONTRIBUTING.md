@@ -148,8 +148,21 @@ Fill in every section of the pull request template. In particular:
   and attach the same numbers some other way.
 - **AI assistance** names any tool that made a non-trivial contribution.
 
-A pull request needs one maintainer approval and a green CI run to merge.
+A pull request merges when every check is green on a branch that is up to date
+with `main` and every review thread is resolved. One of those checks, the
+`review` status, passes in either of two cases:
+
+- two people other than the author approve, and nobody's latest review requests
+  changes;
+- the author asked for review (a review request, or a comment after the
+  reviewers' last word) and five days passed with no review or comment from
+  anyone else.
+
+A push dismisses earlier approvals, so approvals cover the commit that merges.
 Merges use squash, so the pull request title becomes the commit subject.
+`.github/rulesets/main.json` is the ruleset that enforces this on `main`, so a
+change to these rules is a pull request too. An admin applies it with
+`gh api repos/HectorHHZ/llm-honing/rulesets --method POST --input .github/rulesets/main.json`.
 
 ### The GPU check
 
