@@ -13,12 +13,20 @@
 - :mod:`honing.e2e.tracking` logs a run to W&B when its config asks for it.
 """
 
-from honing.e2e.components import PipelineContext, build_component, missing_requirements, resolve_references
+from honing.e2e.components import (
+    SCHEDULER_SLOT,
+    PipelineContext,
+    build_component,
+    missing_requirements,
+    resolve_references,
+    scheduler_or_script,
+)
 from honing.e2e.conformance import DeliveryProbe, RunnerCheck, check_runner, probe_harness
 from honing.e2e.trainer_conformance import TrainerCheck, check_trainer
 from honing.e2e.workspace_runner import WorkspaceDeliveryProbe, WorkspaceEpisodeRunner
 
 __all__ = [
+    "SCHEDULER_SLOT",
     "DeliveryProbe",
     "PipelineContext",
     "RunnerCheck",
@@ -31,4 +39,5 @@ __all__ = [
     "missing_requirements",
     "probe_harness",
     "resolve_references",
+    "scheduler_or_script",
 ]

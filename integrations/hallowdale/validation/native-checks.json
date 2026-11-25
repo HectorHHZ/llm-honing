@@ -1,0 +1,1425 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "controls",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "offeredChoices": 28
+      },
+      "steps": [
+        {
+          "action": "wait",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {},
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 12,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 12,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 46.1852,
+            "y": -111.0022,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 24,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "right",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 46.1852,
+            "y": -111.0022,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 24,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -111.0022,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 36,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "up",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "UP": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.4815,
+            "y": -111.0022,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 36,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 48,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "down",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "DOWN": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 48,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 59,
+              "ticks": 59
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -103.0756,
+            "vx": 0.0,
+            "vy": 10.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 72,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump_left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 59,
+              "ticks": 59
+            },
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -103.0756,
+            "vx": 0.0,
+            "vy": 10.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 72,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 46.1852,
+            "y": -103.5813,
+            "vx": -11.1111,
+            "vy": -11.4667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 84,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump_right",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 59,
+              "ticks": 59
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 46.1852,
+            "y": -103.5813,
+            "vx": -11.1111,
+            "vy": -11.4667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 84,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 96,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 12,
+          "jump_frames": 3,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 15,
+              "ticks": 15
+            }
+          },
+          "before": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 96,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -108.7672,
+            "vx": 0.0,
+            "vy": -10.5157,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 108,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump_left",
+          "frames": 12,
+          "jump_frames": 3,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 15,
+              "ticks": 15
+            },
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -108.7672,
+            "vx": 0.0,
+            "vy": -10.5157,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 108,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 120,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump_right",
+          "frames": 12,
+          "jump_frames": 3,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 15,
+              "ticks": 15
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 120,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -108.7672,
+            "vx": 11.1111,
+            "vy": -10.5157,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 132,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack",
+          "frames": 12,
+          "started": [
+            "NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.4815,
+            "y": -108.7672,
+            "vx": 11.1111,
+            "vy": -10.5157,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 132,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 144,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_left",
+          "frames": 12,
+          "started": [
+            "NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            },
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 144,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 156,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_right",
+          "frames": 12,
+          "started": [
+            "NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 156,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 168,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_up",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "UP": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 168,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 180,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_down",
+          "frames": 12,
+          "started": [
+            "NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "DOWN": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            },
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 180,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 192,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dash",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 192,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 204,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dash_left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 204,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 216,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dash_right",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 216,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 228,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "interact",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "INTERACT": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 228,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 240,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "focus",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "FOCUS": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 240,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 252,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 252,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 264,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast_left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 264,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 276,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast_right",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 46.1852,
+            "y": -111.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 276,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 288,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast_up",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "UP": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.4815,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 288,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 300,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast_down",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "DOWN": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 300,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 312,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "c_dash",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "C_DASH": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 312,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 324,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dream_nail",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "D_NAIL": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 324,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 336,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "repeated presses",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "jumpHeightsInTiles": [
+          9.093,
+          9.093
+        ]
+      },
+      "steps": [
+        {
+          "action": "jump",
+          "frames": 1,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 4,
+              "ticks": 4
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -110.4089,
+            "vx": 0.0,
+            "vy": 29.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 1,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 1,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 4,
+              "ticks": 4
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 37,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -110.4067,
+            "vx": 0.0,
+            "vy": 29.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 38,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_right",
+          "frames": 15,
+          "started": [
+            "NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 0,
+              "last_tick": 74,
+              "ticks": 75
+            },
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 74,
+              "ticks": 75
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 74,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 56.037,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 89,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_right",
+          "frames": 15,
+          "started": [
+            "NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 0,
+              "last_tick": 74,
+              "ticks": 75
+            },
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 74,
+              "ticks": 75
+            }
+          },
+          "before": {
+            "x": 56.037,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 89,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 61.5926,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 104,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "refused commands",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "refusals": {
+          "malformed JSON": "malformed JSON",
+          "stale id": "id 0 is not the current observation id 1",
+          "future id": "id 2 is not the current observation id 1",
+          "string id": "id must be an integer",
+          "duplicate key": "duplicate JSON keys",
+          "missing frames": "frames must be an integer",
+          "zero frames": "frames must be within 1..600",
+          "too many frames": "frames must be within 1..600",
+          "text frames": "frames must be an integer",
+          "unknown action": "unknown action \"fly\"",
+          "pause key": "key \"PAUSE\" cannot be used",
+          "map key": "key \"OPEN_MAP\" cannot be used",
+          "unknown key": "key \"F12\" cannot be used",
+          "button in first": "first may name direction keys only",
+          "jump_frames without jump": "jump_frames needs a command that presses JUMP",
+          "zero jump_frames": "jump_frames must be within 1..frames",
+          "jump_frames above frames": "jump_frames must be within 1..frames"
+        }
+      },
+      "steps": []
+    },
+    {
+      "name": "idle watchdog under a stale-command flood",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "idleSeconds": 3,
+        "secondsToExit": 3.09,
+        "staleCommandsSent": 146
+      },
+      "steps": []
+    },
+    {
+      "name": "rejected model response",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {},
+      "steps": []
+    }
+  ]
+}

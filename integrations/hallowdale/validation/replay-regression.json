@@ -1,0 +1,38 @@
+{
+  "question": "Does the bridge in this directory still produce the observations of a run recorded before the full action interface was added?",
+  "method": "The action windows of one recorded run were replayed through the bridge with no model. Every observation line was compared byte for byte with the recording.",
+  "recording": {
+    "made": "2026-11-18 by the earlier bridge, with a harness outside this pull request choosing the windows",
+    "included": false,
+    "start": "new game, Dean's Pass, seed 42",
+    "windows": 1978,
+    "bridgeFrames": 7170,
+    "actions": {
+      "wait": 759,
+      "right": 623,
+      "attack_right": 14,
+      "left": 481,
+      "jump_right": 59,
+      "jump_left": 42
+    },
+    "settings": {
+      "HONING_JUMP_MODE": "sticky",
+      "HONING_RENDER": "window",
+      "HONING_VIEW_ANCHOR": "feet:720.0,440.0",
+      "HONING_VIEW_SIZE": "1440x800"
+    }
+  },
+  "result": {
+    "visible_observations.jsonl": {
+      "recordedLines": 1979,
+      "identicalLines": 1979,
+      "identical": true
+    },
+    "observations.jsonl": {
+      "recordedLines": 1979,
+      "identicalLines": 1979,
+      "identical": true
+    }
+  },
+  "limits": "The recording uses six of the actions. New actions are covered by action-probes.json. Agreement was measured on one machine with Mesa software rendering."
+}

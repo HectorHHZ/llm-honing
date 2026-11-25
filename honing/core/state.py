@@ -1,13 +1,16 @@
-"""Rules for a harness evolution method's state, which is published and rolled back with a release.
+"""Rules for the state a campaign writes into the commit record and reads back.
 
-The state is written into the commit record as JSON and read back on
-rollback, so it must survive that round trip unchanged. A value JSON cannot
-represent exactly, such as a set or a tuple, would come back as something else.
+Two components keep such state. A harness evolution method's state is
+published and rolled back with a release. A scheduler's state is carried by
+every record line written after its last decision, and is read back on a
+restart. Both are written as JSON, so both must survive that round trip
+unchanged. A value JSON cannot represent exactly, such as a set or a tuple,
+would come back as something else.
 
-Every non-empty state carries an integer ``schema_version``. A method's state
-changes shape as the method evolves, and a rollback can hand an old release's
-state to newer code; the version is what lets the campaign refuse that instead
-of letting the method misread it.
+Every non-empty state carries an integer ``schema_version``. A component's
+state changes shape as the component evolves, and a rollback or a restart can
+hand old state to newer code; the version is what lets the campaign refuse that
+instead of letting the component misread it.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from collections.abc import Mapping
 from honing.core.errors import ContractError
 
 METHOD_STATE_VERSION_KEY = "schema_version"
+SCHEDULER_STATE_VERSION_KEY = "schema_version"
 
 
 def json_native_problem(value: object, path: str = "state") -> str | None:
@@ -45,19 +49,37 @@ def json_native_problem(value: object, path: str = "state") -> str | None:
     return f"{path} is a {type(value).__name__}; use a dict, list, str, int, float, bool, or None"
 
 
-def method_state_version(state: Mapping[str, object]) -> int | None:
-    """The state's ``schema_version``, or ``None`` for an empty state."""
+def _state_version(state: Mapping[str, object], owner: str, key: str) -> int | None:
     if not state:
         return None
-    version = state.get(METHOD_STATE_VERSION_KEY)
+    version = state.get(key)
     if isinstance(version, bool) or not isinstance(version, int):
-        raise ContractError(f"method state must carry an integer {METHOD_STATE_VERSION_KEY!r}, got {version!r}")
+        raise ContractError(f"{owner} state must carry an integer {key!r}, got {version!r}")
     return version
+
+
+def _validate_state(state: Mapping[str, object], owner: str, key: str) -> None:
+    problem = json_native_problem(dict(state))
+    if problem is not None:
+        raise ContractError(f"{owner} state must be JSON-native: {problem}")
+    _state_version(state, owner, key)
+
+
+def method_state_version(state: Mapping[str, object]) -> int | None:
+    """The state's ``schema_version``, or ``None`` for an empty state."""
+    return _state_version(state, "method", METHOD_STATE_VERSION_KEY)
 
 
 def validate_method_state(state: Mapping[str, object]) -> None:
     """Refuse state that would not survive the commit record, or that has no schema version."""
-    problem = json_native_problem(dict(state))
-    if problem is not None:
-        raise ContractError(f"method state must be JSON-native: {problem}")
-    method_state_version(state)
+    _validate_state(state, "method", METHOD_STATE_VERSION_KEY)
+
+
+def scheduler_state_version(state: Mapping[str, object]) -> int | None:
+    """The scheduler state's ``schema_version``, or ``None`` for an empty state."""
+    return _state_version(state, "scheduler", SCHEDULER_STATE_VERSION_KEY)
+
+
+def validate_scheduler_state(state: Mapping[str, object]) -> None:
+    """Refuse scheduler state that would not survive the commit record, or that has no schema version."""
+    _validate_state(state, "scheduler", SCHEDULER_STATE_VERSION_KEY)

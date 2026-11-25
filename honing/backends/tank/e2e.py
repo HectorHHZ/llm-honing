@@ -6,16 +6,17 @@ The config names every component by import path, as RA2's does
 ``function(context, **args)``. Components are built in :data:`SLOTS` order,
 and a factory can read the ones built before it from ``context.components``.
 
-The campaign runs the config's ``schedule`` of harness and train moves. Every
-move is gated by :func:`~honing.backends.tank.gate.fresh_seed_gate`: the paired
-interval selector on ``val`` pool seeds no earlier gate played, sized by the
-config's ``gate`` block (``rounds``, ``looks``, ``min_effect``,
-``confidence``). A harness move must also pass its method's own selector on
-``validation_tasks``, the suite file's fixed ``val`` tasks, which GEPA keeps
-for its Pareto front. A harness method draws its minibatches from
-``harness_tasks`` and rollouts are played on them too (the ``train`` split).
-No task setting can name ``heldout``. It writes the release chain, every
-round's run directory, and ``summary.json`` under ``work_dir``.
+The campaign runs the config's ``schedule`` of harness and train moves, or the
+moves an optional ``scheduler`` component chooses instead. Every move is gated
+by :func:`~honing.backends.tank.gate.fresh_seed_gate`: the paired interval
+selector on ``val`` pool seeds no earlier gate played, sized by the config's
+``gate`` block (``rounds``, ``looks``, ``min_effect``, ``confidence``). A
+harness move must also pass its method's own selector on ``validation_tasks``,
+the suite file's fixed ``val`` tasks, which GEPA keeps for its Pareto front. A
+harness method draws its minibatches from ``harness_tasks`` and rollouts are
+played on them too (the ``train`` split). No task setting can name ``heldout``.
+It writes the release chain, every round's run directory, and ``summary.json``
+under ``work_dir``.
 
 ``configs/e2e/tank_dry_run.json`` plays real rounds (the Node match process and
 Honing's ``DecisionServer``) with a stand-in decision model, a fake trainer,
@@ -49,11 +50,11 @@ from honing.campaign import (
     CampaignDefaults,
     CompressionComponents,
     HarnessComponents,
-    ScriptedScheduler,
     StepOutcome,
 )
 from honing.core import (
     ChatModel,
+    CoAdaptScheduler,
     CompressionBudget,
     ContractError,
     DataProvider,
@@ -80,13 +81,13 @@ from honing.core import (
     TrainJobSpec,
     UtilizationTelemetry,
 )
-from honing.e2e.components import build_component, missing_requirements
+from honing.e2e.components import SCHEDULER_SLOT, build_component, missing_requirements, scheduler_or_script
 from honing.release import EpisodeEvaluator, Gate, ReleaseChain
 
 DEFAULT_INTEGRATION = "integrations/tank-war"
 DEFAULT_SUITE = "tasks/suite.jsonl"
 
-# Built in this order. ``rollout`` is optional. The gate's evaluator is always the fresh-seed one.
+# Built in this order; ``rollout`` and ``scheduler`` are optional. The gate's evaluator is always the fresh-seed one.
 SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("model_source", ModelSource, True),
     ("endpoints", PolicyEndpoints, True),
@@ -96,6 +97,7 @@ SLOTS: tuple[tuple[str, type, bool], ...] = (
     ("data", DataProvider, True),
     ("rollout", RolloutProvider, False),
     ("method", EvolveMethod, True),
+    SCHEDULER_SLOT,
 )
 
 
@@ -314,6 +316,7 @@ class E2ERun:
     campaign: Campaign
     moves: tuple[Move, ...]
     context: E2EContext
+    scheduler: CoAdaptScheduler
 
 
 def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -> E2ERun:
@@ -377,7 +380,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     )
     campaign.start(c["model_source"], work, harness_seed=seed_harness(integration_dir))  # type: ignore[arg-type]
     moves = tuple(_move(entry) for entry in config.get("schedule", ({"kind": "harness"}, {"kind": "train"})))
-    return E2ERun(campaign, moves, context)
+    return E2ERun(campaign, moves, context, scheduler_or_script(c, moves))
 
 
 def summarize(outcomes: Sequence[StepOutcome], run: E2ERun) -> dict[str, object]:
@@ -420,7 +423,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ContractError as error:
         print(f"cannot start: {error}", file=sys.stderr)
         return 2
-    outcomes = run.campaign.run(ScriptedScheduler(run.moves))
+    outcomes = run.campaign.run(run.scheduler)
     summary = summarize(outcomes, run)
     (run.context.work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     for step in summary["steps"]:  # type: ignore[attr-defined]

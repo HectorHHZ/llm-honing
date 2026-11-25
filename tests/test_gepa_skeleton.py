@@ -109,12 +109,21 @@ class SpyGEPAMethod(GEPAMethod):
 class UntilBudgetSpent:
     """Harness moves until GEPA proposes nothing without running an episode, which here only its budget stop does.
 
-    A scheduler sees the head and the published releases, not the method's
-    pending state or its skips, so this one reads the commit record.
+    A scheduler's history names a skip but not the episodes it spent, so this
+    one reads the commit record. It keeps no state of its own.
     """
+
+    name = "until_budget_spent"
+    state_schema_version = 1
 
     def __init__(self, record_path: Path) -> None:
         self._record_path = record_path
+
+    def export_state(self) -> Mapping[str, object]:
+        return {"schema_version": self.state_schema_version}
+
+    def restore_state(self, state: Mapping[str, object]) -> None:
+        pass
 
     def next_move(self, state: CampaignState) -> Move:
         last = json.loads(self._record_path.read_text().splitlines()[-1])

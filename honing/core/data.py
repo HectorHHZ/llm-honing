@@ -9,7 +9,7 @@ neither; rollout data names both, and a batch that mixes releases or harnesses
 is refused by ``honing.campaign.rules.batch_from_one_release``, because rewards
 earned under different policies or different harnesses are not comparable.
 
-A decision model (a Jev-style System One model) learns from typed decisions, not
+A decision model (a Jev-style System 1 model) learns from typed decisions, not
 token sequences: the state, the questions asked about it, the options each
 offered, and the option chosen. :class:`DecisionSample` carries one decision, and
 a ``typed_decisions`` batch carries them, so data collection is the same whichever
@@ -102,7 +102,7 @@ class PreferencePair:
 class DecisionQuestion:
     """One typed question about a state, with the options it offers.
 
-    ``kind`` follows the three question forms a System One model answers:
+    ``kind`` follows the three question forms a System 1 model answers:
     ``choice`` picks one option, ``score`` rates against levels, and ``noul``
     is a yes-or-no evaluation. ``options`` pairs each option's key with its label.
     """
