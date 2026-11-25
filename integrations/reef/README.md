@@ -17,6 +17,8 @@ The records it reads are defined in `honing/backends/reef/records.py`, and
 
 ## Run it
 
+Reef stores artifacts with Git LFS, so `git lfs` must be on `PATH` or `reef serve` exits at startup.
+
 ```bash
 python3.12 -m venv .reef-venv
 .reef-venv/bin/pip install "reef-infra @ git+https://github.com/Human-Agent-Society/reef@bc8c15081bfdbd2ea0a4ceacc045545f020da668"
