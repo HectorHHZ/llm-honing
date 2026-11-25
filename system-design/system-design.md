@@ -438,6 +438,22 @@ the tank decision-log parser: `honing.backends.tank` imports its runner, grader,
 and demonstrations only when one is first used, so System 2's scheduler (#138) can read
 the same traces without the rest of the backend.
 
+A counterfactual probe (`honing/harness/probe.py`, #170) tests a diagnosis on the same
+traces. It rebuilds the `/v1/decide` request each logged decision sent, its rendered parts
+and questions exactly as logged, changes one thing and asks again: the text
+(`TextVariant`, such as a field removed), the rendering from the raw state under other
+settings (`SettingsVariant`, through a source's `ContextRenderer`), or the weights that
+answer (`WeightsVariant`). It reports, per decision and question, the probability of a
+target option as logged and under the variant, and whether the most probable option
+changed. Before it measures, it checks two things and refuses the probe when either fails.
+The server answering for the traces' weights must report their checksum (`weightsSha256` in
+its health metadata, against `DecisionTrace.policy_checksum` or one the caller names). And
+the identity probe, the logged requests asked again unchanged, must reproduce the logged
+probabilities within 0.01, with no change of the most probable option unless the logged top
+two were within 0.01. Requests go in batches, one request and up to the server's
+`maxBranches` more per call. The probe imports only the standard library and `honing.core`;
+`scripts/system2/probe.py` runs it on tank run directories.
+
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
 

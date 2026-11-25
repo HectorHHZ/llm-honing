@@ -11,6 +11,8 @@
   ``honing.core``, only the modules each names: the loader its package and the
   tank decision-log parser, never the runner, grader, rollouts or
   demonstrations.
+- The counterfactual probe (``honing.harness.probe``) loads only the standard
+  library, ``honing.core`` and itself, so System 2 can probe without a backend.
 - Only ``honing/harness/models.py`` imports litellm, an optional extra whose
   pin is reviewed on its own.
 - ``honing/backends/slime/sandbox.py`` imports only the standard library, so it
@@ -106,6 +108,7 @@ TRACE_READERS = {
         "honing.backends.tank.traces",
     },
     "honing.harness.traces": {"honing", "honing.harness", "honing.harness.traces"},
+    "honing.harness.probe": {"honing", "honing.harness", "honing.harness.probe"},
 }
 
 
