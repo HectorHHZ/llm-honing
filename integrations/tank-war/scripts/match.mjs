@@ -14,10 +14,17 @@
 // --sample-seed draws each policy choice from the model's probabilities (an on-policy rollout) instead of
 // taking the most probable one. --teacher plays the agent's seat with the planner teacher and needs no server.
 //
+// states.jsonl holds what a decision was rendered from: a header line with the harness files' text and the
+// platform that recorded the round, then one line per agent decision with the raw game state
+// (web/game/snapshot.js), its SHA-256, and the motion the weapon question was asked about. decisions.jsonl rows
+// name their decision by `decision`. scripts/raw-states.mjs re-renders, replays, and labels a run from these
+// files.
+//
 // --out (which must not exist) receives manifest.json, decisions.jsonl (one row per question set the agent was
 // asked, with the state, questions, answers, and executed choice), events.jsonl, and result.json; a run that
 // stops on an error writes error.json and exits 1. When the round ends, the manifest is written again with the
-// SHA-256 of each of the other three files under "outputs", so a reader can refuse a run whose files changed.
+// SHA-256 of decisions.jsonl, events.jsonl, result.json and states.jsonl under "outputs", so a reader can refuse a
+// run whose files changed.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -27,6 +34,7 @@ import { adapter } from "../web/game/adapter.js";
 import { rng, blocked } from "../web/game/engine.js";
 import { strategyFrom } from "../web/game/strategies.js";
 import { plannerTeacher, TEACHER_MODEL } from "../web/game/teacher.js";
+import { snapshotGame, canonicalJSON } from "../web/game/snapshot.js";
 import {
     decide,
     healthFor,
@@ -67,9 +75,30 @@ const INTERVENTIONS = [
     "plan_veto",
     "plan_intent_retained",
 ];
-// The files a finished round writes after the manifest; the manifest records each one's SHA-256.
-export const OUTPUTS = ["decisions.jsonl", "events.jsonl", "result.json"];
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+// The match asks with no network delay: game time stops while a seat waits.
+const RTT_MS = 0;
+// states.jsonl: a header line with the harness the round was played under,
+// then the raw state behind each agent decision (see web/game/snapshot.js).
+export const STATES_FILE = "states.jsonl",
+    RAW_STATES_FORMAT = "tank-raw-states",
+    RAW_STATES_VERSION = 1;
+// The files whose SHA-256 the manifest records once the round finishes.
+export const OUTPUTS = [
+    "decisions.jsonl",
+    "events.jsonl",
+    "result.json",
+    STATES_FILE,
+];
+// The platform a round is recorded or replayed on. The engine's Math results can
+// differ in the last bits between operating systems, CPUs and Node versions, so
+// a replay is bit exact on the platform that recorded the round.
+export const PLATFORM = {
+    os: process.platform,
+    arch: process.arch,
+    node: process.versions.node,
+};
+export const stateHash = (state) => sha256(canonicalJSON(state));
 
 // The controller settings a harness asks for, checked; throws on anything a match would misread.
 export function parseController(text) {
@@ -131,20 +160,31 @@ export async function loadHarness(dir) {
           ];
     if (!Array.isArray(files))
         throw Error("index.json must list the harness files");
+    const contents = [];
+    for (const file of files)
+        contents.push({
+            path: file.path,
+            kind: file.kind,
+            content: await readFile(
+                dir ? join(dir, file.path) : new URL(file.source, ROOT),
+                "utf8",
+            ),
+        });
+    return harnessFrom(contents);
+}
+
+// The harness its files make, each {path, kind, content}. `contents` keeps them.
+export function harnessFrom(contents) {
     let seat = parseController("{}"),
         questions = DEFAULT_QUESTIONS;
     const notes = [],
         manifest = [];
-    for (const file of files) {
-        const content = await readFile(
-            dir ? join(dir, file.path) : new URL(file.source, ROOT),
-            "utf8",
-        );
+    for (const { path, kind, content } of contents) {
         let role = "note";
-        if (file.path === CONTROLLER_PATH) {
+        if (path === CONTROLLER_PATH) {
             seat = parseController(content);
             role = "controller";
-        } else if (file.path === QUESTIONS_PATH) {
+        } else if (path === QUESTIONS_PATH) {
             let parsed;
             try {
                 parsed = JSON.parse(content);
@@ -153,15 +193,20 @@ export async function loadHarness(dir) {
             }
             questions = validateQuestions(parsed);
             role = "questions";
-        } else notes.push(`OPERATING NOTES (${file.path}):\n${content.trim()}`);
-        manifest.push({
-            path: file.path,
-            kind: file.kind,
-            role,
-            sha256: sha256(content),
-        });
+        } else notes.push(`OPERATING NOTES (${path}):\n${content.trim()}`);
+        manifest.push({ path, kind, role, sha256: sha256(content) });
     }
-    return { seat, questions, notes: notes.join("\n\n"), files: manifest };
+    return {
+        seat,
+        questions,
+        notes: notes.join("\n\n"),
+        files: manifest,
+        contents: contents.map(({ path, kind, content }) => ({
+            path,
+            kind,
+            content,
+        })),
+    };
 }
 
 // A choice drawn from the allowed options in proportion to their probabilities.
@@ -183,6 +228,7 @@ async function sources() {
         "web/game/adapter.js",
         "web/game/strategies.js",
         "web/game/teacher.js",
+        "web/game/snapshot.js",
         "model-bridge.mjs",
         "scripts/match.mjs",
     ];
@@ -231,8 +277,6 @@ export async function playMatch({
         error.harness = true;
         throw error;
     });
-    const me = SEATS.indexOf(seat),
-        them = 1 - me;
     let model, ask;
     if (teacher) {
         if (harness.seat.controllerMode !== "plans")
@@ -287,74 +331,55 @@ export async function playMatch({
         JSON.stringify(manifest, null, 2),
     );
 
-    const game = new adapter.Game(seed);
-    adapter.initialize(game);
-    game.timeLeft = seconds;
-    const seats = [];
-    seats[me] = { ...harness.seat, interval: intervalMs };
-    seats[them] = { ...OPPONENT_SEAT, interval: opponentIntervalMs };
-    seats.forEach((s, i) =>
-        game.setPlayerSettings(i, {
-            assistEnabled: s.assistEnabled,
-            assistProfile: s.assistProfile,
-            fireGuardEnabled: s.fireGuardEnabled,
-        }),
+    await writeFile(
+        join(out, STATES_FILE),
+        JSON.stringify({
+            format: RAW_STATES_FORMAT,
+            version: RAW_STATES_VERSION,
+            seed,
+            seat,
+            platform: PLATFORM,
+            harness: harness.contents,
+        }) + "\n",
     );
-    game.start();
     const choose = sampleSeed !== undefined ? sampler(sampleSeed) : undefined;
-    const next = [0, 0],
-        decisions = [0, 0];
-    let serial = 0;
-
-    async function turn(player) {
-        const s = seats[player],
-            observed = adapter.observe(game, player, { ...s, rtt: 0 }),
-            body = {
-                ...observed.request,
-                id: `${seat}-${seed}-${++serial}`,
-                player,
-                round_id: game.roundSerial,
-                map_revision: game.maze.revision,
-            };
-        validateRequest(body, "tank-war");
-        const agent = player === me;
-        const response =
-            agent && !teacher
-                ? await decide(
-                      {
-                          model: model.model,
-                          agentIds: ["agent", "agent"],
-                          contextLimit: null,
-                          branches: model.branches,
-                          ask,
-                      },
-                      body,
-                      {
-                          questions: harness.questions,
-                          notes: harness.notes,
-                          choose,
-                      },
-                  )
-                : await decide(
-                      {
-                          model: TEACHER_MODEL,
-                          agentIds: ["planner", "planner"],
-                          contextLimit: null,
-                          ask: plannerTeacher(observed),
-                      },
-                      body,
-                      agent
-                          ? {
-                                questions: harness.questions,
-                                notes: harness.notes,
-                            }
-                          : {},
-                  );
-        if (!adapter.validControls(response, observed))
-            throw Error("The decision has invalid controls");
-        const applied = adapter.apply(game, player, response, s);
-        decisions[player]++;
-        if (!agent) return;
+    const agent = teacher
+        ? ({ body, observed }) =>
+              decide(
+                  {
+                      model: TEACHER_MODEL,
+                      agentIds: ["planner", "planner"],
+                      contextLimit: null,
+                      ask: plannerTeacher(observed),
+                  },
+                  body,
+                  { questions: harness.questions, notes: harness.notes },
+              )
+        : ({ body }) =>
+              decide(
+                  {
+                      model: model.model,
+                      agentIds: ["agent", "agent"],
+                      contextLimit: null,
+                      branches: model.branches,
+                      ask,
+                  },
+                  body,
+                  {
+                      questions: harness.questions,
+                      notes: harness.notes,
+                      choose,
+                  },
+              );
+    async function record({
+        decision,
+        body,
+        response,
+        applied,
+        state,
+        time,
+        round,
+    }) {
         const executed =
             body.protocol === "plans-v1"
                 ? {
@@ -363,8 +388,8 @@ export async function playMatch({
                   }
                 : response.chosen;
         const rows = response.honing_results.map((call) => ({
-            time: Math.round(game.elapsed * 1000) / 1000,
-            round: game.round,
+            time,
+            round,
             protocol: body.protocol,
             request_id: call.id,
             contextParts: {
@@ -383,11 +408,134 @@ export async function playMatch({
             ),
             constraints: response.constraints ?? null,
             applied,
+            decision,
         }));
         await appendFile(
             join(out, "decisions.jsonl"),
             rows.map((r) => JSON.stringify(r) + "\n").join(""),
         );
+        await appendFile(
+            join(out, STATES_FILE),
+            JSON.stringify({
+                decision,
+                request_id: body.id,
+                time,
+                player: body.player,
+                interval_ms: intervalMs,
+                rtt_ms: RTT_MS,
+                motion: response.motion_id ?? null,
+                state_sha256: stateHash(state),
+                game: state,
+            }) + "\n",
+        );
+    }
+    const { game, decisions } = await playRound({
+        seed,
+        seat,
+        harness,
+        seconds,
+        intervalMs,
+        opponentIntervalMs,
+        agent,
+        record,
+    });
+    const result = roundResult(game, { seed, seat, opponent, decisions });
+    await writeFile(
+        join(out, "events.jsonl"),
+        game.events.map((e) => JSON.stringify(e) + "\n").join(""),
+    );
+    await writeFile(join(out, "result.json"), JSON.stringify(result, null, 2));
+    manifest.outputs = Object.fromEntries(
+        await Promise.all(
+            OUTPUTS.map(async (f) => [f, sha256(await readFile(join(out, f)))]),
+        ),
+    );
+    await writeFile(
+        join(out, "manifest.json"),
+        JSON.stringify(manifest, null, 2),
+    );
+    return result;
+}
+
+// One round in lockstep from `seed`: the agent's seat plays under `harness`
+// against the planner opponent. For each agent decision, `agent({ body,
+// observed, state, decision })` returns decide()'s response, and `record` sees
+// it once it is applied. `state` is the raw state behind the decision
+// (snapshotGame), read before the observation, which leaves the game unchanged.
+export async function playRound({
+    seed,
+    seat,
+    harness,
+    seconds,
+    intervalMs,
+    opponentIntervalMs,
+    agent,
+    record,
+}) {
+    const me = SEATS.indexOf(seat),
+        them = 1 - me;
+    const game = new adapter.Game(seed);
+    adapter.initialize(game);
+    game.timeLeft = seconds;
+    const seats = [];
+    seats[me] = { ...harness.seat, interval: intervalMs };
+    seats[them] = { ...OPPONENT_SEAT, interval: opponentIntervalMs };
+    seats.forEach((s, i) =>
+        game.setPlayerSettings(i, {
+            assistEnabled: s.assistEnabled,
+            assistProfile: s.assistProfile,
+            fireGuardEnabled: s.fireGuardEnabled,
+        }),
+    );
+    game.start();
+    const next = [0, 0],
+        decisions = [0, 0];
+    let serial = 0;
+
+    async function turn(player) {
+        const state = player === me ? snapshotGame(game) : null,
+            s = seats[player],
+            observed = adapter.observe(game, player, { ...s, rtt: RTT_MS }),
+            body = {
+                ...observed.request,
+                id: `${seat}-${seed}-${++serial}`,
+                player,
+                round_id: game.roundSerial,
+                map_revision: game.maze.revision,
+            };
+        validateRequest(body, "tank-war");
+        const response =
+            player === me
+                ? await agent({
+                      body,
+                      observed,
+                      state,
+                      decision: decisions[me],
+                  })
+                : await decide(
+                      {
+                          model: TEACHER_MODEL,
+                          agentIds: ["planner", "planner"],
+                          contextLimit: null,
+                          ask: plannerTeacher(observed),
+                      },
+                      body,
+                      {},
+                  );
+        if (!adapter.validControls(response, observed))
+            throw Error("The decision has invalid controls");
+        const applied = adapter.apply(game, player, response, s);
+        decisions[player]++;
+        if (player === me)
+            await record({
+                decision: decisions[me] - 1,
+                body,
+                response,
+                applied,
+                state,
+                time: Math.round(game.elapsed * 1000) / 1000,
+                round: game.round,
+            });
     }
 
     const limit = Math.ceil((seconds + 1) / STEP);
@@ -403,10 +551,15 @@ export async function playMatch({
     }
     if (game.phase === "running")
         throw Error("The round did not end within its time limit");
+    return { game, decisions };
+}
+
+// What result.json records about a finished round.
+export function roundResult(game, { seed, seat, opponent, decisions }) {
     const round = game.events.find((e) => e.type === "round"),
         kills = game.events.filter((e) => e.type === "kill"),
         winner = game.result === null ? null : SEATS[game.result];
-    const result = {
+    return {
         seed,
         seat,
         opponent,
@@ -433,21 +586,6 @@ export async function playMatch({
             ]),
         ),
     };
-    await writeFile(
-        join(out, "events.jsonl"),
-        game.events.map((e) => JSON.stringify(e) + "\n").join(""),
-    );
-    await writeFile(join(out, "result.json"), JSON.stringify(result, null, 2));
-    manifest.outputs = Object.fromEntries(
-        await Promise.all(
-            OUTPUTS.map(async (f) => [f, sha256(await readFile(join(out, f)))]),
-        ),
-    );
-    await writeFile(
-        join(out, "manifest.json"),
-        JSON.stringify(manifest, null, 2),
-    );
-    return result;
 }
 
 function parse(argv) {

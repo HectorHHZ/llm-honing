@@ -15,6 +15,28 @@ Knight clone demos, this exercises compact precision platforming in an existing
 port of the earlier game, without their combat/action surfaces. RA2/Craftax/
 Griddly have campaign/task/grader surfaces; this standalone demo does not.
 
+## Research scope
+
+Primary category: **Precision control**. Capability tags: spatial control, action sequence, timing.
+
+Climb rooms with movement, jumps and dashes. Spikes cause death and restart the
+room.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose the offered movement, jump and dash inputs. |
+| Harness | Build observations, validate responses, pause for inference and set bounded input windows. |
+| Engine and other policies | Apply movement, wall jumps, dash rules, collisions, deaths and room transitions. |
+
+The integration uses the C port of the 2015 game. It is an input demo without a
+campaign runner or task grader.
+
+Suggested evaluation: Define a room start and exit first. Measure exit success,
+deaths and decisions. Compare input-window lengths under the same task.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Resources and build
 
 Linux x86_64, gcc, SDL2 >=2.0.18, SDL2_mixer, Xvfb and ffmpeg/ffprobe are needed.

@@ -12,6 +12,7 @@ from honing.backends.tank.traces import TankTraceSource
 from honing.campaign import ScriptedScheduler
 from honing.core import (
     BackendSupport,
+    CampaignState,
     ChatReply,
     CheckpointRef,
     CompressionStep,
@@ -39,6 +40,7 @@ from honing.core import (
     QuantizePlan,
     QuantScheme,
     RecoverySpec,
+    StepRecord,
     TeacherRef,
     TraceEvent,
     TrainingBatch,
@@ -46,6 +48,7 @@ from honing.core import (
     UpdateCandidate,
     UpdatePolicy,
     protocols,
+    validate_scheduler_state,
 )
 from honing.harness import endpoints
 from honing.release import (
@@ -74,6 +77,7 @@ from tests.fakes.harness import (
     StaticPolicyEndpoints,
 )
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld, IdentityConverter, parameters_of, small_moe
+from tests.fakes.scheduler import HistoryScheduler
 
 
 def implementations() -> list[tuple[object, type]]:
@@ -106,6 +110,7 @@ def implementations() -> list[tuple[object, type]]:
         (AcceptAll(), protocols.CandidateSelector),
         (EpisodeEvaluator(runner, grader, TASKS), protocols.Evaluator),
         (ScriptedScheduler([]), protocols.CoAdaptScheduler),
+        (HistoryScheduler([]), protocols.CoAdaptScheduler),
     ]
 
 
@@ -291,6 +296,20 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
         "method state with a boolean schema version",
         lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": True}),
     ),
+    ("scheduler state holding a set", lambda: validate_scheduler_state({"schema_version": 1, "seen": {"a"}})),
+    ("scheduler state without a schema version", lambda: validate_scheduler_state({"next": 0})),
+    ("an unknown step result", lambda: StepRecord(0, Move(kind="train"), "abandoned", "r0000", "x")),  # type: ignore[arg-type]
+    ("a published step without a release", lambda: StepRecord(0, Move(kind="train"), "published", "r0000", "won")),
+    (
+        "a rejected step naming a release",
+        lambda: StepRecord(0, Move(kind="train"), "rejected", "r0000", "lost", release_id="r0001"),
+    ),
+    (
+        "a skipped step with gate metrics",
+        lambda: StepRecord(0, Move(kind="harness"), "skipped", "r0000", "none", gate_metrics={"gate_tasks": 3.0}),
+    ),
+    ("a stop recorded as a step", lambda: StepRecord(0, Move(kind="stop"), "skipped", "r0000", "stopped")),
+    ("a negative step index", lambda: StepRecord(-1, Move(kind="train"), "rejected", "r0000", "lost")),
 ]
 
 
@@ -299,3 +318,23 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
 def test_an_invalid_value_is_refused_at_construction(case: str, build: Callable[[], object]) -> None:
     with pytest.raises(ContractError):
         build()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("make", [ScriptedScheduler, HistoryScheduler], ids=["scripted", "history"])
+def test_a_schedulers_exported_state_restores_a_fresh_one_to_the_same_place(make: Callable[..., object]) -> None:
+    """What every scheduler owes the commit record: versioned JSON-native state that a fresh instance takes back."""
+    moves = [Move(kind="train"), Move(kind="harness")]
+    release = HoneRelease("r0000", UpdateCandidate("init", None, _snapshot()), None)
+    state = CampaignState(head=release, releases=(release,), step=0)
+    scheduler, fresh = make(moves), make(moves)
+    assert isinstance(scheduler, protocols.CoAdaptScheduler) and isinstance(fresh, protocols.CoAdaptScheduler)
+    scheduler.next_move(state)
+
+    exported = scheduler.export_state()
+    validate_scheduler_state(exported)
+    assert exported["schema_version"] == scheduler.state_schema_version
+    fresh.restore_state(exported)
+
+    assert fresh.export_state() == exported
+    assert fresh.next_move(state) == scheduler.next_move(state) == Move(kind="harness")

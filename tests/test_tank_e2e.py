@@ -15,7 +15,9 @@ import pytest
 from honing.backends.tank.e2e import _move, build, main, tasks
 from honing.backends.tank.scenarios import SEATS, TankScenario, build_suite, write_suite
 from honing.backends.tank.traces import TankTraceSource
+from honing.campaign import ScriptedScheduler
 from honing.core import ContractError
+from tests.fakes.scheduler import HistoryScheduler
 
 REPO = Path(__file__).resolve().parents[1]
 DRY_RUN = REPO / "configs/e2e/tank_dry_run.json"
@@ -115,6 +117,21 @@ def test_the_sglang_campaign_builds_gepa_reading_the_rounds_traces_as_the_dry_ru
 
     assert isinstance(run.context.components["method"].traces, TankTraceSource)  # type: ignore[attr-defined]
     assert run.context.integration_dir == REPO / "integrations/tank-war"
+
+
+@pytest.mark.unit
+def test_the_schedule_runs_through_the_scheduler_slot_unless_the_config_names_a_scheduler(tmp_path: Path) -> None:
+    pytest.importorskip("gepa", reason="the dry run's method is GEPA")
+    scripted = build(_config(requires={}), REPO, tmp_path / "scripted")
+    assert isinstance(scripted.scheduler, ScriptedScheduler)
+    assert scripted.scheduler.export_state() == {"schema_version": 1, "next": 0, "moves": 3}
+
+    components = {
+        **_config()["components"],  # type: ignore[dict-item]
+        "scheduler": {"factory": "tests.fakes.scheduler:history_scheduler", "args": {"kinds": ["train"]}},
+    }
+    named = build(_config(requires={}, components=components), REPO, tmp_path / "named")
+    assert isinstance(named.scheduler, HistoryScheduler)
 
 
 @pytest.mark.unit

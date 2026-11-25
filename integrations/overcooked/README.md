@@ -7,6 +7,28 @@ The pinned upstream engine owns movement, collisions, interactions, recipes,
 rewards and rendering. The GUI displays its official PNG sprites.
 All integration code lives here; the root wheel and core protocols are unchanged.
 
+## Research scope
+
+Primary category: **Cooperative coordination**. Capability tags: spatial planning, resource sequence, cooperation.
+
+Prepare and serve food with a teammate in a shared kitchen.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose one of six native actions for chef 0. |
+| Harness | Supply the full kitchen and recent joint history. Validate the choice and route it to chef 0. |
+| Engine and other policies | Apply both chefs' actions and cooking rules together. A separate fixed rule policy controls chef 1 in the documented model setup. |
+
+The teammate can score alone. Team score therefore needs a matched control
+before it can support a claim about the model contribution.
+
+Suggested evaluation: Report raw team score and a chef-0 STAY control under the
+same layout, budget and teammate. Test new teammates, seats and layouts
+separately.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Why this game and what comes next
 
 This adds cooperative spatial coordination and multi-stage resource handling

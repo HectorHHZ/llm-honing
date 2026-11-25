@@ -17,6 +17,7 @@ Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on
 | `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, every gated episode's run directory, and no seed played by two gates |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
 | `node scripts/e2e/tank-war.mjs` | a decision server, Tank War's HTTP bridge, and both decision interfaces; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each interface plays |
+| `python scripts/e2e/check_raw_states.py --record <new-dir>` (or `RUN...`) | tank rounds' raw states: every decision re-renders to its logged context, every round replays to its logged state hashes, and the planner teacher labels every question. `--record` first plays 4 seeds from both seats with the stand-in model and with the teacher. Named run directories, such as a NanoJev round from a GPU, are checked as they are, on the machine that recorded them |
 
 One script is the exception: `gepa_live.py` calls real model APIs, needs a key, and costs money, so CI runs it only against a local stub (below).
 
@@ -31,8 +32,9 @@ One script is the exception: `gepa_live.py` calls real model APIs, needs a key, 
 | Compression | `scorer`, `selector`, `editor`, `quantizer`, `telemetry` | fakes on a small MoE |
 | Harness Evolve | `runner`, `grader`, `method` | `WorkspaceEpisodeRunner` around a stand-in agent process; fake grader and method |
 | Gate | `evaluator` (optional), `selectors` | the runner's episodes on `tasks`; win/loss, no regression for compression |
+| Campaign | `scheduler` (optional) | `ScriptedScheduler` over the moves of `schedule` |
 
-`schedule` lists the steps and `expect` their results; a run whose results differ exits 1. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
+`schedule` lists the steps and `expect` their results; a run whose results differ exits 1. A `scheduler` component chooses every move itself, until it stops. A `rollback` entry still runs once the moves before it in `schedule` have run, and the run fails when the scheduler stops before it. The tank and RA2 campaign scripts take the same `scheduler` slot. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
 
 ## The Slime trainer
 

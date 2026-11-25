@@ -28,6 +28,7 @@ from honing.core import (
     UpdateCandidate,
     method_state_version,
     requirements_for,
+    scheduler_state_version,
 )
 
 
@@ -207,4 +208,26 @@ def method_state_schema_matches(state: Mapping[str, object], method: str, expect
         raise CampaignRuleError(
             "method_state_schema_matches",
             f"{method} reads method state schema version {expected}, but the head's state is version {found}",
+        )
+
+
+def scheduler_state_schema_matches(
+    state: Mapping[str, object], written_by: str, scheduler: str, expected: int
+) -> None:
+    """Scheduler state written by another scheduler, or under another schema, is refused before the scheduler reads it.
+
+    A restart hands the last recorded state to whatever scheduler the new run
+    built. Refusing here names both schedulers or both versions. A scheduler
+    that read it anyway would misplace it in its own script or memory.
+    """
+    if written_by != scheduler:
+        raise CampaignRuleError(
+            "scheduler_state_schema_matches",
+            f"the state was written by scheduler {written_by!r}, but this campaign runs {scheduler!r}",
+        )
+    found = scheduler_state_version(state)
+    if found != expected:
+        raise CampaignRuleError(
+            "scheduler_state_schema_matches",
+            f"{scheduler} reads scheduler state schema version {expected}, but the state is version {found}",
         )

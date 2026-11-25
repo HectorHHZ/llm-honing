@@ -44,6 +44,7 @@ from tests.fakes.harness import SEED_HARNESS, AppendInstructionMethod, FakeEpiso
 from tests.fakes.model import FakeModelSource, FakeWorld
 from tests.fakes.pipeline import FakePolicyEndpoints
 from tests.fakes.pipeline import runner as workspace_runner
+from tests.fakes.scheduler import HistoryScheduler
 
 REPO = Path(__file__).resolve().parents[1]
 ALL_PLANES = REPO / "configs/e2e/all_planes.json"
@@ -77,6 +78,10 @@ def test_the_pipeline_crosses_every_plane_and_restores_a_release(tmp_path: Path)
         "train",
     ]
     assert summary["head"] == "r0001" and summary["failures"] == []
+    # The schedule ran through the default scheduler, whose place in it is on every line after release 0.
+    records = [json.loads(line) for line in (tmp_path / "out/releases/commits.jsonl").read_text().splitlines()]
+    assert [r.get("scheduler") for r in records] == [None, *["scripted"] * 9]
+    assert records[-1]["op"] == "rollback" and records[-1]["scheduler_state"]["next"] == 8
     pruned = summary["releases"][2]
     assert pruned["parameters"] < summary["releases"][1]["parameters"]
     # The harness episodes ran as agent processes that asked the policy server.
@@ -128,10 +133,79 @@ def test_a_runner_is_swapped_by_changing_one_config_entry(tmp_path: Path) -> Non
     assert not (tmp_path / "out/workspaces").exists()
 
 
+def _with_scheduler(kinds: list[str]) -> dict[str, Any]:
+    components = {
+        **_config()["components"],
+        "runner": {"factory": "tests.test_e2e_pipeline:in_process_runner"},
+        "scheduler": {"factory": "tests.fakes.scheduler:history_scheduler", "args": {"kinds": kinds}},
+    }
+    return {"components": components}
+
+
+@pytest.mark.unit
+def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_their_place(tmp_path: Path) -> None:
+    config = _config(
+        **_with_scheduler(["train", "harness", "train"]),
+        schedule=[{"kind": "harness", "label": "ignored"}, {"kind": "rollback", "to": "r0000"}],
+        expect=[],
+    )
+
+    pipeline = build(config, REPO, tmp_path / "out")
+    summary = run(pipeline)
+
+    # The rollback runs after one move, as in the schedule. The scheduler then goes on until it stops.
+    assert [(s["move"], s["result"], s["release"]) for s in summary["steps"]] == [
+        ("train", "published", "r0001"),
+        ("rollback", "restored", "r0000"),
+        ("harness", "published", "r0002"),
+        ("train", "published", "r0003"),
+    ]
+    assert isinstance(pipeline.scheduler, HistoryScheduler) and summary["failures"] == []
+    seen = pipeline.scheduler.seen
+    assert [len(state.history) for state in seen] == [0, 1, 2, 3]
+    assert seen[1].head.release_id == "r0000"  # it chose after the rollback, and saw the head it restored
+    records = [json.loads(line) for line in (tmp_path / "out/releases/commits.jsonl").read_text().splitlines()]
+    assert [(r["op"], r.get("scheduler_state", {}).get("next")) for r in records] == [
+        ("publish", None),
+        ("publish", 1),
+        ("rollback", 1),
+        ("publish", 2),
+        ("publish", 3),
+    ]
+
+
+@pytest.mark.unit
+def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -> None:
+    config = _config(
+        **_with_scheduler(["train"]),
+        schedule=[{"kind": "train"}, {"kind": "train"}, {"kind": "rollback", "to": "r0000"}],
+        expect=[],
+    )
+
+    summary = run(build(config, REPO, tmp_path / "out"))
+
+    assert [(s["move"], s["result"], s["release"]) for s in summary["steps"]] == [("train", "published", "r0001")]
+    assert summary["head"] == "r0001"
+    assert summary["failures"] == ["the run ended before schedule step 3 (rollback to r0000) ran"]
+
+
+@pytest.mark.unit
+def test_a_run_that_ran_another_number_of_steps_than_expected_fails(tmp_path: Path) -> None:
+    config = _config(**_with_scheduler(["train", "train"]), schedule=[{"kind": "train"}], expect=["published"])
+
+    summary = run(build(config, REPO, tmp_path / "out"))
+
+    assert summary["failures"] == ["2 steps ran, but expect lists 1"]
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("change", "message"),
     [
+        (
+            {"components": {**_config()["components"], "scheduler": {"factory": "tests.fakes.pipeline:grader"}}},
+            "returned FakeTaskGrader, not a CoAdaptScheduler",
+        ),
         ({"schedule": [{"kind": "serve"}], "expect": []}, "not 'serve'"),
         ({"expect": ["published"]}, "expect needs one of"),
         ({"requires": {"commands": ["no-such-command-xyz"]}}, "command no-such-command-xyz"),

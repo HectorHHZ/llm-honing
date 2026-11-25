@@ -1,8 +1,8 @@
 # Standalone game decision receiver
 
 `decision.py` is the standard-library-only response validator, HTTP client and
-strict JSON decoder used by the Hollow Knight, VVVVVV, Taisei, Hurrican and
-Celeste Classic demos. The game scripts temporarily add their `integrations/` directory for this
+strict JSON decoder used by the Hollow Knight, VVVVVV, Taisei, Hurrican,
+Celeste Classic and hallowdale demos. The game scripts temporarily add their `integrations/` directory for this
 import and remove that inserted entry afterward. They work from an arbitrary
 working directory without an installed Honing package or model dependencies,
 while preserving optional-runtime discovery and caller-owned import paths.
@@ -26,8 +26,8 @@ All context is required by default. A caller may explicitly allow whole entries
 of `logs`, `memory` or `details` to be pruned. Removals must match submitted
 entries in the existing server's order: oldest logs, newest memory, newest
 details. Essential entries and token clipping are always rejected. Current
-policies remain: Hollow Knight/Taisei/Hurrican allow no removal, Celeste permits
-oldest logs only, and VVVVVV permits optional logs/memory/details.
+policies remain: Hollow Knight/Taisei/Hurrican/hallowdale allow no removal,
+Celeste permits oldest logs only, and VVVVVV permits optional logs/memory/details.
 
 The decoder rejects duplicate keys at every object depth, NaN/Infinity and
 exponent overflow. When `raw_path` is supplied, the HTTP client writes the exact

@@ -1,0 +1,143 @@
+diff --git a/bin/main.ml b/bin/main.ml
+index e7e3f34..e43fc2e 100644
+--- a/bin/main.ml
++++ b/bin/main.ml
+@@ -22,13 +22,22 @@ let () =
+   Raylib.init_audio_device ();
+   Raylib.set_exit_key Raylib.Key.Null;
+
+-  if Env.development then
+-    Raylib.set_window_position 340 400
++  if Honing_input.active then (
++    (* honing bridge: no frame limiter (the bridge steps the game itself), fixed random seed,
++       session-local save files; see src/honing.ml *)
++    Raylib.set_window_position 0 0;
++    Raylib.set_target_fps 0;
++    Random.init Honing.seed;
++    Honing.prepare ();
++    State.init () |> Honing.run)
+   else (
+-    Sys.chdir (Filename.dirname Sys.executable_name);
+-    Raylib.set_window_position 0 0);
++    if Env.development then
++      Raylib.set_window_position 340 400
++    else (
++      Sys.chdir (Filename.dirname Sys.executable_name);
++      Raylib.set_window_position 0 0);
+
+-  Raylib.set_target_fps Config.window.fps;
+-  Random.self_init ();
+-  File.maybe_create_saves_dir ();
+-  State.init () |> loop
++    Raylib.set_target_fps Config.window.fps;
++    Random.self_init ();
++    File.maybe_create_saves_dir ();
++    State.init () |> loop)
+diff --git a/src/controls.ml b/src/controls.ml
+index 9e019f2..680ed10 100644
+--- a/src/controls.ml
++++ b/src/controls.ml
+@@ -525,15 +525,24 @@ let check_gamepad_input controls check_button direction k =
+     | _ -> failwithf "tried checking direction input for non-ARROW action %s" (show_game_action k))
+
+ let key_up (controls : controls) k =
++  if Honing_input.active then
++    not (Honing_input.is_down (show_game_action k))
++  else
+   Raylib.is_key_up (get_key controls k)
+   && ((not (Raylib.is_gamepad_available gamepad))
+      || Raylib.is_gamepad_button_up gamepad (get_button controls k))
+
+ let key_down ?(direction = false) (controls : controls) k =
++  if Honing_input.active then
++    Honing_input.is_down (show_game_action k)
++  else
+   Raylib.is_key_down (get_key controls k)
+   || check_gamepad_input controls Raylib.is_gamepad_button_down direction k
+
+ let key_pressed ?(direction = false) (controls : controls) k : control_type option =
++  if Honing_input.active then
++    if Honing_input.is_pressed (show_game_action k) then Some KEYBOARD else None
++  else
+   if Raylib.is_key_pressed (get_key controls k) then
+     Some KEYBOARD
+   else if check_gamepad_input controls Raylib.is_gamepad_button_pressed direction k then
+@@ -542,5 +551,8 @@ let key_pressed ?(direction = false) (controls : controls) k : control_type opti
+     None
+
+ let key_released ?(direction = false) (controls : controls) k =
++  if Honing_input.active then
++    Honing_input.is_released (show_game_action k)
++  else
+   Raylib.is_key_released (get_key controls k)
+   || check_gamepad_input controls Raylib.is_gamepad_button_released direction k
+diff --git a/src/env.ml b/src/env.ml
+index 00cac20..a9242de 100644
+--- a/src/env.ml
++++ b/src/env.ml
+@@ -32,7 +32,9 @@ let (development, project_root) : bool * string =
+   Sys.chdir project_root;
+   if verbose then
+     print "env: %s\nroot: %s" (if !is_dev then "dev" else "prod") project_root;
+-  (!is_dev, project_root)
++  ((* honing: the bridge build runs from _build but must look and play like the release *)
++   !is_dev && not Honing_input.active,
++   project_root)
+
+ let room_scale = 3
+ let tile_size = 12
+@@ -68,6 +70,9 @@ let (window_w, window_h, window_scale, font_size) : float * float * float * floa
+       (h_ratio, true)
+   in
+   let window_scale =
++    match Honing_input.window_scale with
++    | Some honing_scale -> honing_scale
++    | None ->
+     if development then
+       List.last
+         [
+diff --git a/src/file.ml b/src/file.ml
+index 99b95f7..a6c3f26 100644
+--- a/src/file.ml
++++ b/src/file.ml
+@@ -3,12 +3,19 @@ open Utils
+ let make_path (segments : string list) : string = String.concat Filename.dir_sep segments
+ let make_root_path (segments : string list) : string = make_path (Env.project_root :: segments)
+ let make_assets_path (segments : string list) : string = make_root_path ("assets" :: segments)
+-let save_file_path idx = make_root_path [ "saves"; fmt "%d.json" idx ]
++let saves_dir () =
++  (* honing: every bridge session has its own save files *)
++  if Honing_input.active then
++    make_path [ Honing_input.session_dir; "saves" ]
++  else
++    make_root_path [ "saves" ]
++
++let save_file_path idx = make_path [ saves_dir (); fmt "%d.json" idx ]
+ let mkdir (dir : string) : unit = Sys.mkdir dir 0o775
+ let ls (dir : string) : string list = Sys.readdir dir |> Array.to_list
+
+ let maybe_create_saves_dir () =
+-  let saves_dir_path = make_root_path ["saves"] in
++  let saves_dir_path = saves_dir () in
+   if not (Sys.file_exists saves_dir_path) then
+     mkdir saves_dir_path
+
+diff --git a/src/render.ml b/src/render.ml
+index a6c3ea6..f5de0e8 100644
+--- a/src/render.ml
++++ b/src/render.ml
+@@ -681,6 +681,7 @@ let tick (state : state) =
+         (camera_x +. Config.window.w -. 100. |> Float.to_int)
+         (camera_y |> Float.to_int);
+     Raylib.end_mode_2d ();
++    !Honing_input.before_end_drawing ();
+     Raylib.end_drawing ();
+     state
+   in
+@@ -1258,5 +1259,6 @@ let tick (state : state) =
+       if state.debug.show_frame_inputs then
+         draw_frame_inputs ());
+     Raylib.end_mode_2d ();
++    !Honing_input.before_end_drawing ();
+     Raylib.end_drawing ();
+     state

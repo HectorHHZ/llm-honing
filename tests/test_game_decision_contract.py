@@ -307,6 +307,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
             "taisei/run.py": (),
             "hurrican/run.py": (),
             "celeste-classic/run.py": ("logs",),
+            "hallowdale/run.py": (),
             "vvvvvv/decision.py": ("details", "memory", "logs"),
         }
         imported = 0
@@ -336,7 +337,14 @@ class SharedHttpAndJsonTests(unittest.TestCase):
         self.assertGreater(imported, 0)
 
     def test_standalone_entrypoints_need_only_the_standard_library(self):
-        paths = ("hollow-knight/run.py", "taisei/run.py", "hurrican/run.py", "celeste-classic/run.py", "vvvvvv/run.py")
+        paths = (
+            "hollow-knight/run.py",
+            "taisei/run.py",
+            "hurrican/run.py",
+            "celeste-classic/run.py",
+            "hallowdale/run.py",
+            "vvvvvv/run.py",
+        )
         with tempfile.TemporaryDirectory() as directory:
             for relative in paths:
                 path = ROOT / "integrations" / relative
@@ -359,6 +367,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
             "taisei/run.py",
             "hurrican/run.py",
             "celeste-classic/run.py",
+            "hallowdale/run.py",
             "vvvvvv/decision.py",
         )
         available = [

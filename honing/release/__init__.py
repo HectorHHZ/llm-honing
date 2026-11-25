@@ -1,6 +1,6 @@
 """The gate, the selection policies, and the release chain every candidate settles through."""
 
-from honing.release.chain import CurvePoint, ReleaseChain
+from honing.release.chain import CurvePoint, ReleaseChain, read_scheduler_state
 from honing.release.evaluation import EpisodeEvaluator
 from honing.release.gate import Gate
 from honing.release.selectors import AcceptAll, NoRegressionSelector, PairedIntervalSelector, WinLossSelector
@@ -26,4 +26,5 @@ __all__ = [
     "betting_paired_difference",
     "gate_metrics",
     "paired_difference",
+    "read_scheduler_state",
 ]

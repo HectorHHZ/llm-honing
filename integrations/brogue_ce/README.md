@@ -5,6 +5,28 @@ dungeon crawler with procedurally generated floors, stealth, combat, and item
 identification. This scenario runs the upstream rules and saves the engine's
 own `.broguerec` recordings. The official Tiles client plays them back.
 
+## Research scope
+
+Primary category: **Exploration and resource planning**. Capability tags: exploration, resource use, risk decisions.
+
+Explore a native dungeon, fight enemies and use or identify items.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | A future model client can select keys and answer native prompts through the control API. |
+| Harness | The bridge supplies keyboard/display access and recording. The supplied demo invokes native auto-explore and then quits. |
+| Engine and other policies | Apply dungeon rules and native auto-explore. One auto-explore input can advance several turns and select a route. |
+
+The current demo does not establish model planning. Native .broguerec recording
+supports inspection of the executed play.
+
+Suggested evaluation: Measure floor progress, deaths and resource use. Record
+actual game turns. Compare primitive movement with auto-explore as separate
+control conditions.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Setup
 
 From the Honing repository root, build a separate WebBrogue executable. The
