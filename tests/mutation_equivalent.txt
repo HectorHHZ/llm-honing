@@ -1,0 +1,30 @@
+# Surviving mutants that are equivalent to the original code: no test can tell them apart.
+# One per line, as scripts/checks/mutation_survivors.py prints them: the function, then the mutated line.
+# HTTP header names are case-insensitive; zip(strict=...) only matters when lengths differ, which they never
+# do here; ensure_ascii changes bytes, not the JSON value; None and False are both false; the serving
+# loop's idle wake-up and its daemon threads change nothing a request can observe.
+honing.backends.jev.server.xǁ_Handlerǁ_send: body = json.dumps(payload, allow_nan=False).encode("utf-8")
+honing.backends.jev.server.xǁ_Handlerǁ_send: body = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("UTF-8")
+honing.backends.jev.server.xǁ_Handlerǁ_send: body = json.dumps(payload, ensure_ascii=False, allow_nan=None).encode("utf-8")
+honing.backends.jev.server.xǁ_Handlerǁ_send: body = json.dumps(payload, ensure_ascii=None, allow_nan=False).encode("utf-8")
+honing.backends.jev.server.xǁ_Handlerǁ_send: body = json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")
+honing.backends.jev.server.xǁ_Handlerǁ_send: self.send_header("content-length", str(len(body)))
+honing.backends.jev.server.xǁ_Handlerǁ_send: self.send_header("CONTENT-LENGTH", str(len(body)))
+honing.backends.jev.server.xǁ_Handlerǁ_send: self.send_header("content-type", "application/json")
+honing.backends.jev.server.xǁ_Handlerǁ_send: self.send_header("CONTENT-TYPE", "application/json")
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: for request, response in zip(requests, responses, ):
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: for request, response in zip(requests, responses, strict=False):
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: for request, response in zip(requests, responses, strict=None):
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: length = int(self.headers.get("content-length") or 0)
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: length = int(self.headers.get("CONTENT-LENGTH") or 0)
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: response["branches"] = dict(zip(branches, responses[1:], ))
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: response["branches"] = dict(zip(branches, responses[1:], strict=False))
+honing.backends.jev.server.xǁ_Handlerǁdo_POST: response["branches"] = dict(zip(branches, responses[1:], strict=None))
+honing.backends.jev.server.xǁDecisionServerǁdecide_many: if getattr(self.model, "concurrent", None):
+honing.backends.jev.server.xǁDecisionServerǁserve: accepting = threading.Thread(target=self.serve_forever, )
+honing.backends.jev.server.xǁDecisionServerǁserve: accepting = threading.Thread(target=self.serve_forever, daemon=False)
+honing.backends.jev.server.xǁDecisionServerǁserve: accepting = threading.Thread(target=self.serve_forever, daemon=None)
+honing.backends.jev.server.xǁDecisionServerǁserve: break
+honing.backends.jev.server.xǁDecisionServerǁserve: decision = self._decisions.get(timeout=2.0)
+honing.backends.jev.server.xǁDecisionServerǁserve: decision = self._decisions.get(timeout=None)
+honing.backends.jev.server.xǁDecisionServerǁserve: return

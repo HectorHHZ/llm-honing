@@ -174,3 +174,10 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.mutmut]
+# Mutation testing (weekly CI job `mutation`): each module listed here must have its mutants killed by the tests
+# below, or a survivor is either a test gap or a mutant equivalent to the original (listed in tests/mutation.md).
+paths_to_mutate = ["honing/backends/jev/server.py"]
+pytest_add_cli_args_test_selection = ["tests/test_jev_server.py", "tests/test_jev_server_fuzz.py"]
+also_copy = ["tests", "honing", "integrations", "configs"]

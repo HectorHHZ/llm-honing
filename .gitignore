@@ -31,3 +31,4 @@ work/
 runs/
 *.ckpt
 *.safetensors
+mutants/
