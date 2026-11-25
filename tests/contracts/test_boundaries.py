@@ -111,7 +111,7 @@ TRACE_READERS = {
 @pytest.mark.integration
 @pytest.mark.parametrize("module", sorted(TRACE_READERS))
 def test_importing_a_trace_reader_loads_only_core_and_the_modules_it_names(repo_root: Path, module: str) -> None:
-    """GEPA, Meta-Harness and System 0 read traces through these, so importing one must not load a plane or the
+    """GEPA, Meta-Harness and System 2 read traces through these, so importing one must not load a plane or the
     rest of a backend. A fresh interpreter imports it, and every module that import loaded is checked."""
     script = (
         "import json, sys\n"

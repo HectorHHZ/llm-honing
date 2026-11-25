@@ -1,6 +1,6 @@
 """An episode's decision traces as compact text for a model to reflect on.
 
-GEPA's reflective dataset, Meta-Harness's trace files and System 0 read the
+GEPA's reflective dataset, Meta-Harness's trace files and System 2 read the
 same rendering, and the same traces and cap always render to the same text.
 
 The text opens with the episode, the release it ran under (or, when no

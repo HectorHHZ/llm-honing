@@ -28,6 +28,27 @@ HTML from disk is enough. Use the bundler to share a single offline file.
 node integrations/ember-vault/scripts/bundle.cjs /tmp/ember-vault.html
 ```
 
+## Research scope
+
+Primary category: **Reactive combat**. Capability tags: combat, resource use, upgrade choice.
+
+Clear the vaults, choose upgrades, defeat the Furnace and reach the final gate.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | A future model client can choose movement, aim, fire, dash and upgrades through the control API. |
+| Harness | A client must map model output to API actions and define decision timing. The supplied demo uses a rule controller. |
+| Engine and other policies | Apply combat and upgrades. When aim coordinates are omitted, the engine API aims at the nearest hostile. |
+
+The current rule demo and deterministic replay establish a control path. They
+do not establish a decision-model run.
+
+Suggested evaluation: Measure gate completion, damage and upgrade choices. Use
+separate configuration names for explicit model aim and automatic aim.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Drive the engine
 
 Use `agent` for a headless controller in any language. Send one JSON object

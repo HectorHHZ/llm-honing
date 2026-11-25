@@ -4,6 +4,96 @@ The game runtime owns game state, rules, native engine calls, actions, rendering
 and standalone controls. The Honing adapter owns task splits, harness files,
 model requests, episode execution, grading and training data conversion.
 
+## Research categories
+
+This index covers 15 games and the Tank War public-site variant in this
+checkout. Each game has one primary category for navigation and several
+capability tags. A category applies to the game, task, observation and control
+configuration together. A change to visibility, action abstraction or assistance
+can change the decision demands.
+
+The descriptions summarize the integration documents. This documentation change
+adds no game run or measured model result. Some integrations provide a control
+API and rule demo; their entries identify model use as future work.
+
+| Category | Main decision demand | Games |
+| --- | --- | --- |
+| Precision control | Select movement actions in the required sequence and at the required time. | [Celeste Classic](celeste-classic/README.md#research-scope), [VVVVVV](vvvvvv/README.md#research-scope) |
+| Reactive combat | Select movement and combat actions as threats change. | [Taisei](taisei/README.md#research-scope), [Hurrican](hurrican/README.md#research-scope), [Hollow Knight imitation](hollow-knight/README.md#research-scope), [Soul Knight student project](soul-knight/README.md#research-scope), [REA-Issac](rea_issac/README.md#research-scope), [Ember Vault](ember-vault/README.md#research-scope) |
+| Spatial and tactical planning | Select routes and account for later action effects. | [Griddly Spiders](griddly/README.md#research-scope), [Frost Circuit](frost-circuit/README.md#research-scope) |
+| Exploration and resource planning | Use information and resources to complete dependent goals. | [Craftax](craftax/README.md#research-scope), [Brogue CE](brogue_ce/README.md#research-scope) |
+| Competitive decision-making | Select tactics or strategy against an opponent. | [Tank War](tank-war/README.md#research-scope), [Red Alert 2](ra2/README.md#research-scope) |
+| Cooperative coordination | Select actions that support a shared task with a teammate. | [Overcooked-AI](overcooked/README.md#research-scope) |
+
+The [Tank War public challenge](tank-war-challenge/README.md#research-scope)
+uses separate question text and supports player modifiers. Keep it as a named
+Tank War configuration when comparing results. Integrations outside this game
+inventory include coding-agent adapters and shared tooling.
+
+## Capability and responsibility matrix
+
+Here, model means the decision model called during play. Harness includes
+observation construction, history, questions, candidate actions, selection
+rules, controller assistance and execution scheduling. Engine means the game
+rules and state transitions. Native automation belongs to the engine, even
+when the harness invokes it. Rule opponents and teammates act separately from
+the evaluated model. Fault-attribution experiments can record the controller
+as a separate component within this broader description of the harness.
+
+| Capability or function | Model responsibility | Harness responsibility | Engine or evaluation responsibility |
+| --- | --- | --- | --- |
+| State understanding | Interpret the state supplied in the request. | Extract, filter and format observations; set visibility and input limits. | Supply native state and rendering. |
+| Memory | Use supplied history; internal memory needs separate evidence. | Retain, select or summarize history where supported. | Check what information was available at each decision. |
+| Short-term prediction | Infer consequences that the input has not supplied. | Supply forecasts or danger hints in named configurations. | Compute actual movement, collisions and damage. |
+| Planning and resources | Rank or select an offered action using the goal and resources. | Define task context, candidate plans and scripted substeps. | Apply prerequisites, resource costs and native pathfinding. |
+| Motor control and timing | Select inputs at the offered level of control. | Map choices to inputs; set duration, cadence and inference pauses. | Apply physics, cooldowns and native input rules. |
+| Opponent or teammate reasoning | Choose a response from available state and history. | Expose participant information and route choices to the controlled seat. | Run the other policies; fix or vary them in evaluation. |
+| Action acceptance | Return probabilities, scores or a choice as required by the adapter. | Validate replies; apply the declared selection rule; record filtering and overrides. | Accept or reject inputs under game rules. |
+| Success and learning claims | Supply decisions during play. | Record requests, replies and executed actions. | Grade native outcomes and compare fixed experimental configurations. |
+
+A model can rank an action that the harness does not execute. For attribution,
+retain the model output, selected action, executed action and override reason.
+Game score alone cannot identify which component supplied a capability.
+For example, Taisei supplies firing, Tank War can supply dodge assistance,
+Brogue supplies native auto-explore, and Overcooked has a separate rule teammate.
+The game-level sections state these boundaries beside their operating commands.
+
+## Comparing model and harness changes
+
+Use the same task and harness to compare model revisions. Use the same model
+weights to compare harness revisions. When both change, compare all four
+combinations on matched tasks:
+
+| | Original harness H0 | Changed harness H1 |
+| --- | --- | --- |
+| Original model M0 | Baseline | Harness change |
+| Changed model M1 | Model change | Joint change |
+
+Report the effect of each change and their interaction. These categories apply
+across model families; they do not rank NanoJev, Laya or other models.
+
+Record the following information so that readers can compare results:
+
+- Engine/build and model revisions; task start, goal and action budget.
+- Observation format and visibility, history, and information omitted.
+- Action abstraction, automatic actions, assistance and selection rules.
+- Decision cadence, input duration and whether inference pauses simulation.
+- Controlled seat and opponent or teammate policy.
+- Native outcome, metric, technical failures and budget-truncated runs.
+- Training, selection and heldout seeds, layouts and interaction partners.
+
+These are suggested experiment descriptions, not a new trace format or a
+project-wide acceptance policy. Use controls to test responsibility claims:
+fixed Tank assistance settings, Overcooked's chef-0 STAY policy, and separate
+primitive-input and auto-explore conditions in Brogue. A control that is not
+implemented remains proposed work.
+
+Treat related seats, repeated resets and decisions from one episode as grouped
+observations. Report each game's results before any category aggregate. Raw
+scores from different games do not have a common unit.
+
+## Runtime and adapter locations
+
 | Game | Runtime and resources | Honing adapter |
 | --- | --- | --- |
 | Brogue CE | `brogue_ce/engine.py` and the pinned native WebBrogue build | Integration-local demo |
