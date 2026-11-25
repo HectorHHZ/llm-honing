@@ -421,7 +421,11 @@ class Campaign:
                 f"chat model {model} returned no price; set budget.chat_usd_per_million_tokens[{model}]"
                 for model in meter.unpriced_models
             ]
-            if outcome.cost.gpu_seconds is None:
+            unknown += [
+                f"the endpoint {endpoint} reported no GPUs; whoever starts it must set PolicyEndpoint.gpus"
+                for endpoint in meter.unreported_endpoints
+            ]
+            if meter.training_gpu_seconds is None:
                 unknown.append(
                     f"the trainer {type(self._trainer_for(move)).__name__} reported no gpu_seconds; it must set "
                     "TrainResult.gpu_seconds"

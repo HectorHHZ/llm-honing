@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from honing.campaign.cost import MeteredChatModel
+from honing.campaign.cost import MeteredChatModel, unmetered
 from honing.core import (
     ChatMessage,
     ChatModel,
@@ -320,7 +320,7 @@ class OpenAIEndpoints:
 
     def __init__(self, base_url: str, model: str) -> None:
         self._endpoint = PolicyEndpoint(
-            base_url=base_url, tokenizer_location="remote", served_model=model, runtime="openai_chat"
+            base_url=base_url, tokenizer_location="remote", served_model=model, runtime="openai_chat", gpus=0
         )
 
     @property
@@ -465,6 +465,7 @@ def live_options(config: Mapping[str, Any], endpoints: object) -> LiveOptions:
     live = config.get("live", {})
     price_model = litellm_model(config["model"]) if "model" in config else None
     # Only a policy behind OpenAIEndpoints has a URL to check; any other is not priced.
+    endpoints = unmetered(endpoints)
     if price_model is None or not isinstance(endpoints, OpenAIEndpoints):
         return LiveOptions(max_consecutive_faults=int(live.get("max_consecutive_faults", 3)))
     return LiveOptions(

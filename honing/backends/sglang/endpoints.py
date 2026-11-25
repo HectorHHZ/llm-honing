@@ -276,6 +276,7 @@ class SGLangPolicyEndpoints:
             tokenizer_location=str(checkpoint),
             served_model=key[:16],
             runtime=self.settings.runtime,
+            gpus=len(gpu.split(",")),
         )
         with self._lock:
             closed = self._closed

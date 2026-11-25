@@ -35,6 +35,7 @@ from honing.core.cost import (
     EpisodePurpose,
     MoveCost,
     charge_chat,
+    charge_endpoint,
     charge_episode,
     charging,
 )
@@ -260,6 +261,7 @@ __all__ = [
     "WeightConverter",
     "WeightFormat",
     "charge_chat",
+    "charge_endpoint",
     "charge_episode",
     "charging",
     "keyed_method_state",

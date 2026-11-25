@@ -78,6 +78,7 @@ class GatewayModel:
             tokenizer_location="gateway",
             served_model=self.model,
             runtime="openai_chat",
+            gpus=0,  # a remote API; its calls are priced by tokens
         )
 
 

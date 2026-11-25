@@ -36,7 +36,7 @@ from pathlib import Path
 RESULTS = {"published", "rolled back", "skipped", "restored"}
 MOVE_RESULTS = {"published", "rolled back", "skipped"}
 PURPOSES = ("gate", "method", "rollout", "demonstration")
-COST_FIELDS = ("gpu_seconds", "input_tokens", "output_tokens", "api_usd", "usd", "wall_seconds")
+COST_FIELDS = ("gpu_seconds", "serving_gpu_seconds", "input_tokens", "output_tokens", "api_usd", "usd", "wall_seconds")
 
 
 def _plus(left: float | None, right: float | None) -> float | None:

@@ -1,15 +1,25 @@
 """What one move cost, and the sink that episodes and chat calls are charged to while it runs.
 
 A move spends episodes for four purposes (the gate, the harness method, rollouts
-and demonstrations), GPU time in training, and tokens and dollars in chat calls.
-:class:`MoveCost` holds all of them for one move, in one record.
+and demonstrations), GPU time in training and in serving the policies its
+episodes run against, and tokens and dollars in chat calls. :class:`MoveCost`
+holds all of them for one move, in one record.
 
 Episodes are charged where they are run, not reported by each component: every
 episode goes through :func:`~honing.core.run_graded`, which calls
 :func:`charge_episode`, and a chat model wrapped for metering calls
 :func:`charge_chat`. Both charge whatever :class:`CostSink` the campaign has
 installed with :func:`charging` for the move in progress, and nothing when none
-is installed. The sink lives in a :class:`contextvars.ContextVar`, which
+is installed. Serving is charged the same way: a policy map wrapped for metering
+calls :func:`charge_endpoint` with every endpoint it resolves.
+
+Serving GPU time is charged per window, one block of episodes run for one
+purpose: the window's wall time times the summed ``gpus`` of the distinct
+endpoints its episodes resolved, each endpoint counted once however many
+episodes used it. A gate window covers both the candidate's and the
+incumbent's servers. Every purpose is charged this way, the method's own
+episodes included; demonstrations come to 0 because their teacher is a script
+that resolves no endpoint. CPU time is not charged anywhere. The sink lives in a :class:`contextvars.ContextVar`, which
 ``asyncio`` copies into every task it starts, so episodes run concurrently under
 ``asyncio.run`` are charged to the move that started them.
 
@@ -27,6 +37,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Protocol, get_args
 
+from honing.core.endpoints import PolicyEndpoint
 from honing.core.errors import ContractError, require
 
 EpisodePurpose = Literal["gate", "method", "rollout", "demonstration"]
@@ -46,8 +57,12 @@ class MoveCost:
     """Everything one move spent.
 
     ``episodes`` names every purpose in :data:`EPISODE_PURPOSES`, including the
-    ones the move did not spend on. ``gpu_seconds`` is the trainers' elapsed
-    time times their GPUs, ``None`` when a trainer ran without reporting it.
+    ones the move did not spend on. ``gpu_seconds`` is all the GPU time the
+    move used: the trainers' elapsed time times their GPUs plus
+    ``serving_gpu_seconds``, the serving GPU time of its episode windows (see
+    the module docstring). Either is ``None`` when a trainer did not report its
+    GPU time or an endpoint did not report its GPUs, and an unknown serving part
+    makes the total unknown.
     ``api_usd`` is the chat calls' price, ``None`` when any call was unpriced.
     ``usd`` is the move in the campaign's one budget unit, GPU time at a fixed
     GPU-hour price plus ``api_usd``; it is ``None`` when either part is
@@ -56,6 +71,7 @@ class MoveCost:
 
     episodes: Mapping[str, int] = field(default_factory=_no_episodes)
     gpu_seconds: float | None = 0.0
+    serving_gpu_seconds: float | None = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
     api_usd: float | None = 0.0
@@ -71,10 +87,17 @@ class MoveCost:
             _require_count(count, f"{purpose} episodes")
         _require_count(self.input_tokens, "input_tokens")
         _require_count(self.output_tokens, "output_tokens")
-        for name in ("gpu_seconds", "api_usd", "usd"):
+        for name in ("gpu_seconds", "serving_gpu_seconds", "api_usd", "usd"):
             value = getattr(self, name)
             require(value is None or _amount(value), f"{name} must be a finite number >= 0 or None, got {value!r}")
         require(_amount(self.wall_seconds), f"wall_seconds must be a finite number >= 0, got {self.wall_seconds!r}")
+        if self.serving_gpu_seconds is None:
+            require(self.gpu_seconds is None, "gpu_seconds includes serving_gpu_seconds, so it is None when that is")
+        elif self.gpu_seconds is not None:
+            require(
+                self.serving_gpu_seconds <= self.gpu_seconds * (1 + 1e-9),
+                f"serving_gpu_seconds {self.serving_gpu_seconds} is part of gpu_seconds {self.gpu_seconds}",
+            )
         object.__setattr__(self, "episodes", MappingProxyType({p: self.episodes[p] for p in EPISODE_PURPOSES}))
 
     @property
@@ -86,6 +109,7 @@ class MoveCost:
         return MoveCost(
             episodes={p: self.episodes[p] + other.episodes[p] for p in EPISODE_PURPOSES},
             gpu_seconds=_plus(self.gpu_seconds, other.gpu_seconds),
+            serving_gpu_seconds=_plus(self.serving_gpu_seconds, other.serving_gpu_seconds),
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             api_usd=_plus(self.api_usd, other.api_usd),
@@ -98,6 +122,7 @@ class MoveCost:
         return {
             "episodes": dict(self.episodes),
             "gpu_seconds": self.gpu_seconds,
+            "serving_gpu_seconds": self.serving_gpu_seconds,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "api_usd": self.api_usd,
@@ -108,7 +133,16 @@ class MoveCost:
     @classmethod
     def from_record(cls, record: Mapping[str, object]) -> MoveCost:
         """Read back what :meth:`to_record` wrote. Refuses a record with missing or unknown keys."""
-        keys = {"episodes", "gpu_seconds", "input_tokens", "output_tokens", "api_usd", "usd", "wall_seconds"}
+        keys = {
+            "episodes",
+            "gpu_seconds",
+            "serving_gpu_seconds",
+            "input_tokens",
+            "output_tokens",
+            "api_usd",
+            "usd",
+            "wall_seconds",
+        }
         if set(record) != keys:
             raise ContractError(f"a cost record has keys {sorted(keys)}, got {sorted(record)}")
         episodes = record["episodes"]
@@ -117,6 +151,7 @@ class MoveCost:
         return cls(
             episodes=dict(episodes),
             gpu_seconds=record["gpu_seconds"],  # type: ignore[arg-type]
+            serving_gpu_seconds=record["serving_gpu_seconds"],  # type: ignore[arg-type]
             input_tokens=record["input_tokens"],  # type: ignore[arg-type]
             output_tokens=record["output_tokens"],  # type: ignore[arg-type]
             api_usd=record["api_usd"],  # type: ignore[arg-type]
@@ -129,6 +164,7 @@ class MoveCost:
         values: dict[str, float | None] = {f"cost_episodes_{p}": float(n) for p, n in self.episodes.items()}
         values.update(
             cost_gpu_seconds=self.gpu_seconds,
+            cost_serving_gpu_seconds=self.serving_gpu_seconds,
             cost_input_tokens=float(self.input_tokens),
             cost_output_tokens=float(self.output_tokens),
             cost_api_usd=self.api_usd,
@@ -158,6 +194,10 @@ class CostSink(Protocol):
         """One chat call; ``cost_usd`` is ``None`` when the client could not price it."""
         ...
 
+    def charge_endpoint(self, endpoint: PolicyEndpoint) -> None:
+        """An endpoint an episode resolved, so its window is charged for the endpoint's GPUs."""
+        ...
+
 
 _SINK: ContextVar[CostSink | None] = ContextVar("honing_cost_sink", default=None)
 
@@ -184,3 +224,10 @@ def charge_chat(model: str | None, input_tokens: int, output_tokens: int, cost_u
     sink = _SINK.get()
     if sink is not None:
         sink.charge_chat(model, input_tokens, output_tokens, cost_usd)
+
+
+def charge_endpoint(endpoint: PolicyEndpoint) -> None:
+    """Charge serving ``endpoint`` to the installed sink, if any. A policy map wrapped for metering calls it."""
+    sink = _SINK.get()
+    if sink is not None:
+        sink.charge_endpoint(endpoint)

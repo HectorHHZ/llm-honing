@@ -8,6 +8,11 @@ cover two runs of the search tasks and a smoke test (see
 
 ``configs/e2e/meta_harness_dry_run.json`` runs it with a scripted proposer.
 
+Under a budget in usd, :func:`method` refuses a
+:class:`~honing.harness.proposers.ClaudeCodeProposer`: its sessions are not
+metered, so their spend would pass as free, as an unpriced chat model's would
+(:meth:`~honing.campaign.cost.CampaignBudget.check_chat_model`).
+
 Paths in arguments may use ``{root}`` (the repository root), ``{run}`` (the
 run directory's name), ``{tmp}`` (the system's temporary directory), and ``~``.
 """
@@ -20,7 +25,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from honing.core import ProposerAgent, TraceSource
+from honing.campaign.cost import CampaignBudget
+from honing.core import ContractError, ProposerAgent, TraceSource
 from honing.e2e.components import PipelineContext, build_component
 from honing.harness.methods.meta_harness import MetaHarnessMethod
 from honing.harness.proposers import DEFAULT_TOOLS, ClaudeCodeProposer
@@ -54,8 +60,17 @@ def method(
 
     Returns:
         The method.
+
+    Raises:
+        ContractError: The budget is in usd and the proposer is a ``ClaudeCodeProposer``.
     """
     agent = build_component(proposer, context, "proposer", ProposerAgent)
+    budget = context.shared.get("budget")
+    if isinstance(budget, CampaignBudget) and budget.unit == "usd" and isinstance(agent, ClaudeCodeProposer):
+        raise ContractError(
+            "the budget is in usd, but ClaudeCodeProposer's sessions are not metered, so their spend would "
+            "count as free; use a budget in wall_seconds or a proposer whose spend is metered"
+        )
     source = build_component(traces, context, "traces", TraceSource) if traces else None
     directory = _path(work_dir, context) if work_dir else context.work_dir / "meta-harness"
     return MetaHarnessMethod(

@@ -28,6 +28,7 @@ from typing import Literal
 from honing.backends.llm_gateway import GatewayEndpoints
 from honing.backends.openhands.harness import AGENT, AgentPlan, ToolPolicy, plan_agent
 from honing.backends.openhands.key_proxy import KeyProxy
+from honing.campaign.cost import unmetered
 from honing.core import (
     CampaignRuleError,
     ContractError,
@@ -340,8 +341,9 @@ class OpenHandsEpisodeRunner:
             if key is not None and not (self._environment.get(key) or os.environ.get(key)):
                 raise ContractError(f"{endpoint.served_model} needs its API key in the environment variable {key}")
             access["api_key_env"] = key
-        if isinstance(self._endpoints, GatewayEndpoints):  # only a gateway model has prices
-            model = self._endpoints.model(policy)
+        endpoints = unmetered(self._endpoints)
+        if isinstance(endpoints, GatewayEndpoints):  # only a gateway model has prices
+            model = endpoints.model(policy)
             if model.input_usd_per_million is not None:
                 access["input_cost_per_token"] = model.input_usd_per_million / 1e6
             if model.output_usd_per_million is not None:

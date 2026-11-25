@@ -7,8 +7,13 @@ move it admitted; the overshoot is reported, not hidden.
 
 A dollar budget never treats an unknown price as free. A chat model it cannot
 price is refused when the budget is built (:meth:`CampaignBudget.check_chat_model`),
-and a reply that still arrives unpriced, or a trainer that does not report its
-GPU time, stops the campaign with an error after the move is recorded.
+and a reply that still arrives unpriced, a trainer that does not report its GPU
+time, or an endpoint that does not report its GPUs stops the campaign with an
+error after the move is recorded.
+
+Serving is metered by :class:`MeteredPolicyEndpoints`, which every pipeline
+wraps around its ``endpoints`` component (:func:`~honing.e2e.build_component`).
+A campaign built by hand around an unwrapped policy map charges no serving time.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ from __future__ import annotations
 import math
 import threading
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args
@@ -29,7 +34,11 @@ from honing.core import (
     ContractError,
     EpisodePurpose,
     MoveCost,
+    PolicyEndpoint,
+    PolicyEndpoints,
+    PolicyRef,
     charge_chat,
+    charge_endpoint,
     require,
 )
 
@@ -131,41 +140,78 @@ def _price(value: float) -> bool:
     return math.isfinite(value) and value >= 0
 
 
+def _now() -> float:
+    # Looked up when a meter is built, so a test can stand in for the clock of the meters a campaign builds.
+    return time.monotonic()
+
+
 class CostMeter:
     """Adds up what one move spends. Satisfies :class:`~honing.core.CostSink`.
 
     The campaign installs the meter with :func:`~honing.core.charging` for the
     whole move and names the purpose of each phase with :meth:`purpose`. An
-    episode charged outside every purpose is a bug in the campaign, so it
-    raises rather than landing in some default bucket.
+    episode or endpoint charged outside every purpose is a bug in the campaign,
+    so it raises rather than landing in some default bucket.
+
+    Each :meth:`purpose` block is one serving window (see
+    :mod:`honing.core.cost`): when it ends, its wall time times the summed GPUs
+    of the distinct endpoints resolved inside it is added to the serving GPU
+    time. Blocks do not nest, so no GPU-second is charged twice.
     """
 
-    def __init__(self, budget: CampaignBudget | None) -> None:
+    def __init__(self, budget: CampaignBudget | None, clock: Callable[[], float] | None = None) -> None:
         self._budget = budget
+        self._clock = clock if clock is not None else _now
         self._lock = threading.Lock()
         self._purpose: EpisodePurpose | None = None
         self._episodes: dict[str, int] = dict.fromkeys(EPISODE_PURPOSES, 0)
-        self._gpu_seconds: float | None = 0.0
+        self._training_gpu_seconds: float | None = 0.0
+        self._serving_gpu_seconds: float | None = 0.0
+        # The open window's endpoints, keyed by URL and model name, with the GPUs each reported.
+        self._window: dict[tuple[str, str], int | None] = {}
+        self._unreported: set[str] = set()
         self._input_tokens = 0
         self._output_tokens = 0
         self._api_usd: float | None = 0.0
         self._unpriced: set[str] = set()
-        self._started = time.monotonic()
+        self._started = self._clock()
 
     @contextmanager
     def purpose(self, purpose: EpisodePurpose) -> Iterator[None]:
-        """Charge the episodes run inside the block to ``purpose``."""
-        previous, self._purpose = self._purpose, purpose
+        """Charge the episodes run inside the block to ``purpose``, and its endpoints' GPUs over its wall time."""
+        if self._purpose is not None:
+            raise ContractError(f"a {purpose} window opened inside the {self._purpose} window; windows do not nest")
+        self._purpose = purpose
+        opened = self._clock()
         try:
             yield
         finally:
-            self._purpose = previous
+            elapsed = self._clock() - opened
+            with self._lock:
+                gpus = list(self._window.values())
+                self._window = {}
+                self._purpose = None
+                if None in gpus or self._serving_gpu_seconds is None:
+                    self._serving_gpu_seconds = None
+                else:
+                    self._serving_gpu_seconds += elapsed * sum(g for g in gpus if g is not None)
 
     def charge_episode(self) -> None:
         if self._purpose is None:
             raise ContractError("an episode ran outside the gate, the method, a rollout, or a demonstration")
         with self._lock:
             self._episodes[self._purpose] += 1
+
+    def charge_endpoint(self, endpoint: PolicyEndpoint) -> None:
+        if self._purpose is None:
+            raise ContractError(
+                f"the endpoint {endpoint.base_url} was resolved outside the gate, the method, a rollout, "
+                "or a demonstration"
+            )
+        with self._lock:
+            self._window[(endpoint.base_url, endpoint.served_model)] = endpoint.gpus
+            if endpoint.gpus is None:
+                self._unreported.add(f"{endpoint.served_model} at {endpoint.base_url}")
 
     def charge_chat(self, model: str | None, input_tokens: int, output_tokens: int, cost_usd: float | None) -> None:
         if cost_usd is None and self._budget is not None and model is not None and model in self._budget.chat_rates:
@@ -182,31 +228,48 @@ class CostMeter:
     def charge_gpu_seconds(self, seconds: float | None) -> None:
         """A trainer's elapsed time times its GPUs; ``None`` when it did not report it."""
         with self._lock:
-            self._gpu_seconds = None if seconds is None or self._gpu_seconds is None else self._gpu_seconds + seconds
+            if seconds is None or self._training_gpu_seconds is None:
+                self._training_gpu_seconds = None
+            else:
+                self._training_gpu_seconds += seconds
 
     @property
     def unpriced_models(self) -> tuple[str, ...]:
         return tuple(sorted(self._unpriced))
 
+    @property
+    def training_gpu_seconds(self) -> float | None:
+        """The trainers' GPU time so far; ``None`` when one did not report it."""
+        return self._training_gpu_seconds
+
+    @property
+    def unreported_endpoints(self) -> tuple[str, ...]:
+        """Every endpoint resolved during the move that did not report its GPUs."""
+        return tuple(sorted(self._unreported))
+
     def close(self) -> MoveCost:
-        """The move's cost so far, with the wall clock read now."""
+        """The move's cost so far, with the wall clock read now. Only windows that have ended are charged."""
         with self._lock:
+            serving = self._serving_gpu_seconds
+            training = self._training_gpu_seconds
+            gpu_seconds = None if serving is None or training is None else training + serving
             gpu_usd: float | None
-            if self._gpu_seconds is None:
+            if gpu_seconds is None:
                 gpu_usd = None
-            elif self._gpu_seconds == 0:
+            elif gpu_seconds == 0:
                 gpu_usd = 0.0
             else:
                 rate = None if self._budget is None else self._budget.gpu_hour_usd
-                gpu_usd = None if rate is None else self._gpu_seconds / 3600 * rate
+                gpu_usd = None if rate is None else gpu_seconds / 3600 * rate
             return MoveCost(
                 episodes=dict(self._episodes),
-                gpu_seconds=self._gpu_seconds,
+                gpu_seconds=gpu_seconds,
+                serving_gpu_seconds=serving,
                 input_tokens=self._input_tokens,
                 output_tokens=self._output_tokens,
                 api_usd=self._api_usd,
                 usd=None if gpu_usd is None or self._api_usd is None else gpu_usd + self._api_usd,
-                wall_seconds=time.monotonic() - self._started,
+                wall_seconds=self._clock() - self._started,
             )
 
 
@@ -243,6 +306,45 @@ class MeteredChatModel:
         return getattr(self._inner, name)
 
 
+class MeteredPolicyEndpoints:
+    """A :class:`~honing.core.PolicyEndpoints` that charges every endpoint it resolves to the move in progress.
+
+    Anything else the wrapped map exposes (``api_key_env``, ``close``) stays
+    reachable; :func:`unmetered` returns the map itself, for a runner that
+    checks its type.
+    """
+
+    def __init__(self, inner: PolicyEndpoints) -> None:
+        self._inner = inner
+
+    @property
+    def inner(self) -> PolicyEndpoints:
+        return self._inner
+
+    def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
+        endpoint = self._inner.resolve(policy)
+        charge_endpoint(endpoint)
+        return endpoint
+
+    def __enter__(self) -> MeteredPolicyEndpoints:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        close = getattr(self._inner, "close", None)
+        if callable(close):
+            close()
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "_inner":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+
+def unmetered(endpoints: object) -> object:
+    """The policy map inside a :class:`MeteredPolicyEndpoints`, or ``endpoints`` itself."""
+    return endpoints.inner if isinstance(endpoints, MeteredPolicyEndpoints) else endpoints
+
+
 def cost_summary(costs: Sequence[MoveCost]) -> dict[str, object]:
     """The total of every move's cost, as ``summary.json`` holds it."""
     total = MoveCost()
@@ -257,6 +359,8 @@ __all__ = [
     "ChatRate",
     "CostMeter",
     "MeteredChatModel",
+    "MeteredPolicyEndpoints",
     "budget_from_config",
     "cost_summary",
+    "unmetered",
 ]

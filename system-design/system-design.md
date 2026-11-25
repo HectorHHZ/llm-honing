@@ -576,7 +576,12 @@ budget, are decided by the scheduler, which reads the labels back from the relea
 episodes by purpose (gate, method, rollout, demonstration), GPU-seconds, chat tokens and
 dollars, and wall-clock seconds. Episodes are charged where they run, by `run_graded`, to
 the move in progress; trainers report elapsed time × GPUs; a metered chat model charges each
-call. A harness method's own validation run (`HarnessComponents.method_evaluator`) counts
+call. Serving is charged too: each `PolicyEndpoint` reports the GPUs its server holds (0 for a
+remote API, unknown when a server does not say), and every block of episodes run for one
+purpose is charged its wall time × the summed GPUs of the distinct endpoints its episodes
+resolved, the method's own episodes included. Demonstrations from a scripted teacher resolve
+no endpoint and cost no serving time. The serving part is recorded on its own
+(`serving_gpu_seconds`) inside the GPU total. A harness method's own validation run (`HarnessComponents.method_evaluator`) counts
 as the method's, so `gate` episodes are the campaign gate's alone, the same overhead for
 every move kind. An amount that cannot be known is recorded as unknown, never as 0, so an
 unpriced move cannot look free. A rejected or skipped move is charged like a published one,
@@ -584,7 +589,8 @@ and its cost is on its `StepRecord` too. A campaign may carry a budget in dollar
 at a fixed price plus chat cost) or in wall-clock seconds; `Campaign.step` admits no move
 once the spend reaches the limit, before it asks the scheduler, so it overshoots by at most
 one move and the scheduler's state records no choice for a move that does not run. Under a
-dollar budget a move it cannot price stops the run.
+dollar budget a move it cannot price stops the run, and so does a Meta-Harness run whose
+proposer is Claude Code, whose sessions are not metered.
 
 The default scheduling policy (planned): pre-training harness pass → *N* training commits
 → when utilization is stable, prune with recovery → retune the harness → repeat until the

@@ -22,6 +22,7 @@ from typing import Literal
 
 from honing.backends.llm_gateway import GatewayEndpoints
 from honing.backends.pi.harness import AGENT, AgentPlan, ToolPolicy, plan_agent
+from honing.campaign.cost import unmetered
 from honing.core import (
     CampaignRuleError,
     ContractError,
@@ -252,8 +253,9 @@ class PiEpisodeRunner:
         if endpoint.runtime not in _CHAT_RUNTIMES:
             raise ContractError(f"pi needs an OpenAI-compatible endpoint, not a {endpoint.runtime} one")
         access: dict[str, object] = {"base_url": endpoint.base_url, "model": endpoint.served_model}
-        if isinstance(self._endpoints, GatewayEndpoints):
-            model = self._endpoints.model(policy)
+        endpoints = unmetered(self._endpoints)
+        if isinstance(endpoints, GatewayEndpoints):
+            model = endpoints.model(policy)
             key = model.api_key_env
             if key is not None and not (self._environment.get(key) or os.environ.get(key)):
                 raise ContractError(f"{model.model} needs its API key in the environment variable {key}")
