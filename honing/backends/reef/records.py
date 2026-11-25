@@ -25,6 +25,10 @@ Tags travel in ``payload.metadata.tags``, where Reef stores the
 ``x-reef-tag-*`` headers of an inference, so one import batch can carry
 records of several episodes.
 
+Reef stores a payload with its object keys sorted, so anything whose order
+means something is a list of ``[name, value]`` pairs: the parts, the
+questions, and each question's options. A sample's options are in that order.
+
 Follows Reef's ``AgentRecord`` (reef/core/records_types.py), ``ReportPayload``
 and ``with_request_tags`` (reef/api/wire.py) and ``import_records``
 (reef/api/request_handling.py), Reef bc8c150. Differs: the payload is a
@@ -140,8 +144,8 @@ class RecordedDecision:
                 "version": FORMAT_VERSION,
                 "request_id": self.request_id,
                 "branch": self.branch,
-                "parts": {name: list(lines) for name, lines in self.parts.items()},
-                "questions": _plain(self.questions),
+                "parts": [[name, list(lines)] for name, lines in self.parts.items()],
+                "questions": [[key, _ordered_question(question)] for key, question in self.questions.items()],
                 "answers": _plain(self.answers),
             },
             "metadata": {"tags": dict(self.tags)},
@@ -162,10 +166,19 @@ class RecordedDecision:
         tags = metadata.get("tags") if isinstance(metadata, Mapping) else None
         if not isinstance(tags, Mapping):
             raise ContractError(f"a {DECISION_FORMAT} record carries its tags in metadata.tags")
+        parts, questions = body["parts"], body["questions"]
+        if not _pairs(parts) or not _pairs(questions):
+            raise ContractError(f"a {DECISION_FORMAT} record holds parts and questions as [name, value] pairs")
+        ordered: dict[str, Mapping[str, Any]] = {}
+        for key, question in questions:
+            criteria = question.get("criteria") if isinstance(question, Mapping) else None
+            if not isinstance(criteria, list) or not _pairs(criteria):
+                raise ContractError(f"question {key} of a {DECISION_FORMAT} record holds its options as pairs")
+            ordered[key] = {**question, "criteria": dict(criteria)}
         return cls(
             request_id=body["request_id"],
-            parts=body["parts"],
-            questions=body["questions"],
+            parts=dict(parts),
+            questions=ordered,
             answers=body["answers"],
             tags=tags,
             branch=body["branch"],
@@ -358,6 +371,16 @@ def _versioned(body: object, kind: str) -> Mapping[str, Any]:
     if body.get("version") != FORMAT_VERSION:
         raise ContractError(f"{kind} version {body.get('version')!r}; this Honing reads version {FORMAT_VERSION}")
     return body
+
+
+def _ordered_question(question: Mapping[str, Any]) -> dict[str, Any]:
+    return {**_plain(question), "criteria": [[option, text] for option, text in question["criteria"].items()]}
+
+
+def _pairs(value: object) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(pair, list) and len(pair) == 2 and isinstance(pair[0], str) for pair in value
+    )
 
 
 def _require_text(value: object, what: str) -> None:

@@ -21,8 +21,8 @@ inference record whose payload is:
     "version": 1,
     "request_id": "blue-3114-1:motion",
     "branch": null,
-    "parts": {"essential": ["..."], "details": [], "memory": [], "logs": []},
-    "questions": {"motion": {"type": "...", "instructions": "...", "criteria": {"...": "..."}}},
+    "parts": [["essential", ["..."]], ["details", []], ["memory", []], ["logs", []]],
+    "questions": [["motion", {"type": "...", "instructions": "...", "criteria": [["...", "..."]]}]],
     "answers": {"motion": {"choice": "...", "probabilities": {"...": 0.5}}}
   },
   "metadata": {"tags": {"episode": "...", "task": "...", "release": "...", "harness": "...", "policy": "..."}}
@@ -30,7 +30,10 @@ inference record whose payload is:
 ```
 
 `parts`, `questions` and `answers` are the request's and the reply's objects
-as sent. `branch` names the branch the request was in, or is `null`.
+as sent, except that Reef stores a payload with its object keys sorted. So
+whatever has an order (the parts, the questions, each question's options) is a
+list of `[name, value]` pairs, and a sample's options keep that order.
+`branch` names the branch the request was in, or is `null`.
 
 **An episode report** is the grade of one episode, posted to `/reef/report`:
 

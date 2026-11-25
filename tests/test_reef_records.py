@@ -29,7 +29,8 @@ def rows(log: Path) -> list[dict[str, Any]]:
 
 
 def through_json(value: Any) -> Any:
-    return json.loads(json.dumps(value))
+    """``value`` as Reef hands it back: its stores sort object keys."""
+    return json.loads(json.dumps(value, sort_keys=True))
 
 
 @pytest.mark.parametrize("log", FIXTURES, ids=lambda log: log.parent.name)
