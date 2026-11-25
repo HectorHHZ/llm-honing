@@ -24,6 +24,29 @@ gate, trainers, and harness methods run on top of it.
 | What improves it | SFT on a teacher's matches, GRPO on its own matches, and GEPA on the question text |
 | What decides a release | training uses paired wins versus losses; GEPA uses a strictly higher validation mean |
 
+## Research scope
+
+Primary category: **Competitive decision-making**. Capability tags: opponent response, resources, longer planning.
+
+Build a base, produce units and attack an opponent.
+
+| Component                 | Responsibility in this configuration                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Model                     | Rank or select the offered high-level questions and actions.                                                    |
+| Harness                   | Construct state text, candidate sets and questions. Set decision cadence and map selections to native commands. |
+| Engine and other policies | Apply resource costs, unit behavior, native command execution and game rules. The opponent acts separately.     |
+
+High-level choices do not establish direct unit micro-control. Match, runner,
+grader and training interfaces are available. The current controller does not
+sample actions for GRPO.
+
+Suggested evaluation: Measure wins under fixed maps and opponents, then test
+unseen conditions. Use economy, production, unit losses and rejected commands
+as diagnostic measures.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Contents
 
 1. [How the model learns](#1-how-the-model-learns): SFT, GRPO, GEPA, and the release check

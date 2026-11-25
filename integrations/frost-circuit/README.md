@@ -26,6 +26,30 @@ single offline HTML file.
 node integrations/frost-circuit/scripts/bundle.cjs /tmp/frost-circuit.html
 ```
 
+## Research scope
+
+Primary category: **Spatial and tactical planning**. Capability tags: route planning, tactical timing, resource use.
+
+Recover station cores, avoid warned attacks, disable the Warden and extract
+through the airlock.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | A future model client can choose movement, wait, Pulse and upgrades through the control API. |
+| Harness | A client must construct model requests and map choices to API actions. The supplied demo uses a rule controller. |
+| Engine and other policies | Expose attack intentions and danger cells. Apply turn transitions, attacks, Pulse costs and extraction rules. |
+
+The engine supplies attack warnings directly. Using them does not establish
+independent prediction of enemy attacks. The rule demo is not a decision-model
+result.
+
+Suggested evaluation: Measure extraction success, damage and Pulse use. An
+experiment that removes warnings needs a separate observation profile and
+validation.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Drive the engine
 
 Use `agent` for a headless controller in any language. Send one JSON object

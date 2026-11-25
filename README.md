@@ -9,6 +9,24 @@ infra it runs on is being built here.
 See [game runtime and adapter locations](integrations/README.md) for the
 Python import paths, package contents and replay compatibility.
 
+The games are grouped by the decisions a model must make under a specified
+harness. These categories describe research tasks; measured model ability
+requires evaluation under that configuration.
+
+| Category | Main decision demand | Games |
+| --- | --- | --- |
+| Precision control | Select movement actions in the required sequence and at the required time. | [Celeste Classic](integrations/celeste-classic/README.md#research-scope), [VVVVVV](integrations/vvvvvv/README.md#research-scope) |
+| Reactive combat | Select movement and combat actions as threats change. | [Taisei](integrations/taisei/README.md#research-scope), [Hurrican](integrations/hurrican/README.md#research-scope), [Hollow Knight imitation](integrations/hollow-knight/README.md#research-scope), [Soul Knight student project](integrations/soul-knight/README.md#research-scope), [REA-Issac](integrations/rea_issac/README.md#research-scope), [Ember Vault](integrations/ember-vault/README.md#research-scope) |
+| Spatial and tactical planning | Select routes and account for later action effects. | [Griddly Spiders](integrations/griddly/README.md#research-scope), [Frost Circuit](integrations/frost-circuit/README.md#research-scope) |
+| Exploration and resource planning | Use information and resources to complete dependent goals. | [Craftax](integrations/craftax/README.md#research-scope), [Brogue CE](integrations/brogue_ce/README.md#research-scope) |
+| Competitive decision-making | Select tactics or strategy against an opponent. | [Tank War](integrations/tank-war/README.md#research-scope), [Red Alert 2](integrations/ra2/README.md#research-scope) |
+| Cooperative coordination | Select actions that support a shared task with a teammate. | [Overcooked-AI](integrations/overcooked/README.md#research-scope) |
+
+The [research index and responsibility matrix](integrations/README.md#research-categories)
+explain what the model, harness and engine each supply. Each game link above
+opens its research scope. The [public Tank War site](integrations/tank-war-challenge/README.md#research-scope)
+is a separate configuration of Tank War.
+
 ### Red Alert 2
 
 https://github.com/user-attachments/assets/08a30342-5381-4f22-a8ae-6b438cff2994

@@ -2,6 +2,29 @@
 
 The public Tank War site, where people play against NanoJev at `/play/`, as it runs at play.honinglab.com, with the player features added on top of it. It is a fork of the tank duel game from #90, kept apart from [`integrations/tank-war`](../tank-war/README.md) so that its behavior stays exactly what players see today; the consolidation of #120 and its changed question text never reached it.
 
+## Research scope
+
+Primary category: **Competitive decision-making**. Capability tags: public-site variant of tank war.
+
+Let a human player fight the configured model on the public site.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Answer the motion and weapon questions sent by the compatibility bridge. |
+| Harness | Use the public site's legacy question text and control path. Manage admission and retain the public-site configuration separately from the main Tank War integration. |
+| Engine and other policies | Apply duel rules and any enabled player modifiers. The human controls the player tank. |
+
+This is a Tank War variant, not a sixteenth distinct game. Its question text
+differs from the main integration. Browser-reported leaderboards are not an
+evaluation result.
+
+Suggested evaluation: Record the site revision, question text and player
+modifiers. Keep modified rounds and public-site results separate from the main
+Tank War evaluation.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## What a player gets
 
 - A match queue with round tickets and a lobby, so many people share the model servers in turn, plus touch controls on phones.

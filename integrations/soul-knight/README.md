@@ -12,6 +12,28 @@ This integration is an interface experiment. Task suites, a harness
 author's student game is the baseline; commercial Soul Knight fidelity and a
 completed model-controlled Boss route have not been established.
 
+## Research scope
+
+Primary category: **Reactive combat**. Capability tags: movement, target selection, combat.
+
+Move and fight through ordinary, elite and Boss encounters in the student game.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose movement, a button and an aim target. |
+| Harness | Read Unity state, build choices, validate replies and apply inputs for the requested frames. |
+| Engine and other policies | Run the encounters, movement, combat and physics. |
+
+This is an interface experiment using the author release. A task suite, grader
+and complete model-controlled Boss route are not established.
+
+Suggested evaluation: First define and verify complete episodes and native end
+conditions. Then measure room success, Boss success and damage under fixed
+tasks.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## External resources
 
 Only adapter source, patch source, schemas and tests are included here. Obtain
