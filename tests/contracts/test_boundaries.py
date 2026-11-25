@@ -3,7 +3,9 @@
 - ``honing.core`` imports only the standard library, so every plane can depend
   on it without pulling in a framework.
 - Only ``honing/backends/`` may import a training framework. Slime is the one
-  dependency; Reef is a design reference and is never imported.
+  training dependency.
+- Reef runs as its own service (#137). Only ``honing/backends/reef/`` imports
+  its client, ``reef_client``, and nothing imports ``reef`` itself.
 - ``honing/backends/hf_checkpoint.py``, which every backend uses to name a
   checkpoint, imports only the standard library and ``honing.core``.
 - Importing the decision-trace loader (``honing.backends.tank.traces``) or
@@ -83,6 +85,17 @@ def test_only_backend_packages_import_a_training_framework(repo_root: Path) -> N
 
 
 @pytest.mark.unit
+def test_only_the_reef_backend_imports_reef_client(repo_root: Path) -> None:
+    package = repo_root / "honing"
+    offenders = {
+        str(path.relative_to(repo_root)): sorted(names & {"reef", "reef_client"})
+        for path in sorted(package.rglob("*.py"))
+        if (names := imported_top_levels(path)) & {"reef", "reef_client"}
+        and ("reef" in names or path.relative_to(package).parts[:2] != ("backends", "reef"))
+    }
+    assert offenders == {}, f"Reef imports outside honing/backends/reef/, or of reef itself: {offenders}"
+
+
 def test_the_checkpoint_identity_imports_no_backend(repo_root: Path) -> None:
     """Backends name a Hugging Face checkpoint through hf_checkpoint, so it must not import any of them."""
     path = repo_root / "honing" / "backends" / "hf_checkpoint.py"
