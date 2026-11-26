@@ -6,7 +6,7 @@ model requests, episode execution, grading and training data conversion.
 
 ## Research categories
 
-This index covers the 15 games in this checkout that have a research scope, the
+This index covers the 16 games in this checkout that have a research scope, the
 Tank War public-site variant and Space Invaders. Space Invaders has an
 environment and replay here but no research scope yet, so its link opens the
 environment document. Each game has one primary category for navigation and
@@ -22,7 +22,7 @@ a control API and rule demo; their entries identify model use as future work.
 | --- | --- | --- |
 | Strategy | Long horizon, economy | [Red Alert 2](ra2/README.md#research-scope) (real-time strategy) |
 | Shooters | Aim, dodge, timing | [Tank War](tank-war/README.md#research-scope) (maze tank duel), [Space Invaders](../docs/space-invaders-environment.md) (Atari arcade), [Taisei](taisei/README.md#research-scope) (bullet hell), [Hurrican](hurrican/README.md#research-scope) (run-and-gun) |
-| Platformers | Precise movement | [Celeste Classic](celeste-classic/README.md#research-scope) (precision jumps), [VVVVVV](vvvvvv/README.md#research-scope) (gravity flips), [Hollow Knight imitation](hollow-knight/README.md#research-scope) (action, Unity) |
+| Platformers | Precise movement | [Celeste Classic](celeste-classic/README.md#research-scope) (precision jumps), [VVVVVV](vvvvvv/README.md#research-scope) (gravity flips), [Hollow Knight imitation](hollow-knight/README.md#research-scope) (action, Unity), [Hollow Knight (ForestDango)](hollow-knight-forestdango/README.md#research-scope) (Unity remake of the opening) |
 | Roguelikes | Explore, partial view | [Brogue CE](brogue_ce/README.md#research-scope) (turn-based dungeon), [Frost Circuit](frost-circuit/README.md#research-scope) (turn-based tactics), [REA-Issac](rea_issac/README.md#research-scope) (real-time rooms), [Ember Vault](ember-vault/README.md#research-scope) (real-time action), [Soul Knight student project](soul-knight/README.md#research-scope) (real-time, Unity) |
 | Survival and puzzle | Crafting, planning | [Craftax](craftax/README.md#research-scope) (2D Minecraft-like), [Griddly Spiders](griddly/README.md#research-scope) (grid puzzle) |
 | Co-op | Work with a teammate | [Overcooked-AI](overcooked/README.md#research-scope) (2-chef cooking) |
@@ -108,6 +108,7 @@ scores from different games do not have a common unit.
 | Tank War | `tank-war/web/game/engine.js` and web resources | `../honing/backends/tank/` |
 | RA2 | `ra2/` native bridge and runtime tools | `../honing/backends/ra2/` |
 | Soul Knight, Hollow Knight | `soul-knight/`, `hollow-knight/` native control bridges | Integration-local demos |
+| Hollow Knight (ForestDango) | `hollow-knight-forestdango/bridge/` file bridge in the operator's build | Integration-local Exp 0 collector |
 
 Craftax and Griddly keep the upstream game as an optional pinned dependency.
 Their local runtime modules expose game observations and explicit steps. They

@@ -1,0 +1,2 @@
+# development checkpoint (control prefix, 9 frames per step): experiments/hk-forestdango-demo/20261125_0017_v9_keys_harness/analysis/prefix_before_first_enemy.txt (29 steps to x 84.5)
+R/n R/n R/n R/n R/n R/n R/n R/n R/n R/n R/n R/n N/f R/n R/n R/n R/n R/n R/n R/n N/f R/n R/n R/n R/n R/n R/n N/f R/n

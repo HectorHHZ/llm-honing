@@ -1,0 +1,13 @@
+{"obs_id": 1, "tick": 0, "action": "keys", "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"], "frames": 11, "label": "Laya: left + up", "real_frames": 11, "decision": 1, "move": "left", "attack": "up"}
+{"obs_id": 2, "tick": 11, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 2, "label": "Laya: left + up", "real_frames": 2, "decision": 1, "move": "left", "attack": "up"}
+{"obs_id": 3, "tick": 13, "action": "keys", "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"], "frames": 11, "label": "Laya: left + up", "real_frames": 11, "decision": 2, "move": "left", "attack": "up"}
+{"obs_id": 4, "tick": 24, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 2, "label": "Laya: left + up", "real_frames": 2, "decision": 2, "move": "left", "attack": "up"}
+{"obs_id": 5, "tick": 26, "action": "keys", "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"], "frames": 11, "label": "Laya: left + up", "real_frames": 11, "decision": 3, "move": "left", "attack": "up"}
+{"obs_id": 6, "tick": 37, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 2, "label": "Laya: left + up", "real_frames": 2, "decision": 3, "move": "left", "attack": "up"}
+{"obs_id": 7, "tick": 39, "action": "keys", "hold": ["LEFT"], "press": ["JUMP", "NAIL"], "first": ["UP", "LEFT"], "frames": 3, "label": "Laya: left_short_jump + up", "real_frames": 3, "decision": 4, "move": "left_short_jump", "attack": "up"}
+{"obs_id": 8, "tick": 42, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 8, "label": "Laya: left_short_jump + up", "real_frames": 8, "decision": 4, "move": "left_short_jump", "attack": "up"}
+{"obs_id": 9, "tick": 50, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 2, "label": "Laya: left_short_jump + up", "real_frames": 2, "decision": 4, "move": "left_short_jump", "attack": "up"}
+{"obs_id": 10, "tick": 52, "action": "keys", "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"], "frames": 11, "label": "Laya: left + up", "real_frames": 11, "decision": 5, "move": "left", "attack": "up"}
+{"obs_id": 11, "tick": 63, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 2, "label": "Laya: left + up", "real_frames": 2, "decision": 5, "move": "left", "attack": "up"}
+{"obs_id": 12, "tick": 65, "action": "keys", "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"], "frames": 11, "label": "Laya: left + up", "real_frames": 11, "decision": 6, "move": "left", "attack": "up"}
+{"obs_id": 13, "tick": 76, "action": "keys", "hold": ["LEFT"], "press": [], "first": [], "frames": 2, "label": "Laya: left + up", "real_frames": 2, "decision": 6, "move": "left", "attack": "up"}
