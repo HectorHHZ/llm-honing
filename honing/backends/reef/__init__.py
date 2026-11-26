@@ -4,6 +4,9 @@ Reef runs as its own service in its own Python 3.12 environment. Honing
 reaches it only from this package, through ``reef-client`` (the ``reef``
 extra), and never imports ``reef`` itself. See ``README.md`` here for the
 record format and the Reef code each module follows.
+
+``recorder`` (the decision server's recorder, #223) imports ``reef_client``,
+so it is not imported here: import ``honing.backends.reef.recorder`` itself.
 """
 
 from honing.backends.reef.provider import JOB_FORMAT, JOB_VERSION, ReefDataProvider, decisions_from_job

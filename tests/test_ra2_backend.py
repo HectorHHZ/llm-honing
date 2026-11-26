@@ -110,6 +110,17 @@ def test_the_runner_plays_the_scenario_against_the_policy_s_server(tmp_path: Pat
     arguments = json.loads((Path(outcome.workspace_location) / "result.json").read_text())["arguments"]  # type: ignore[arg-type]
     assert arguments["map"] == "mp03t4.map" and arguments["seat"] == "blue" and arguments["seed"] == "1000"
     assert arguments["decision-server"] == "http://strong:1"
+    # The match sends these on every decision, so a recording decision server tags its Reef records (#223).
+    tags = json.loads(arguments["reef-tags"])
+    assert {k: tags[k] for k in ("task", "harness", "policy")} == {
+        "task": task.task_id,
+        "harness": SPEC.spec_id,
+        "policy": "a",
+    }
+    assert set(tags) == {"episode", "task", "harness", "policy"}
+    again = asyncio.run(runner.run(SPEC, task, _policy("a")))
+    arguments = json.loads((Path(again.workspace_location) / "result.json").read_text())["arguments"]  # type: ignore[arg-type]
+    assert json.loads(arguments["reef-tags"])["episode"] != tags["episode"]
     assert json.loads(outcome.final_output)["outcome"] == {"blue": 1, "red": -1}
     assert outcome.transcript_location.endswith("decisions.jsonl")  # type: ignore[union-attr]
 

@@ -7,6 +7,7 @@ export class HttpDecisionClient {
         startupMs = 180000,
         requestMs = 60000,
         fetchImpl = fetch,
+        headers = {},
     } = {}) {
         if (typeof url !== "string" || !/^https?:\/\//.test(url))
             throw new Error(
@@ -14,6 +15,8 @@ export class HttpDecisionClient {
             );
         this.url = url.replace(/\/$/, "");
         this.requestMs = requestMs;
+        // Extra headers on every decision, such as the match's x-reef-tag-* headers.
+        this.headers = headers;
         this.fetch = fetchImpl;
         this.seq = 0;
         this.closed = false;
@@ -50,7 +53,7 @@ export class HttpDecisionClient {
         const id = ++this.seq;
         const response = await this.fetch(this.url + "/v1/decide", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { ...this.headers, "Content-Type": "application/json" },
             body: JSON.stringify({
                 id,
                 parts: packet.parts,

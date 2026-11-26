@@ -230,7 +230,8 @@ the selected motion. When the server's health reports `maxBranches` of at least
 the number of admissible motions, as Honing's decision server does, both go in
 one request: the weapon question of each admissible motion is a branch of the
 motion request, the server answers every branch in the same model call, and the
-bridge keeps the selected motion's. The recorded calls, probabilities and
+bridge keeps the selected motion's. Every weapon request, branched or not, has
+the id `<id>:weapon:<motion>`, so each branch is a request of its own. The recorded calls, probabilities and
 controls are those of the two-request decision; `structured_requests` counts the
 requests sent. The bridge rejects truncated context, missing candidates,
 invalid probabilities and mismatched identities. It does not invent model
@@ -343,6 +344,13 @@ Safety can project a sampled motion to an admissible motion before execution.
 The training label remains the sampled policy choice. The log keeps the applied
 action and constraints separately. The weapon request uses the applied motion's
 forecast. Each sampled decision receives the round's reward.
+
+`--reef-tags=JSON` names the round's Reef tags, such as
+`{"episode": "...", "task": "...", "harness": "...", "policy": "..."}`. Every
+decision request carries them as `x-reef-tag-*` headers, so a decision server
+that records in Reef (`--reef-url`, #223) tags its records with them, and the
+manifest keeps them under `reef_tags`. The `episode` tag must be new for every
+attempt of every round. Honing's runner sets a new one on every attempt.
 
 From the **repository root**, with Honing and its GEPA extra installed:
 

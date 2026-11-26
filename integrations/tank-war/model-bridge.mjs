@@ -97,7 +97,9 @@ export function validateRequest(body, edition) {
     }
 }
 export async function upstream(backend, route, body, signal) {
+    // backend.headers (a match's x-reef-tag-* headers) go on decisions only.
     const headers = {
+        ...(body ? backend.headers : {}),
         "Content-Type": "application/json",
     };
     if (backend.token) headers.Authorization = `Bearer ${backend.token}`;
@@ -322,7 +324,9 @@ export async function decideWithHoning(
 // motion, a plans-v1 decision sends the weapon question of each admissible
 // motion as a branch of the motion request, one request in all, and keeps the
 // selected motion's answer; the recorded calls are the two a decision of two
-// requests records.
+// requests records. A weapon request's id names its motion (`<id>:weapon:<motion>`),
+// branched or not, so each branch is a request of its own: the decision server
+// records every branch in Reef under its id (#223).
 export async function decide(
     { model, agentIds, contextLimit, ask, branches = 0 },
     body,
@@ -396,7 +400,7 @@ export async function decide(
             weaponSent = Object.fromEntries(
                 body.admissible_motion_ids.map((id) => [
                     id,
-                    request(weaponFor(id).state, weaponAsked, "weapon"),
+                    request(weaponFor(id).state, weaponAsked, "weapon:" + id),
                 ]),
             );
             asked++;
@@ -425,7 +429,7 @@ export async function decide(
         const { permitted, state: weaponState } = weaponFor(motionId);
         const w = together
             ? accept(weaponSent[motionId], weaponReplies[motionId])
-            : await predict(weaponState, weaponAsked, "weapon");
+            : await predict(weaponState, weaponAsked, "weapon:" + motionId);
         const weapon = choose
             ? pick("weapon", w.weapon.probabilities, ["fire", "hold"])
             : w.weapon.choice;

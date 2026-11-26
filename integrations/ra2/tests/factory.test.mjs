@@ -6,6 +6,8 @@ import {
     checkServedFamily,
     decisionClientOptions,
     inferenceCallUnit,
+    parseReefTags,
+    reefTagHeaders,
 } from "../integration/models/factory.mjs";
 import { LayaClient } from "../integration/laya/client.mjs";
 
@@ -210,4 +212,39 @@ test("djev uses a bridge and is counted as a structured request", () => {
     );
     assert.equal(inferenceCallUnit("djev"), "structured_decision_request");
     assert.equal(inferenceCallUnit("nanojev"), "native_model_forward");
+});
+
+test("--reef-tags become the x-reef-tag-* headers of a decision server's client (#223)", () => {
+    assert.deepEqual(
+        decisionClientOptions(
+            {
+                family: "kev",
+                "decision-server": "http://127.0.0.1:8801",
+                "reef-tags": '{"episode": "e-1", "task": "t"}',
+            },
+            "intent",
+        ),
+        {
+            family: "kev",
+            decisionServer: "http://127.0.0.1:8801",
+            headers: { "x-reef-tag-episode": "e-1", "x-reef-tag-task": "t" },
+        },
+    );
+    for (const [text, message] of [
+        ["nope", /not JSON/],
+        ['{"seat": "red"}', /unknown tag seat/],
+        ['{"episode": ""}', /non-empty string/],
+    ])
+        assert.throws(() => reefTagHeaders(text), message);
+});
+
+test("--reef-tags read as the object the manifest keeps (#223)", () => {
+    assert.deepEqual(parseReefTags('{"episode": "e-1", "task": "t"}'), {
+        episode: "e-1",
+        task: "t",
+    });
+    assert.throws(
+        () => parseReefTags('{"episode": " e"}'),
+        /surrounding spaces/,
+    );
 });

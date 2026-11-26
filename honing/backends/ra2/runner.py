@@ -27,6 +27,21 @@ from honing.harness.endpoints import resolve_endpoint
 RESULT_FIELDS = ("outcome", "tick", "ended", "truncated", "hash")
 
 
+def reef_tags(task: Task, spec: HarnessSpec, policy: PolicyRef) -> dict[str, str]:
+    """The Reef tags of one attempt of ``task``, which the match sends on every decision request (#223).
+
+    ``episode`` is new on every call, so a retried episode is a new attempt
+    and gets new record ids. ``release`` is left out: a runner is given the
+    policy's weights, not the release that holds them.
+    """
+    return {
+        "episode": uuid.uuid4().hex,
+        "task": task.task_id,
+        "harness": spec.spec_id,
+        "policy": policy.checkpoint.checksum,
+    }
+
+
 class RA2EpisodeRunner:
     """Satisfies :class:`~honing.core.EpisodeRunner` for RA2 tasks.
 
@@ -123,6 +138,7 @@ class RA2EpisodeRunner:
             f"--ticks={scenario.ticks}",
             f"--cadence={scenario.cadence}",
             f"--decision-server={endpoint.base_url}",
+            f"--reef-tags={json.dumps(reef_tags(task, spec, policy))}",
             f"--out={out}",
             *self._harness_arguments(spec, harness_dir),
         ]

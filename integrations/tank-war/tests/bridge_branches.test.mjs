@@ -158,3 +158,20 @@ test("a reply without the selected branch is refused", async () => {
         /did not preserve complete decision context/,
     );
 });
+
+test("every weapon request has its own id naming its motion, branched or not (#223)", async () => {
+    const { body, ids } = plansRequest("ids");
+    const sequentialAsked = [],
+        togetherAsked = [];
+    const sequential = await decision(ids, sequentialAsked, 0, { body });
+    await decision(ids, togetherAsked, 16, { body });
+    const branchIds = Object.entries(togetherAsked[0].branches).map(
+        ([motion, branch]) => [motion, branch.id],
+    );
+    assert.deepEqual(
+        branchIds,
+        body.admissible_motion_ids.map((m) => [m, `ids:weapon:${m}`]),
+    );
+    assert.equal(sequentialAsked[1].id, `ids:weapon:${sequential.motion_id}`);
+    assert.equal(sequential.honing_results[1].id, sequentialAsked[1].id);
+});

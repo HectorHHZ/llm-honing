@@ -150,6 +150,11 @@ ignore_missing_imports = true
 module = ["wandb.*"]
 ignore_missing_imports = true
 
+# reef-client is an optional extra with no type marker; the ".[dev]" setup must type-check without it.
+[[tool.mypy.overrides]]
+module = ["reef_client", "reef_client.*"]
+ignore_missing_imports = true
+
 # Craftax runs in its own optional game environment, outside base Honing.
 [[tool.mypy.overrides]]
 module = ["craftax", "craftax.*", "jax", "jax.*", "numpy", "numpy.*", "imageio", "imageio.*"]
