@@ -18,6 +18,14 @@ its minibatches from ``harness_tasks`` and rollouts are played on them too (the
 ``train`` split). No task setting can name ``heldout``. It writes the release
 chain, every round's run directory, and ``summary.json`` under ``work_dir``.
 
+``components`` may also hold ``trainers`` (named entries) and ``methods`` (a
+list), as a pipeline config's does. A train step names its trainer with
+``"trainer"`` and a harness step its method with ``"method"``; a step that
+names none runs the ``trainer`` or ``method`` slot. A ``direction_edit`` step
+can state its own ``"direction_edit"``: question, target and strength, all three.
+``configs/e2e/tank_levers_dry_run.json`` runs two methods and two trainers in
+one campaign.
+
 ``configs/e2e/tank_dry_run.json`` plays real rounds (the Node match process and
 Honing's ``DecisionServer``) with a stand-in decision model, a fake trainer,
 and GEPA reflecting, through a scripted chat model, on the rounds' rendered
@@ -81,7 +89,16 @@ from honing.core import (
     TrainJobSpec,
     UtilizationTelemetry,
 )
-from honing.e2e.components import SCHEDULER_SLOT, build_component, missing_requirements, scheduler_or_script
+from honing.e2e.components import (
+    METHODS,
+    SCHEDULER_SLOT,
+    TRAINERS,
+    build_component,
+    build_named_trainers_and_methods,
+    direction_edit_spec,
+    missing_requirements,
+    scheduler_or_script,
+)
 from honing.release import EpisodeEvaluator, Gate, ReleaseChain
 
 DEFAULT_INTEGRATION = "integrations/tank-war"
@@ -288,24 +305,27 @@ def _gate(context: E2EContext, settings: Mapping[str, object]) -> Gate:
 def _move(entry: Mapping[str, object]) -> Move:
     kind = entry.get("kind")
     if kind == "harness":
-        budget = entry.get("episode_budget")
+        budget, method = entry.get("episode_budget"), entry.get("method")
         return Move(
             kind="harness",
             harness=HarnessMoveConfig(
                 label=str(entry.get("label", "harness")),
                 episode_budget=int(str(budget)) if budget is not None else None,
+                method=str(method) if method is not None else None,
             ),
         )
     if kind == "train":
         algorithm = str(entry.get("algorithm", "sft"))
+        trainer = entry.get("trainer")
         job = TrainJobSpec(
             algorithm=algorithm,  # type: ignore[arg-type]
             steps=int(str(entry.get("steps", 1))),
             contract=entry.get("contract", "typed_decisions"),  # type: ignore[arg-type]
             # On-policy algorithms play under the head's harness: the controller is part of the policy.
             rollout="harness" if algorithm == "grpo" else "none",
+            direction_edit=direction_edit_spec(entry.get("direction_edit")),
         )
-        return Move(kind="train", train=job)
+        return Move(kind="train", train=job, trainer=str(trainer) if trainer is not None else None)
     raise ContractError(f"a tank campaign schedules harness and train moves, not {kind!r}")
 
 
@@ -350,9 +370,10 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             context.components[slot] = build_component(components[slot], context, slot, protocol)
         elif required:
             raise ContractError(f"the config names no {slot} component")
-    unknown = set(components) - {slot for slot, _, _ in SLOTS}
+    unknown = set(components) - {slot for slot, _, _ in SLOTS} - {TRAINERS, METHODS}
     if unknown:
         raise ContractError(f"unknown components {sorted(unknown)}")
+    trainers, methods = build_named_trainers_and_methods(components, context)
     c = context.components
     none = NoCompression()
     campaign = Campaign(
@@ -369,6 +390,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             episode_budget=int(config.get("episode_budget", 0)),
             samples_per_task=int(config.get("samples_per_task", 1)),
             method_evaluator=EpisodeEvaluator(c["runner"], c["grader"], context.validation_tasks),  # type: ignore[arg-type]
+            methods=methods,
         ),
         defaults=CampaignDefaults(
             train=TrainJobSpec("sft", steps=1, contract="typed_decisions"),
@@ -377,9 +399,12 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             scheme=QuantScheme(weight_format="int4", granularity="group", group_size=128),
         ),
         rollout=c.get("rollout"),  # type: ignore[arg-type]
+        trainers=trainers,
     )
     campaign.start(c["model_source"], work, harness_seed=seed_harness(integration_dir))  # type: ignore[arg-type]
     moves = tuple(_move(entry) for entry in config.get("schedule", ({"kind": "harness"}, {"kind": "train"})))
+    for move in moves:
+        campaign.check_move(move)  # refuse a step for a trainer or method the config does not build
     return E2ERun(campaign, moves, context, scheduler_or_script(c, moves))
 
 

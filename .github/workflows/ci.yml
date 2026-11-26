@@ -336,6 +336,12 @@ jobs:
           python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json --work-dir "$RUNNER_TEMP/tank-campaign"
           python scripts/e2e/check_campaign.py "$RUNNER_TEMP/tank-campaign" \
             --expect harness=published --expect train="rolled back" --expect train="rolled back"
+      - name: Tank levers end to end (GEPA and Meta-Harness, teacher sft and a direction edit, in one campaign)
+        run: |
+          python scripts/e2e/tank_campaign.py --config configs/e2e/tank_levers_dry_run.json --work-dir "$RUNNER_TEMP/tank-levers"
+          python scripts/e2e/check_campaign.py "$RUNNER_TEMP/tank-levers" \
+            --expect harness=published --expect train="rolled back" --expect train="rolled back" \
+            --expect harness="rolled back" --expect train="rolled back"
       - name: Tank harness runner contract
         run: python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json --work-dir "$RUNNER_TEMP/tank-runner-check"
       - name: Serving end to end (decision server process, the match's Node client stack)
@@ -353,6 +359,8 @@ jobs:
             ${{ runner.temp }}/campaign/releases/commits.jsonl
             ${{ runner.temp }}/tank-campaign/summary.json
             ${{ runner.temp }}/tank-campaign/releases/commits.jsonl
+            ${{ runner.temp }}/tank-levers/summary.json
+            ${{ runner.temp }}/tank-levers/releases/commits.jsonl
             ${{ runner.temp }}/serving/server.err
           if-no-files-found: ignore
 

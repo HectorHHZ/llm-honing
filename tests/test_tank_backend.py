@@ -38,7 +38,7 @@ from honing.backends.tank import (
 )
 from honing.backends.tank.harness import question_keys
 from honing.backends.tank.rollouts import ROLLOUT_CONTRACT
-from honing.backends.tank.scenarios import SPLIT_SEEDS
+from honing.backends.tank.scenarios import DEMONSTRATION_SEEDS, SPLIT_SEEDS
 from honing.core import (
     CampaignRuleError,
     ContractError,
@@ -515,7 +515,8 @@ def test_demonstrations_label_the_models_questions_with_the_teachers_answers(tmp
     assert batch is not None and len(batch.decisions) == 4
     assert all(d.behavior_probs is None and d.reward is None for d in batch.decisions)
     assert [dict(d.chosen) for d in batch.decisions[:2]] == [{"motion": "stop_none"}, {"weapon": "fire"}]
-    assert provider.next_batch(contract) is None  # served once
+    assert batch.batch_id == "tank-teacher-demonstrations-1"
+    assert [d.group for d in batch.decisions] == ["tank:1001:blue"] * 2 + ["tank:1001:red"] * 2
     assert (
         TankDemonstrationProvider(runner, suite.tasks("train", limit=1), SEED).next_batch(
             DataContract("token_sequences")
@@ -557,3 +558,45 @@ def test_a_real_round_against_the_stand_in_model_is_graded_and_delivers_every_fi
     teacher = TankDemonstrationProvider(runner, load_suite(SUITE_PATH).tasks("train", limit=1), SEED)
     batch = teacher.next_batch(DataContract("typed_decisions"))
     assert batch is not None and {k for d in batch.decisions for k, _ in d.questions} == {"motion", "weapon"}
+
+
+def _teacher_rounds(tmp_path: Path) -> list[tuple[int, str]]:
+    """The seed and seat of every teacher round under ``tmp_path``, in the order they were played."""
+    manifests = sorted((tmp_path / "runs").glob("*--teacher--*/manifest.json"), key=lambda p: p.stat().st_mtime_ns)
+    return [(m["seed"], m["seat"]) for m in (json.loads(path.read_text()) for path in manifests)]
+
+
+@pytest.mark.unit
+def test_every_demonstration_batch_after_the_first_plays_seeds_no_task_uses(tmp_path: Path) -> None:
+    runner = _runner(tmp_path, concurrency=1)
+    suite = load_suite(SUITE_PATH)
+    provider = TankDemonstrationProvider(runner, suite.tasks("train", limit=4), SEED)
+    contract = DataContract("typed_decisions")
+
+    batches = [provider.next_batch(contract) for _ in range(3)]
+
+    assert [batch.batch_id for batch in batches if batch is not None] == [
+        "tank-teacher-demonstrations-1",
+        "tank-teacher-demonstrations-2",
+        "tank-teacher-demonstrations-3",
+    ]
+    fresh = DEMONSTRATION_SEEDS[:4]
+    assert sorted(_teacher_rounds(tmp_path)) == sorted(
+        (seed, seat) for seed in (1001, 1002, *fresh) for seat in ("blue", "red")
+    )
+    suite_seeds = {suite.scenario(str(record["task_id"])).seed for record in suite.records}
+    assert not suite_seeds & set(DEMONSTRATION_SEEDS[:1000])
+
+
+@pytest.mark.unit
+def test_demonstrations_stop_when_the_fresh_seeds_run_out_and_refuse_a_seed_the_suite_plays(tmp_path: Path) -> None:
+    runner = _runner(tmp_path)
+    tasks = load_suite(SUITE_PATH).tasks("train", limit=2)
+    contract = DataContract("typed_decisions")
+    provider = TankDemonstrationProvider(runner, tasks, SEED, fresh_seeds=(900_001,))
+
+    assert provider.next_batch(contract) is not None
+    assert provider.next_batch(contract) is not None
+    assert provider.next_batch(contract) is None
+    with pytest.raises(ContractError, match=r"must be in no split; the suite already plays \[2001\]"):
+        TankDemonstrationProvider(runner, tasks, SEED, fresh_seeds=(900_001, 2001))
