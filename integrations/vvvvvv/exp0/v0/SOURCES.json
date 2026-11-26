@@ -1,0 +1,269 @@
+{
+ "schema": "honing-exp0-port-v1",
+ "what": "Each file below is derived from one source file of the local workspace that collected the Exp 0 v0 releases (or from a git object of this repository). verbatim = byte copy; text = the listed rewrites only; py = the listed rewrites, then the repository's own tools with its pyproject.toml: ruff check --fix (safe fixes), isort --profile=black, black, ruff check --add-noqa (comments only), repeated until clean. The release bundles hold the source files themselves (common-source/, collector-source/).",
+ "generated": "2026-11-26 04:48 PST",
+ "tools": {
+  "ruff": "ruff 0.17.3",
+  "isort": "isort 9.0.2",
+  "black": "black, 26.10.1 (compiled: yes)"
+ },
+ "files": [
+  {
+   "path": "integrations/vvvvvv/exp0/v0/DATASET.md",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/package/DATASET.md",
+   "source_sha256": "2a520a7e8739a4c5dc56cd8f6222196930712ffde53567c6ab7b5bdd274edfb3",
+   "kind": "text",
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/LABELS.md",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/package/LABELS.md",
+   "source_sha256": "715432b8aad94f0e32a9c4b6661a4866194d4dd4c7f9e31cf834266b93ce8bd8",
+   "kind": "text",
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/PROTOCOL.md",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/package/PROTOCOL.md",
+   "source_sha256": "dad4cc115af6d7eebd61cc0c177581a745df19797db916df291a9198eb69e6a4",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/RESULTS.md",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/package/RESULTS.md",
+   "source_sha256": "8d5ea74ae744c74f660c707484ece5e132ef486d7ac4c40f8b2b29283931f116",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/RUNBOOK.md",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/package/RUNBOOK.md",
+   "source_sha256": "06d5f4ca667a0f498d9ff09a6b8e32255f655f94ad791dbb34479048af97b1c7",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/TODO.md",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/package/TODO.md",
+   "source_sha256": "756dbf9a704ddbcb25529bafdeb6588b0ac1cd9ea58eba97a9cf41d72cd116dd",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/adapter.py",
+   "source": "code/exp0/games/vvvvvv/adapter.py",
+   "source_sha256": "fb091d288534043e06f2c99a4901a25a8573b0aea8ea4bb1a2f99851337edeaa",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/capture_replay.py",
+   "source": "code/exp0/games/vvvvvv/capture_replay.py",
+   "source_sha256": "03b7aefae304b1329ba89ea74d8c29541d5636243f121f0ee1be0830f9c1eb67",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/DATASET.md",
+   "source": "code/exp0/games/vvvvvv/cards/DATASET.md",
+   "source_sha256": "2199a64e52a3aae76982729c75d0c3a3d29713aee32fbdec1668defb3fbff458",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/LABELS.md",
+   "source": "code/exp0/games/vvvvvv/cards/LABELS.md",
+   "source_sha256": "7badb8ab116ba128ce9301ff8d36e12f31dd07a2f88c87dbb13a59608b7f19bc",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/PROTOCOL.md",
+   "source": "code/exp0/games/vvvvvv/cards/PROTOCOL.md",
+   "source_sha256": "466694a2d300295f074bf06f80896d4d9fccb77101335e12b1449e25af25802f",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/RELEASE_RECEIPT.md",
+   "source": "code/exp0/games/vvvvvv/cards/RELEASE_RECEIPT.md",
+   "source_sha256": "9abf7b9073cdb8b39568828191f3afeae5ab60b7c29e097009cd2d07166433ae",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/RESULTS.md",
+   "source": "code/exp0/games/vvvvvv/cards/RESULTS.md",
+   "source_sha256": "e7097a63063e0d0302ce7cbd23a9bb6298677eea9cd3f9e5a87aa5bee81f871e",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/RUNBOOK.md",
+   "source": "code/exp0/games/vvvvvv/cards/RUNBOOK.md",
+   "source_sha256": "06d5f4ca667a0f498d9ff09a6b8e32255f655f94ad791dbb34479048af97b1c7",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ],
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cards/TODO.md",
+   "source": "code/exp0/games/vvvvvv/cards/TODO.md",
+   "source_sha256": "d3ff2c57ae56f902a3436ee76df8764fdf4d9a6d5bec916a990ad40279c79647",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/collect_set.py",
+   "source": "code/exp0/games/smallgames/collect_set.py",
+   "source_sha256": "efccca7bcb22d53108406062cdb3e51b40a0452a588564659bd08ce261ff96a9",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/collection.json",
+   "source": "experiments/exp0/20261126_0045_vvvvvv_v0_collection/collection/collection.json",
+   "source_sha256": "93a1013eeea6f3133003353c3b97af794f1a464f3d5f74c42cb83c8fb5a5a0a7",
+   "kind": "verbatim",
+   "note": "the collection root's frozen plan (= plans/release_v0_frozen.json byte for byte)"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/cut_video.py",
+   "source": "code/exp0/games/smallgames/cut_video.py",
+   "source_sha256": "43ff89664bc9f9563ca5eccc218050f9cce0a8946058472e7e28cac69cb780df",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/exp0_vvvvvv.py",
+   "source": "code/exp0/games/vvvvvv/exp0_vvvvvv.py",
+   "source_sha256": "5b8eca1ff43fdd891df3333f645665c3f3e9a98d0386e03027c1d28450a13aa4",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/fault_checks.py",
+   "source": "code/exp0/games/vvvvvv/fault_checks.py",
+   "source_sha256": "5cba7584b86da2084576b6e8194139541a9ccbeaaf9adaec1c8d0152b6356282",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/pins.json",
+   "source": "code/exp0/games/vvvvvv/pins.json",
+   "source_sha256": "f73b761f10737927ed841ee55e18e22cad7edb61d004fb9e34a7ed9a58f4acd9",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/plans/make_plan.py",
+   "source": "code/exp0/games/vvvvvv/plans/make_plan.py",
+   "source_sha256": "be7ee6f55b3d4ddbae9c7019896bfba6f78820a1b3e5e1a9d2b7b139ae32b45b",
+   "kind": "py",
+   "note": "formatting only: its strings are the frozen plan's text"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/plans/pilot_persistent_p01.json",
+   "source": "code/exp0/games/vvvvvv/plans/pilot_persistent_p01.json",
+   "source_sha256": "b85c226af0867a56c55b1f0d35c8236037b4a93ee986c3cbdf2a9c853a7fb076",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/plans/release_v0_frozen.json",
+   "source": "code/exp0/games/vvvvvv/plans/release_v0_frozen.json",
+   "source_sha256": "93a1013eeea6f3133003353c3b97af794f1a464f3d5f74c42cb83c8fb5a5a0a7",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/procs.py",
+   "source": "code/exp0/games/smallgames/procs.py",
+   "source_sha256": "6a532782928d9b4f84678fc1ad0ce31ad0ee22f689007013e166a50127fc89cf",
+   "kind": "py",
+   "rewrites": [
+    "path: no local absolute path"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/release_v0.py",
+   "source": "code/exp0/games/vvvvvv/release_v0.py",
+   "source_sha256": "2289e7537a0fe74733802a516db704271995637b59da5ee586ac1a68a27c9c26",
+   "kind": "py",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: a file that is not ported is not snapshotted",
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/vvvvvv/exp0/v0/runtime.py",
+   "source": "code/exp0/games/vvvvvv/runtime.py",
+   "source_sha256": "d25e419fc73eb222c41efcc98ee34dd423449f28184f892ab894ef89c399d972",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  }
+ ],
+ "not_ported": [
+  {
+   "source": "code/exp0/games/vvvvvv/source/, build/, build.log",
+   "why": "the pinned original game source and its local build: third-party, not ours to publish (integrations/vvvvvv/README.md builds them)"
+  },
+  {
+   "source": "code/exp0/games/vvvvvv/integration/, _shared/",
+   "why": "local copies of integrations/vvvvvv and integrations/_shared/decision.py at 9d5327f; byte-identical to main (pins.json), so the repository's own files are used"
+  },
+  {
+   "source": "code/exp0/games/vvvvvv/isolation_check.py",
+   "why": "game-neutral: it is integrations/_shared/exp0/isolation_check.py (shared unit)"
+  },
+  {
+   "source": "code/exp0/games/smallgames/write_pins.py",
+   "why": "writes pins.json from the collecting workspace's layout (game copies under code/exp0/games/); the written pins.json is kept"
+  },
+  {
+   "source": "code/exp0/games/vvvvvv/plans/pilot_first_death*.json, pilot_deaths_allowed.json, main_draft_*.json",
+   "why": "phase-1 pilot and draft plans (2026-11-23), superseded by the frozen release plan"
+  }
+ ],
+ "new_files_not_derived": [
+  "integrations/vvvvvv/exp0/v0/README.md",
+  "tests/test_exp0_vvvvvv.py",
+  "tests/fixtures/exp0_vvvvvv/: the first model rows of s01-no_injection-a1 and s01-harness-a1 of the release collection (states, requests, the clean render, one raw reply), cut unchanged"
+ ]
+}

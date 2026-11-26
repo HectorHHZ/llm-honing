@@ -1,0 +1,54 @@
+{
+ "game_id": "vvvvvv",
+ "shape": "native",
+ "game": {
+  "source": "TerryCavanagh/VVVVVV@40e1ec3bbf2a990a5c600564fe312c2121178a50 (copy of games/vvvvvv/source, pristine + build.py edits)",
+  "binary": "code/exp0/games/vvvvvv/build/VVVVVV",
+  "binary_sha256": "47cca96b72687ed8876a1229ada58420d06677bd81fabc18d429e5388a7eb9f0",
+  "assets": "games/vvvvvv/data.zip (official Make and Play desktop data; local only)",
+  "assets_sha256": "c767809594f6472da9f56136e76657e38640d584164a46112250ac6293ecc0ea",
+  "runtime_libs": "SDL3 3.4.0 (libSDL3.so.0.4.0) from a conda environment, given by $VVVVVV_SDL_LIB or found by code/exp0/games/vvvvvv/runtime.py"
+ },
+ "integration": {
+  "upstream_main": "9d5327f1c5a53b8b134db847952ff6281267c0a6",
+  "dir": "integrations/vvvvvv",
+  "files_sha256": {
+   "HoningBridge.h": "5fe9607c467294d025ee2c4cb3be0650f9c4aa30f63866a43b2af8c9fa15fe98",
+   "HoningBridge.inc": "1c5414877989d40010e92831d5da2d8e2d02fcdb367ff8f8b3de2162852ba149",
+   "build.py": "61fdb5bbd296ca7e47857d3910e53cef5dadff9adc669399e6e7a1e3b6da9e44",
+   "decision.py": "dc718d4bfa2e6ad1a25ddeda9c9b30420878d9e41bb249901990589cdb39ba2f",
+   "run.py": "b14bd59067943d424cda433b3953a90392b60495b0515446eee9936acfe93c1e",
+   "verify_native.py": "dbba4cb30a3decf06f92d8c449ec317d4ac1dc6fe6bef45fe3ec2c7586dd5728"
+  },
+  "shared_receiver_sha256": "35906a8495a28b0329ca0e4ab5b610ed9ed7a06debc5d6160600b536aac267f5"
+ },
+ "harness": "the integration's request builder run.request_for, 6 actions, 15 native ticks per decision",
+ "observation": "integration default: full bridge observation (player, gravity, deaths, room, checkpoint, 9x9 local tiles, current-room entities); no pixels",
+ "controller": "integration NativeClient (command.txt) + HoningBridge",
+ "collector": {
+  "file": "exp0_vvvvvv.py",
+  "fingerprint": "5364c9867237c4e15b42ebfcca85809b5bba2579f80a41e183ef9c7bd660c84f"
+ },
+ "collector_at_v0_collection": {
+  "fingerprint": "08373ed1ea2b0334f72d88fda0e70eafe8382fd355c64e2889f56ecbc4437be2",
+  "same_files": [
+   "exp0_vvvvvv.py",
+   "adapter.py",
+   "smallgames/procs.py"
+  ]
+ },
+ "laya": {
+  "clean": {
+   "service": "http://127.0.0.1:8813",
+   "repo": "convaiinnovations/laya-typed-decisions",
+   "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+   "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e"
+  },
+  "alternate": {
+   "service": "http://127.0.0.1:8814",
+   "repo": "jayzou3773/laya-ra2-v33",
+   "revision": "51d2f5a0b36c0a9921a450f14a5afb7cb6d30685",
+   "weightsSha256": "2ed46ac94c366db2dc68751d0eabfe945ceaeaf430e9fea1ec9e6c60c0207925"
+  }
+ }
+}

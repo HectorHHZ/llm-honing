@@ -1,0 +1,106 @@
+{
+ "schema": "honing-exp0-collection-v0",
+ "game_id": "vvvvvv",
+ "dataset_dir": "vvvvvv/v0/",
+ "shape": "native",
+ "question_key": "action",
+ "observation": "vvvvvv-integration-default-v1 (9x9 local tiles + current-room entities)",
+ "per_condition": 1,
+ "initial_groups": 1,
+ "selection": {
+  "rule": "sample",
+  "seed": null,
+  "per_group_seed": "scenario.policy_seed"
+ },
+ "clean_weights_sha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+ "alternate_weights_sha256": "2ed46ac94c366db2dc68751d0eabfe945ceaeaf430e9fea1ec9e6c60c0207925",
+ "weight_difference_tolerance": 0.01,
+ "probe": {
+  "first_decisions": 4,
+  "identity_tolerance": 0.01,
+  "tie": 0.01
+ },
+ "diagnosis": {
+  "max_tokens": 9000,
+  "time": {
+   "unit": "sim_seconds",
+   "before": 3600,
+   "after": 0
+  },
+  "preamble": "Times are seconds of game time: one native tick is 34 ms, and every model decision holds one of six inputs for 15 ticks (0.51 s); the game pauses while the model decides. Gravity can be flipped only while standing on a floor or ceiling.",
+  "windows": {
+   "max_runs_listed": 12,
+   "max_mismatches_listed": 6
+  },
+  "public_observation_max_chars": 1500
+ },
+ "outcomes": {
+  "win": [
+   "crossed_conundrum"
+  ],
+  "loss": [
+   "player_died"
+  ],
+  "timeout": [
+   "decision_cap"
+  ],
+  "other_terminal": []
+ },
+ "faults": {
+  "harness": {
+   "family": "observation-omission",
+   "instance": "omit-local-terrain-persistent-v1",
+   "trigger_rule": "every model decision: the request is rendered from the state with the 9x9 local rows showing solid and spike cells as clear; the trigger is the first decision at which this changes the request (decision 0 from the start)",
+   "changed_artifact": "localSolidRows in the model request (solid '#' and spike '!' cells rendered as clear '.')"
+  },
+  "weights": {
+   "family": "alternate-checkpoint",
+   "instance": "laya-ra2-v33-v1",
+   "trigger_rule": "every decision of the episode",
+   "changed_artifact": "decision checkpoint weights (jayzou3773/laya-ra2-v33@51d2f5a0, service 8814)"
+  },
+  "controller": {
+   "family": "post-selection-input-remap",
+   "instance": "swap-left-right-persistent-v1",
+   "trigger_rule": "every model decision whose selected input has a horizontal direction (left, right, flip_left, flip_right): left and right are exchanged after the selection; the trigger is the first such decision",
+   "changed_artifact": "native input sent to the game (left and right exchanged; flip edges kept)"
+  }
+ },
+ "groups": [
+  {
+   "id": "p01",
+   "split": "train",
+   "scenario": {
+    "task": "ss1-welcome-aboard-to-past-conundrum",
+    "start": {
+     "mode": "Space Station 1 time trial",
+     "room": [
+      113,
+      105
+     ],
+     "room_name": "Welcome Aboard",
+     "player": [
+      200,
+      161
+     ],
+     "gravity": "down",
+     "deaths": 0,
+     "setup": "native countdown, 165 ticks"
+    },
+    "policy_seed": 9001,
+    "ticks_per_decision": 15,
+    "deaths_end_episode": false,
+    "win_rule": "the player enters a room other than [113,105] Welcome Aboard and [114,105] Conundrum",
+    "caps": {
+     "decisions": 150
+    }
+   }
+  }
+ ],
+ "attempt_cap_per_slot": 3,
+ "neutral_id_prefix": "v",
+ "shuffle_seed": 200,
+ "response_tries": 2,
+ "status": "PILOT (development, not scored)",
+ "dry_run": true
+}
