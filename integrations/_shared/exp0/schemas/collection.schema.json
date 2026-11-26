@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:collection-plan:1",
+  "title": "Exp 0 v0 frozen collection plan (collection.json; one per game; frozen before the main collection)",
+  "type": "object",
+  "required": [
+    "schema",
+    "game_id",
+    "dataset_dir",
+    "shape",
+    "observation",
+    "per_condition",
+    "initial_groups",
+    "selection",
+    "clean_weights_sha256",
+    "alternate_weights_sha256",
+    "weight_difference_tolerance",
+    "probe",
+    "diagnosis",
+    "outcomes",
+    "faults",
+    "groups",
+    "attempt_cap_per_slot",
+    "neutral_id_prefix",
+    "shuffle_seed",
+    "response_tries"
+  ],
+  "properties": {
+    "schema": {
+      "const": "honing-exp0-collection-v0"
+    },
+    "game_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "dataset_dir": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*/v0/$"
+    },
+    "shape": {
+      "enum": [
+        "native",
+        "option"
+      ]
+    },
+    "question_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "per_condition": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "initial_groups": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "selection": {
+      "type": "object",
+      "required": [
+        "rule",
+        "seed"
+      ],
+      "properties": {
+        "rule": {
+          "enum": [
+            "argmax",
+            "sample"
+          ]
+        },
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "per_group_seed": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*$"
+        }
+      }
+    },
+    "clean_weights_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "alternate_weights_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "weight_difference_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "probe": {
+      "type": "object",
+      "required": [
+        "first_decisions",
+        "identity_tolerance",
+        "tie"
+      ],
+      "properties": {
+        "first_decisions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "identity_tolerance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "tie": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "diagnosis": {
+      "type": "object",
+      "required": [
+        "max_tokens",
+        "time",
+        "preamble"
+      ],
+      "properties": {
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "time": {
+          "type": "object",
+          "required": [
+            "unit",
+            "before",
+            "after"
+          ],
+          "properties": {
+            "unit": {
+              "enum": [
+                "native_tick",
+                "sim_seconds"
+              ]
+            },
+            "before": {
+              "type": "number",
+              "minimum": 0
+            },
+            "after": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "preamble": {
+          "type": "string",
+          "minLength": 1
+        },
+        "windows": {
+          "type": "object",
+          "properties": {
+            "max_runs_listed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_mismatches_listed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "public_observation_max_chars": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "required": [
+        "win",
+        "loss",
+        "timeout",
+        "other_terminal"
+      ],
+      "properties": {
+        "win": {
+          "$ref": "#/$defs/reasons"
+        },
+        "loss": {
+          "$ref": "#/$defs/reasons"
+        },
+        "timeout": {
+          "$ref": "#/$defs/reasons"
+        },
+        "other_terminal": {
+          "$ref": "#/$defs/reasons"
+        }
+      }
+    },
+    "faults": {
+      "type": "object",
+      "required": [
+        "harness",
+        "weights",
+        "controller"
+      ],
+      "properties": {
+        "harness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/fault"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/fault"
+              },
+              "description": "0.2.0: several validated instances of this component; each attempt names one"
+            }
+          ]
+        },
+        "weights": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/fault"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/fault"
+              },
+              "description": "0.2.0: several validated instances of this component; each attempt names one"
+            }
+          ]
+        },
+        "controller": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/fault"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/fault"
+              },
+              "description": "0.2.0: several validated instances of this component; each attempt names one"
+            }
+          ]
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "split",
+          "scenario"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+          },
+          "split": {
+            "enum": [
+              "train",
+              "val",
+              "test"
+            ]
+          },
+          "scenario": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "attempt_cap_per_slot": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "neutral_id_prefix": {
+      "type": "string",
+      "pattern": "^[a-z]{1,3}$"
+    },
+    "shuffle_seed": {
+      "type": "integer"
+    },
+    "response_tries": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "selection_rule_for_scoring": {
+      "const": "griddly-v0"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "extra": {
+      "type": "object"
+    },
+    "question_keys": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "0.2.0: several choice questions per decision, in request order"
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "0.2.0: a plan for a release-chain dry run on pilot/smoke data; never a release"
+    }
+  },
+  "$defs": {
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "fault": {
+      "type": "object",
+      "required": [
+        "family",
+        "instance",
+        "trigger_rule",
+        "changed_artifact"
+      ],
+      "properties": {
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instance": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "changed_artifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "builder": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "question_key"
+      ],
+      "not": {
+        "required": [
+          "question_keys"
+        ]
+      }
+    },
+    {
+      "required": [
+        "question_keys"
+      ],
+      "not": {
+        "required": [
+          "question_key"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "cause": {"enum": ["harness", "weights", "controller", "uncertain"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "explanation": {"type": "string", "minLength": 1}
+  },
+  "required": ["cause", "confidence", "explanation"],
+  "additionalProperties": false
+}
