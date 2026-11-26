@@ -1,0 +1,739 @@
+{
+ "decision": {
+  "decision": 1,
+  "obs_id": 22,
+  "tick": 63,
+  "offered": [
+   "advance_right",
+   "retreat_left",
+   "wait"
+  ],
+  "harness_order": [
+   "advance_right",
+   "retreat_left",
+   "wait"
+  ],
+  "withheld": {
+   "climb_wall_left": "unknown_wall: climbing into the unknown only when the way right is closed",
+   "go_back_left": "no_dead_end: going back is offered only at a dead end"
+  },
+  "choice": "advance_right",
+  "probability": 0.4836,
+  "probabilities": {
+   "advance_right": 0.4836,
+   "retreat_left": 0.2661,
+   "wait": 0.2504
+  }
+ },
+ "visibleBefore": {
+  "schema": "honing.visible.v1",
+  "adapter": "hollow-knight-visible-v1",
+  "profile": "visible",
+  "game": "hollow-knight-imitation",
+  "frame": {
+   "id": 22,
+   "tick": 63,
+   "simulation_time": 1.4666666984558105
+  },
+  "view": {
+   "screen_rect": [
+    0,
+    0,
+    960,
+    540
+   ],
+   "world_from_screen": [
+    0.018518447875976562,
+    0.0,
+    0.0,
+    -0.018518447875976562,
+    -15.448888778686523,
+    3.328155994415283
+   ],
+   "world_units": "Unity world units; screen x right/y down"
+  },
+  "terrain": {
+   "status": "available",
+   "coverage": "full",
+   "origin": [
+    0,
+    0
+   ],
+   "cell_size": [
+    20,
+    20
+   ],
+   "rows": [
+    "\u0141\u0141\u0141\u0141\u0140\u0140\u0140\u0140\u0140\u0141\u0141\u0141\u0141\u0141\u0143\u0142\u0143\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0141\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0140\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0141\u0141\u0141\u0141\u0140\u0140\u0140\u0140\u0140\u0141\u0141\u0141\u0141\u0141\u0143\u0142\u0143\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0141\u0140\u0140\u0140\u0140\u0140\u0141\u0141\u0141\u0141\u0141\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0141\u0140\u0140\u0140\u0140\u0140\u0141\u0141\u0141\u0141\u0141\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0141\u0140\u0140\u0140\u0140\u0140\u0141\u0101\u0101\u0101\u0101\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0141\u0141\u0141\u0141\u0141\u0141\u0141\u0101\u0101\u0101\u0141\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u01c1\u0141\u0141\u01c1\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u01c1\u01c1\u0141\u01c1\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0141\u01c1\u0141\u0141\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0141\u0141\u01c1\u0141\u0141\u01c1\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0141\u0141\u01c0\u0141\u01c1\u0141\u0141\u01c0\u0141\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0141\u0141\u0140\u0141\u01c1\u01c1\u0141\u0140\u0140\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0141\u0141\u01c1\u01c1\u0141\u0141\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u01c1\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u01c1\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0142\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0151\u0151\u0101\u01c1\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0141\u01c1\u01c1\u01c1\u0141\u01c1\u01c1\u01c1\u01c1\u0141",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0151\u0151\u0101\u01c1\u01c1\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u01c1\u01c1\u01c1\u01c1\u01c0\u01c0\u01c0\u01c0\u01c1\u01c0\u01c0\u01c1",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0143\u0143\u0102\u0143\u0101\u0101\u0101\u0101\u0101\u0101\u0151\u0151\u0101\u01c1\u0141\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0141\u01c1\u0180\u0180\u0180\u0180\u0180\u0180\u01c0\u01c0\u0180\u0180\u0180",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0147\u0142\u0147\u0145\u0145\u0145\u0145\u0145\u0145\u0155\u0155\u0145\u01c5\u01c5\u0145\u0145\u0145\u0145\u0145\u0145\u0145\u0145\u01c5\u01c4\u01c0\u01c0\u01c0\u01c0\u01c0\u01c0\u01c0\u01c0\u01c0\u01c0",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0144\u0146\u0146\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0144\u0144\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0144\u0144\u0144\u0144\u0144\u0144\u0144\u0144\u0144\u0144\u0144",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0144\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104",
+    "\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0101\u0145\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104\u0104"
+   ],
+   "legend": {
+    "unknown": "? unknown/unsupported/partly transparent; never safe",
+    "background": ". visible background/no visible obstacle; not a collision guarantee",
+    "solid": "# visible solid-looking wall",
+    "platform": "= visible platform surface/body",
+    "hazard": "! visible spike/projectile hazard",
+    "actor": "@ visible player/enemy sprite",
+    "interactable": "+ visible interactable; no hidden identity"
+   }
+  },
+  "objects": [
+   {
+    "id": "v4814",
+    "kind": "wall",
+    "bounds": [
+     278,
+     0,
+     54,
+     427
+    ]
+   },
+   {
+    "id": "v4838",
+    "kind": "visible_scenery",
+    "bounds": [
+     875,
+     354,
+     85,
+     63
+    ]
+   },
+   {
+    "id": "v4852",
+    "kind": "visible_scenery",
+    "bounds": [
+     485,
+     177,
+     113,
+     243
+    ]
+   },
+   {
+    "id": "v4868",
+    "kind": "platform",
+    "bounds": [
+     268,
+     405,
+     692,
+     135
+    ]
+   },
+   {
+    "id": "v4890",
+    "kind": "visible_scenery",
+    "bounds": [
+     726,
+     354,
+     158,
+     63
+    ]
+   },
+   {
+    "id": "v4902",
+    "kind": "player",
+    "bounds": [
+     465,
+     346,
+     30,
+     63
+    ]
+   }
+  ],
+  "self": {
+   "object_id": "v4902"
+  },
+  "hud": {
+   "health": {
+    "value": 5,
+    "evidence": "hud"
+   }
+  },
+  "rules": [
+   "Reach a visible level exit while staying alive. No direction to an offscreen exit is supplied.",
+   "Walk left/right; jump permits a second jump before landing. Walls permit wall climbing/jumping.",
+   "Dash and sword attacks obey native cooldowns; attack up/down directions are supported, downward sword attack requires airborne state.",
+   "Visible spikes/projectiles can hurt or kill. A gap/unknown cell is not proof of safety.",
+   "Screen x increases right and screen y increases down. Each action holds for the requested render-frame window; the game pauses during model inference."
+  ],
+  "capabilities": {
+   "global_debug": true,
+   "pixels_to_model": false,
+   "hidden_own_state": false
+  },
+  "disclosure": {
+   "visibility": "Same real camera, native sprite sorting and alpha-aware conservative opaque label pass; full-screen top-down rows. No scene-wide actor/collider data in this envelope.",
+   "geometry": "Object bounds are AABBs of actually surviving opaque sprite pixels, clipped to screen, not collider bounds; terrain labels describe visible appearance, not guaranteed collision.",
+   "unsupported": "Alpha edges/translucency/unsupported shaders/masked sprites are unknown. No sprite means no visible object. Secret identity, enemy HP, exact own velocity/grounded and unrendered collider semantics are omitted. Unsupported non-sprite renderers not yet accepted.",
+   "resolution": "Cell pixels=20. Every per-cell semantic is retained as a bit-union and assigned a compact glyph by the Python adapter; unknown never implies empty.",
+   "debug": "Full original global native state is separate debug_observation.json; it is not the default model payload."
+  }
+ },
+ "debugBefore": {
+  "id": 22,
+  "frame": 63,
+  "health": 5,
+  "jumps": 2,
+  "fixedSteps": 70,
+  "scene": "Level1",
+  "x": -6.559999942779541,
+  "y": -3.671844005584717,
+  "vx": 0.0,
+  "vy": 0.0,
+  "wallLeft": 2.0,
+  "wallRight": 2.0,
+  "simulationTime": 1.4666666984558105,
+  "grounded": true,
+  "floorLeft": true,
+  "floorRight": true,
+  "enemies": [
+   {
+    "name": "Enemy (1)",
+    "x": 21.723770141601562,
+    "y": 1.9841800928115845,
+    "health": 3
+   },
+   {
+    "name": "Enemy",
+    "x": 104.70133209228516,
+    "y": 10.01346206665039,
+    "health": 3
+   }
+  ],
+  "exits": [
+   {
+    "x": 113.70842742919922,
+    "y": 11.062509536743164,
+    "width": 0.4522705078125,
+    "height": 4.445018768310547
+   }
+  ]
+ },
+ "windows": [
+  {
+   "obs_id": 22,
+   "tick": 63,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 23,
+   "tick": 70,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 24,
+   "tick": 77,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 25,
+   "tick": 84,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 26,
+   "tick": 91,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 27,
+   "tick": 98,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 28,
+   "tick": 105,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 29,
+   "tick": 112,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 30,
+   "tick": 119,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 31,
+   "tick": 126,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 32,
+   "tick": 133,
+   "action": "right",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 33,
+   "tick": 136,
+   "action": "right",
+   "frames": 2,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:takeoff",
+   "sim_frames": 1
+  },
+  {
+   "obs_id": 34,
+   "tick": 138,
+   "action": "jump_right",
+   "frames": 2,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b0",
+   "sim_frames": 1
+  },
+  {
+   "obs_id": 35,
+   "tick": 140,
+   "action": "wait",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b1",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 36,
+   "tick": 145,
+   "action": "wait",
+   "frames": 2,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b5",
+   "sim_frames": 1
+  },
+  {
+   "obs_id": 37,
+   "tick": 147,
+   "action": "jump_right",
+   "frames": 2,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b6",
+   "sim_frames": 1
+  },
+  {
+   "obs_id": 38,
+   "tick": 149,
+   "action": "wait",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b7",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 39,
+   "tick": 154,
+   "action": "wait",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b11",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 40,
+   "tick": 159,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b15",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 41,
+   "tick": 164,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b19",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 42,
+   "tick": 169,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b23",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 43,
+   "tick": 174,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b27",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 44,
+   "tick": 179,
+   "action": "wait",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b31",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 45,
+   "tick": 184,
+   "action": "wait",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b35",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 46,
+   "tick": 189,
+   "action": "wait",
+   "frames": 2,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b39",
+   "sim_frames": 1
+  },
+  {
+   "obs_id": 47,
+   "tick": 191,
+   "action": "wait",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "settle",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 48,
+   "tick": 194,
+   "action": "wait",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "settle",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 49,
+   "tick": 197,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 50,
+   "tick": 204,
+   "action": "right",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 51,
+   "tick": 207,
+   "action": "jump_right",
+   "frames": 2,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b0",
+   "sim_frames": 1
+  },
+  {
+   "obs_id": 52,
+   "tick": 209,
+   "action": "wait",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b1",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 53,
+   "tick": 212,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b3",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 54,
+   "tick": 217,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b7",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 55,
+   "tick": 222,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b11",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 56,
+   "tick": 227,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b15",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 57,
+   "tick": 232,
+   "action": "right",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b19",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 58,
+   "tick": 237,
+   "action": "right",
+   "frames": 4,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b23",
+   "sim_frames": 3
+  },
+  {
+   "obs_id": 59,
+   "tick": 241,
+   "action": "wait",
+   "frames": 5,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b26",
+   "sim_frames": 4
+  },
+  {
+   "obs_id": 60,
+   "tick": 246,
+   "action": "wait",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:jump:b30",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 61,
+   "tick": 249,
+   "action": "wait",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "settle",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 62,
+   "tick": 252,
+   "action": "wait",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "settle",
+   "sim_frames": 2
+  },
+  {
+   "obs_id": 63,
+   "tick": 255,
+   "action": "right",
+   "frames": 7,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 6
+  },
+  {
+   "obs_id": 64,
+   "tick": 262,
+   "action": "right",
+   "frames": 3,
+   "label": "Laya chose advance_right",
+   "decision": 1,
+   "why": "advance_right:walk",
+   "sim_frames": 2
+  }
+ ],
+ "debugAfter": {
+  "id": 65,
+  "frame": 265,
+  "health": 5,
+  "jumps": 2,
+  "fixedSteps": 335,
+  "scene": "Level1",
+  "x": 13.640012741088867,
+  "y": 0.9028040766716003,
+  "vx": 5.0,
+  "vy": 0.0,
+  "wallLeft": 2.0,
+  "wallRight": 2.0,
+  "simulationTime": 6.766666889190674,
+  "grounded": true,
+  "floorLeft": true,
+  "floorRight": false,
+  "enemies": [
+   {
+    "name": "Enemy (1)",
+    "x": 19.56772804260254,
+    "y": 1.9841800928115845,
+    "health": 3
+   },
+   {
+    "name": "Enemy",
+    "x": 103.07716369628906,
+    "y": 10.01346206665039,
+    "health": 3
+   }
+  ],
+  "exits": [
+   {
+    "x": 113.70842742919922,
+    "y": 11.062509536743164,
+    "width": 0.4522705078125,
+    "height": 4.445018768310547
+   }
+  ]
+ },
+ "skillResult": {
+  "decision": 1,
+  "skill": "advance_right",
+  "reason": "an enemy stands at the landing spot of the next platform",
+  "windows": 43,
+  "sim_frames": 159,
+  "notes": [
+   "jumped to the next platform",
+   "jumped to the next platform"
+  ],
+  "moved": [
+   20.2,
+   4.57
+  ],
+  "hp": 5,
+  "deaths": 0,
+  "remembered_surfaces": 9,
+  "eval_only": {
+   "x": 13.640012741088867,
+   "y": 0.9028040766716003,
+   "health": 5,
+   "scene": "Level1"
+  },
+  "harness_log": {
+   "reflex_strikes": 0,
+   "air_strikes": 0,
+   "fade_guard": 0,
+   "sim_total": 201,
+   "area": 0
+  }
+ }
+}

@@ -1,0 +1,169 @@
+{
+ "readMe": "The first-option control needs no model, so it was re-run from the committed code for this pull request. Each rerun is compared with the recorded run eval_first_v8_L1L2. windows/frames/decisions/status/deaths/minHp/xMax are [reference, rerun]. windowsIdenticalFromStart counts native windows with the same action, frame count, decision and reason from the first window on.",
+ "reference": "eval_first_v8_L1L2",
+ "reruns": [
+  {
+   "name": "first_pr_built_runtime",
+   "player": "built by build_linux_player.py from the bridge source committed here",
+   "windows": [
+    912,
+    912
+   ],
+   "frames": [
+    3764,
+    3764
+   ],
+   "decisions": [
+    29,
+    29
+   ],
+   "choicesIdentical": true,
+   "requestsIdentical": true,
+   "windowsIdenticalFromStart": 912,
+   "firstDifferingWindow": null,
+   "gameStateRecordsIdenticalFromStart": 913,
+   "status": [
+    "goal reached: Level2 x >= 124",
+    "goal reached: Level2 x >= 124"
+   ],
+   "deaths": [
+    0,
+    0
+   ],
+   "minHp": [
+    5,
+    5
+   ],
+   "xMax": [
+    126.42,
+    126.42
+   ],
+   "visibleObservationLines": {
+    "compared": 913,
+    "byteIdentical": 566
+   }
+  },
+  {
+   "name": "first_original_runtime",
+   "player": "the player the evaluation ran on",
+   "windows": [
+    912,
+    911
+   ],
+   "frames": [
+    3764,
+    3768
+   ],
+   "decisions": [
+    29,
+    29
+   ],
+   "choicesIdentical": true,
+   "requestsIdentical": true,
+   "windowsIdenticalFromStart": 887,
+   "firstDifferingWindow": {
+    "index": 887,
+    "reference": {
+     "obs_id": 888,
+     "tick": 3650,
+     "action": "right",
+     "frames": 7,
+     "decision": 28,
+     "why": "hit_switch:approach"
+    },
+    "rerun": {
+     "obs_id": 888,
+     "tick": 3650,
+     "action": "right",
+     "frames": 6,
+     "decision": 28,
+     "why": "hit_switch:approach"
+    }
+   },
+   "gameStateRecordsIdenticalFromStart": 888,
+   "status": [
+    "goal reached: Level2 x >= 124",
+    "goal reached: Level2 x >= 124"
+   ],
+   "deaths": [
+    0,
+    0
+   ],
+   "minHp": [
+    5,
+    5
+   ],
+   "xMax": [
+    126.42,
+    126.47
+   ],
+   "visibleObservationLines": {
+    "compared": 912,
+    "byteIdentical": 503
+   }
+  },
+  {
+   "name": "first_original_runtime_2",
+   "player": "the player the evaluation ran on",
+   "windows": [
+    912,
+    912
+   ],
+   "frames": [
+    3764,
+    3764
+   ],
+   "decisions": [
+    29,
+    29
+   ],
+   "choicesIdentical": true,
+   "requestsIdentical": true,
+   "windowsIdenticalFromStart": 912,
+   "firstDifferingWindow": null,
+   "gameStateRecordsIdenticalFromStart": 913,
+   "status": [
+    "goal reached: Level2 x >= 124",
+    "goal reached: Level2 x >= 124"
+   ],
+   "deaths": [
+    0,
+    0
+   ],
+   "minHp": [
+    5,
+    5
+   ],
+   "xMax": [
+    126.42,
+    126.42
+   ],
+   "visibleObservationLines": {
+    "compared": 913,
+    "byteIdentical": 615
+   }
+  }
+ ],
+ "defaultProfile": {
+  "check": "integrations/hollow-knight/verify_native.py on a player built from this source, without HONING_OBSERVATION_PROFILE",
+  "result": {
+   "renderFramesAdvanced": 132,
+   "allPhysicsAndTimeAdvanced": true,
+   "movementBothDirections": true,
+   "duplicateCommandsDidNotAdvance": true,
+   "ownedPlayersExited": true
+  },
+  "inputsChecked": 11,
+  "rejectionCasesChecked": 7,
+  "sameCheckOnUnmodifiedBridge": {
+   "renderFramesAdvanced": 132,
+   "allPhysicsAndTimeAdvanced": true,
+   "movementBothDirections": true,
+   "duplicateCommandsDidNotAdvance": true,
+   "ownedPlayersExited": true
+  },
+  "fixedInputSteps": 11,
+  "fixedInputStepsIdenticalToUnmodifiedBridge": 11,
+  "fieldsThatDiffer": []
+ }
+}

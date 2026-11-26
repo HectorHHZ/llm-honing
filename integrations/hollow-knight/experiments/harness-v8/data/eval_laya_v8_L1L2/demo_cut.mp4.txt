@@ -1,0 +1,21 @@
+edited cut of eval_laya_v8_L1L2: demo_cut.mp4
+source: 4877 captured frames = 162.6 s at 30 fps
+this cut: 4501 frames = 75.0 s at 60 fps (overall x2.17)
+normal play is shown at x2; 15 waiting stretches (506 frames = 16.9 s) are shown at x8 (every 4th frame kept). Nothing else is removed.
+encoded for the repository: 30 fps on the same timeline, 104 kbit/s H.264
+waiting stretches (first frame - last frame, seconds, why the knight waits):
+     269 -    329    2.0 s  outwait_enemy:watch
+     669 -    689    0.7 s  hit_switch:watch
+     693 -    729    1.2 s  fade-guard: no pause while the dying thing vanishes, hit_switch:watch
+     895 -    916    0.7 s  hurt-lock
+    1569 -   1605    1.2 s  wait
+    1848 -   1863    0.5 s  hit_switch:look
+    1865 -   1880    0.5 s  hit_switch:look
+    3105 -   3120    0.5 s  hit_switch:look
+    3122 -   3137    0.5 s  hit_switch:look
+    3428 -   3440    0.4 s  pass_hazard_right:watch
+    3447 -   3462    0.5 s  pass_hazard_right:watch
+    3490 -   3598    3.6 s  pass_hazard_right:watch
+    3599 -   3692    3.1 s  pass_hazard_right:watch
+    4320 -   4345    0.8 s  advance_right:jump:watching
+    4471 -   4491    0.7 s  advance_right:jump:watching
