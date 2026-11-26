@@ -81,7 +81,7 @@ from honing.core.protocols import (
     run_graded,
 )
 from honing.core.release import HoneRelease
-from honing.core.schedule import CampaignState, Move, MoveKind, StepRecord, StepResult
+from honing.core.schedule import CampaignState, MetricsSource, Move, MoveKind, StepRecord, StepResult
 from honing.core.state import (
     KEYED_STATE_SCHEMA_VERSION,
     METHOD_STATE_VERSION_KEY,
@@ -191,6 +191,7 @@ __all__ = [
     "Layer",
     "LayerShape",
     "MethodRequirements",
+    "MetricsSource",
     "ModelEditor",
     "ModelSnapshot",
     "ModelSource",

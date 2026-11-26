@@ -47,7 +47,13 @@ from honing.core import (
 )
 from honing.harness.methods.gepa.archive import ARCHIVE_SCHEMA_VERSION, Archive, ArchiveCandidate
 from honing.harness.models import ChatModelError
-from honing.harness.traces import DEFAULT_MAX_TOKENS, render_traces
+from honing.harness.traces import (
+    DEFAULT_AFTER_SECONDS,
+    DEFAULT_BEFORE_SECONDS,
+    DEFAULT_MAX_TOKENS,
+    check_window,
+    render_traces,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +70,10 @@ class GEPAConfig:
     template per component path; a component with none uses upstream's default.
     A template must contain ``<curr_param>`` and ``<side_info>``.
     ``trace_max_tokens`` caps each example's rendered decision traces, when the
-    method reads them. It has no upstream counterpart.
+    method reads them, and ``trace_before_seconds`` and ``trace_after_seconds``
+    size the windows around their key events. The defaults suit a tank round,
+    and a game with another clock sets its own. None has an upstream
+    counterpart.
     """
 
     max_metric_calls: int
@@ -76,6 +85,8 @@ class GEPAConfig:
     reflection_temperature: float = 1.0
     rng_seed: int = 0
     trace_max_tokens: int = DEFAULT_MAX_TOKENS
+    trace_before_seconds: float = DEFAULT_BEFORE_SECONDS
+    trace_after_seconds: float = DEFAULT_AFTER_SECONDS
 
     def __post_init__(self) -> None:
         require(self.max_metric_calls >= 0, f"max_metric_calls must be >= 0, got {self.max_metric_calls}")
@@ -88,6 +99,7 @@ class GEPAConfig:
             f"reflection_temperature must be >= 0, got {self.reflection_temperature}",
         )
         require(self.trace_max_tokens >= 100, f"trace_max_tokens must be >= 100, got {self.trace_max_tokens}")
+        check_window(self.trace_before_seconds, self.trace_after_seconds)
 
     def template_for(self, path: str) -> str | None:
         """The template for one component, resolved as upstream's ``StatelessReflectionLM`` does."""
@@ -357,7 +369,12 @@ class GEPAMethod:
         traces = self.traces.traces(record) if self.traces is not None else ()
         if not traces:
             return record.outcome.final_output
-        return render_traces(traces, max_tokens=self.config.trace_max_tokens)
+        return render_traces(
+            traces,
+            max_tokens=self.config.trace_max_tokens,
+            before_seconds=self.config.trace_before_seconds,
+            after_seconds=self.config.trace_after_seconds,
+        )
 
 
 def settle(archive: Archive, evaluation: EvaluationResult, selected: bool) -> Archive:

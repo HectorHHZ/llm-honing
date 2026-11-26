@@ -341,13 +341,39 @@ def test_two_consecutive_gates_draw_disjoint_validation_seeds(tmp_path: Path) ->
 
 
 @pytest.mark.unit
+def test_a_gate_starts_at_the_configured_first_seed(tmp_path: Path) -> None:
+    suite = load_suite(SUITE_PATH)
+    incumbent = HoneRelease("r0000", _init("even"), None)
+
+    def first_two_gates(**settings: int) -> list[set[int]]:
+        gate = fresh_seed_gate(_runner(tmp_path), _grader(), suite, rounds=4, **settings)
+        played = []
+        for checksum in ("strong", "weak"):
+            evaluation, _ = gate.judge(_trained(checksum), incumbent)
+            played.append({suite.scenario(record.task_id).seed for record in evaluation.records})
+        return played
+
+    # Two campaigns with the same first seed play the same gates. Another first seed plays others.
+    assert first_two_gates(first_seed=150_000) == first_two_gates(first_seed=150_000)
+    assert first_two_gates(first_seed=150_000) == [{150_000, 150_001}, {150_002, 150_003}]
+    assert first_two_gates() == [{100_000, 100_001}, {100_002, 100_003}]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("first_seed", [99_999, 200_000, 2001, True, "150000"])
+def test_a_first_seed_outside_the_val_pool_is_refused(tmp_path: Path, first_seed: object) -> None:
+    with pytest.raises(ContractError, match="first_seed must be a seed of the val pool, 100000 to 199999"):
+        fresh_seed_gate(_runner(tmp_path), _grader(), load_suite(SUITE_PATH), rounds=4, first_seed=first_seed)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
-    "seed_differences", [[0.5] * 6 + [-0.5] * 2, [0.5] * 14 + [-0.5] * 2], ids=["review", "seats-would-select"]
+    "seed_differences", [[0.5] * 6 + [-0.5] * 2, [-0.5] * 2 + [0.5] * 14], ids=["review", "sixteen-seeds"]
 )
 def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[float]) -> None:
     # The second seat repeats the first, so it adds no evidence, and the gate must decide as it would on one
-    # difference per seed. The first case is the #197 review's. The second one the interval would select if
-    # every seat counted as its own task.
+    # difference per seed. The first case is the #197 review's. The second has more seeds and its losses first, so
+    # its interval per seed reaches just below zero.
     seeds = len(seed_differences)
     games = _SeatsAgree(lambda policy, seed: 0.5 + seed_differences[seed] if policy == "strong" else 0.5)
     gate = fresh_seed_gate(games, games, load_suite(SUITE_PATH), rounds=2 * seeds)
@@ -370,7 +396,7 @@ def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[flo
     )
     assert (decision.metrics["tasks"], decision.metrics["rounds"]) == (seeds, 2 * seeds)
     assert not decision.selected
-    # The records keep every seat. Counted seat by seat, the second case would be selected.
+    # The records keep every seat. Counted seat by seat, both cases would be selected.
     candidate_records, incumbent_records = evaluation.records[: 2 * seeds], evaluation.records[2 * seeds :]
     seats = EvaluationResult(
         task_ids=tuple(record.task_id for record in candidate_records),
@@ -378,7 +404,7 @@ def test_both_seats_of_a_seed_count_as_one_difference(seed_differences: list[flo
         incumbent_scores=tuple(record.score for record in incumbent_records),
         evaluated_variant="master",
     )
-    assert PairedIntervalSelector().decide(candidate, seats).selected is (seeds == 16)
+    assert PairedIntervalSelector().decide(candidate, seats).selected
 
 
 @pytest.mark.unit

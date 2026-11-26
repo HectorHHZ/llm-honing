@@ -36,6 +36,28 @@ motion with a partial on-screen object sensor. It has no grounded jumping,
 platform navigation or campaign grading. The API records which hazards are
 omitted, and inference pauses the native loop.
 
+## Research scope
+
+Primary category: **Reactive combat**. Capability tags: threat response, movement timing.
+
+Move through a Stage 1 Easy segment and avoid moving bullets.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose one of nine movement options. |
+| Harness | Build the partial on-screen object observation, pause for inference and apply movement. Hold shot and focus continuously; exclude bombs. |
+| Engine and other policies | Apply bullet motion, collisions, hit recovery and the native practice-start rules. |
+
+The adapter supplies firing and focus. The practice start and tick budget
+define this task. The short demo does not establish full-stage completion.
+
+Suggested evaluation: Measure hits and survival within a fixed segment. Record
+practice-start settings and omitted hazards. Test movement timing separately
+from the fixed firing policy.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Install and run
 
 Game assets, binaries, weights, recordings and full traces are external local

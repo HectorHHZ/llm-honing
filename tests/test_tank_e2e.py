@@ -63,6 +63,8 @@ def test_a_config_is_refused_before_any_round_when_the_machine_or_the_config_lac
         build(_config(requires={}, validation_tasks={"split": "dev"}), REPO, tmp_path / "c")
     with pytest.raises(ContractError, match="unknown gate settings \\['size'\\]"):
         build(_config(requires={}, gate={"size": 8}), REPO, tmp_path / "d")
+    with pytest.raises(ContractError, match="first_seed must be a seed of the val pool"):
+        build(_config(requires={}, gate={"rounds": 8, "first_seed": 2001}), REPO, tmp_path / "e")
 
 
 @pytest.mark.unit
@@ -127,13 +129,18 @@ def test_the_schedule_runs_through_the_scheduler_slot_unless_the_config_names_a_
     pytest.importorskip("gepa", reason="the dry run's method is GEPA")
     scripted = build(_config(requires={}), REPO, tmp_path / "scripted")
     assert isinstance(scripted.scheduler, ScriptedScheduler)
-    assert scripted.scheduler.export_state() == {"schema_version": 1, "next": 0, "moves": 3}
+    exported = scripted.scheduler.export_state()
+    assert (exported["schema_version"], exported["next"], exported["moves"]) == (2, 0, 3)
 
     components = {
         **_config()["components"],  # type: ignore[dict-item]
         "scheduler": {"factory": "tests.fakes.scheduler:history_scheduler", "args": {"kinds": ["train"]}},
     }
-    named = build(_config(requires={}, components=components), REPO, tmp_path / "named")
+    with pytest.warns(
+        UserWarning,
+        match=r"the 'history' scheduler chooses every move, so the schedule's moves \(harness, train, train\)",
+    ):
+        named = build(_config(requires={}, components=components), REPO, tmp_path / "named")
     assert isinstance(named.scheduler, HistoryScheduler)
 
 

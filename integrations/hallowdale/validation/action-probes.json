@@ -1,0 +1,1783 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "attack_right breaks a door",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "blockedAtX": 87.4444,
+        "doorsBroken": [
+          "forgotten_deans-pass/d7_32638"
+        ]
+      },
+      "steps": [
+        {
+          "action": "attack_right",
+          "frames": 3,
+          "started": [
+            "NAIL"
+          ],
+          "children": [
+            "NAIL_RIGHT"
+          ],
+          "keys": {
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 14,
+              "ticks": 15
+            }
+          },
+          "before": {
+            "x": 87.4444,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 108,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 88.5556,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 111,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "right",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 88.6296,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 123,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 93.0,
+            "y": -111.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 135,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "strike directions",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "attachedStrike": {
+          "attack_left": [
+            "NAIL_LEFT"
+          ],
+          "attack_right": [
+            "NAIL_RIGHT"
+          ],
+          "attack_up": [
+            "NAIL_UP"
+          ],
+          "attack_down": [
+            "NAIL_DOWN"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "action": "attack_left",
+          "frames": 3,
+          "started": [
+            "NAIL"
+          ],
+          "children": [
+            "NAIL_LEFT"
+          ],
+          "keys": {
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 14,
+              "ticks": 15
+            },
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 49.5185,
+            "y": -111.0022,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 3,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_right",
+          "frames": 3,
+          "started": [
+            "NAIL"
+          ],
+          "children": [
+            "NAIL_RIGHT"
+          ],
+          "keys": {
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 14,
+              "ticks": 15
+            }
+          },
+          "before": {
+            "x": 49.4444,
+            "y": -111.0022,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 18,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.4815,
+            "y": -111.0022,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 21,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_up",
+          "frames": 3,
+          "started": [
+            "NAIL"
+          ],
+          "children": [
+            "NAIL_UP"
+          ],
+          "keys": {
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "UP": {
+              "first_tick": 0,
+              "last_tick": 14,
+              "ticks": 15
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 36,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 39,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 6,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 29,
+              "ticks": 29
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 54,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -106.2422,
+            "vx": 0.0,
+            "vy": 20.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "attack_down",
+          "frames": 3,
+          "started": [
+            "NAIL"
+          ],
+          "children": [
+            "NAIL_DOWN"
+          ],
+          "keys": {
+            "DOWN": {
+              "first_tick": 0,
+              "last_tick": 14,
+              "ticks": 15
+            },
+            "JUMP": {
+              "first_tick": 0,
+              "last_tick": 14,
+              "ticks": 15
+            },
+            "NAIL": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -106.2422,
+            "vx": 0.0,
+            "vy": 20.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -104.4089,
+            "vx": 0.0,
+            "vy": 15.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 63,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "variable jump height",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "heightInTiles": {
+          "jump_frames=1": 1.413,
+          "jump_frames=3": 3.139,
+          "jump_frames=6": 5.313,
+          "jump_frames=12": 8.183,
+          "no jump_frames (full jump)": 9.093,
+          "jump_frames=3 again": 3.139
+        }
+      },
+      "steps": [
+        {
+          "action": "jump",
+          "frames": 1,
+          "jump_frames": 1,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 4,
+              "ticks": 4
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -110.4089,
+            "vx": 0.0,
+            "vy": 29.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 1,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 3,
+          "jump_frames": 3,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 14,
+              "ticks": 14
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 11,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -108.5733,
+            "vx": 0.0,
+            "vy": 25.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 14,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 6,
+          "jump_frames": 6,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 29,
+              "ticks": 29
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 28,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -106.24,
+            "vx": 0.0,
+            "vy": 20.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 34,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 12,
+          "jump_frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 59,
+              "ticks": 59
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 51,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -103.0733,
+            "vx": 0.0,
+            "vy": 10.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 63,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 1,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 4,
+              "ticks": 4
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 83,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -110.4067,
+            "vx": 0.0,
+            "vy": 29.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 84,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 3,
+          "jump_frames": 3,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 14,
+              "ticks": 14
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 120,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 50.5556,
+            "y": -108.5733,
+            "vx": 0.0,
+            "vy": 25.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "right",
+            "frame": 123,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "focus heals with soul",
+      "start": "debug save spikes.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "healthBefore": 4,
+        "healthAfter": 5,
+        "soulBefore": 99,
+        "soulAfter": 66
+      },
+      "steps": [
+        {
+          "action": "focus",
+          "frames": 60,
+          "started": [
+            "FOCUS"
+          ],
+          "children": [],
+          "keys": {
+            "FOCUS": {
+              "first_tick": 0,
+              "last_tick": 299,
+              "ticks": 300
+            }
+          },
+          "before": {
+            "x": 105.6296,
+            "y": -87.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 4,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 33,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 105.6296,
+            "y": -87.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 66,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 93,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "spells spend soul",
+      "start": "debug save abilities.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "spells": {
+          "cast_right": {
+            "gameStarted": [
+              "CAST_VENGEFUL_SPIRIT"
+            ],
+            "soulBefore": 99,
+            "soulAfter": 66,
+            "expected": "CAST_VENGEFUL_SPIRIT"
+          },
+          "cast_up": {
+            "gameStarted": [
+              "CAST_HOWLING_WRAITHS"
+            ],
+            "soulBefore": 66,
+            "soulAfter": 33,
+            "expected": "CAST_HOWLING_WRAITHS"
+          },
+          "cast_down": {
+            "gameStarted": [
+              "CAST_DESOLATE_DIVE",
+              "DIVE_HOP"
+            ],
+            "soulBefore": 33,
+            "soulAfter": 0,
+            "expected": "DIVE_HOP"
+          }
+        }
+      },
+      "steps": [
+        {
+          "action": "cast_right",
+          "frames": 30,
+          "started": [
+            "CAST_VENGEFUL_SPIRIT"
+          ],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 97.4148,
+            "y": -97.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 66,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 30,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast_up",
+          "frames": 30,
+          "started": [
+            "CAST_HOWLING_WRAITHS"
+          ],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "UP": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 97.4148,
+            "y": -97.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 66,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 30,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 97.4889,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 33,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast_down",
+          "frames": 30,
+          "started": [
+            "CAST_DESOLATE_DIVE",
+            "DIVE_HOP"
+          ],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "DOWN": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 97.4889,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 33,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 97.4889,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 0,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 90,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "interact opens and closes text",
+      "start": "debug save lore.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "label": [
+          "Read (use [V])"
+        ],
+        "openedTextKind": [
+          "text"
+        ],
+        "openedTextCharacters": 305,
+        "pressesToClose": 1
+      },
+      "steps": [
+        {
+          "action": "interact",
+          "frames": 3,
+          "started": [],
+          "children": [],
+          "keys": {
+            "INTERACT": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 171.3889,
+            "y": -80.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 171.3889,
+            "y": -80.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 3,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 171.3889,
+            "y": -80.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 160
+          },
+          "after": {
+            "x": 171.3889,
+            "y": -80.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 72,
+            "fadeAlpha": 160
+          }
+        },
+        {
+          "action": "left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 171.3889,
+            "y": -80.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 105,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 167.0185,
+            "y": -80.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 117,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "c-dash charge and release",
+      "start": "debug save abilities.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "walkSpeed": -11.1111,
+        "cDashSpeed": -33.3333
+      },
+      "steps": [
+        {
+          "action": "left",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 86.1852,
+            "y": -97.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 12,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "c_dash",
+          "frames": 10,
+          "started": [
+            "C_DASH_CHARGE"
+          ],
+          "children": [
+            "C_DASH_CHARGE_CRYSTALS"
+          ],
+          "keys": {
+            "C_DASH": {
+              "first_tick": 0,
+              "last_tick": 49,
+              "ticks": 50
+            }
+          },
+          "before": {
+            "x": 86.1852,
+            "y": -97.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 12,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 86.1111,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 22,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "wait",
+          "frames": 6,
+          "started": [],
+          "children": [],
+          "keys": {},
+          "before": {
+            "x": 86.1111,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 22,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 86.1111,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 28,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "c_dash",
+          "frames": 30,
+          "started": [
+            "C_DASH_CHARGE"
+          ],
+          "children": [
+            "C_DASH_CHARGE_CRYSTALS"
+          ],
+          "keys": {
+            "C_DASH": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 86.1111,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 28,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 86.1111,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 58,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "wait",
+          "frames": 6,
+          "started": [
+            "C_DASH"
+          ],
+          "children": [
+            "C_DASH_WHOOSH"
+          ],
+          "keys": {},
+          "before": {
+            "x": 86.1111,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 58,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 79.6667,
+            "y": -97.0,
+            "vx": -33.3333,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 64,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 3,
+          "started": [
+            "C_DASH_COOLDOWN"
+          ],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 14,
+              "ticks": 14
+            }
+          },
+          "before": {
+            "x": 79.6667,
+            "y": -97.0,
+            "vx": -33.3333,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 64,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 76.4874,
+            "y": -97.0,
+            "vx": -29.4815,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 67,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "dream nail swing",
+      "start": "debug save abilities.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {},
+      "steps": [
+        {
+          "action": "dream_nail",
+          "frames": 10,
+          "started": [
+            "DREAM_NAIL"
+          ],
+          "children": [],
+          "keys": {
+            "D_NAIL": {
+              "first_tick": 0,
+              "last_tick": 49,
+              "ticks": 50
+            }
+          },
+          "before": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 10,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dream_nail",
+          "frames": 32,
+          "started": [
+            "DREAM_NAIL"
+          ],
+          "children": [
+            "DREAM_NAIL"
+          ],
+          "keys": {
+            "D_NAIL": {
+              "first_tick": 0,
+              "last_tick": 159,
+              "ticks": 160
+            }
+          },
+          "before": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 25,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 57,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "dash and double jump",
+      "start": "debug save abilities.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "walkSpeed": 11.1111,
+        "dashSpeed": 22.2222
+      },
+      "steps": [
+        {
+          "action": "right",
+          "frames": 12,
+          "started": [],
+          "children": [],
+          "keys": {
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 59,
+              "ticks": 60
+            }
+          },
+          "before": {
+            "x": 90.5556,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 94.9259,
+            "y": -97.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 12,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dash_right",
+          "frames": 4,
+          "started": [
+            "DASH"
+          ],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 19,
+              "ticks": 20
+            }
+          },
+          "before": {
+            "x": 94.9259,
+            "y": -97.0,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 12,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 97.8148,
+            "y": -97.0,
+            "vx": 22.2222,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 16,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dash_left",
+          "frames": 20,
+          "started": [
+            "DASH"
+          ],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 99,
+              "ticks": 100
+            }
+          },
+          "before": {
+            "x": 102.4074,
+            "y": -97.0,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 40,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 106.1852,
+            "y": -97.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 60,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dash_left",
+          "frames": 20,
+          "started": [
+            "DASH"
+          ],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "LEFT": {
+              "first_tick": 0,
+              "last_tick": 99,
+              "ticks": 100
+            }
+          },
+          "before": {
+            "x": 106.1852,
+            "y": -97.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 60,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 95.0741,
+            "y": -97.0,
+            "vx": -11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 80,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 6,
+          "started": [],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 29,
+              "ticks": 29
+            }
+          },
+          "before": {
+            "x": 95.0,
+            "y": -97.0,
+            "vx": -0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "left",
+            "frame": 104,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 95.0,
+            "y": -92.24,
+            "vx": -0.0,
+            "vy": 20.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 110,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "jump",
+          "frames": 6,
+          "started": [
+            "FLAP"
+          ],
+          "children": [],
+          "keys": {
+            "JUMP": {
+              "first_tick": 1,
+              "last_tick": 29,
+              "ticks": 29
+            }
+          },
+          "before": {
+            "x": 95.0,
+            "y": -92.24,
+            "vx": -0.0,
+            "vy": 20.6667,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 110,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 95.0,
+            "y": -89.2724,
+            "vx": -0.0,
+            "vy": 24.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": false,
+            "frozen": false,
+            "facing": "left",
+            "frame": 116,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "death on the last tick of a window",
+      "start": "debug save spikes.save",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "spikeHits": 5,
+        "windowsUntilTheReload": 670,
+        "windowsWithTheReloadTick": 1
+      },
+      "steps": []
+    },
+    {
+      "name": "locked abilities do nothing",
+      "start": "new game",
+      "passed": true,
+      "failedChecks": [],
+      "measured": {
+        "abilities": []
+      },
+      "steps": [
+        {
+          "action": "dash_right",
+          "frames": 30,
+          "started": [],
+          "children": [],
+          "keys": {
+            "DASH": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            },
+            "RIGHT": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 50.5556,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 0,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 61.5926,
+            "y": -111.0022,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 30,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "cast",
+          "frames": 30,
+          "started": [],
+          "children": [],
+          "keys": {
+            "CAST": {
+              "first_tick": 0,
+              "last_tick": 4,
+              "ticks": 5
+            }
+          },
+          "before": {
+            "x": 61.5926,
+            "y": -111.0022,
+            "vx": 11.1111,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 30,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 61.6667,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "c_dash",
+          "frames": 30,
+          "started": [],
+          "children": [],
+          "keys": {
+            "C_DASH": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 61.6667,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 60,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 61.6667,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 90,
+            "fadeAlpha": 0
+          }
+        },
+        {
+          "action": "dream_nail",
+          "frames": 30,
+          "started": [],
+          "children": [],
+          "keys": {
+            "D_NAIL": {
+              "first_tick": 0,
+              "last_tick": 149,
+              "ticks": 150
+            }
+          },
+          "before": {
+            "x": 61.6667,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 90,
+            "fadeAlpha": 0
+          },
+          "after": {
+            "x": 61.6667,
+            "y": -111.0022,
+            "vx": 0.0,
+            "vy": -0.0,
+            "health": 5,
+            "soul": 99,
+            "grounded": true,
+            "frozen": false,
+            "facing": "right",
+            "frame": 120,
+            "fadeAlpha": 0
+          }
+        }
+      ]
+    }
+  ]
+}

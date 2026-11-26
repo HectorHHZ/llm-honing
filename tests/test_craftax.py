@@ -39,7 +39,9 @@ from honing.core import (
     TaskGrader,
     run_graded,
 )
+from integrations.craftax.agent import AgentSession
 from integrations.craftax.catalog import ACTIONS
+from integrations.craftax.engine import CraftaxEngine
 from tests.fakes.craftax import FakeCraftaxEngine, fake_versions
 from tests.fakes.model import FakeModelSource, FakeWorld
 
@@ -274,14 +276,18 @@ def test_failed_model_does_not_turn_into_random_play(
 
 
 @pytest.mark.unit
-def test_import_and_help_need_no_game_packages() -> None:
+@pytest.mark.parametrize(
+    ("module", "flag"),
+    [("honing.backends.craftax.match", "--decision-server"), ("integrations.craftax.agent", "--max-steps")],
+)
+def test_import_and_help_need_no_game_packages(module: str, flag: str) -> None:
     code = (
         "import sys; sys.modules['craftax']=None; sys.modules['jax']=None; sys.modules['numpy']=None; "
-        "import honing.backends.craftax; from honing.backends.craftax.match import main; main(['--help'])"
+        f"from {module} import main; main(['--help'])"
     )
     result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert "--decision-server" in result.stdout
+    assert flag in result.stdout
 
 
 @pytest.mark.unit
@@ -357,6 +363,91 @@ def test_native_engine_with_http_decisions(tmp_path: Path, decision_server: Any)
     )
     assert result["steps"] == len(requests) == 2
     assert replay.verify_replay(out)["verified"]
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")
+def test_native_agent_observes_and_steps_the_symbolic_game() -> None:
+    requests = (
+        '{"op":"observe"}',
+        "{",
+        '{"op":"step","action":"UNKNOWN"}',
+        '{"op":"step","action":["UP"]}',
+        '{"op":"observe"}',
+        '{"op":"step","action":"UP"}',
+        '{"op":"step","action":"NOOP"}',
+        '{"op":"step","action":"UP"}',
+        '{"op":"observe"}',
+    )
+    process = subprocess.run(
+        [sys.executable, "-m", "integrations.craftax.agent", "--max-steps", "2"],
+        cwd=ROOT,
+        input="\n".join(requests) + "\n",
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=180,
+    )
+    start, bad_json, bad_action, bad_type, again, next_turn, ended, after, final = map(
+        json.loads, process.stdout.splitlines()
+    )
+    assert start["ok"] is True
+    state = start["observation"]
+    assert state["schema_version"] == 1
+    assert state["game"] == "craftax"
+    assert all("seed" not in reply["observation"] for reply in (start, again, next_turn, ended, final))
+    assert state["map"]["width"] == 11 and state["map"]["height"] == 9
+    assert len(state["map"]["tiles"]) == len(state["map"]["items"]) == 9
+    assert all(len(row) == 11 for row in state["map"]["tiles"])
+    assert state["player"]["x"] == 5 and state["player"]["y"] == 4
+    assert state["player"]["health"] > 0
+    assert state["inventory"]
+    assert set(state["progress"]) == {"ladder_down_unlocked", "boss_vulnerable", "light_level"}
+    assert state["action_space"]["choices"] == list(ACTIONS)
+    assert "native_state_hash" not in state
+    assert all(reply["ok"] is False for reply in (bad_json, bad_action, bad_type, after))
+    assert start == again
+    assert next_turn["observation"]["clock"]["value"] == 1
+    assert ended == final
+    assert ended["observation"]["clock"] == {"unit": "turn", "value": 2, "limit": 2}
+    assert ended["observation"]["status"] == "step_limit"
+    assert ended["observation"]["done"] is True
+    assert ended["observation"]["action_space"] is None
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")
+def test_native_agent_updates_public_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    from craftax.craftax.constants import MONSTERS_KILLED_TO_CLEAR_LEVEL
+
+    with CraftaxEngine(CraftaxScenario(seed=1, max_steps=2)) as engine:
+        native_reset = engine._env.reset
+
+        def reset(key: Any, params: Any) -> tuple[Any, Any]:
+            _, state = native_reset(key, params)
+            y, x = state.player_position
+            light_map = state.light_map.at[state.player_level, y, x].set(0.0)
+            kills = state.monsters_killed.at[state.player_level].set(0)
+            state = state.replace(
+                light_level=0.25, light_map=light_map, monsters_killed=kills, boss_timesteps_to_spawn_this_round=1
+            )
+            return engine._env.get_obs(state), state
+
+        def step(_key: Any, state: Any, _action: int, _params: Any) -> tuple[Any, Any, float, bool, dict[str, Any]]:
+            kills = state.monsters_killed.at[state.player_level].set(MONSTERS_KILLED_TO_CLEAR_LEVEL)
+            state = state.replace(light_level=0.75, monsters_killed=kills, boss_timesteps_to_spawn_this_round=0)
+            return engine._env.get_obs(state), state, 0.0, False, {}
+
+        monkeypatch.setattr(engine._env, "reset", reset)
+        monkeypatch.setattr(engine._env, "step", step)
+        session = AgentSession(engine)
+        initial = session.observe_for_ai()
+        assert initial["progress"] == {"ladder_down_unlocked": False, "boss_vulnerable": False, "light_level": 0.25}
+        assert initial["map"]["tiles"][initial["player"]["y"]][initial["player"]["x"]] is None
+
+        updated = session.step_for_ai("NOOP")
+        assert updated["progress"] == {"ladder_down_unlocked": True, "boss_vulnerable": True, "light_level": 0.75}
+        assert updated["map"] == initial["map"]
 
 
 @pytest.mark.skipif(not REAL, reason="optional Craftax runtime is not installed")

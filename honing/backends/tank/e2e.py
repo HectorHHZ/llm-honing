@@ -10,13 +10,13 @@ The campaign runs the config's ``schedule`` of harness and train moves, or the
 moves an optional ``scheduler`` component chooses instead. Every move is gated
 by :func:`~honing.backends.tank.gate.fresh_seed_gate`: the paired interval
 selector on ``val`` pool seeds no earlier gate played, sized by the config's
-``gate`` block (``rounds``, ``looks``, ``min_effect``, ``confidence``). A
-harness move must also pass its method's own selector on ``validation_tasks``,
-the suite file's fixed ``val`` tasks, which GEPA keeps for its Pareto front. A
-harness method draws its minibatches from ``harness_tasks`` and rollouts are
-played on them too (the ``train`` split). No task setting can name ``heldout``.
-It writes the release chain, every round's run directory, and ``summary.json``
-under ``work_dir``.
+``gate`` block (``rounds``, ``looks``, ``min_effect``, ``confidence``, and
+``first_seed``, the seed the first gate starts at). A harness move must also
+pass its method's own selector on ``validation_tasks``, the suite file's fixed
+``val`` tasks, which GEPA keeps for its Pareto front. A harness method draws
+its minibatches from ``harness_tasks`` and rollouts are played on them too (the
+``train`` split). No task setting can name ``heldout``. It writes the release
+chain, every round's run directory, and ``summary.json`` under ``work_dir``.
 
 ``components`` may also hold ``trainers`` (named entries) and ``methods`` (a
 list), as a pipeline config's does. A train step names its trainer with
@@ -295,7 +295,7 @@ def _tasks(suite: TankSuite, selection: Mapping[str, object]) -> tuple[Task, ...
 
 
 def _gate(context: E2EContext, settings: Mapping[str, object]) -> Gate:
-    unknown = set(settings) - {"rounds", "looks", "min_effect", "confidence"}
+    unknown = set(settings) - {"rounds", "looks", "min_effect", "confidence", "first_seed"}
     if unknown:
         raise ContractError(f"unknown gate settings {sorted(unknown)}")
     runner, grader = context.component("runner"), context.component("grader")

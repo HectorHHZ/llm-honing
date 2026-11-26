@@ -16,6 +16,8 @@ from honing.core.training import RecoverySpec, TrainJobSpec
 
 MoveKind = Literal["train", "prune", "quantize", "harness", "stop"]
 StepResult = Literal["published", "rejected", "skipped"]
+#: Whose run a step's gate metrics come from.
+MetricsSource = Literal["gate", "method"]
 
 
 @dataclass(frozen=True)
@@ -62,7 +64,11 @@ class StepRecord:
     published, set only when it was published. ``reason`` is the gate's reason,
     or why a harness method proposed nothing. ``gate_metrics`` are the
     evaluation's numbers that every gated candidate records (the ``gate_*``
-    metrics). A skipped move reached no gate, so it has none.
+    metrics), and ``metrics_from`` says whose run they come from. It is
+    ``"gate"`` for the campaign's gate, and ``"method"`` when a harness
+    method's own selector rejected the candidate on the method's evaluator
+    (``HarnessComponents.method_evaluator``), so the gate never ran. A
+    skipped move reached no gate, so it has neither.
     """
 
     step: int
@@ -73,6 +79,7 @@ class StepRecord:
     label: str | None = None
     release_id: str | None = None
     gate_metrics: Mapping[str, float] = field(default_factory=dict)
+    metrics_from: MetricsSource | None = None
 
     def __post_init__(self) -> None:
         require(self.step >= 0, f"StepRecord.step must be >= 0, got {self.step}")
@@ -83,6 +90,12 @@ class StepRecord:
             "a step names a release exactly when it was published",
         )
         require(self.result != "skipped" or not self.gate_metrics, "a skipped step reached no gate")
+        require(
+            (self.metrics_from is None) == (self.result == "skipped"),
+            "a step says whose run its gate metrics come from exactly when it was not skipped",
+        )
+        if self.metrics_from is not None:
+            require_choice(self.metrics_from, get_args(MetricsSource), "StepRecord.metrics_from")
         require(all(math.isfinite(value) for value in self.gate_metrics.values()), "gate metrics must be finite")
 
 

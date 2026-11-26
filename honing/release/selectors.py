@@ -8,9 +8,9 @@ from statistics import NormalDist
 from honing.core import EvaluationResult, SelectionDecision, UpdateCandidate, require
 from honing.release.statistics import MAX_BET, PairedDifference, betting_paired_difference, paired_difference
 
-#: The share of ``1 - confidence`` a sequential gate's interim looks spend, split evenly between them. It is
-#: small so the final look's interval stays close to a fixed gate's, and interim looks stop only on clear results.
-INTERIM_SHARE = 0.1
+#: How far a random walk seen after whole steps overshoots a level a Brownian motion just touches, in standard
+#: deviations of one step: ``-zeta(1/2) / sqrt(2 pi)``, Siegmund's correction for discrete monitoring.
+OVERSHOOT = 0.5826
 
 
 def _interval_metrics(evaluation: EvaluationResult) -> dict[str, float]:
@@ -92,20 +92,19 @@ class PairedIntervalSelector:
     With ``looks > 1`` the :class:`~honing.release.Gate` plays its rounds in
     ``looks`` equal blocks and calls :meth:`look` after each one, so it can
     stop once the result is clear. The decision records ``stopped_early``.
-    Every look is another chance for noise to clear the bar, so the looks split
-    ``1 - confidence`` between them. The interim looks share a tenth of it
-    evenly and the final look keeps the rest. The chance that any look's
-    interval misses the true mean is at most the sum of the parts, so the bound
-    above holds across all the looks. This is a Haybittle-Peto design with a
-    Bonferroni split.
+    Every look continues one betting process, with stakes tuned to the planned
+    total of rounds, and the interval's bound covers the capital's running
+    maximum over every round. So each look uses the full ``confidence``, and
+    the bound above holds across all of them.
 
     A bound that holds for every distribution costs rounds. To detect 0.10
-    with 80% power at a paired standard deviation of 0.5, a fixed gate needs
-    327 rounds and a four-look gate 336, where a normal interval needed 199
-    and 208. The normal interval selected a candidate with no effect up to 16%
-    of the time on skewed differences. In simulation this one selected at most
-    0.6% on every shape the tests try. :meth:`rounds_needed` sizes a gate for
-    this interval.
+    with 80% power at a paired standard deviation of 0.5, a gate needs 279
+    rounds, where a normal interval needed 199. A four-look gate plans 280
+    and plays 205 on average. The normal interval selected a candidate with
+    no effect up to 16% of the time on skewed differences. In simulation this
+    one selected at most 2.0% on every shape the tests try. Testing the final
+    capital alone selected at most 0.6%, but needed a sixth more rounds.
+    :meth:`rounds_needed` sizes a gate for this interval.
     """
 
     name = "paired_interval"
@@ -126,96 +125,130 @@ class PairedIntervalSelector:
         return self._looks
 
     def look(
-        self, candidate: UpdateCandidate, evaluation: EvaluationResult, *, final: bool
+        self, candidate: UpdateCandidate, evaluation: EvaluationResult, *, final: bool, planned: int | None = None
     ) -> SelectionDecision | None:
         """Decide on the rounds played so far, or return None to play the next block.
 
-        An interim look selects when the interval is above ``min_effect``,
+        ``planned`` is the number of rounds the gate plays if no look stops it,
+        fixed before the first round. Every look tunes the stakes to it, so all
+        of a gate's looks read one betting process, and an interim look needs
+        it. An interim look selects when the interval is above ``min_effect``,
         rejects when it is below, and otherwise returns None. The final look
-        always decides. A gate makes at most ``looks - 1`` interim looks, or the
-        bound in the class docstring no longer holds.
+        always decides. The bound holds however many looks a gate makes.
         """
         if final:
-            return self.decide(candidate, evaluation)
+            return self.decide(candidate, evaluation, planned=planned)
         require(self._looks > 1, "a selector with one look has no interim looks")
-        confidence = self._look_confidence(final=False)
-        interval = betting_paired_difference(evaluation, confidence=confidence)
+        require(planned is not None, "an interim look needs the planned rounds, to which every look tunes its stakes")
+        interval = betting_paired_difference(evaluation, confidence=self._confidence, planned=planned)
         if interval.low > self._min_effect or interval.high < self._min_effect:
-            return self._decision(interval, confidence, stopped_early=True)
+            return self._decision(interval, planned, stopped_early=True)
         return None
 
-    def decide(self, candidate: UpdateCandidate, evaluation: EvaluationResult) -> SelectionDecision:
-        """The final look. A gate that plays all its rounds at once calls only this."""
-        confidence = self._look_confidence(final=True)
-        interval = betting_paired_difference(evaluation, confidence=confidence)
-        return self._decision(interval, confidence, stopped_early=False)
+    def decide(
+        self, candidate: UpdateCandidate, evaluation: EvaluationResult, *, planned: int | None = None
+    ) -> SelectionDecision:
+        """The final look. ``planned`` defaults to the rounds evaluated, for a gate that plays them all at once."""
+        interval = betting_paired_difference(evaluation, confidence=self._confidence, planned=planned)
+        return self._decision(interval, planned, stopped_early=False)
 
     def rounds_needed(self, paired_sd: float, effect: float, power: float = 0.8) -> int:
-        """Paired rounds for the final look to select a true mean difference of ``effect`` with ``power``.
+        """Paired rounds for a gate to select a true mean difference of ``effect`` with ``power``.
 
         ``paired_sd`` is the standard deviation of one round's difference. The
-        low end clears ``min_effect`` when the log capital of betting above it
-        reaches the final look's level, ``log(2 / alpha)``. With stake ``b``, a
-        round adds ``log(1 + b (d - min_effect))``, which averages about
-        ``b g - b ** 2 (paired_sd ** 2 + g ** 2) / 2`` with a standard deviation
-        of about ``b paired_sd``, where ``g`` is ``effect - min_effect``. The
-        count is the smallest at which the total's mean, less ``z(power)`` of
-        its standard deviations, reaches the level, at the stake the interval
-        uses once it has seen the spread. Simulated power at that count is 80
-        to 83% for spreads of 0.3 to 0.7 and an effect of 0.10. It is rounded
-        up to whole blocks of at least two rounds. Interim looks add a little
-        power, since they can select early.
+        low end clears ``min_effect`` once the log capital of betting above it
+        has reached ``log(2 / (1 - confidence))`` after some round. With stake
+        ``b``, a round adds ``log(1 + b (d - min_effect))``, which averages
+        about ``b g - b ** 2 (paired_sd ** 2 + g ** 2) / 2`` with a standard
+        deviation of about ``b paired_sd``, where ``g`` is
+        ``effect - min_effect`` and ``b`` is the stake the interval uses once
+        it has seen the spread, tuned to the planned rounds. The count is the
+        smallest at which a Brownian motion with that drift and spread reaches
+        the level within it with probability ``power``
+        (:func:`_reach_chance`). The capital is seen only after whole rounds,
+        and a Brownian motion can cross the level between them, so the level
+        is raised by ``OVERSHOOT`` of a round's standard deviation. The count
+        is whole blocks of at least two rounds. Simulated power at it is 81
+        to 82% for spreads of 0.3 to 0.7 and an effect of 0.10, with one look
+        or four.
         """
         require(paired_sd > 0.0, f"paired_sd must be > 0, got {paired_sd}")
         require(effect > self._min_effect, f"effect must be above min_effect {self._min_effect}, got {effect}")
         require(0.0 < power < 1.0, f"power must be in (0, 1), got {power}")
-        level = math.log(2.0 / (1.0 - self._look_confidence(final=True)))
+        level = math.log(2.0 / (1.0 - self._confidence))
         gap = effect - self._min_effect
-        z_power = NormalDist().inv_cdf(power)
+        cap = MAX_BET / (1.0 + self._min_effect)
 
-        def enough(rounds: int) -> bool:
-            bet = min(math.sqrt(2.0 * level / (rounds * paired_sd**2)), MAX_BET / (1.0 + self._min_effect))
-            growth = rounds * (bet * gap - bet**2 * (paired_sd**2 + gap**2) / 2.0)
-            return growth - z_power * bet * paired_sd * math.sqrt(rounds) >= level
+        def enough(blocks: int) -> bool:
+            rounds = blocks * self._looks
+            bet = min(math.sqrt(2.0 * level / (rounds * paired_sd**2)), cap)
+            drift = bet * gap - bet**2 * (paired_sd**2 + gap**2) / 2.0
+            spread = bet * paired_sd
+            return _reach_chance(drift, spread, level + OVERSHOOT * spread, rounds) >= power
 
-        # Enough rounds stay enough with more, so double past the count and bisect back to it.
-        short, rounds = 0, 1
-        while not enough(rounds):
-            short, rounds = rounds, rounds * 2
-        while rounds - short > 1:
-            middle = (short + rounds) // 2
-            short, rounds = (short, middle) if enough(middle) else (middle, rounds)
-        blocks = max(math.ceil(rounds / self._looks), 2)
+        # Enough blocks stay enough with more, so double past the count and bisect back to it.
+        short, blocks = 1, 2
+        while not enough(blocks):
+            short, blocks = blocks, blocks * 2
+        while blocks - short > 1:
+            middle = (short + blocks) // 2
+            short, blocks = (short, middle) if enough(middle) else (middle, blocks)
         return blocks * self._looks
 
-    def _look_confidence(self, *, final: bool) -> float:
-        """One look's interval level. The levels' miss chances add up to ``1 - confidence``."""
-        if self._looks == 1:
-            return self._confidence
-        alpha = 1.0 - self._confidence
-        if final:
-            return 1.0 - (1.0 - INTERIM_SHARE) * alpha
-        return 1.0 - INTERIM_SHARE * alpha / (self._looks - 1)
+    def _decision(self, interval: PairedDifference, planned: int | None, *, stopped_early: bool) -> SelectionDecision:
+        """Select when the low end clears ``min_effect``, unless the ends crossed.
 
-    def _decision(self, interval: PairedDifference, confidence: float, *, stopped_early: bool) -> SelectionDecision:
-        selected = interval.low > self._min_effect
+        Each end keeps the furthest the capital reached, so tasks whose
+        differences change with their order, such as ten wins and then sixty
+        losses, can leave the low end above the high end. No single mean fits
+        such tasks, which breaks the bound's assumption, so the selector
+        rejects. With independent tasks this happens rarely, and rejecting
+        never raises the false-accept rate.
+        """
+        crossed = interval.low > interval.high
+        selected = interval.low > self._min_effect and not crossed
+        planned = interval.tasks if planned is None else planned
         return SelectionDecision(
             outcome="select" if selected else "reject",
             policy=self.name,
             reason=(
-                f"the {confidence:.2%} interval on the mean difference over {interval.tasks} tasks is"
-                f" [{interval.low:+.4f}, {interval.high:+.4f}], and selecting needs it above {self._min_effect:+.4f}"
+                f"the {self._confidence * 100:g}% interval on the mean difference over {interval.tasks} of {planned}"
+                f" planned tasks is [{interval.low:+.4f}, {interval.high:+.4f}], and selecting needs it above"
+                f" {self._min_effect:+.4f}"
+                + (". Its ends crossed, so no single mean fits the differences" if crossed else "")
             ),
             metrics={
                 "tasks": float(interval.tasks),
+                "planned_tasks": float(planned),
                 "difference_mean": interval.mean,
                 "difference_low": interval.low,
                 "difference_high": interval.high,
-                "interval_confidence": confidence,
+                "interval_confidence": self._confidence,
                 "min_effect": self._min_effect,
                 "stopped_early": float(stopped_early),
             },
         )
+
+
+def _reach_chance(drift: float, spread: float, level: float, steps: int) -> float:
+    """The chance a Brownian motion with this drift and spread per step reaches ``level`` within ``steps``.
+
+    It is ``Phi(a) + exp(2 drift level / spread ** 2) Phi(-c)``, where ``a``
+    and ``c`` are ``drift steps - level`` and ``drift steps + level`` over
+    ``spread sqrt(steps)``. On a rising walk the exponential can overflow
+    while ``Phi(-c)`` underflows, so the second term is computed as
+    ``pdf(a) Phi(-c) / pdf(c)``, which is the same value. Past ``c = 30``,
+    where both parts of that ratio near underflow, ``1 / c`` is within 0.2%
+    of it.
+    """
+    scale = spread * math.sqrt(steps)
+    a = (drift * steps - level) / scale
+    c = (drift * steps + level) / scale
+    normal = NormalDist()
+    if drift <= 0.0:
+        return normal.cdf(a) + math.exp(2.0 * drift * level / spread**2) * normal.cdf(-c)
+    ratio = 1.0 / c if c > 30.0 else math.erfc(c / math.sqrt(2.0)) / 2.0 / normal.pdf(c)
+    return normal.cdf(a) + normal.pdf(a) * ratio
 
 
 class AcceptAll:
