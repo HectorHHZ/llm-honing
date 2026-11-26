@@ -1,0 +1,294 @@
+{
+ "schema": "honing-exp0-port-v1",
+ "what": "Each file below is derived from one source file of the local workspace that collected the Exp 0 v0 releases (or from a git object of this repository). verbatim = byte copy; text = the listed rewrites only; py = the listed rewrites, then the repository's own tools with its pyproject.toml: ruff check --fix (safe fixes), isort --profile=black, black, ruff check --add-noqa (comments only), repeated until clean. The release bundles hold the source files themselves (common-source/, collector-source/).",
+ "generated": "2026-11-26 05:08 PST",
+ "tools": {
+  "ruff": "ruff 0.17.3",
+  "isort": "isort 9.0.2",
+  "black": "black, 26.10.1 (compiled: yes)"
+ },
+ "files": [
+  {
+   "path": "integrations/_shared/exp0/.gitattributes",
+   "source": "code/exp0/common/.gitattributes",
+   "source_sha256": "f88f95aabd8e20e4b15f9f102c3ee6059e4dfe71ff4a2cc9a7e1ce143364d5ad",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/CONTRACT.md",
+   "source": "code/exp0/common/CONTRACT.md",
+   "source_sha256": "277914a47ddb3c67c6c495f8990a9b4517400b4c795dc37e2e3ad1748494ee49",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session roles or account owner)",
+    "doc: no local service ports or internal session names",
+    "path: no local absolute path",
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/_shared/exp0/adapter.py",
+   "source": "code/exp0/common/adapter.py",
+   "source_sha256": "fc334f219f10a6ad2896ddf57610ef03d2115aa79f7243b8208f2cfa86179ef4",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/audit_set.py",
+   "source": "code/exp0/common/audit_set.py",
+   "source_sha256": "f82e8b720ee9a18b5e98deb96c9c54ba172dd282d720be4b467d8d631e88b9b6",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/bundle.py",
+   "source": "code/exp0/common/bundle.py",
+   "source_sha256": "e34a6a63546ac16a654db8ad2d3b1b64223ca1431a7bb16e0361e182ccc57fdc",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/contract.py",
+   "source": "code/exp0/common/contract.py",
+   "source_sha256": "36ec1b18679f16ec283a16e8226e8f9842afa48bcb962dada6db2e98ff3b8e03",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/diagnose.py",
+   "source": "code/exp0/common/diagnose.py",
+   "source_sha256": "4a5e0cde3664dc42f2b9d3f40b621e76641a27a713a1e0e63efed4aa27c4d9ad",
+   "kind": "py",
+   "rewrites": [
+    "doc: neutral wording (no session roles or account owner)"
+   ]
+  },
+  {
+   "path": "integrations/_shared/exp0/diagnosis_inputs.py",
+   "source": "code/exp0/common/diagnosis_inputs.py",
+   "source_sha256": "84a1b37156ce95cb5c2393b0d67379d4af39b8446f7a01d40e5afa79bfd1369d",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/diagnosis_prompt.txt",
+   "source": "code/exp0/common/diagnosis_prompt.txt",
+   "source_sha256": "12ad488dbea2d7c11c0b40cf2f086d450088547b2148da5399fe0a2aced6d06b",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/diagnosis_prompt_probe_variant.txt",
+   "source": "code/exp0/common/diagnosis_prompt_probe_variant.txt",
+   "source_sha256": "da848a845aa7fc24512a1ad7b2d0405efaf7090059e9decabe3a1c3052e60dd6",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/diagnosis_schema.json",
+   "source": "code/exp0/common/diagnosis_schema.json",
+   "source_sha256": "7b7e2930fe5eba7a49f189f3d9f9906cc71e1f64ed0eb52db14c5a9d77e16d3e",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/fill_cards.py",
+   "source": "code/exp0/common/fill_cards.py",
+   "source_sha256": "465f571b3ad065b681e512f8d7d422a98644b13f512c912bcec2c7995fd3a27b",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/isolation_check.py",
+   "source": "code/exp0/games/vvvvvv/isolation_check.py",
+   "source_sha256": "447dd431569e2c5af48d189cc8e06e6edb8d1dfdb725a523bad65c142bc7c33d",
+   "kind": "py",
+   "note": "from code/exp0/games/vvvvvv/: game-neutral, used by both releases"
+  },
+  {
+   "path": "integrations/_shared/exp0/probes.py",
+   "source": "code/exp0/common/probes.py",
+   "source_sha256": "cd449543c3f3e4358a1853a0c84736567d109f3a838645a8516633da7b8a8251",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/release_metadata.py",
+   "source": "code/exp0/common/release_metadata.py",
+   "source_sha256": "0fc7701fa10d00b79d5fd02a0575b1e7a64cdeb6a3c2ac63bf1a7cd0cf0b159e",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/schema_lite.py",
+   "source": "code/exp0/common/schema_lite.py",
+   "source_sha256": "34a35369c4b568d9786ee3eb016a8ab88946658a70c3cd97dba2ab01f81076e1",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/attempt.schema.json",
+   "source": "code/exp0/common/schemas/attempt.schema.json",
+   "source_sha256": "b0c6cc681e3cfa9db301cf3c9d6f6a9f58d1ae692244f524caf704e508ce4682",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/collection.schema.json",
+   "source": "code/exp0/common/schemas/collection.schema.json",
+   "source_sha256": "0855aab381251bb5d31d9454da0590136df3a48af6e8147b7770801c966a9c11",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/decision.schema.json",
+   "source": "code/exp0/common/schemas/decision.schema.json",
+   "source_sha256": "dd6db9f11b670807b33664764bdf87099748a722fcb973471198651d10e22b90",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/episode-index.schema.json",
+   "source": "code/exp0/common/schemas/episode-index.schema.json",
+   "source_sha256": "281cd01256be553d7fb179ae7a488089c6eb618991735e2fda1a2497a1b86cd5",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/error.schema.json",
+   "source": "code/exp0/common/schemas/error.schema.json",
+   "source_sha256": "6fbacff7fcf0fd3d9aeb9d28108d9f3000dba3a0ab7fb01e1455e3511b7b89e0",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/manifest.schema.json",
+   "source": "code/exp0/common/schemas/manifest.schema.json",
+   "source_sha256": "92689a08db04bb22fe8b5c0c50f8c7c8c756a7b95e2065b589f06c74989f53c6",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/schemas/result.schema.json",
+   "source": "code/exp0/common/schemas/result.schema.json",
+   "source_sha256": "2e1c64e909dd2efb867957d2942f325e842ec8102cf3d89ee513403d851f7709",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/score.py",
+   "source": "code/exp0/common/score.py",
+   "source_sha256": "5d75691828d67686d50a2f89f14bff74c369c14b3ea898dbf3ec83f0a2fa610b",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/DATASET.md",
+   "source": "code/exp0/common/templates/DATASET.md",
+   "source_sha256": "1f61ff319041dad79b5623e6c6445be88b35ab6d0dc2991b6b876ab4b3a34a5f",
+   "kind": "text"
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/LABELS.md",
+   "source": "code/exp0/common/templates/LABELS.md",
+   "source_sha256": "a2380d5f4b7c648dba0e68c519f32c81bb8a0c0afe2778ac2cbed3aefb9b7181",
+   "kind": "text"
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/PROTOCOL.md",
+   "source": "code/exp0/common/templates/PROTOCOL.md",
+   "source_sha256": "ba1bf08e3f262e182fbe735aeeb3bbe812216b4558a1646d30917a16db953442",
+   "kind": "text"
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/RELEASE_RECEIPT.md",
+   "source": "code/exp0/common/templates/RELEASE_RECEIPT.md",
+   "source_sha256": "eda3bbed97fe4232ab8861ef9509d501c54d165317b2265ab2d7ae7d86290a35",
+   "kind": "text"
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/RESULTS.md",
+   "source": "code/exp0/common/templates/RESULTS.md",
+   "source_sha256": "71581c565a664f09bc28dcd76757d6adeeec7bbdb3516a01fd57a25e5b2bbe50",
+   "kind": "text"
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/RUNBOOK.md",
+   "source": "code/exp0/common/templates/RUNBOOK.md",
+   "source_sha256": "4c5442fcf0704222992470d78006c5966068e3f93f40118bae07069c350270ea",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session roles or account owner)",
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/_shared/exp0/templates/TODO.md",
+   "source": "code/exp0/common/templates/TODO.md",
+   "source_sha256": "67be46d4e80e816c25da0762344654490b470e9d0a88006464c9678b14dca1ea",
+   "kind": "text"
+  },
+  {
+   "path": "integrations/_shared/exp0/tests/fake_laya.py",
+   "source": "code/exp0/common/tests/fake_laya.py",
+   "source_sha256": "1138ab0630bcb3ec27be56127344084ca1370252a9479ad51b72af165ba15c14",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/tests/stub_codex.py",
+   "source": "code/exp0/common/tests/stub_codex.py",
+   "source_sha256": "313273efb02b69b55e5b5cbec35e989818c0506218ccd061e842add390ef22c2",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/tests/synthetic_game.py",
+   "source": "code/exp0/common/tests/synthetic_game.py",
+   "source_sha256": "3b27b90c4fa4e9839989dcecc97e677de7d4ab0379ebc1893d26597312473b2e",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/upload_release.py",
+   "source": "code/exp0/common/upload_release.py",
+   "source_sha256": "d8b72181d60f6d412f980c95d1b6bad4dbd880f475d0963a2474e6dedaa58576",
+   "kind": "py",
+   "rewrites": [
+    "doc: neutral wording (no session roles or account owner)"
+   ]
+  },
+  {
+   "path": "integrations/_shared/exp0/upstream.py",
+   "source": "code/exp0/common/upstream.py",
+   "source_sha256": "43cd7f80b095f808944d7f5865e093835bbdf9c1c181c9c460b1958471ddf9ff",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout",
+    "pinned #168 renderer: the vendored copy at 9d5327f, never main's"
+   ]
+  },
+  {
+   "path": "integrations/_shared/exp0/validate_episode.py",
+   "source": "code/exp0/common/validate_episode.py",
+   "source_sha256": "c7a0058e72fac6d25f85dff8b3f586891a89571a63d585cc83394d0aa8b3ad01",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/_shared/exp0/vendor/probe_a151596.py",
+   "source": "code/exp0/common/vendor/probe_a151596.py",
+   "source_sha256": "710008bf583ee56225a1eb51c987b86e77857bfb70a64b500a83d22fa5936fa4",
+   "kind": "verbatim"
+  },
+  {
+   "path": "integrations/_shared/exp0/vendor/traces_9d5327f.py",
+   "source": "git 9d5327f1c5a53b8b134db847952ff6281267c0a6:honing/harness/traces.py (HectorHHZ/llm-honing)",
+   "source_sha256": "7735a8494f8bd0621fab9e8e3f47c9be0eb3db1057911ae2f184a99d1e1a0d67",
+   "kind": "verbatim",
+   "note": "the #168 renderer the v0 releases rendered their diagnosis inputs with"
+  },
+  {
+   "path": "integrations/_shared/exp0/verify_release.py",
+   "source": "code/exp0/common/verify_release.py",
+   "source_sha256": "d19d338f0af0eccf7e32a92781e5e86658d317e65e81e4c110204b450de0ff4b",
+   "kind": "py"
+  },
+  {
+   "path": "tests/test_exp0_common.py",
+   "source": "code/exp0/common/tests/test_pipeline.py",
+   "source_sha256": "13c4e85067da0f9b5e2f0931466b6a019f535af6e5e31d83875aadf98c792112",
+   "kind": "py",
+   "rewrites": [
+    "test: repository test layout (pytest collects tests/; temporary output; markers; cleanup)"
+   ]
+  }
+ ],
+ "not_ported": [
+  {
+   "source": "code/exp0/common/tests/real_probe_hk.py",
+   "why": "a manual check that calls a live Laya service on a local Hollow Knight run; not a CI test"
+  }
+ ],
+ "new_files_not_derived": [
+  "integrations/_shared/exp0/README.md",
+  "integrations/_shared/README.md (one paragraph)",
+  "pyproject.toml (per-file ignores E402, E501 for the ported Exp 0 code)"
+ ]
+}

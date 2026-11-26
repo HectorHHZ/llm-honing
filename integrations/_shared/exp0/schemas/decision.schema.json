@@ -1,0 +1,631 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:decision-row:1",
+  "title": "Exp 0 v0 decision row (one line of decisions.jsonl; contract 0.2.0: one or several questions)",
+  "type": "object",
+  "required": [
+    "index",
+    "kind",
+    "native_before",
+    "public_observation",
+    "public_state",
+    "request",
+    "clean_request",
+    "response",
+    "probabilities",
+    "server_choice",
+    "model_choice",
+    "executed",
+    "fault",
+    "events",
+    "native_after",
+    "timing"
+  ],
+  "properties": {
+    "index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "kind": {
+      "enum": [
+        "model",
+        "forced",
+        "auto"
+      ]
+    },
+    "native_before": {
+      "$ref": "#/$defs/native_time"
+    },
+    "native_after": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/native_time"
+        }
+      ]
+    },
+    "public_observation": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "public_state": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "request": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/request"
+        }
+      ]
+    },
+    "clean_request": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/request"
+        }
+      ]
+    },
+    "response": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "file",
+            "tries"
+          ],
+          "properties": {
+            "file": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/relpath"
+                }
+              ]
+            },
+            "tries": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/try"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "probabilities": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 2,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "description": "several questions (0.2.0): {question: {option: p}}"
+        }
+      ]
+    },
+    "server_choice": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "several questions (0.2.0): {question: option}"
+        }
+      ]
+    },
+    "model_choice": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "several questions (0.2.0): {question: option}"
+        }
+      ]
+    },
+    "executed": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "option",
+            "windows"
+          ],
+          "properties": {
+            "option": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "minProperties": 2,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "several questions (0.2.0): {question: option}"
+                }
+              ]
+            },
+            "windows": {
+              "type": "array",
+              "minItems": 0,
+              "items": {
+                "$ref": "#/$defs/window"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "fault": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "component",
+            "changed",
+            "detail"
+          ],
+          "properties": {
+            "component": {
+              "enum": [
+                "harness",
+                "weights",
+                "controller"
+              ]
+            },
+            "changed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            },
+            "questions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "several questions (0.2.0): the questions whose request text or execution the fault changed"
+            }
+          }
+        }
+      ]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "wall_seconds"
+      ],
+      "properties": {
+        "model_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "execution_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "wall_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "model"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "$ref": "#/$defs/request"
+          },
+          "response": {
+            "type": "object"
+          },
+          "public_observation": {
+            "type": "object"
+          },
+          "model_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "minProperties": 2,
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "several questions (0.2.0): {question: option}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "forced"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "type": "null"
+          },
+          "clean_request": {
+            "type": "null"
+          },
+          "response": {
+            "type": "null"
+          },
+          "probabilities": {
+            "type": "null"
+          },
+          "server_choice": {
+            "type": "null"
+          },
+          "model_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "minProperties": 2,
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "auto"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "type": "null"
+          },
+          "clean_request": {
+            "type": "null"
+          },
+          "response": {
+            "type": "null"
+          },
+          "probabilities": {
+            "type": "null"
+          },
+          "server_choice": {
+            "type": "null"
+          },
+          "model_choice": {
+            "type": "null"
+          },
+          "executed": {
+            "type": "object",
+            "properties": {
+              "option": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "relpath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+    },
+    "native_time": {
+      "type": "object",
+      "required": [
+        "tick"
+      ],
+      "properties": {
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frame": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "sim_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "parts",
+        "questions"
+      ],
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "integer"
+          ]
+        },
+        "parts": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "questions": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "type",
+              "instructions",
+              "criteria"
+            ],
+            "properties": {
+              "type": {
+                "const": "choice"
+              },
+              "instructions": {
+                "type": "string",
+                "minLength": 1
+              },
+              "criteria": {
+                "type": "object",
+                "minProperties": 2,
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "try": {
+      "type": "object",
+      "required": [
+        "file",
+        "status",
+        "seconds"
+      ],
+      "properties": {
+        "file": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/relpath"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "rejected",
+            "transport_error"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "required": [
+        "native_action",
+        "ticks",
+        "start_tick"
+      ],
+      "properties": {
+        "native_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ticks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frames": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "intended_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string"
+        },
+        "extra": {
+          "type": "object"
+        },
+        "intended_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "0.2.0: the window length the clean controller would have used, only when the controller fault changed it"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "tick",
+        "kind",
+        "text",
+        "visible"
+      ],
+      "properties": {
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "enum": [
+            "damage",
+            "death",
+            "heal",
+            "kill",
+            "goal",
+            "checkpoint",
+            "room",
+            "pickup",
+            "terminal",
+            "other"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
