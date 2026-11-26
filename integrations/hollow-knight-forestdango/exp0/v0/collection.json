@@ -1,0 +1,562 @@
+{
+  "schema": "honing-exp0-collection-v0",
+  "game_id": "hollow-knight-forestdango",
+  "dataset_dir": "hollow-knight-forestdango/v0/",
+  "shape": "option",
+  "question_keys": [
+    "move",
+    "attack"
+  ],
+  "observation": "hk-forestdango-visible-window-v12-standing-v1",
+  "per_condition": 10,
+  "initial_groups": 10,
+  "selection": {
+    "rule": "argmax",
+    "seed": null
+  },
+  "clean_weights_sha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+  "alternate_weights_sha256": "2ed46ac94c366db2dc68751d0eabfe945ceaeaf430e9fea1ec9e6c60c0207925",
+  "weight_difference_tolerance": 0.01,
+  "probe": {
+    "first_decisions": 4,
+    "identity_tolerance": 0.01,
+    "tie": 0.01
+  },
+  "diagnosis": {
+    "max_tokens": 9000,
+    "time": {
+      "unit": "native_tick",
+      "before": 100000,
+      "after": 0
+    },
+    "preamble": "Full Hollow Knight (ForestDango build) at 30 native frames per second; the renderer's time coordinate counts these frames. Every decision answers two questions, the movement keys and the attack key, and both answers' keys are held for the next 13 frames (0.43 s), sent as two or three native windows.",
+    "windows": {
+      "max_runs_listed": 12,
+      "max_mismatches_listed": 6
+    },
+    "public_observation_max_chars": 1400
+  },
+  "outcomes": {
+    "win": [
+      "reached_goal",
+      "boss_defeated"
+    ],
+    "loss": [
+      "player_died"
+    ],
+    "timeout": [
+      "decision_cap",
+      "frame_cap"
+    ],
+    "other_terminal": [
+      "left_area"
+    ]
+  },
+  "faults": {
+    "harness": {
+      "family": "observation-omission",
+      "instance": "omit-ground-v1",
+      "trigger_rule": "the first model decision whose clean request describes the ground or ledges; from then on every eligible decision is altered (persistent)",
+      "changed_artifact": "state text of the model request (the ground and ledge sentences)"
+    },
+    "weights": {
+      "family": "alternate-checkpoint",
+      "instance": "laya-ra2-v33-v1",
+      "trigger_rule": "every decision of the episode; from then on every eligible decision is altered (persistent)",
+      "changed_artifact": "decision checkpoint weights (Laya 8812, jayzou3773/laya-ra2-v33), both questions"
+    },
+    "controller": {
+      "family": "post-selection-input-remap",
+      "instance": "swap-left-right-v1",
+      "trigger_rule": "the first model decision whose chosen move holds a direction key; from then on every eligible decision is altered (persistent)",
+      "changed_artifact": "native direction keys sent to the game (LEFT and RIGHT exchanged)"
+    }
+  },
+  "groups": [
+    {
+      "id": "g01-newgame",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "new_game",
+        "prefix_sha256": null,
+        "prefix_steps": 0,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 4,
+          "place": [
+            42.3,
+            10.018
+          ],
+          "x": [
+            41.3,
+            43.3
+          ],
+          "y": [
+            9.717,
+            10.318
+          ],
+          "distance_from_start": 7.8,
+          "height_change": 0.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g02-r022",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route022",
+        "prefix_sha256": "adf5d743869725a2b8488f21f0e30e415e808f1e8ea783edb9e63ef346191242",
+        "prefix_steps": 22,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 26,
+          "place": [
+            80.615,
+            10.018
+          ],
+          "x": [
+            79.615,
+            81.615
+          ],
+          "y": [
+            9.717,
+            10.318
+          ],
+          "distance_from_start": 7.8,
+          "height_change": 0.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g03-r046",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route046",
+        "prefix_sha256": "75ac2f85723fb43cd637f86782674e5e8c0ece077555df209e9df56080165625",
+        "prefix_steps": 46,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 51,
+          "place": [
+            112.949,
+            8.018
+          ],
+          "x": [
+            111.949,
+            113.949
+          ],
+          "y": [
+            7.718,
+            8.318
+          ],
+          "distance_from_start": 9.95,
+          "height_change": -2.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g04-r060",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route060",
+        "prefix_sha256": "1fb8f0ea6f249875d48b7cd6a47234ee08f9775362c5d04636339c1768c5dac1",
+        "prefix_steps": 60,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 68,
+          "place": [
+            144.149,
+            4.018
+          ],
+          "x": [
+            143.149,
+            145.149
+          ],
+          "y": [
+            3.718,
+            4.317
+          ],
+          "distance_from_start": 16.71,
+          "height_change": -6.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g05-r071",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route071",
+        "prefix_sha256": "b935b4807d5c2ee9ce32e74a22f4c67e05de5cbb07b9da3ea68f9ca80b5e1425",
+        "prefix_steps": 71,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 73,
+          "place": [
+            134.399,
+            10.018
+          ],
+          "x": [
+            133.399,
+            135.399
+          ],
+          "y": [
+            9.717,
+            10.318
+          ],
+          "distance_from_start": 5.59,
+          "height_change": 4.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g06-r073",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route073",
+        "prefix_sha256": "44aa8aa06f7a94d6f02e6036afa83aa646500cafcba554c5df4a8926fac4dfca",
+        "prefix_steps": 73,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 76,
+          "place": [
+            140.249,
+            10.803
+          ],
+          "x": [
+            139.249,
+            141.249
+          ],
+          "y": [
+            10.503,
+            11.103
+          ],
+          "distance_from_start": 5.9,
+          "height_change": 0.79
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g07-r081",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route081",
+        "prefix_sha256": "7af1d66570d81499c82201cc651b3a33952b410bc691590b9d9628fe2bf91ebd",
+        "prefix_steps": 81,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 85,
+          "place": [
+            149.999,
+            16.973
+          ],
+          "x": [
+            148.999,
+            150.999
+          ],
+          "y": [
+            16.673,
+            17.273
+          ],
+          "distance_from_start": 5.58,
+          "height_change": 3.99
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g08-r093",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route093",
+        "prefix_sha256": "e551d0558b1ee9d68f2cb7a4342d31fca5ad713d09c5dca9bfac22d330c82268",
+        "prefix_steps": 93,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 97,
+          "place": [
+            132.448,
+            22.017
+          ],
+          "x": [
+            131.448,
+            133.448
+          ],
+          "y": [
+            21.717,
+            22.317
+          ],
+          "distance_from_start": 7.02,
+          "height_change": 3.88
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g09-r097",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route097",
+        "prefix_sha256": "461497a600922f152ed3246a81595c84b5e7295431849e3ea915d63d2a5a4183",
+        "prefix_steps": 97,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 101,
+          "place": [
+            126.267,
+            26.017
+          ],
+          "x": [
+            125.267,
+            127.267
+          ],
+          "y": [
+            25.717,
+            26.317
+          ],
+          "distance_from_start": 7.36,
+          "height_change": 4.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g10-r101",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route101",
+        "prefix_sha256": "2dcca10563eacb474d5683788e52bbfd9916ebcd16b8c35c9131e4e19c8e4200",
+        "prefix_steps": 101,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 106,
+          "place": [
+            118.758,
+            30.017
+          ],
+          "x": [
+            117.758,
+            119.758
+          ],
+          "y": [
+            29.717,
+            30.317
+          ],
+          "distance_from_start": 8.51,
+          "height_change": 4.0
+        },
+        "reserve": false
+      }
+    },
+    {
+      "id": "g11-r008",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route008",
+        "prefix_sha256": "0cdc42ed65d6ca5970c4234f6e1f49100c7b0d09563a973ac82f3092b2091220",
+        "prefix_steps": 8,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 12,
+          "place": [
+            57.9,
+            10.018
+          ],
+          "x": [
+            56.9,
+            58.9
+          ],
+          "y": [
+            9.717,
+            10.318
+          ],
+          "distance_from_start": 7.8,
+          "height_change": 0.0
+        },
+        "reserve": true
+      }
+    },
+    {
+      "id": "g12-r029",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route029",
+        "prefix_sha256": "4d684d08cd6f419a1d7bc3319e287c79dd519e9b0ccb67597591696340dee6c2",
+        "prefix_steps": 29,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 40,
+          "place": [
+            93.449,
+            10.018
+          ],
+          "x": [
+            92.449,
+            94.449
+          ],
+          "y": [
+            9.717,
+            10.318
+          ],
+          "distance_from_start": 8.93,
+          "height_change": 0.0
+        },
+        "reserve": true
+      }
+    },
+    {
+      "id": "g13-r040",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route040",
+        "prefix_sha256": "94d0dc70a10443d68027a798be9bb2a93c5343f792306c395e51b96685232f60",
+        "prefix_steps": 40,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 44,
+          "place": [
+            101.249,
+            10.018
+          ],
+          "x": [
+            100.249,
+            102.249
+          ],
+          "y": [
+            9.717,
+            10.318
+          ],
+          "distance_from_start": 7.8,
+          "height_change": 0.0
+        },
+        "reserve": true
+      }
+    },
+    {
+      "id": "g14-r063",
+      "split": "train",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route063",
+        "prefix_sha256": "24dbfd77ba757dd156e1df99e69c3a0c998f384caf4d05d54f4ec8a7b2cc2d09",
+        "prefix_steps": 63,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 68,
+          "place": [
+            144.149,
+            4.018
+          ],
+          "x": [
+            143.149,
+            145.149
+          ],
+          "y": [
+            3.718,
+            4.317
+          ],
+          "distance_from_start": 11.45,
+          "height_change": -6.0
+        },
+        "reserve": true
+      }
+    },
+    {
+      "id": "g15-r076",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route076",
+        "prefix_sha256": "237003b22670da6fb32b4ec536a86b68771c2570f821cb2ebd35ce4d0b360198",
+        "prefix_steps": 76,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 81,
+          "place": [
+            146.099,
+            12.986
+          ],
+          "x": [
+            145.099,
+            147.099
+          ],
+          "y": [
+            12.686,
+            13.287
+          ],
+          "distance_from_start": 6.24,
+          "height_change": 2.18
+        },
+        "reserve": true
+      }
+    },
+    {
+      "id": "g16-r089",
+      "split": "val",
+      "scenario": {
+        "task": "kp-waypoint",
+        "seed": 42,
+        "start": "route089",
+        "prefix_sha256": "3b388800cc2a29cd1cadb28ab65bd4d582a044c869a25cd24bf1cd01954a0716",
+        "prefix_steps": 89,
+        "waypoint": {
+          "scene": "Tutorial_01",
+          "route_step": 93,
+          "place": [
+            138.299,
+            18.133
+          ],
+          "x": [
+            137.299,
+            139.299
+          ],
+          "y": [
+            17.833,
+            18.433
+          ],
+          "distance_from_start": 8.49,
+          "height_change": -3.35
+        },
+        "reserve": true
+      }
+    }
+  ],
+  "attempt_cap_per_slot": 3,
+  "neutral_id_prefix": "h",
+  "shuffle_seed": 200,
+  "response_tries": 1,
+  "notes": "The 23 clean pilots (pilots/ of the collection experiment) are exact replicas of the clean controls on the deterministic build and were inspected before the freeze: they set the waypoint rule, the cap and the group choice (history of inspected data, #185)."
+}

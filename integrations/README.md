@@ -6,7 +6,7 @@ model requests, episode execution, grading and training data conversion.
 
 ## Research categories
 
-This index covers 15 games and the Tank War public-site variant in this
+This index covers 16 games and the Tank War public-site variant in this
 checkout. Each game has one primary category for navigation and several
 capability tags. A category applies to the game, task, observation and control
 configuration together. A change to visibility, action abstraction or assistance
@@ -19,7 +19,7 @@ API and rule demo; their entries identify model use as future work.
 | Category | Main decision demand | Games |
 | --- | --- | --- |
 | Precision control | Select movement actions in the required sequence and at the required time. | [Celeste Classic](celeste-classic/README.md#research-scope), [VVVVVV](vvvvvv/README.md#research-scope) |
-| Reactive combat | Select movement and combat actions as threats change. | [Taisei](taisei/README.md#research-scope), [Hurrican](hurrican/README.md#research-scope), [Hollow Knight imitation](hollow-knight/README.md#research-scope), [Soul Knight student project](soul-knight/README.md#research-scope), [REA-Issac](rea_issac/README.md#research-scope), [Ember Vault](ember-vault/README.md#research-scope) |
+| Reactive combat | Select movement and combat actions as threats change. | [Taisei](taisei/README.md#research-scope), [Hurrican](hurrican/README.md#research-scope), [Hollow Knight imitation](hollow-knight/README.md#research-scope), [Hollow Knight (ForestDango)](hollow-knight-forestdango/README.md#research-scope), [Soul Knight student project](soul-knight/README.md#research-scope), [REA-Issac](rea_issac/README.md#research-scope), [Ember Vault](ember-vault/README.md#research-scope) |
 | Spatial and tactical planning | Select routes and account for later action effects. | [Griddly Spiders](griddly/README.md#research-scope), [Frost Circuit](frost-circuit/README.md#research-scope) |
 | Exploration and resource planning | Use information and resources to complete dependent goals. | [Craftax](craftax/README.md#research-scope), [Brogue CE](brogue_ce/README.md#research-scope) |
 | Competitive decision-making | Select tactics or strategy against an opponent. | [Tank War](tank-war/README.md#research-scope), [Red Alert 2](ra2/README.md#research-scope) |
@@ -105,6 +105,7 @@ scores from different games do not have a common unit.
 | Tank War | `tank-war/web/game/engine.js` and web resources | `../honing/backends/tank/` |
 | RA2 | `ra2/` native bridge and runtime tools | `../honing/backends/ra2/` |
 | Soul Knight, Hollow Knight | `soul-knight/`, `hollow-knight/` native control bridges | Integration-local demos |
+| Hollow Knight (ForestDango) | `hollow-knight-forestdango/bridge/` file bridge in the operator's build | Integration-local Exp 0 collector |
 
 Craftax and Griddly keep the upstream game as an optional pinned dependency.
 Their local runtime modules expose game observations and explicit steps. They

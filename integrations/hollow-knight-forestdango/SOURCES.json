@@ -1,0 +1,536 @@
+{
+ "schema": "honing-exp0-port-v1",
+ "what": "Each file below is derived from one source file of the local workspace that collected the Exp 0 v0 releases (or from a git object of this repository). verbatim = byte copy; text = the listed rewrites only; py = the listed rewrites, then the repository's own tools with its pyproject.toml: ruff check --fix (safe fixes), isort --profile=black, black, ruff check --add-noqa (comments only), repeated until clean. The release bundles hold the source files themselves (common-source/, collector-source/).",
+ "generated": "2026-11-26 04:42 PST",
+ "tools": {
+  "ruff": "ruff 0.17.3",
+  "isort": "isort 9.0.2",
+  "black": "black, 26.10.1 (compiled: yes)"
+ },
+ "files": [
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningBridge.cs",
+   "source": "code/hk-devmode/bridge/HoningBridge.cs",
+   "source_sha256": "2dce7520d2a2413e317d1bd1022246db1c6cbeaf83d9c7f06ecf0ad3dac9178a",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningClock.cs",
+   "source": "code/hk-devmode/bridge/HoningClock.cs",
+   "source_sha256": "44046ce177c03afc2b7854d58c21b66f9d45be707665f007cd7d5d374b170115",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningDebug.cs",
+   "source": "code/hk-devmode/bridge/HoningDebug.cs",
+   "source_sha256": "1af344cf9be71e8c996e9101bb43d175f82903feaab61938846231426d4ad4ae",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningDev.cs",
+   "source": "code/hk-devmode/bridge/HoningDev.cs",
+   "source_sha256": "2de688015f46710a80e662807cf0b645c7f1d58d7dbe4af138f1b58db4c73f1d",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningLookahead.cs",
+   "source": "code/hk-devmode/bridge/HoningLookahead.cs",
+   "source_sha256": "8023633e0495db9797e04499c817d12d79cdd70850976be35311de50cc1e10f9",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningProbe.cs",
+   "source": "code/hk-devmode/bridge/HoningProbe.cs",
+   "source_sha256": "066a9846f4fa8a99d2f0ab1cd4ff93288c4e411ea47e629fedd9ae8f8659fb4f",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/bridge/HoningVisible.cs",
+   "source": "code/hk-devmode/bridge/HoningVisible.cs",
+   "source_sha256": "de3345aba080dae5db9e5cec32d932489252c8da0b7e60b0e02621a8855532d6",
+   "kind": "verbatim",
+   "note": "bridge source compiled into the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/DATASET.md",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/package/DATASET.md",
+   "source_sha256": "982ec643e7c47ecfe9ef956df57e8e244ee7be940f6b3604f5b561dd87ee36e7",
+   "kind": "text",
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/LABELS.md",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/package/LABELS.md",
+   "source_sha256": "b27a928f818149e0fa93a11574b62ce6fd68567e1e891287611dd93e7b21fe3a",
+   "kind": "text",
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/PROTOCOL.md",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/package/PROTOCOL.md",
+   "source_sha256": "92125ab075cf94f7f446184236c2408ae0aad9c53e15ae8eb5a235104c7eea14",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/RESULTS.md",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/package/RESULTS.md",
+   "source_sha256": "ea16f229803668c4962b072abda0fa33e5811cb348b0526bf910b5eae53a2679",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/RUNBOOK.md",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/package/RUNBOOK.md",
+   "source_sha256": "522d7dbec4d653ba2c95a27bbb3c572dace5b196c26b087bbd8248c420d9b6c6",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/TODO.md",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/package/TODO.md",
+   "source_sha256": "5e276364e32bff02a1f5193163b701356657586ae596464ef1c10f7099018737",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "the collection's filled package document, adapted to the repository"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/batch.py",
+   "source": "code/exp0/hk_v9/batch.py",
+   "source_sha256": "9060fad52f9fe86f9f535145080b17fefb6ee2729742408fe618301c853cd3a9",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/card_values_dryrun.json",
+   "source": "code/exp0/hk_v9/card_values_dryrun.json",
+   "source_sha256": "2f3cd22aef9d7552d36ce13b30aa2331589433515019ddd4e345d33d2300aedc",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/DATASET.md",
+   "source": "code/exp0/hk_v9/cards/DATASET.md",
+   "source_sha256": "a50845f33635a6cc22e50e6d7c8b3eef1ae2094dc7521aa55aad66ce68b739ab",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/LABELS.md",
+   "source": "code/exp0/hk_v9/cards/LABELS.md",
+   "source_sha256": "23fd7f5da5b390563db66f8bc7e7d789c88d24aeed91da19a70814750ee10aca",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/PROTOCOL.md",
+   "source": "code/exp0/hk_v9/cards/PROTOCOL.md",
+   "source_sha256": "5259ed1133f14ac89cdfe16e0f953560f69837dfa029473dab6893dcec1da748",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/RELEASE_RECEIPT.md",
+   "source": "code/exp0/hk_v9/cards/RELEASE_RECEIPT.md",
+   "source_sha256": "0b5e1f2710fb4458bb73a15170022d778f5f40825538c9e2dde73895d843500f",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/RESULTS.md",
+   "source": "code/exp0/hk_v9/cards/RESULTS.md",
+   "source_sha256": "52dfb0530edcf79144de1a218532bbc3a5b6cbd234341fc878da195ab9980782",
+   "kind": "text",
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/RUNBOOK.md",
+   "source": "code/exp0/hk_v9/cards/RUNBOOK.md",
+   "source_sha256": "ea84a2c75410cf77d645878fbd54121762946515b49d0278ad4ce5098f977148",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ],
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/cards/TODO.md",
+   "source": "code/exp0/hk_v9/cards/TODO.md",
+   "source_sha256": "12177820b3c3dae29e8d4fab213593197b9adba2682b576e5702cbd0e845c77b",
+   "kind": "text",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)"
+   ],
+   "note": "card template the release driver fills (fill_cards.py)"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/collect.py",
+   "source": "code/exp0/hk_v9/collect.py",
+   "source_sha256": "f82d81dcc00021dcadf352b4a28d9f143659e47f8b18429c030e26c9deb867e2",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/collection.json",
+   "source": "experiments/exp0/20261126_0045_hk_v0_collection/collection/collection.json",
+   "source_sha256": "d75bc46d973345dfc3ec9d8039faabed2d17f15464e0db2a8ccad1c33928ad25",
+   "kind": "verbatim",
+   "note": "the collection root's frozen contract plan, rendered from plan.json"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/__init__.py",
+   "source": "code/exp0/hk_v9/core/__init__.py",
+   "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/env.py",
+   "source": "code/exp0/hk_v9/core/env.py",
+   "source_sha256": "eb1b7997f1e7f0d4d09ef60f96d453b4f7726ad94ac98f15a041e2ab72efee6d",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/env_forestdango.py",
+   "source": "code/exp0/hk_v9/core/env_forestdango.py",
+   "source_sha256": "00f4f0f6b63f2ce8b19ae819ef467d0aa0485952aef192fe7d87dc9734b3131e",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/env_keys.py",
+   "source": "code/exp0/hk_v9/core/env_keys.py",
+   "source_sha256": "189a3efd4ef81ef671a9bb0a54cfed710d145dba7dd02a6b499189ca2ba8c28b",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/evalwatch.py",
+   "source": "code/exp0/hk_v9/core/evalwatch.py",
+   "source_sha256": "8dff62ffab8a5816c25cb2b859fc4069399978c36676bce3c0f5684265858dd8",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/laya.py",
+   "source": "code/exp0/hk_v9/core/laya.py",
+   "source_sha256": "07f6cfe08e39da2ae8a4ee4cd50f08cd0820b3ea2484454f75f790863574ecaa",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/core/laya_multi.py",
+   "source": "code/exp0/hk_v9/core/laya_multi.py",
+   "source_sha256": "7f61e8d68ef0354d5683ad321d2d7163f6e38c6ec4ff3818aba4662b958f5579",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/faults.py",
+   "source": "code/exp0/hk_v9/faults.py",
+   "source_sha256": "7ee686fa33fd01c12de4486274fc3c10fec70cadfa43e1c0accb859ca7315980",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/__init__.py",
+   "source": "code/exp0/hk_v9/harness/__init__.py",
+   "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing.SOURCE.json",
+   "source": "code/exp0/hk_v9/harness/v12_standing.SOURCE.json",
+   "source_sha256": "7d5f07575ad90a237a0d277c3ec77a7af3dcb8a8d27bc5783639528349c9a638",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/__init__.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/__init__.py",
+   "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/agent.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/agent.py",
+   "source_sha256": "676b2ad893e7ad377238cab4504785a4b77dac3b8afb22fbb5e8c985d790fc0c",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/keys.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/keys.py",
+   "source_sha256": "6f05d42dc0e3031549ca95e19d57a9f0d0a01e9db6d33bf398dd5a62d0e4c2a2",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/look.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/look.py",
+   "source_sha256": "8788bb900f3e6adf592d8a6832b29bcf29f9639bc3e6aa572eb7cd79542621cf",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/mem.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/mem.py",
+   "source_sha256": "6a911e0386998ef0c394739c5eac2d197622d140c31e6d0d1180e62827595fd9",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/see.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/see.py",
+   "source_sha256": "06672a150cc97d9a3a56b36e1df55ecf6b166f9f0938ba9f024870eb76460a0a",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/sim.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/sim.py",
+   "source_sha256": "ab90d7b73a2fd7ea7a8987c06c43a27394fba7c42bcd130aa2ba293ec807d8fc",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/harness/v12_standing/text.py",
+   "source": "code/exp0/hk_v9/harness/v12_standing/text.py",
+   "source_sha256": "18850a62d20d4336a00d092e699900652a7726eb585fd9dd5bac599a4090d5f6",
+   "kind": "verbatim",
+   "note": "pinned harness snapshot; its fingerprint is in every manifest"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/hk_adapter.py",
+   "source": "code/exp0/hk_v9/hk_adapter.py",
+   "source_sha256": "795b91065aec24ffd1a1f7bbf4cd412c259c29892e6c375aca2709b477c9eacb",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/native_replay.py",
+   "source": "code/exp0/hk_v9/native_replay.py",
+   "source_sha256": "cc2d3b2fd201483c9575bedcc904aceb8831a46baac72e52c08060612a31e755",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/offline.py",
+   "source": "code/exp0/hk_v9/offline.py",
+   "source_sha256": "75c4fe8bbec55c5deee8a1bb046f405292a874a07b5cc12dc7ec49afb4ae4a2c",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/offline_faults.py",
+   "source": "code/exp0/hk_v9/offline_faults.py",
+   "source_sha256": "c240f46c6fe91084134c14b34dcf3c3fbecbc7efd64780083d11bad81ae63ebf",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/pins.json",
+   "source": "code/exp0/hk_v9/pins.json",
+   "source_sha256": "379364a7bad25bb6d67c7f544a369ebc6e5309c1f5289164a2fafe800703f379",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/pins.py",
+   "source": "code/exp0/hk_v9/pins.py",
+   "source_sha256": "d7ae954eba92e58dcf2d6eae741976fe58d4dc2eae94e1d2d4412e27b46f7510",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/plan.json",
+   "source": "code/exp0/hk_v9/plan.json",
+   "source_sha256": "e51763904122ea619e3bb674b38b0f704f0d12144dd1316418209f47e24e3546",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/release_dryrun.py",
+   "source": "code/exp0/hk_v9/release_dryrun.py",
+   "source_sha256": "ab5a4ee426aa14d786da9c7c1270e16be053538a350c006586272a33ecdd27fe",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/release_jobs.py",
+   "source": "code/exp0/hk_v9/release_jobs.py",
+   "source_sha256": "e448765734e75c7641f60b5063cd2ded2f8412a6be611bd98eaf955f19ff2c8a",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/release_v0.py",
+   "source": "code/exp0/hk_v9/release_v0.py",
+   "source_sha256": "91b84a66c3d0cbf49adb1ba3e5074ac8a51f4e39c1f916e569834b81adc802cb",
+   "kind": "py",
+   "rewrites": [
+    "doc: neutral wording (no session or account names)",
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/replay_check.py",
+   "source": "code/exp0/hk_v9/replay_check.py",
+   "source_sha256": "296426bcbe63dcd4abcf4563e9745450f6579dda75f2b83873d264362e0150ff",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/replay_env.py",
+   "source": "code/exp0/hk_v9/replay_env.py",
+   "source_sha256": "a7608b0a71426bf00dc9131726eb5892d8229056ba53c9c4daa280901efeb427",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/runtime.py",
+   "source": "code/exp0/hk_v9/runtime.py",
+   "source_sha256": "9c236fc953da16c3bc2d11b78ee0036b7280c0d52190bf7b981da15c9d250dad",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts.py",
+   "source": "code/exp0/hk_v9/starts.py",
+   "source_sha256": "e6bed16fab9d3446b8fa7d165b6de535aba26a85d99d887c3d227693609f1919",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts/fable_corridor_end.txt",
+   "source": "code/exp0/hk_v9/starts/fable_corridor_end.txt",
+   "source_sha256": "f2317ab9cf72fa4601294e8edcb128e843c472042d0628199603f85b517cab46",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts/fable_first_enemy.txt",
+   "source": "code/exp0/hk_v9/starts/fable_first_enemy.txt",
+   "source_sha256": "3056281f9f426e48500dba6fe8deecc591996cae0a83c60f8ddc76188e6d480b",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts/fable_ledge_y30.txt",
+   "source": "code/exp0/hk_v9/starts/fable_ledge_y30.txt",
+   "source_sha256": "66e6d317306d53c088ded0a641c9240581368ded3cbe760cd48eca17b419cf0e",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts/fable_platform_y11.txt",
+   "source": "code/exp0/hk_v9/starts/fable_platform_y11.txt",
+   "source_sha256": "2183f785358e023e255f1e8bcfd38ac6d91dae095196e8ef341c80b9ada7f558",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts/fable_pocket_floor.txt",
+   "source": "code/exp0/hk_v9/starts/fable_pocket_floor.txt",
+   "source_sha256": "acc337a6fb046e67ab166968aae9ea8c4ab110725a96991fdc897f30b9872bb6",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/starts/route_to_upper_left_ledge.txt",
+   "source": "code/exp0/hk_v9/starts/route_to_upper_left_ledge.txt",
+   "source_sha256": "583bc235f64647f804d9f256ef277a61d34b3c5d8c024f992f6632920c626c04",
+   "kind": "verbatim",
+   "note": "frozen record"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/state_codec.py",
+   "source": "code/exp0/hk_v9/state_codec.py",
+   "source_sha256": "e75dd9ff034be69cd323987b53f3cce796b4cb439635f98973f5b97ba2db363e",
+   "kind": "py"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/to_contract.py",
+   "source": "code/exp0/hk_v9/to_contract.py",
+   "source_sha256": "175d2e9539e56cde905e99d6077ec708bfca6c5920dfa6dc3e7ba9546653ac21",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/exp0/v0/verify_starts.py",
+   "source": "code/exp0/hk_v9/verify_starts.py",
+   "source_sha256": "00f77587247347a678439dc90eafbfe3e4afd01ea1227bb3bd878dab01aafbd2",
+   "kind": "py",
+   "rewrites": [
+    "path: repository layout"
+   ]
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/player/hk_det.sh",
+   "source": "code/hk-devmode/build/linux64_devmode_c/hk_det.sh",
+   "source_sha256": "b2117544c2bc5d897450e22f0273f203c93aa2050f3892c61336bd8140ede2b1",
+   "kind": "verbatim",
+   "note": "launcher placed next to the player executable of the deterministic build"
+  },
+  {
+   "path": "integrations/hollow-knight-forestdango/player/hk_fast.sh",
+   "source": "code/hk-devmode/build/linux64_devmode_c/hk_fast.sh",
+   "source_sha256": "88e9d9412a8d0869cee5b7dc8f5c3d43582d546dd67def262c6e9122d487e2a7",
+   "kind": "verbatim",
+   "note": "launcher placed next to the player executable of the deterministic build"
+  }
+ ],
+ "not_ported": [
+  {
+   "source": "code/exp0/hk_v9/source_ref/",
+   "why": "read-only reference copies of the originals the adapter was adapted from, kept locally for diffs"
+  },
+  {
+   "source": "code/exp0/hk_v9/harness/v9_keys/",
+   "why": "the stand-in harness of the smoke runs; the release uses v12_standing"
+  },
+  {
+   "source": "code/hk-devmode/overlay/, tools/make_overlay.py",
+   "why": "modified copies of (and patch anchors from) scripts of ForestDango/Hollow-Knight-Demo, which has no license"
+  },
+  {
+   "source": "the game: ForestDango/Hollow-Knight-Demo and the Unity builds",
+   "why": "third-party project without a license, with commercial Unity assets; supplied by the operator"
+  }
+ ],
+ "new_files_not_derived": [
+  "integrations/hollow-knight-forestdango/README.md",
+  "tests/test_exp0_hollow_knight_forestdango.py",
+  "tests/fixtures/exp0_hollow_knight_forestdango/: the first decisions of a recorded run (session files cut consistently; the manifest keeps only the replay fields)",
+  "integrations/README.md (index rows)",
+  ".pre-commit-config.yaml (exclude the harness snapshot)"
+ ]
+}

@@ -1,0 +1,4 @@
+# development checkpoint (control prefix, 9 frames per step): the first 63 steps of
+# experiments/hk-forestdango-demo/20261125_0017_v9_keys_harness/analysis/route_to_upper_left_ledge.txt
+# expected place after it (routecheck_ledge_replay): (134.4, 10.0) on the upper corridor, before the drop into the pocket
+R/n R/n R/n R/n R/n R/n R/n R/n R/n R/n R/n R/n N/f R/n R/n R/n R/n R/n R/n R/n N/f R/n R/n R/n R/n R/n R/n N/f R/n R/n R/n N/n N/f N/n N/f R/n R/n R/n R/n R/n R/n R/n R/n R/n N/f R/n R/n R/n R/n R/n R/n Rl/n Rl/n Rl/n R/n R/n R/n R/n N/f R/n R/n R/n R/n

@@ -1,0 +1,58 @@
+{
+ "what": "pinned snapshot copy of the Demo session's frozen no-autopilot harness v12_standing (the Exp 0 v0 release harness)",
+ "source": "code/hk-hitl/harness/v12_standing",
+ "copied_at": "2026-11-26 00:50 PST (2026-11-26 08:50 UTC)",
+ "copied_by": "Exp 0 v0 HK collection subagent of Honing_CC_Deli (experiments/exp0/20261126_0045_hk_v0_collection)",
+ "frozen_by_demo_session": "2026-11-25 19:55 PST (code/hk-hitl/harness/CHANGELOG.md, v12_standing entry; REPORT.md of experiments/hk-forestdango-demo/20261125_1642_harness_boundary)",
+ "check_at_copy": "diff -r -x __pycache__ against the source and against the harness_snapshot/v12_standing of runs f1_v12_laya_new, f1_v12_laya_pocket, f1_v12_laya_corridor, f2_v12_reader3_pocket: identical",
+ "fingerprint": "162948741065d84210bc27a861f56919a5799adb58a643ecf24d86ab4ac93a9c",
+ "files": {
+  "__init__.py": {
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "agent.py": {
+   "sha256": "676b2ad893e7ad377238cab4504785a4b77dac3b8afb22fbb5e8c985d790fc0c",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "keys.py": {
+   "sha256": "6f05d42dc0e3031549ca95e19d57a9f0d0a01e9db6d33bf398dd5a62d0e4c2a2",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "look.py": {
+   "sha256": "8788bb900f3e6adf592d8a6832b29bcf29f9639bc3e6aa572eb7cd79542621cf",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "mem.py": {
+   "sha256": "6a911e0386998ef0c394739c5eac2d197622d140c31e6d0d1180e62827595fd9",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "see.py": {
+   "sha256": "06672a150cc97d9a3a56b36e1df55ecf6b166f9f0938ba9f024870eb76460a0a",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "sim.py": {
+   "sha256": "ab90d7b73a2fd7ea7a8987c06c43a27394fba7c42bcd130aa2ba293ec807d8fc",
+   "source_mtime_utc": "2026-11-26 03:52:18"
+  },
+  "text.py": {
+   "sha256": "18850a62d20d4336a00d092e699900652a7726eb585fd9dd5bac599a4090d5f6",
+   "source_mtime_utc": "2026-11-26 03:52:18",
+   "sha256_demo_original": "49047c90208c408daafce7af88c967b3577198d76c4070db642068462d0caf9a"
+  }
+ },
+ "fingerprint_of_the_demo_original": "adfbdd6bf390bfc18d1ab2963b6a235ef50109ee7ef4f1d45c363cb879e3c38d",
+ "local_change": {
+  "when": "2026-11-26 03:25 PST, before the plan was frozen and before any release attempt",
+  "why": "privacy: the upstream repository is public; the Demo original hard-codes the local absolute path of Laya's tokenizer file (it contains the local account name)",
+  "file": "text.py",
+  "constant": "_TOKENIZER_FILE",
+  "replaced_text_python_repr": "'_TOKENIZER_FILE = (\"<redacted-local-root>/Honing_codex/soul-knight-hy/honing/cache/hub/models--convaiinnovations--\"\\n                   \"laya-typed-decisions/snapshots/1a793eb568e6718f15941d08f85432581df534e3/tokenizer/tokenizer.json\")'",
+  "replaced_text_note": "the original value is the absolute path of tokenizer/tokenizer.json inside a local Hugging Face cache snapshot of convaiinnovations/laya-typed-decisions@1a793eb568e6718f15941d08f85432581df534e3; its local root is redacted here",
+  "new_text": "_TOKENIZER_FILE = \"<set by the Exp 0 adapter>\"",
+  "set_at_run_time_by": "runtime.harness_agent (code/exp0/hk_v9/runtime.py): $HONING_LAYA_TOKENIZER, else huggingface_hub from the public checkpoint, file tokenizer/tokenizer.json, sha256 6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30; tools refuse to run without it",
+  "text_py_sha256_demo_original": "49047c90208c408daafce7af88c967b3577198d76c4070db642068462d0caf9a",
+  "text_py_sha256_this_copy": "18850a62d20d4336a00d092e699900652a7726eb585fd9dd5bac599a4090d5f6",
+  "check": "every other byte of every file equals the Demo original (verified when the change was made)"
+ }
+}

@@ -1,6 +1,10 @@
 default_language_version:
   python: python3
 
+# The pinned Hollow Knight harness snapshot keeps the exact bytes that the
+# harness fingerprint of every Exp 0 v0 manifest was computed over.
+exclude: ^integrations/hollow-knight-forestdango/exp0/v0/harness/
+
 ci:
   autofix_prs: true
   autoupdate_schedule: quarterly
