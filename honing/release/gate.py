@@ -30,7 +30,9 @@ class Gate:
     A :class:`~honing.release.PairedIntervalSelector` with more than one look
     makes the gate sequential. The gate calls the evaluator once per block and
     asks the selector to look after each block, and stops at the first look
-    that decides. Every call must then play tasks no earlier call played, as
+    that decides. Every look tunes its bets to ``looks`` blocks the size of
+    the first, and a gate whose blocks add up to more is refused. Every call
+    must play tasks no earlier call played, as
     :class:`~honing.backends.tank.FreshSeedEvaluator` does. An evaluator that
     plays the same tasks again is refused at the second block, since its
     rounds would count twice. ``metrics``, when given, adds what it returns
@@ -62,18 +64,29 @@ class Gate:
             )
         chosen = selector if selector is not None else self.selector_for(candidate.kind)
         evaluation = self._evaluate(candidate, incumbent)
-        decision = None
         if isinstance(chosen, PairedIntervalSelector):
-            for _ in range(chosen.looks - 1):
-                decision = chosen.look(candidate, evaluation, final=False)
-                if decision is not None:
-                    break
-                evaluation = _joined(evaluation, self._evaluate(candidate, incumbent))
-        if decision is None:
+            evaluation, decision = self._look_by_block(chosen, candidate, incumbent, evaluation)
+        else:
             decision = chosen.decide(candidate, evaluation)
         if self._metrics is not None:
             decision = replace(decision, metrics={**decision.metrics, **self._metrics(evaluation)})
         return evaluation, decision
+
+    def _look_by_block(
+        self,
+        selector: PairedIntervalSelector,
+        candidate: UpdateCandidate,
+        incumbent: HoneRelease,
+        evaluation: EvaluationResult,
+    ) -> tuple[EvaluationResult, SelectionDecision]:
+        """Look after each block, every look planning ``looks`` blocks the size of the first."""
+        planned = selector.looks * len(evaluation.task_ids)
+        for _ in range(selector.looks - 1):
+            decision = selector.look(candidate, evaluation, final=False, planned=planned)
+            if decision is not None:
+                return evaluation, decision
+            evaluation = _joined(evaluation, self._evaluate(candidate, incumbent))
+        return evaluation, selector.decide(candidate, evaluation, planned=planned)
 
     def _evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
         evaluation = self._evaluator.evaluate(candidate, incumbent)

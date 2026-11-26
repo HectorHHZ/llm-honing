@@ -1,6 +1,6 @@
 """An episode's decision traces as compact text for a model to reflect on.
 
-GEPA's reflective dataset, Meta-Harness's trace files and System 0 read the
+GEPA's reflective dataset, Meta-Harness's trace files and System 2 read the
 same rendering, and the same traces and cap always render to the same text.
 
 The text opens with the episode, the release it ran under (or, when no
@@ -12,7 +12,8 @@ asked from ``before_seconds`` before the event to ``after_seconds`` after it,
 and windows that overlap or touch merge into one. The defaults are sized for
 a tank round: 2 s before an event reaches past a shell's flight of 1.1 to
 1.7 s to the decisions that could have dodged it, and 0.5 s after shows how
-the model went on. An episode without a key event shows the decisions asked
+the model went on. GEPA and Meta-Harness take both spans and the cap from
+their config. An episode without a key event shows the decisions asked
 in the last ``before_seconds`` up to its last one. Each decision shows its
 time, the probability of every option, the choice, what the controller
 allowed and applied, and the events that followed it.
@@ -26,7 +27,11 @@ there is none. It also lists as gone each field of that decision that no new
 field took the place of. A new field takes the place of an old one when both
 begin with the same name: the first two words of the text before the first
 digit, sign, or one of ``=:([{``. So "Me at 2." replaces "Me at 1.", and
-"Enemy shell incoming." is gone when nothing begins with "Enemy shell". The
+"Enemy shell incoming." is gone when nothing begins with "Enemy shell". When
+several old fields share the new one's name, it takes the place of the one
+whose text it shares the longest start with, so "Enemy 2 at 8." replaces
+"Enemy 2 at 7." and leaves "Enemy 1 at 3." gone. Without names from the
+source this is a guess, which a list whose items all changed can defeat. The
 constraints and applied action are shown when they changed since the decision
 shown before. A decision's text therefore depends on which decisions are shown
 before it in its window.
@@ -53,7 +58,7 @@ from collections.abc import Sequence
 
 from honing.core import DecisionTrace, require
 
-DEFAULT_MAX_TOKENS = 6000
+DEFAULT_MAX_TOKENS = 12000
 DEFAULT_BEFORE_SECONDS = 2.0
 DEFAULT_AFTER_SECONDS = 0.5
 # Enough of a policy checksum to tell policies apart: the tank runner names run directories with as many.
@@ -76,6 +81,14 @@ def estimate_tokens(text: str) -> int:
     return len(_TOKEN.findall(text))
 
 
+def check_window(before_seconds: float, after_seconds: float) -> None:
+    """Refuse a window that does not reach a finite time >= 0 before and after its event."""
+    require(
+        all(math.isfinite(seconds) and seconds >= 0.0 for seconds in (before_seconds, after_seconds)),
+        "a window's before_seconds and after_seconds are finite and >= 0",
+    )
+
+
 def render_traces(
     traces: Sequence[DecisionTrace],
     *,
@@ -85,10 +98,7 @@ def render_traces(
 ) -> str:
     """One episode's traces, in step order, as text of at most ``max_tokens`` estimated tokens."""
     require(max_tokens > estimate_tokens(CUT_MARK), f"max_tokens must exceed {estimate_tokens(CUT_MARK)}")
-    require(
-        all(math.isfinite(seconds) and seconds >= 0.0 for seconds in (before_seconds, after_seconds)),
-        "a window's before_seconds and after_seconds are finite and >= 0",
-    )
+    check_window(before_seconds, after_seconds)
     if not traces:
         return "No decisions were recorded in this episode.\n"
     require(
@@ -336,19 +346,26 @@ def _state(current: Fields, before: Fields | None) -> list[str]:
 
 
 def _diff(items: Sequence[str], old: Sequence[str]) -> tuple[list[str], list[str]]:
-    """The fields new since ``old``, and the fields of ``old`` that no new field took the place of."""
+    """The fields new since ``old``, and the fields of ``old`` that no new field took the place of.
+
+    Each new field, in order, takes the place of the old field with its name
+    that shares the longest start with it, the earliest on a tie.
+    """
     present, earlier = set(items), set(old)
     new = [field for field in items if field not in earlier]
-    room = Counter(_name(field) for field in new)
-    gone = []
-    for field in old:
-        if field in present:
-            continue
-        if room[_name(field)]:
-            room[_name(field)] -= 1
-        else:
-            gone.append(field)
-    return new, gone
+    left = [field for field in old if field not in present]
+    for field in new:
+        name = _name(field)
+        same = [index for index, gone in enumerate(left) if _name(gone) == name]
+        if same:
+            del left[max(same, key=lambda index: (_shared_start(field, left[index]), -index))]
+    return new, left
+
+
+def _shared_start(first: str, second: str) -> int:
+    """How many characters the two texts begin with alike."""
+    pairs = enumerate(zip(first, second, strict=False))
+    return next((index for index, (a, b) in pairs if a != b), min(len(first), len(second)))
 
 
 def _name(field: str) -> str:
@@ -389,6 +406,7 @@ __all__ = [
     "DEFAULT_BEFORE_SECONDS",
     "DEFAULT_MAX_TOKENS",
     "POLICY_CHECKSUM_CHARS",
+    "check_window",
     "estimate_tokens",
     "render_traces",
 ]

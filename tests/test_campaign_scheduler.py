@@ -37,6 +37,7 @@ def test_the_history_holds_every_move_with_its_result_and_gate_metrics(tmp_path:
     assert (rejected.release_id, published.release_id, skipped.release_id) == (None, "r0001", None)
     assert (published.label, skipped.label, rejected.label) == ("verify", "verify", None)
     assert skipped.reason == "append_instruction proposed nothing" and skipped.gate_metrics == {}
+    assert (rejected.metrics_from, published.metrics_from, skipped.metrics_from) == ("gate", "gate", None)
     # The history carries the same gate numbers the commit record holds for each candidate.
     _, reject_line, publish_line, _ = _records(fixture.campaign.chain.record_path)
     for record, line in ((rejected, reject_line), (published, publish_line)):
@@ -45,6 +46,28 @@ def test_the_history_holds_every_move_with_its_result_and_gate_metrics(tmp_path:
         assert {name: metrics[name] for name in GATE_METRIC_NAMES} == record.gate_metrics
         assert record.reason == line["decision"]["reason"]  # type: ignore[index]
     assert fixture.campaign.state().step == 3
+
+
+@pytest.mark.unit
+def test_the_gate_metrics_are_computed_once_per_gated_move(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import honing.campaign.campaign as campaign_module
+
+    calls: list[object] = []
+    computed = campaign_module.gate_metrics
+
+    def counted(evaluation: object) -> Mapping[str, float]:
+        calls.append(evaluation)
+        return computed(evaluation)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(campaign_module, "gate_metrics", counted)
+    fixture = build_campaign(tmp_path)
+    fixture.campaign.run(ScriptedScheduler([TRAIN, TRAIN]))
+
+    gated = [record for record in fixture.campaign.state().history if record.result != "skipped"]
+    assert len(calls) == len(gated) == 2
+    lines = [json.loads(line) for line in fixture.campaign.chain.record_path.read_text().splitlines()[1:]]
+    for record, line in zip(gated, lines, strict=True):
+        assert {name: line["candidate"]["metrics"][name] for name in record.gate_metrics} == record.gate_metrics
 
 
 @pytest.mark.unit
@@ -145,6 +168,25 @@ def test_a_scripted_scheduler_restores_its_place_in_the_script(tmp_path: Path) -
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "other",
+    [
+        [Move(kind="prune"), Move(kind="quantize")],  # the case in #211: same length, other kinds
+        [HARNESS, TRAIN],  # same moves, other order
+        [TRAIN, Move(kind="harness", harness=HarnessMoveConfig(label="another"))],  # same kinds, another label
+    ],
+)
+def test_a_scripted_scheduler_refuses_another_script_of_the_same_length(tmp_path: Path, other: list[Move]) -> None:
+    fixture = build_campaign(tmp_path)
+    fixture.campaign.run(ScriptedScheduler([TRAIN, HARNESS]), max_steps=1)
+    restarted = ScriptedScheduler(other)
+
+    with pytest.raises(ContractError, match="another script of the same length"):
+        restore_scheduler(restarted, fixture.campaign.chain.record_path)
+    assert restarted.export_state()["next"] == 0
+
+
+@pytest.mark.unit
 def test_a_record_without_scheduler_state_restores_nothing(tmp_path: Path) -> None:
     fixture = build_campaign(tmp_path)
     fixture.campaign.advance(TRAIN)  # moved by hand, with no scheduler
@@ -166,7 +208,13 @@ def test_a_line_cut_short_by_a_crash_is_not_read(tmp_path: Path) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write('{"op": "publish", "scheduler": "scripted", "scheduler_state": {"next"')
 
-    assert read_scheduler_state(path) == complete == ("scripted", {"schema_version": 1, "next": 1, "moves": 2})
+    assert complete is not None and complete[0] == "scripted"
+    assert read_scheduler_state(path) == complete
+    assert {key: complete[1][key] for key in ("schema_version", "next", "moves")} == {
+        "schema_version": 2,
+        "next": 1,
+        "moves": 2,
+    }
 
 
 @pytest.mark.unit
@@ -178,13 +226,15 @@ def test_state_from_another_scheduler_or_schema_is_refused_before_it_is_read(tmp
     with pytest.raises(CampaignRuleError, match="written by scheduler 'scripted', but this campaign runs 'history'"):
         restore_scheduler(HistoryScheduler([TRAIN]), path)
     newer = ScriptedScheduler([TRAIN])
-    newer.state_schema_version = 2  # type: ignore[misc]
-    with pytest.raises(CampaignRuleError, match="reads scheduler state schema version 2, but the state is version 1"):
+    newer.state_schema_version = 3  # type: ignore[misc]
+    with pytest.raises(CampaignRuleError, match="reads scheduler state schema version 3, but the state is version 2"):
         restore_scheduler(newer, path)
     assert newer.export_state()["next"] == 0
 
 
 class _BadStateScheduler(ScriptedScheduler):
+    state_schema_version = 1
+
     def __init__(self, state: Mapping[str, object]) -> None:
         super().__init__([TRAIN])
         self._state = state
@@ -221,6 +271,7 @@ class _LiveStateScheduler(ScriptedScheduler):
     """Exports its live state, nested list included, so the caller keeps a handle on what it handed over."""
 
     name = "live"
+    state_schema_version = 1
 
     def __init__(self) -> None:
         super().__init__([TRAIN])

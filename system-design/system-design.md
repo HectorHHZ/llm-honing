@@ -124,7 +124,7 @@ algorithm declares the `DataContract` it consumes — token sequences, on-policy
 grouped on-policy samples, or preference pairs — and the campaign checks the batch against
 it before training starts.
 
-A decision model (a Jev-style System One model) trains on `typed_decisions`. Each
+A decision model (a Jev-style System 1 model) trains on `typed_decisions`. Each
 `DecisionSample` holds the state, the typed questions asked about it with their options, and the
 option chosen. A rollout's samples also hold the behavior probabilities, the reward, and a group. `sft` and `grpo` accept this
 contract when a job names it (`TrainJobSpec.contract`), and run on a local trainer. A backend
@@ -425,14 +425,18 @@ same questions. Over the cap, decisions around events with a higher priority num
 leave first, and within a window the earliest and latest leave before those nearest in
 time to the decision the event followed. The same traces and cap always render to the
 same text. In a tank round, a motion decision's whole state is about 1,300 estimated
-tokens and a weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000, so
-at the default cap of 6,000 it keeps only its last 0.45 to 0.8 s. Given a trace source,
+tokens and a weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000. The
+default cap of 12,000 keeps its last 1.3 to 1.8 s, longer than the shortest flight of a
+shell, where 6,000 kept only 0.45 to 0.8 s. GEPA and Meta-Harness take the cap and both
+window spans from their config (`trace_max_tokens`, `trace_before_seconds`,
+`trace_after_seconds`), so a reflection model with a small context lowers the cap and a
+game with another clock sets its own spans. Given a trace source,
 GEPA's reflective dataset shows each minibatch episode's rendering as its generated
 output, and Meta-Harness writes it to a file under its work directory, keeps the file's
 path in its archive state, and copies it as `decisions.txt` beside each search trace.
 Importing the loader or the renderer loads only the standard library, `honing.core` and
 the tank decision-log parser: `honing.backends.tank` imports its runner, grader, rollouts
-and demonstrations only when one is first used, so System 0's scheduler (#138) can read
+and demonstrations only when one is first used, so System 2's scheduler (#138) can read
 the same traces without the rest of the backend.
 
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
@@ -515,7 +519,9 @@ published with the next accepted release, whatever its kind.
 **A scheduler sees every move, and keeps its own state.** `CampaignState.history` holds a
 `StepRecord` for every move the campaign advanced, published, rejected, or skipped: the
 move, its label, the head it was built on, the release it published, the reason, and the
-`gate_*` metrics (none for a skip). A scheduler learns from a rejection there, which the
+`gate_*` metrics (none for a skip). `metrics_from` says whose run those metrics come from:
+`"gate"`, or `"method"` when a harness method's own selector rejected the candidate on
+`method_evaluator` and the gate never ran. A scheduler learns from a rejection there, which the
 releases alone never show. Its own state follows the method-state rules: it is JSON-native
 and carries a `schema_version`. The scheduler holds that state, and `CampaignState` does not
 carry it. After each choice the chain takes a deep copy of the exported state, which no
@@ -537,7 +543,10 @@ from the record belongs with rebuilding the chain.
 
 **Every runner has the same scheduler slot.** The pipeline, tank, and RA2 configs take an
 optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the
-config's `schedule`. In the pipeline a `rollback` entry stays the pipeline's own step: it
+config's `schedule`, and its state names the script by a digest of its moves' kinds and
+labels, so a restart refuses another script of the same length. With a scheduler, the
+`schedule`'s moves are not run, and building the run warns that they are ignored. In the
+pipeline a `rollback` entry stays the pipeline's own step: it
 runs once as many moves as precede it in `schedule` have run, whichever scheduler chose
 them, and the run fails when the scheduler stops before it.
 
@@ -566,16 +575,24 @@ selects when the interval on the mean paired difference lies above a minimum eff
 interval is a betting bound that assumes only independent differences in `[-1, 1]`, so a
 candidate with no effect is selected at most `(1 - confidence) / 2` of the time at any
 gate size, skewed or tied scores included. It decides once, or after each block of a gate
-that plays in blocks and stops when the result is clear, with the confidence split across
-the looks so stopping early does not raise the false-accept rate. With more than one look
-the gate calls its evaluator once per block, so that evaluator must play new tasks on every
-call, and the decision records `stopped_early`.
+that plays in blocks and stops when the result is clear. Every look continues one betting
+process with stakes tuned to the planned rounds, and the bound covers the capital's running
+maximum, so every look uses the full confidence and stopping early does not raise the
+false-accept rate. Because each end keeps the furthest the capital reached, tasks whose
+differences change with their order can leave the ends crossed, and such an interval never
+selects. To detect a gain of 0.10 with 80% power at a paired standard deviation
+of 0.5, a four-look gate plans 280 rounds and plays about 205 on average. With more than
+one look the gate calls its evaluator once per block, so that evaluator must play new tasks
+on every call, and the decision records `stopped_early`.
 
 **The tank gate never replays a seed.** A loop that reads gate verdicts can overfit rounds it
 sees at every step. The tank gate (`honing/backends/tank/gate.py`) draws every block's seeds
 from a pool of 100,000 validation seeds, in order, so no two gates of a campaign share a seed,
 and records the first and last seed it played (`seed_first`, `seed_last`) beside the
-interval, `rounds` and `stopped_early`. Both seats of a seed play the same maze, so the gate
+interval, `rounds` and `stopped_early`. The first gate starts at the pool's first seed, or at
+the config's `gate.first_seed`: campaigns that start at the same seed play the same gates,
+which pairs two arms of an experiment, and repeats of one arm start elsewhere. Both seats of
+a seed play the same maze, so the gate
 scores a seed by the mean of its two seats and the interval counts it once (`tasks`), while
 every seat's episode record stays on the evaluation. The suite file's eight validation
 seeds stay fixed for GEPA's Pareto front. A suite with a task on a pool seed, in any split,

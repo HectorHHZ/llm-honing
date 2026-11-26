@@ -299,17 +299,37 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
     ("scheduler state holding a set", lambda: validate_scheduler_state({"schema_version": 1, "seen": {"a"}})),
     ("scheduler state without a schema version", lambda: validate_scheduler_state({"next": 0})),
     ("an unknown step result", lambda: StepRecord(0, Move(kind="train"), "abandoned", "r0000", "x")),  # type: ignore[arg-type]
-    ("a published step without a release", lambda: StepRecord(0, Move(kind="train"), "published", "r0000", "won")),
+    (
+        "a published step without a release",
+        lambda: StepRecord(0, Move(kind="train"), "published", "r0000", "won", metrics_from="gate"),
+    ),
     (
         "a rejected step naming a release",
-        lambda: StepRecord(0, Move(kind="train"), "rejected", "r0000", "lost", release_id="r0001"),
+        lambda: StepRecord(
+            0, Move(kind="train"), "rejected", "r0000", "lost", release_id="r0001", metrics_from="gate"
+        ),
+    ),
+    (
+        "a rejected step that says no source for its metrics",
+        lambda: StepRecord(0, Move(kind="train"), "rejected", "r0000", "lost"),
+    ),
+    (
+        "a skipped step that names a source for its metrics",
+        lambda: StepRecord(0, Move(kind="harness"), "skipped", "r0000", "none", metrics_from="method"),
+    ),
+    (
+        "an unknown source for a step's metrics",
+        lambda: StepRecord(0, Move(kind="train"), "rejected", "r0000", "lost", metrics_from="judge"),  # type: ignore[arg-type]
     ),
     (
         "a skipped step with gate metrics",
         lambda: StepRecord(0, Move(kind="harness"), "skipped", "r0000", "none", gate_metrics={"gate_tasks": 3.0}),
     ),
     ("a stop recorded as a step", lambda: StepRecord(0, Move(kind="stop"), "skipped", "r0000", "stopped")),
-    ("a negative step index", lambda: StepRecord(-1, Move(kind="train"), "rejected", "r0000", "lost")),
+    (
+        "a negative step index",
+        lambda: StepRecord(-1, Move(kind="train"), "rejected", "r0000", "lost", metrics_from="gate"),
+    ),
 ]
 
 

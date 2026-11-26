@@ -15,6 +15,29 @@ magic and dungeon traversal. The committed task suite starts with three
 crafting achievements in that full game. Completing those tasks is not a claim
 of full-game victory or general roguelike competence.
 
+## Research scope
+
+Primary category: **Exploration and resource planning**. Capability tags: exploration, resource use, dependent goals.
+
+Collect resources, craft items and survive in the full native game.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose among all 43 native actions, including actions with unmet prerequisites. |
+| Harness | Format public state and task context. Present the native options without solving navigation or adding a hidden-state legality mask. |
+| Engine and other policies | Apply action prerequisites, resource costs, survival rules and achievement transitions. |
+
+The current suite covers three introductory crafting achievements. Success on
+these tasks does not establish full-game victory. A runner, grader and native
+replay are available.
+
+Suggested evaluation: Report success and steps for each achievement, together
+with survival. Use new task suites before making claims about longer goal
+chains.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Setup
 
 Use a separate Python 3.12 environment. From the repository root:
@@ -111,6 +134,44 @@ observation. Unknown tiles stay `null`. Public character attributes, inventory
 and observed entity classes are included; hidden world maps, enemy health and
 unidentified potion mappings are not model inputs. Native state hashes are
 recorded for replay integrity and are not shown to the model.
+
+## Observe and control from an AI process
+
+Run the JSON Lines controller from the repository root with the Craftax
+Python environment. Send one object per line on stdin and read one reply on
+stdout. `observe` reads the current state without advancing the game. `step`
+applies one named action and returns the next observation. Replies contain
+`ok: true` and `observation`, or `ok: false` and `error` for an invalid
+request. Close stdin to end the session.
+
+```bash
+printf '%s\n' '{"op":"observe"}' '{"op":"step","action":"UP"}' |
+  integrations/craftax/.venv/bin/python -m integrations.craftax.agent --seed 1 --max-steps 300
+```
+
+`schema_version` is `1`. `map.tiles[y][x]` and `map.items[y][x]` are the
+local 11-column by 9-row view. Coordinates are zero-based, with `x` right
+and `y` down. The window follows the player, whose `x` and `y` are local to
+that view. Unobserved tiles are `null`. `entities` lists visible creatures
+and projectiles with a class, a native type ID and a local position. `player`
+includes health, food, drink, energy and other public character attributes.
+`inventory`, `equipment`, `goals` and `achievements` provide task context.
+`progress` reports `ladder_down_unlocked` for the current floor,
+`boss_vulnerable`, and the overworld `light_level`, using native symbolic signals.
+Set the world seed with `--seed` for a repeatable session. Observations omit it.
+
+`action_space.choices` lists all 43 native action names while the game is
+running. Actions are subject to native prerequisites and may have no effect
+on the world. Each accepted action advances `clock.value` by one turn and
+returns the last action's `reward`. `--goals` takes a comma-separated list of
+achievement names and defaults to the introductory crafting tasks above.
+Select later dungeon or combat achievements for deeper play.
+`done` is true when the native game ends, the goals are complete or the step
+limit is reached.
+
+Python callers can wrap a `CraftaxEngine` in `AgentSession` from
+`integrations.craftax.agent` and call `observe_for_ai()` or `step_for_ai(action)`.
+The wrapper resets the engine when created and the caller closes the engine.
 
 ## Tasks, harness and grading
 

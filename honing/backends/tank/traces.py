@@ -21,13 +21,13 @@ shots those are, since one hit ends the round. When no shell of the agent hit
 a tank, every shot the agent fired missed, including those still in flight
 when the round ended. When one did, the engine names the shell on the shot and
 on the kill, and every other shot missed. A run whose kill by the agent's
-shell names no shell was recorded before the engine named shells, and is
-refused.
+shell names no shell was recorded before the engine named shells. It loads
+with no shot marked missed, and its outcome says so.
 
 This module imports only the standard library, :mod:`honing.core` and the
 decision log's parser (:mod:`honing.backends.tank.decisions`), and importing it
 loads none of the runner, the grader, the rollouts or the demonstrations, so
-System 0 can read traces without the rest of the backend.
+System 2 can read traces without the rest of the backend.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from __future__ import annotations
 import hashlib
 import json
 from bisect import bisect_right
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +47,8 @@ SEATS = ("blue", "red")
 # The agent's own death is shown whatever the length, and the other key events as room allows.
 AGENT_DEATH_PRIORITY = 0
 OTHER_KEY_PRIORITY = 1
+#: What the outcome adds for a round recorded before the engine named shells.
+UNNAMED_SHELLS = "No shot is marked missed: the round was recorded before the engine named shells"
 # Every seat's controller writes these, but only the agent's are its decisions' doing.
 _ALWAYS_KEPT = frozenset({"shot", "kill", "round"})
 # A decision's time is rounded to the millisecond, so an event within half of one belongs to it.
@@ -73,16 +75,19 @@ class TankTraceSource:
         )
 
 
-def verify_outputs(run: Path) -> Mapping[str, object]:
-    """The run's manifest, once every file it hashes matches. Raises ``ContractError`` otherwise."""
+def verify_outputs(run: Path, names: Sequence[str] = OUTPUTS) -> Mapping[str, object]:
+    """The run's manifest, once it hashes each of ``names`` and each still matches. Raises ``ContractError`` otherwise.
+
+    The manifest may hash more files than ``names``: a round that logs raw states also hashes ``states.jsonl``.
+    """
     manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
     outputs = manifest.get("outputs")
-    if not isinstance(outputs, dict) or sorted(outputs) != sorted(OUTPUTS):
+    if not isinstance(outputs, dict) or not set(names) <= set(outputs):
         raise ContractError(
-            f"{run}/manifest.json records no SHA-256 of {list(OUTPUTS)}. The round did not finish,"
+            f"{run}/manifest.json records no SHA-256 of {list(names)}. The round did not finish,"
             " or an older match wrote it"
         )
-    for name in OUTPUTS:
+    for name in names:
         path = run / name
         if not path.is_file():
             raise ContractError(f"{path} is missing, but its manifest records it")
@@ -106,7 +111,7 @@ def load_run(
     result = json.loads((run / "result.json").read_text(encoding="utf-8"))
     rows = _lines(run / "decisions.jsonl")
     events = _lines(run / "events.jsonl")
-    hits = _hits(events, me, run)
+    hits = _hits(events, me)
     times = [float(row["time"]) for row in rows]
     followed: list[list[TraceEvent]] = [[] for _ in rows]
     for event in events:
@@ -114,7 +119,7 @@ def load_run(
         if traced is not None and rows:
             index = bisect_right(times, traced.time_seconds + _TIME_TOLERANCE_SECONDS) - 1
             followed[max(index, 0)].append(traced)
-    outcome = _outcome(result, seat)
+    outcome = _outcome(result, seat) if hits is not None else f"{_outcome(result, seat)}. {UNNAMED_SHELLS}"
     return tuple(
         DecisionTrace(
             episode_id=run.name,
@@ -138,18 +143,20 @@ def _lines(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def _hits(events: list[dict[str, Any]], me: int, run: Path) -> frozenset[str]:
-    """The agent's shells that hit a tank, named as the engine names them on the shot and the kill."""
+def _hits(events: list[dict[str, Any]], me: int) -> frozenset[str] | None:
+    """The agent's shells that hit a tank, named as the engine names them on the shot and the kill.
+
+    ``None`` when a kill by the agent's shell names no shell: the round was
+    recorded before the engine named shells, so its missed shots cannot be
+    told from the hit.
+    """
     kills = [event for event in events if event["type"] == "kill" and event["player"] == me]
     if any("shell" not in kill for kill in kills):
-        raise ContractError(
-            f"{run}/events.jsonl has a kill by the agent's shell that names no shell, so its missed shots"
-            " cannot be told from the hit. The round was recorded before the engine named shells"
-        )
+        return None
     return frozenset(str(kill["shell"]) for kill in kills)
 
 
-def _event(event: Mapping[str, Any], me: int, hits: frozenset[str]) -> TraceEvent | None:
+def _event(event: Mapping[str, Any], me: int, hits: frozenset[str] | None) -> TraceEvent | None:
     """One game event as a trace event, or ``None`` for one the decisions already hold or the opponent's own."""
     kind = str(event["type"])
     player = event.get("player")
@@ -158,7 +165,7 @@ def _event(event: Mapping[str, Any], me: int, hits: frozenset[str]) -> TraceEven
     time = float(event["time"])
     if kind == "shot":
         text = f"{SEATS[event['player']]} fired"
-        if player == me and event.get("shell") not in hits:
+        if player == me and hits is not None and event.get("shell") not in hits:
             return TraceEvent(time, text, "missed shot", OTHER_KEY_PRIORITY)
         return TraceEvent(time, text)
     if kind == "kill":
@@ -201,6 +208,7 @@ __all__ = [
     "AGENT_DEATH_PRIORITY",
     "OTHER_KEY_PRIORITY",
     "OUTPUTS",
+    "UNNAMED_SHELLS",
     "TankTraceSource",
     "load_run",
     "verify_outputs",
