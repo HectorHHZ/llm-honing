@@ -1,0 +1,6 @@
+# The agent gateway's direct requirements; requirements.txt is the lock compiled from this file:
+#   uv pip compile --universal --python-version 3.12 requirements.in -o requirements.txt
+# The same litellm as Honing's own extra (pyproject.toml).
+litellm[proxy]==1.106.6
+# The proxy imports prisma when it rejects a request; without it, a missing or wrong key answers 500, not 401.
+prisma==0.15.0

@@ -190,8 +190,15 @@ loads with `--checkpoint-manifest` and
 `honing.backends.jev.nanojev_serving.nanojev_endpoints` starts on demand, one
 server per checkpoint. `configs/e2e/tank_direction_edit.json` runs the whole
 thing on the tank campaign: the pinned release, teacher rounds on the train
-split, the edit, and a gate on all 16 validation tasks with the candidate and
-the incumbent each on their own GPU.
+split, the edit, and a gate of 64 rounds on fresh validation seeds with the
+candidate and the incumbent each on their own GPU.
+On one H100 node this gate selected the edit. It scored 0.641 against the
+release's 0.320 on seeds 100000 to 100031, a mean per-seed difference of
++0.32 with a 95% interval of [+0.079, +0.515], in about ten minutes. The
+release gated against itself on the same seeds was rejected. The per-seed
+standard deviation of the difference was 0.42. At that spread 64 rounds give
+80% power on a gain near 0.32, so a smaller edit needs more rounds: 80 seeds
+(160 rounds) for a gain of 0.18.
 
 The edited checkpoint is published as
 [HectorHe/NanoJev-tank-direction-edit](https://huggingface.co/HectorHe/NanoJev-tank-direction-edit):

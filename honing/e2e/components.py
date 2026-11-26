@@ -9,6 +9,11 @@ object satisfying the slot's protocol. ``context`` is whatever the caller
 passes: it carries paths, the components built so far, and a ``shared`` map
 for factories that belong together (a fake model source and the fake trainer
 that must use the same fake storage, for example).
+
+Every campaign config has the same optional ``scheduler`` slot
+(:data:`SCHEDULER_SLOT`). A config that names none runs the moves of its
+``schedule`` through a :class:`~honing.campaign.ScriptedScheduler`
+(:func:`scheduler_or_script`).
 """
 
 from __future__ import annotations
@@ -16,12 +21,17 @@ from __future__ import annotations
 import importlib
 import os
 import shutil
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from honing.core import ContractError
+from honing.campaign import ScriptedScheduler
+from honing.core import CoAdaptScheduler, ContractError, Move
+
+# Built after every other slot, so a scheduler's factory can read all the components.
+SCHEDULER_SLOT: tuple[str, type, bool] = ("scheduler", CoAdaptScheduler, False)
 
 
 @dataclass
@@ -58,6 +68,26 @@ def build_component(spec: Mapping[str, object], context: object, slot: str, prot
             f"the {slot} factory {target!r} returned {type(component).__name__}, not a {protocol.__name__}"
         )
     return component
+
+
+def scheduler_or_script(components: Mapping[str, object], moves: Sequence[Move]) -> CoAdaptScheduler:
+    """The ``scheduler`` component a config built, or a :class:`ScriptedScheduler` replaying ``moves``.
+
+    With a scheduler, the config's own moves are not run, so a warning names them.
+    """
+    scheduler = components.get("scheduler")
+    if scheduler is None:
+        return ScriptedScheduler(moves)
+    assert isinstance(scheduler, CoAdaptScheduler)
+    if moves:
+        kinds = ", ".join(move.kind for move in moves)
+        warnings.warn(
+            f"the {scheduler.name!r} scheduler chooses every move, so the schedule's moves ({kinds}) are not run."
+            " In a pipeline they only place its rollback steps.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return scheduler
 
 
 def missing_requirements(requires: Mapping[str, Sequence[str]]) -> list[str]:

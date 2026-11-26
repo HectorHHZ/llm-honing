@@ -6,6 +6,11 @@
   dependency; Reef is a design reference and is never imported.
 - ``honing/backends/hf_checkpoint.py``, which every backend uses to name a
   checkpoint, imports only the standard library and ``honing.core``.
+- Importing the decision-trace loader (``honing.backends.tank.traces``) or
+  renderer (``honing.harness.traces``) loads, besides the standard library and
+  ``honing.core``, only the modules each names: the loader its package and the
+  tank decision-log parser, never the runner, grader, rollouts or
+  demonstrations.
 - Only ``honing/harness/models.py`` imports litellm, an optional extra whose
   pin is reviewed on its own.
 - ``honing/backends/slime/sandbox.py`` imports only the standard library, so it
@@ -18,7 +23,10 @@
 from __future__ import annotations
 
 import ast
+import importlib
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -86,6 +94,61 @@ def test_the_checkpoint_identity_imports_no_backend(repo_root: Path) -> None:
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("honing")
     ]
     assert honing_imports and all(name == "honing.core" for name in honing_imports)
+
+
+# Each trace reader, and the Honing modules outside honing.core that importing it may load.
+TRACE_READERS = {
+    "honing.backends.tank.traces": {
+        "honing",
+        "honing.backends",
+        "honing.backends.tank",
+        "honing.backends.tank.decisions",
+        "honing.backends.tank.traces",
+    },
+    "honing.harness.traces": {"honing", "honing.harness", "honing.harness.traces"},
+}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("module", sorted(TRACE_READERS))
+def test_importing_a_trace_reader_loads_only_core_and_the_modules_it_names(repo_root: Path, module: str) -> None:
+    """GEPA, Meta-Harness and System 2 read traces through these, so importing one must not load a plane or the
+    rest of a backend. A fresh interpreter imports it, and every module that import loaded is checked."""
+    script = (
+        "import json, sys\n"
+        "before = set(sys.modules)\n"
+        f"import {module}\n"
+        "print(json.dumps(sorted(set(sys.modules) - before)))"
+    )
+    run = subprocess.run([sys.executable, "-c", script], cwd=repo_root, capture_output=True, text=True, check=True)
+    loaded = set(json.loads(run.stdout))
+
+    honing = {name for name in loaded if name.split(".")[0] == "honing"}
+    core = {name for name in honing if name == "honing.core" or name.startswith("honing.core.")}
+    assert honing - core == TRACE_READERS[module]
+    assert {name.split(".")[0] for name in loaded - honing} <= set(sys.stdlib_module_names)
+
+
+@pytest.mark.unit
+def test_every_public_tank_name_is_listed_alike_in_all_three_places_and_resolves(repo_root: Path) -> None:
+    """``honing.backends.tank`` names each public name in its ``TYPE_CHECKING`` imports, in the table its lazy
+    ``__getattr__`` reads, and in ``__all__``. A merge that adds a name to one place can miss another."""
+    tank = importlib.import_module("honing.backends.tank")
+    tree = ast.parse((repo_root / "honing/backends/tank/__init__.py").read_text(encoding="utf-8"))
+    checked = {
+        alias.asname or alias.name: statement.module.rsplit(".", 1)[-1]
+        for node in tree.body
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+        for statement in node.body
+        if isinstance(statement, ast.ImportFrom) and statement.module
+        for alias in statement.names
+    }
+    table = tank._MODULES
+
+    assert checked == table
+    assert sorted(tank.__all__) == sorted(table)
+    for name, module in table.items():
+        assert getattr(tank, name) is getattr(importlib.import_module(f"honing.backends.tank.{module}"), name)
 
 
 @pytest.mark.unit

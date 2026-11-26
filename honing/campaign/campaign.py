@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from honing.campaign import rules
@@ -18,12 +18,14 @@ from honing.core import (
     EpisodeRecord,
     EpisodeRunner,
     EvaluationResult,
+    Evaluator,
     EvolveContext,
     EvolveMethod,
     HarnessMoveConfig,
     HarnessSpec,
     HoneRelease,
     ImportanceScorer,
+    MetricsSource,
     ModelEditor,
     ModelSnapshot,
     ModelSource,
@@ -36,6 +38,8 @@ from honing.core import (
     RecoverySpec,
     RolloutProvider,
     SelectionDecision,
+    StepRecord,
+    StepResult,
     Task,
     TaskGrader,
     TelemetryStore,
@@ -63,7 +67,15 @@ class CompressionComponents:
 
 @dataclass(frozen=True)
 class HarnessComponents:
-    """The Harness plane a campaign uses. A move's :class:`~honing.core.HarnessMoveConfig` overrides it."""
+    """The Harness plane a campaign uses. A move's :class:`~honing.core.HarnessMoveConfig` overrides it.
+
+    A method's selector replaces the gate's for harness candidates. With
+    ``method_evaluator`` set, both must select instead: the method's selector
+    decides on that evaluator's run, and :meth:`~honing.core.EvolveMethod.record`
+    sees that run, so a method such as GEPA keeps its own fixed validation
+    tasks. A candidate it selects then goes through the gate with the gate's
+    own selector, on the gate's evaluator, which may draw fresh tasks.
+    """
 
     runner: EpisodeRunner
     grader: TaskGrader
@@ -71,6 +83,7 @@ class HarnessComponents:
     tasks: tuple[Task, ...]
     episode_budget: int = 0
     samples_per_task: int = 1
+    method_evaluator: Evaluator | None = None
 
     def __post_init__(self) -> None:
         require(len(self.tasks) > 0, "a campaign needs at least one task")
@@ -89,13 +102,21 @@ class CampaignDefaults:
 
 @dataclass(frozen=True)
 class StepOutcome:
-    """What one move produced. ``release`` is set only when the candidate was published."""
+    """What one move produced. ``release`` is set only when the candidate was published.
+
+    ``gate_metrics`` are the gate's numbers the settled candidate's record
+    holds, computed once, so the history and the record cannot disagree.
+    ``metrics_from`` says whose run they come from, as on
+    :class:`~honing.core.StepRecord`.
+    """
 
     move: Move
     decision: SelectionDecision | None
     evaluation: EvaluationResult | None
     release: HoneRelease | None
     skipped_reason: str | None = None
+    gate_metrics: Mapping[str, float] = field(default_factory=dict)
+    metrics_from: MetricsSource | None = None
 
 
 def _size_metrics(snapshot: ModelSnapshot) -> dict[str, float]:
@@ -106,6 +127,36 @@ def _policy_of(snapshot: ModelSnapshot) -> PolicyRef:
     return PolicyRef(checkpoint=snapshot.checkpoint, architecture=snapshot.architecture, variant="master")
 
 
+def _both(method: SelectionDecision, gate: SelectionDecision) -> SelectionDecision:
+    """The gate's verdict on a candidate the method selected, with both reasons and both sets of metrics."""
+    return SelectionDecision(
+        outcome=gate.outcome,
+        policy=f"{method.policy}+{gate.policy}",
+        reason=f"{method.policy}: {method.reason}; {gate.policy}: {gate.reason}",
+        metrics={**method.metrics, **gate.metrics},
+    )
+
+
+def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
+    decision, release = outcome.decision, outcome.release
+    result: StepResult
+    if decision is None:
+        result, reason = "skipped", outcome.skipped_reason or ""
+    else:
+        result, reason = ("published" if release is not None else "rejected"), decision.reason
+    return StepRecord(
+        step=step,
+        move=outcome.move,
+        result=result,
+        parent_id=parent_id,
+        reason=reason,
+        label=outcome.move.harness.label if outcome.move.harness is not None else None,
+        release_id=release.release_id if release is not None else None,
+        gate_metrics=outcome.gate_metrics,
+        metrics_from=outcome.metrics_from,
+    )
+
+
 class Campaign:
     """Runs moves against one release chain.
 
@@ -114,6 +165,11 @@ class Campaign:
     method's state is carried across rejected and skipped steps in memory and
     published with the next accepted release, whatever its kind. A skipped
     step is still written to the commit record, with the episodes it spent.
+
+    Every move it advances, published, rejected, or skipped, is added to the
+    history a scheduler reads from :meth:`state`. When a scheduler chooses the
+    move (:meth:`step`), its state is written into every commit record line
+    from then on, and neither a rejection nor a rollback changes it.
     """
 
     def __init__(
@@ -138,10 +194,20 @@ class Campaign:
         self._rollout = rollout
         self._pending_method_state: Mapping[str, object] | None = None
         self._recent_records: tuple[EpisodeRecord, ...] = ()
+        self._history: list[StepRecord] = []
 
     @property
     def chain(self) -> ReleaseChain:
         return self._chain
+
+    def state(self) -> CampaignState:
+        """What a scheduler sees now: the head, the releases, and every move advanced so far."""
+        return CampaignState(
+            head=self._chain.head(),
+            releases=self._chain.releases(),
+            step=len(self._history),
+            history=tuple(self._history),
+        )
 
     def start(self, source: ModelSource, work_dir: Path, harness_seed: HarnessSpec) -> HoneRelease:
         """Check the planes fit together, materialize the initial model, and publish it as release 0."""
@@ -167,16 +233,43 @@ class Campaign:
         """Ask ``scheduler`` for moves until it stops or ``max_steps`` is reached."""
         require(max_steps > 0, f"max_steps must be > 0, got {max_steps}")
         outcomes: list[StepOutcome] = []
-        for step in range(max_steps):
-            state = CampaignState(head=self._chain.head(), releases=self._chain.releases(), step=step)
-            move = scheduler.next_move(state)
-            if move.kind == "stop":
+        for _ in range(max_steps):
+            outcome = self.step(scheduler)
+            if outcome is None:
                 break
-            outcomes.append(self.advance(move))
+            outcomes.append(outcome)
         return tuple(outcomes)
 
+    def step(self, scheduler: CoAdaptScheduler) -> StepOutcome | None:
+        """Ask ``scheduler`` for the next move and advance it. Returns ``None`` when the scheduler stops.
+
+        The scheduler's state is exported right after its choice, before the
+        move's result is known, checked against its declared schema, and
+        written into every record line from here on. The scheduler reads the
+        result in the history at its next choice. The history is only in
+        memory, so a restart resumes the scheduler from its last choice
+        without the last move's result (see
+        :class:`~honing.core.CoAdaptScheduler`).
+        """
+        move = scheduler.next_move(self.state())
+        exported = scheduler.export_state()
+        # Refused now, not at a restart hours later when the state could no longer be restored.
+        rules.scheduler_state_schema_matches(
+            exported, written_by=scheduler.name, scheduler=scheduler.name, expected=scheduler.state_schema_version
+        )
+        self._chain.set_scheduler_state(scheduler.name, exported)
+        if move.kind == "stop":
+            return None
+        return self.advance(move)
+
     def advance(self, move: Move) -> StepOutcome:
-        """Build, check, and settle the candidate for one move."""
+        """Build, check, and settle the candidate for one move, and add the move to the history."""
+        parent_id = self._chain.head().release_id
+        outcome = self._advance(move)
+        self._history.append(_step_record(len(self._history), parent_id, outcome))
+        return outcome
+
+    def _advance(self, move: Move) -> StepOutcome:
         head = self._chain.head()
         if move.kind == "harness":
             return self._advance_harness(move, head)
@@ -195,7 +288,10 @@ class Campaign:
         return self._settle(move, candidate, head, selector=None)
 
     def rollback(self, release_id: str) -> HoneRelease:
-        """Restore an earlier release as the head. Method state not yet published is discarded."""
+        """Restore an earlier release as the head. Method state not yet published is discarded.
+
+        The scheduler's state is kept: it is the scheduler's memory, not part of a release.
+        """
         self._pending_method_state = None
         return self._chain.rollback(release_id)
 
@@ -320,12 +416,22 @@ class Campaign:
             move_label=config.label,
         )
         self._check_candidate(candidate)
-        evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
-        self._recent_records = evaluation.records
+        metrics_from: MetricsSource = "gate"
+        if harness.method_evaluator is None:
+            evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
+            method_evaluation = evaluation
+        else:
+            method_gate = Gate(harness.method_evaluator, default_selector=method.selector)
+            method_evaluation, decision = method_gate.judge(candidate, head)
+            evaluation, metrics_from = method_evaluation, "method"
+            if decision.selected:
+                evaluation, verdict = self._gate.judge(candidate, head)
+                decision, metrics_from = _both(decision, verdict), "gate"
+        self._recent_records = method_evaluation.records
         # The method learns from every verdict, so its new state is attached
         # whether the candidate is published or rejected.
-        settled = replace(candidate, method_state=method.record(result.state, proposal, evaluation, decision))
-        return self._publish_or_reject(move, settled, evaluation, decision)
+        settled = replace(candidate, method_state=method.record(result.state, proposal, method_evaluation, decision))
+        return self._publish_or_reject(move, settled, evaluation, decision, metrics_from)
 
     # ------------------------------------------------------------ shared
 
@@ -337,18 +443,32 @@ class Campaign:
         return self._publish_or_reject(move, candidate, evaluation, decision)
 
     def _publish_or_reject(
-        self, move: Move, candidate: UpdateCandidate, evaluation: EvaluationResult, decision: SelectionDecision
+        self,
+        move: Move,
+        candidate: UpdateCandidate,
+        evaluation: EvaluationResult,
+        decision: SelectionDecision,
+        metrics_from: MetricsSource = "gate",
     ) -> StepOutcome:
         # Published and rejected candidates both carry the gate result, so the
         # record shows how close a rejection was, not only that it happened.
-        candidate = replace(candidate, metrics={**candidate.metrics, **gate_metrics(evaluation)})
+        metrics = gate_metrics(evaluation)
+        candidate = replace(candidate, metrics={**candidate.metrics, **metrics})
+        release: HoneRelease | None = None
         if decision.selected:
             release = self._chain.commit(candidate, decision)
             self._pending_method_state = None
-            return StepOutcome(move=move, decision=decision, evaluation=evaluation, release=release)
-        self._chain.record_rejection(candidate, decision)
-        self._pending_method_state = candidate.method_state
-        return StepOutcome(move=move, decision=decision, evaluation=evaluation, release=None)
+        else:
+            self._chain.record_rejection(candidate, decision)
+            self._pending_method_state = candidate.method_state
+        return StepOutcome(
+            move=move,
+            decision=decision,
+            evaluation=evaluation,
+            release=release,
+            gate_metrics=metrics,
+            metrics_from=metrics_from,
+        )
 
     @staticmethod
     def _check_candidate(candidate: UpdateCandidate) -> None:

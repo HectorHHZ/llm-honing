@@ -16,9 +16,50 @@ sampled choice and native behavior probabilities stay aligned.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from honing.core import ContractError, DecisionQuestion, DecisionSample
+
+
+def decision_from_row(
+    row: Mapping[str, Any],
+    *,
+    reward: float | None,
+    group: str | None,
+    release_id: str | None,
+    harness_id: str | None,
+    behavior: bool,
+) -> DecisionSample:
+    """One row of ``decisions.jsonl``. ``behavior`` keeps the answers' probabilities as behavior probabilities."""
+    questions = row["questions"]
+    return DecisionSample(
+        parts=tuple((name, tuple(lines)) for name, lines in row["contextParts"].items()),
+        questions=tuple(
+            (
+                key,
+                DecisionQuestion(kind=q["type"], instructions=q["instructions"], options=tuple(q["criteria"].items())),
+            )
+            for key, q in questions.items()
+        ),
+        chosen=tuple((key, row["chosen"][key]) for key in questions),
+        behavior_probs=(
+            tuple(
+                (
+                    key,
+                    tuple((option, float(row["answers"][key]["probabilities"][option])) for option in q["criteria"]),
+                )
+                for key, q in questions.items()
+            )
+            if behavior
+            else None
+        ),
+        reward=reward,
+        group=group,
+        source_release=release_id,
+        source_harness=harness_id,
+    )
 
 
 def decisions_from_log(
@@ -39,39 +80,14 @@ def decisions_from_log(
         for line in rows:
             if not line.strip():
                 continue
-            row = json.loads(line)
-            questions = row["questions"]
             decisions.append(
-                DecisionSample(
-                    parts=tuple((name, tuple(lines)) for name, lines in row["contextParts"].items()),
-                    questions=tuple(
-                        (
-                            key,
-                            DecisionQuestion(
-                                kind=q["type"], instructions=q["instructions"], options=tuple(q["criteria"].items())
-                            ),
-                        )
-                        for key, q in questions.items()
-                    ),
-                    chosen=tuple((key, row["chosen"][key]) for key in questions),
-                    behavior_probs=(
-                        tuple(
-                            (
-                                key,
-                                tuple(
-                                    (option, float(row["answers"][key]["probabilities"][option]))
-                                    for option in q["criteria"]
-                                ),
-                            )
-                            for key, q in questions.items()
-                        )
-                        if behavior
-                        else None
-                    ),
+                decision_from_row(
+                    json.loads(line),
                     reward=reward,
                     group=group,
-                    source_release=release_id,
-                    source_harness=harness_id,
+                    release_id=release_id,
+                    harness_id=harness_id,
+                    behavior=behavior,
                 )
             )
     return decisions

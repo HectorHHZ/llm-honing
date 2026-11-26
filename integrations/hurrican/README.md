@@ -13,6 +13,28 @@ input covers eight simulated seconds; the complete game's play time has not
 been measured. It is an input demo, without a campaign task, EpisodeRunner,
 grader, training or a completion result.
 
+## Research scope
+
+Primary category: **Reactive combat**. Capability tags: platform movement, combat selection, timing.
+
+Move, jump and shoot through the first jungle level.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose offered movement and combat inputs. |
+| Harness | Build observations, validate choices, map inputs, pause for inference and set update windows. |
+| Engine and other policies | Apply movement, combat, collisions, cooldowns and native forced-action priority. |
+
+This is an input demo. The documented eight-second model segment does not
+establish level completion. A task grader is not provided.
+
+Suggested evaluation: Define a fixed route and endpoint. Measure route
+progress, damage and deaths. Report successful input execution separately from
+task success.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## External game and build
 
 The source is pinned to `0d91d1f2d40f38d21e7f41afc01369ee55649fb6`.

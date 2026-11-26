@@ -33,6 +33,7 @@ from honing.core.harness import (
 from honing.core.release import HoneRelease
 from honing.core.schedule import CampaignState, Move
 from honing.core.telemetry import UtilizationTelemetry
+from honing.core.traces import DecisionTrace
 from honing.core.training import TrainJobSpec, TrainResult
 from honing.core.weights import CheckpointRef, ModelSnapshot, ServingWeights, WeightFormat
 
@@ -178,6 +179,20 @@ class ProposerAgent(Protocol):
 
 
 @runtime_checkable
+class TraceSource(Protocol):
+    """Reads back the decisions behind one graded episode, in the order they were made.
+
+    Returns no traces for an episode that left none to read, such as one that
+    stopped on an error, and raises ``ContractError`` for an episode whose files
+    are not the ones its run recorded. ``release_id`` names the release the
+    episode ran under, when the caller knows it, and each trace carries the
+    record's policy checksum.
+    """
+
+    def traces(self, record: EpisodeRecord, *, release_id: str | None = None) -> tuple[DecisionTrace, ...]: ...
+
+
+@runtime_checkable
 class PolicyEndpoints(Protocol):
     """Finds the engine serving a policy. Raises ``ContractError`` for a policy no engine serves."""
 
@@ -285,6 +300,30 @@ class EvolveMethod(Protocol):
 
 @runtime_checkable
 class CoAdaptScheduler(Protocol):
-    """Chooses the next move from the campaign's state."""
+    """Chooses the next move from the campaign's state, and keeps its own state between moves.
+
+    After each decision the campaign writes ``export_state()`` into the commit
+    record, under ``name``, so a restarted run continues through
+    ``restore_state``. The state follows the rules for method state: it is
+    JSON-native and carries ``state_schema_version`` as its ``schema_version``.
+    A rejection or a rollback leaves the scheduler's state alone, because it
+    belongs to the scheduler and no release holds it.
+
+    The state on a record line is exported after the scheduler picks the move
+    and before the move's result is known, so the record's last line does not
+    include the last move's result. The scheduler sees that result in
+    ``CampaignState.history`` at its next choice, but the history is only in
+    memory, so a scheduler restored after a restart never learns it. For
+    example, ``HistoryScheduler([TRAIN])`` from ``tests/fakes/scheduler.py``,
+    with a trainer that makes the model worse, ends with ``rejected == (0,)``
+    in memory, while the record's last line holds ``"rejected": []``.
+    """
+
+    name: str
+    state_schema_version: int
 
     def next_move(self, state: CampaignState) -> Move: ...
+
+    def export_state(self) -> Mapping[str, object]: ...
+
+    def restore_state(self, state: Mapping[str, object]) -> None: ...

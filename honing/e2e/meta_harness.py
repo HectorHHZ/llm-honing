@@ -20,13 +20,22 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from honing.core import ProposerAgent
+from honing.core import ProposerAgent, TraceSource
 from honing.e2e.components import PipelineContext, build_component
 from honing.harness.methods.meta_harness import MetaHarnessMethod
 from honing.harness.proposers import DEFAULT_TOOLS, ClaudeCodeProposer
+from honing.harness.traces import DEFAULT_AFTER_SECONDS, DEFAULT_BEFORE_SECONDS, DEFAULT_MAX_TOKENS
 
 
-def method(context: PipelineContext, proposer: Mapping[str, Any], work_dir: str | None = None) -> MetaHarnessMethod:
+def method(
+    context: PipelineContext,
+    proposer: Mapping[str, Any],
+    work_dir: str | None = None,
+    traces: Mapping[str, Any] | None = None,
+    trace_max_tokens: int = DEFAULT_MAX_TOKENS,
+    trace_before_seconds: float = DEFAULT_BEFORE_SECONDS,
+    trace_after_seconds: float = DEFAULT_AFTER_SECONDS,
+) -> MetaHarnessMethod:
     """Meta-Harness with the proposer agent ``proposer`` names.
 
     Args:
@@ -36,13 +45,27 @@ def method(context: PipelineContext, proposer: Mapping[str, Any], work_dir: str 
             proposer; defaults to ``meta-harness`` under the run's directory.
             A real proposer should work outside the repository, for example
             in ``{tmp}/meta-harness-{run}``.
+        traces: A component entry whose factory returns a ``TraceSource``, for
+            a decision model's episodes: each trace folder then also holds the
+            episode's rendered decisions.
+        trace_max_tokens: The cap on each episode's rendered decisions.
+        trace_before_seconds: How far before a key event its window reaches.
+        trace_after_seconds: How far after a key event its window reaches.
 
     Returns:
         The method.
     """
     agent = build_component(proposer, context, "proposer", ProposerAgent)
+    source = build_component(traces, context, "traces", TraceSource) if traces else None
     directory = _path(work_dir, context) if work_dir else context.work_dir / "meta-harness"
-    return MetaHarnessMethod(agent, directory)  # type: ignore[arg-type]
+    return MetaHarnessMethod(
+        agent,  # type: ignore[arg-type]
+        directory,
+        traces=source,  # type: ignore[arg-type]
+        trace_max_tokens=trace_max_tokens,
+        trace_before_seconds=trace_before_seconds,
+        trace_after_seconds=trace_after_seconds,
+    )
 
 
 def claude_code(

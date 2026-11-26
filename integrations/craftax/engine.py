@@ -66,6 +66,7 @@ class CraftaxEngine:
         self._state: Any = None
         self._rng: Any = None
         self._renderer: Any = None
+        self._progress: dict[str, bool | float] | None = None
         self._ended = False
         self._closed = False
         self._steps = 0
@@ -80,7 +81,16 @@ class CraftaxEngine:
 
     def _observation(self, obs: Any) -> dict[str, Any]:
         np, state = self._np, self._state
-        spatial = np.asarray(obs)[: self._flat].reshape(self._shape)
+        symbolic = np.asarray(obs)
+        # Craftax-Symbolic-v1 ends with eight public status values. Keep the
+        # agent's extra fields separate from the recorded frame and its hash.
+        light_level, *_, ladder_down_unlocked, boss_vulnerable = symbolic[-8:]
+        self._progress = {
+            "ladder_down_unlocked": bool(ladder_down_unlocked),
+            "boss_vulnerable": bool(boss_vulnerable),
+            "light_level": float(light_level),
+        }
+        spatial = symbolic[: self._flat].reshape(self._shape)
         block_ids, item_ids = {a.value: a.name for a in self._blocks}, {a.value: a.name for a in self._items}
         blocks = spatial[:, :, : len(self._blocks)]
         items = spatial[:, :, len(self._blocks) : len(self._blocks) + len(self._items)]
@@ -120,6 +130,12 @@ class CraftaxEngine:
             "coordinates": "local [row,column], down/right positive; null tiles are unobserved",
             "entity_classes": ["melee", "passive", "ranged", "mob_projectile", "player_projectile"],
         }
+
+    def public_progress(self) -> dict[str, bool | float]:
+        """Return the latest native symbolic progression and light signals."""
+        if self._progress is None:
+            raise RuntimeError("reset an open engine before reading progress")
+        return self._progress.copy()
 
     def _frame(self, obs: Any, reward: float, native_done: bool) -> dict[str, Any]:
         achievements = sorted(a.name for a in self._achievements if bool(self._state.achievements[a.value]))
@@ -175,6 +191,7 @@ class CraftaxEngine:
 
     def close(self) -> None:
         self._state, self._rng, self._renderer, self._closed = None, None, None, True
+        self._progress = None
 
     def __enter__(self) -> CraftaxEngine:
         return self

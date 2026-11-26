@@ -85,11 +85,12 @@ types are frozen dataclasses that validate themselves on construction and raise
 | `training` | `TrainJobSpec`, `UpdatePolicy`, `TeacherRef`, `RecoverySpec`, `ALGORITHM_REQUIREMENTS` |
 | `compression` | `ImportanceMap`, `CompressionBudget`, `PrunePlan`, `QuantizePlan`, `CompressionStep` |
 | `harness` | `HarnessSpec`, `Task`, `EpisodeOutcome`, `Grade`, `EpisodeRecord`, `ProposeResult`, `HarnessMoveConfig`, `RunnerSupport`, `MethodRequirements` |
-| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the method-state rules (`validate_method_state`) |
+| `traces` | `DecisionTrace`, `TraceEvent`: one decision of an episode and what followed it |
+| `chat`, `endpoints`, `state` | `ChatMessage`, `ChatReply`; `PolicyEndpoint`; the rules for method and scheduler state (`validate_method_state`, `validate_scheduler_state`) |
 | `candidate` | `UpdateCandidate`, `PolicyRef`, `EvaluationResult`, `SelectionDecision` |
 | `release` | `HoneRelease` |
 | `backend` | `BackendSupport` |
-| `schedule` | `Move`, `CampaignState` |
+| `schedule` | `Move`, `StepRecord`, `CampaignState` |
 | `protocols` | every plane protocol (listed per plane below) |
 
 ### 2.2 Model Source — where the initial model comes from
@@ -123,7 +124,7 @@ algorithm declares the `DataContract` it consumes — token sequences, on-policy
 grouped on-policy samples, or preference pairs — and the campaign checks the batch against
 it before training starts.
 
-A decision model (a Jev-style System One model) trains on `typed_decisions`. Each
+A decision model (a Jev-style System 1 model) trains on `typed_decisions`. Each
 `DecisionSample` holds the state, the typed questions asked about it with their options, and the
 option chosen. A rollout's samples also hold the behavior probabilities, the reward, and a group. `sft` and `grpo` accept this
 contract when a job names it (`TrainJobSpec.contract`), and run on a local trainer. A backend
@@ -392,6 +393,51 @@ headless, with a minimal environment and in its own process group. Meta-Harness 
 each candidate on the move's tasks, whose trajectories its proposer reads, so its gate
 must run on held-out tasks; its selector refuses a gate on any task the proposer reads.
 
+A decision model's episode is read through its decisions. `TraceSource`, a protocol in
+`honing/core`, reads an episode back as `DecisionTrace`s:
+`traces(record, *, release_id=None)`. Each trace holds one decision: the state the model
+read, every option's probability, the choice, what the controller allowed and applied,
+and the events up to the next decision, with the episode's outcome, its grade and the
+checksum of the policy that played it. A `TraceEvent` that a reader should look around
+first is a key event: the source gives it a free-text `label` and an integer `priority`,
+where a lower number is kept longer under a length limit. The source chooses both, so
+each game names its own events without a change to `honing.core`.
+
+`TankTraceSource` (`honing/backends/tank/traces.py`) reads a tank run directory. It
+refuses a run whose `decisions.jsonl`, `events.jsonl` or `result.json` does not match the
+SHA-256 its `manifest.json` records under `outputs`. Its key events are the agent's tank
+destroyed ("agent destroyed", "agent self-hit") at priority 0, and at priority 1 the
+opponent's tank destroyed ("opponent destroyed", "opponent self-hit") and each missed
+shot. A shot missed when its shell hit no tank, which the round's result settles: the
+engine names the shell on each shot and kill, and one hit ends the round.
+
+`render_traces` (`honing/harness/traces.py`) writes one episode as compact text within a
+token cap, counting each word, number and punctuation mark as one token. Its header
+names the release, or, when the caller knows none, the policy by the first 12 characters
+of its checksum: GEPA and Meta-Harness pass no release id, since `EvolveContext` carries
+none. It shows windows of decisions around the key events, measured in episode time:
+every decision asked from 2 s before an event to 0.5 s after it, so a tank death's window
+reaches past the 1.1 to 1.7 s a shell flies. The first decision of each window lists the
+whole state with the controller's constraints and applied action, and each later one
+the state fields that changed or are gone since the decision shown before it with the
+same questions. Over the cap, decisions around events with a higher priority number
+leave first, and within a window the earliest and latest leave before those nearest in
+time to the decision the event followed. The same traces and cap always render to the
+same text. In a tank round, a motion decision's whole state is about 1,300 estimated
+tokens and a weapon decision's 360, and a death's 2 s window runs to 12,000 to 17,000. The
+default cap of 12,000 keeps its last 1.3 to 1.8 s, longer than the shortest flight of a
+shell, where 6,000 kept only 0.45 to 0.8 s. GEPA and Meta-Harness take the cap and both
+window spans from their config (`trace_max_tokens`, `trace_before_seconds`,
+`trace_after_seconds`), so a reflection model with a small context lowers the cap and a
+game with another clock sets its own spans. Given a trace source,
+GEPA's reflective dataset shows each minibatch episode's rendering as its generated
+output, and Meta-Harness writes it to a file under its work directory, keeps the file's
+path in its archive state, and copies it as `decisions.txt` beside each search trace.
+Importing the loader or the renderer loads only the standard library, `honing.core` and
+the tank decision-log parser: `honing.backends.tank` imports its runner, grader, rollouts
+and demonstrations only when one is first used, so System 2's scheduler (#138) can read
+the same traces without the rest of the backend.
+
 Six properties let a future method — GEPA, SkillClaw, Meta-Harness, a failure-driven
 self-proposer — plug in without infrastructure changes:
 
@@ -406,7 +452,10 @@ self-proposer — plug in without infrastructure changes:
    declares; state under another version is refused before the method reads it.
 4. **Evaluations are per task.** `EvaluationResult` keeps score vectors and episode
    records, which Pareto-style selection needs.
-5. **Selection belongs to the method.** Its `selector` replaces the gate's default.
+5. **Selection belongs to the method.** Its `selector` replaces the gate's default, unless
+   the campaign sets `HarnessComponents.method_evaluator`. Then the method's selector decides
+   on that evaluator's run, which can keep the method's own validation tasks, and a candidate
+   it selects must also pass the gate's own selector, so both must select.
 6. **`record` sees every verdict**, accepted or rejected, because archive-based methods
    learn from rejections.
 
@@ -432,11 +481,17 @@ policies.
 
 ```python
 class CoAdaptScheduler(Protocol):
+    name: str
+    state_schema_version: int
     def next_move(self, state: CampaignState) -> Move: ...   # train | prune | quantize | harness | stop
+    def export_state(self) -> Mapping[str, object]: ...
+    def restore_state(self, state: Mapping[str, object]) -> None: ...
 
 campaign.start(source, work_dir, harness_seed)   # release 0
 campaign.run(scheduler)                           # one candidate per move, settled by the gate
+campaign.step(scheduler)                          # one move, or None when the scheduler stops
 campaign.rollback(release_id)                     # restore a whole release
+restore_scheduler(scheduler, record_path)         # resume a scheduler from the commit record
 ```
 
 For each move the campaign builds one candidate, checks the rules, runs the gate, and
@@ -455,9 +510,44 @@ edited, or quantized**, so a refused step costs no compute and leaves nothing be
 | `batch_from_one_release` | samples from a release or harness other than the head's | before training |
 | `method_supported_by_runner`, `spec_runnable` | an evolution method or harness the runner cannot run | at start; per proposal |
 | `method_state_schema_matches` | method state written under a schema the method does not read, for example after a rollback | at start; before each proposal |
+| `scheduler_state_schema_matches` | scheduler state written by another scheduler or under another schema | after each choice; on restore |
 
 A harness method's state is carried across rejected and skipped steps in memory and
 published with the next accepted release, whatever its kind.
+
+**A scheduler sees every move, and keeps its own state.** `CampaignState.history` holds a
+`StepRecord` for every move the campaign advanced, published, rejected, or skipped: the
+move, its label, the head it was built on, the release it published, the reason, and the
+`gate_*` metrics (none for a skip). `metrics_from` says whose run those metrics come from:
+`"gate"`, or `"method"` when a harness method's own selector rejected the candidate on
+`method_evaluator` and the gate never ran. A scheduler learns from a rejection there, which the
+releases alone never show. Its own state follows the method-state rules: it is JSON-native
+and carries a `schema_version`. The scheduler holds that state, and `CampaignState` does not
+carry it. After each choice the chain takes a deep copy of the exported state, which no
+caller can reach, and writes it into every commit record line under `scheduler_state` and
+the scheduler's `name`. A rejection or a rollback leaves it as it is, because it belongs to
+the scheduler and no release holds it. A restart restores it from the record's last line
+(`restore_scheduler`), and `scheduler_state_schema_matches` refuses state another
+scheduler or schema version wrote.
+
+**The recorded scheduler state does not include the last move's result.** The state on a
+line is taken after the scheduler picks the move and before the result is known. The
+scheduler sees the result in the history at its next choice. The history is only in
+memory, and until a chain can be rebuilt from its record a restarted campaign starts a new
+one, so a restart loses the last result. For example, `HistoryScheduler([TRAIN])` (a test
+fake in `tests/fakes/scheduler.py`) with a trainer that makes the model worse ends with
+`rejected == (0,)` in memory. The record's last line holds `"rejected": []`, and a
+scheduler restored from it never learns that step 0 was rejected. Rebuilding the history
+from the record belongs with rebuilding the chain.
+
+**Every runner has the same scheduler slot.** The pipeline, tank, and RA2 configs take an
+optional `scheduler` component. Without one, a `ScriptedScheduler` replays the moves of the
+config's `schedule`, and its state names the script by a digest of its moves' kinds and
+labels, so a restart refuses another script of the same length. With a scheduler, the
+`schedule`'s moves are not run, and building the run warns that they are ignored. In the
+pipeline a `rollback` entry stays the pipeline's own step: it
+runs once as many moves as precede it in `schedule` have run, whichever scheduler chose
+them, and the run fails when the scheduler stops before it.
 
 **Phases belong to the scheduler, not to core.** A harness move carries a
 `HarnessMoveConfig` (tasks, episode budget, method, and a label) that overrides the
@@ -477,8 +567,37 @@ through.
 **The gate scores what ships.** A candidate with serving weights is evaluated on them; the
 gate refuses an evaluation that scored the master instead, because that would hide exactly
 the regression quantization can cause. Selection policies: `WinLossSelector` for changes
-meant to improve quality (training, harness), `NoRegressionSelector` for changes made for
-cost (prune, quantize), `AcceptAll`, or a method's own selector.
+meant to improve quality (training, harness), `PairedIntervalSelector` for the same changes
+when a gain must be told apart from noise, `NoRegressionSelector` for changes made for
+cost (prune, quantize), `AcceptAll`, or a method's own selector. `PairedIntervalSelector`
+selects when the interval on the mean paired difference lies above a minimum effect. The
+interval is a betting bound that assumes only independent differences in `[-1, 1]`, so a
+candidate with no effect is selected at most `(1 - confidence) / 2` of the time at any
+gate size, skewed or tied scores included. It decides once, or after each block of a gate
+that plays in blocks and stops when the result is clear. Every look continues one betting
+process with stakes tuned to the planned rounds, and the bound covers the capital's running
+maximum, so every look uses the full confidence and stopping early does not raise the
+false-accept rate. Because each end keeps the furthest the capital reached, tasks whose
+differences change with their order can leave the ends crossed, and such an interval never
+selects. To detect a gain of 0.10 with 80% power at a paired standard deviation
+of 0.5, a four-look gate plans 280 rounds and plays about 205 on average. With more than
+one look the gate calls its evaluator once per block, so that evaluator must play new tasks
+on every call, and the decision records `stopped_early`.
+
+**The tank gate never replays a seed.** A loop that reads gate verdicts can overfit rounds it
+sees at every step. The tank gate (`honing/backends/tank/gate.py`) draws every block's seeds
+from a pool of 100,000 validation seeds, in order, so no two gates of a campaign share a seed,
+and records the first and last seed it played (`seed_first`, `seed_last`) beside the
+interval, `rounds` and `stopped_early`. The first gate starts at the pool's first seed, or at
+the config's `gate.first_seed`: campaigns that start at the same seed play the same gates,
+which pairs two arms of an experiment, and repeats of one arm start elsewhere. Both seats of
+a seed play the same maze, so the gate
+scores a seed by the mean of its two seats and the interval counts it once (`tasks`), while
+every seat's episode record stays on the evaluation. The suite file's eight validation
+seeds stay fixed for GEPA's Pareto front. A suite with a task on a pool seed, in any split,
+or under a pool task's id is refused before the campaign starts, so no gate replays a suite
+seed. The held-out tasks, and a second pool of 100,000 held-out seeds, are refused to every
+campaign code path and read only by experiment scripts (`TankSuite.heldout_tasks`).
 
 **Comparisons are paired.** Every score is in `[0, 1]`, and selectors compare candidate and
 incumbent task by task. Every gated candidate, published or rejected, records
@@ -502,7 +621,8 @@ Rollback restores all of it.
 
 **The commit record is written before the head moves (P3).** `ReleaseChain` appends each
 publish, rejection, skip, and rollback to a JSON-lines record and flushes it to disk first.
-A value JSON cannot represent exactly is an error, never a string.
+A value JSON cannot represent exactly is an error, never a string. Once a scheduler has
+chosen a move, every line also carries its state (`scheduler`, `scheduler_state`).
 Rebuilding a chain from that record is not implemented yet; the ordering that makes it
 possible is, and is tested.
 
@@ -812,7 +932,10 @@ accept, jobs trained on batches drawn as the campaign draws them, new weights in
 release's format, no overwritten checkpoint, and refusal of what it does not declare.
 `scripts/e2e/tank_campaign.py` runs a campaign on real tank rounds
 (`honing/backends/tank`) with a stand-in decision model: a GEPA harness move, SFT on
-planner-teacher demonstrations, and GRPO on sampled rollouts, each gated on the
-validation rounds. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
+planner-teacher demonstrations, and GRPO on sampled rollouts, each gated by the
+paired interval selector on fresh validation rounds. In its dry run (`configs/e2e/tank_dry_run.json`), GEPA reflects on
+the rounds' rendered decision traces, and the scripted chat model refuses a prompt that
+does not show them. `configs/e2e/tank_campaign_sglang.json` runs the same schedule with
 real models served through SGLang: the policy and every candidate started on demand by
-`SGLangPolicyEndpoints`, and GEPA reflecting through a chat model on its own engine.
+`SGLangPolicyEndpoints`, and GEPA reflecting on the same rendered traces through a chat
+model on its own engine.

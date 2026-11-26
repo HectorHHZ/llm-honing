@@ -1,0 +1,162 @@
+{
+ "producedBy": "integrations/hallowdale/run.py with the bridge modules in integrations/hallowdale",
+ "date": "2026-11-18 PST",
+ "bridgeSources": {
+  "honing.ml": "c4940caa421f85830030a1c2aae3c8ce1b48861c991605bbbd4d0e8e51113c07",
+  "honing_input.ml": "1697ac67c1b81219e73c1c80f810cd9c620976930e4347805705c7902d42216c",
+  "honing_command.ml": "06894d9d9ad97b06e5007c956db73248ce9ef1ce5d0a95192ad93667f23a0d2d",
+  "native.patch": "e68dc861961d2ce95f4639938c9a0140ba3afc6984848a02b5947b1b5540987d",
+  "run.py": "dbffc721af9c9d92dd773487089f9e4ccfd3f2c8ec57323fbbabe89abc5cfff5"
+ },
+ "game": {
+  "repository": "https://github.com/mega-dean/hallowdale",
+  "commit": "a330d3462afe5fa7b8e65573ad8a7c7c79de17e9"
+ },
+ "model": {
+  "repo": "convaiinnovations/laya-typed-decisions",
+  "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+  "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+  "layaVersion": "0.3.20",
+  "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+  "device": "cpu",
+  "maxLen": 2048,
+  "headMaxLen": 512
+ },
+ "run": {
+  "start": "new game, Dean's Pass",
+  "decisions": 12,
+  "framesPerDecision": 12,
+  "cellPixels": 40,
+  "seed": 42,
+  "training": false,
+  "scriptedFallback": false
+ },
+ "sampleDecision": 1,
+ "allDecisions": [
+  {
+   "observationId": 1,
+   "choice": "attack_right",
+   "probability": 0.0941,
+   "stateTokens": 736,
+   "xBefore": 50.5556,
+   "xAfter": 54.9259,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 2,
+   "choice": "attack",
+   "probability": 0.0931,
+   "stateTokens": 731,
+   "xBefore": 54.9259,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 3,
+   "choice": "attack",
+   "probability": 0.097,
+   "stateTokens": 749,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 4,
+   "choice": "attack",
+   "probability": 0.0975,
+   "stateTokens": 757,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 5,
+   "choice": "attack",
+   "probability": 0.098,
+   "stateTokens": 757,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 6,
+   "choice": "attack",
+   "probability": 0.0963,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 7,
+   "choice": "attack",
+   "probability": 0.0959,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 8,
+   "choice": "attack",
+   "probability": 0.0959,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 9,
+   "choice": "attack",
+   "probability": 0.0959,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 10,
+   "choice": "attack",
+   "probability": 0.0959,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 11,
+   "choice": "attack",
+   "probability": 0.0959,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  },
+  {
+   "observationId": 12,
+   "choice": "attack",
+   "probability": 0.0959,
+   "stateTokens": 755,
+   "xBefore": 55.0,
+   "xAfter": 55.0,
+   "yAfter": -111.0022,
+   "healthAfter": 5
+  }
+ ],
+ "limits": [
+  "One short author-side run. It shows that requests, responses and native actions connect.",
+  "It is no measure of how well the model plays, and no independent reviewer has rerun it.",
+  "The demo video in validation/ comes from a different run, made with a harness outside this integration."
+ ]
+}

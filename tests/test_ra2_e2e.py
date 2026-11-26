@@ -25,6 +25,7 @@ from honing.core import (
 )
 from tests.fakes.model import FakeTrainer
 from tests.fakes.ra2.e2e import trainer as fake_trainer
+from tests.fakes.scheduler import HistoryScheduler
 
 REPO = Path(__file__).resolve().parents[1]
 DRY_RUN = REPO / "configs/e2e/ra2_dry_run.json"
@@ -110,7 +111,7 @@ def test_a_new_trainer_and_runner_are_tried_by_changing_the_config(tmp_path: Pat
     RecordingRunner.played = []
 
     run = build({**config, "components": components}, REPO, tmp_path / "out")
-    harness, train = run.campaign.run(ScriptedScheduler(run.moves))
+    harness, train = run.campaign.run(run.scheduler)
 
     trainer = run.context.shared["recording_trainer"]
     assert isinstance(trainer, RecordingTrainer)
@@ -119,6 +120,27 @@ def test_a_new_trainer_and_runner_are_tried_by_changing_the_config(tmp_path: Pat
     assert train.release is not None and train.decision is not None and train.decision.selected
     assert harness.release is None
     assert len(RecordingRunner.played) == 16  # two gates, 4 tasks, candidate and incumbent
+
+
+@pytest.mark.unit
+def test_the_schedule_runs_through_the_scheduler_slot_unless_the_config_names_a_scheduler(tmp_path: Path) -> None:
+    scripted = build(_config(), REPO, tmp_path / "scripted")
+    assert isinstance(scripted.scheduler, ScriptedScheduler)
+    exported = scripted.scheduler.export_state()
+    assert (exported["schema_version"], exported["next"], exported["moves"]) == (2, 0, 2)
+
+    components = {
+        **_config()["components"],  # type: ignore[dict-item]
+        "scheduler": {"factory": "tests.fakes.scheduler:history_scheduler", "args": {"kinds": ["train"]}},
+    }
+    with pytest.warns(UserWarning, match=r"the 'history' scheduler chooses every move, so the schedule's moves"):
+        run = build(_config(components=components), REPO, tmp_path / "named")
+    assert isinstance(run.scheduler, HistoryScheduler)
+    (train,) = run.campaign.run(run.scheduler)
+
+    assert train.move.kind == "train" and train.release is not None
+    last = json.loads(run.campaign.chain.record_path.read_text().splitlines()[-1])
+    assert (last["scheduler"], last["scheduler_state"]["next"]) == ("history", 1)
 
 
 # ---------------------------------------------------------------- startup checks

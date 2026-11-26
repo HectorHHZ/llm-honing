@@ -11,6 +11,11 @@ strictly beats the parent's. The full validation run is the campaign's gate:
 Upstream is used for the pure pieces only: the prompt renderer and output
 extractor of ``InstructionProposalSignature``. The loop stays here, because the
 campaign owns iteration, budgets and state.
+
+For a decision model, a :class:`~honing.core.TraceSource` lets reflection read
+what the model decided: each minibatch example's generated output is then the
+episode's rendered decision traces (:mod:`honing.harness.traces`), beside the
+grader's feedback.
 """
 
 from __future__ import annotations
@@ -36,11 +41,19 @@ from honing.core import (
     ProposeResult,
     SelectionDecision,
     Task,
+    TraceSource,
     UpdateCandidate,
     require,
 )
 from honing.harness.methods.gepa.archive import ARCHIVE_SCHEMA_VERSION, Archive, ArchiveCandidate
 from honing.harness.models import ChatModelError
+from honing.harness.traces import (
+    DEFAULT_AFTER_SECONDS,
+    DEFAULT_BEFORE_SECONDS,
+    DEFAULT_MAX_TOKENS,
+    check_window,
+    render_traces,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +69,11 @@ class GEPAConfig:
     ``reflection_prompt_template`` is one template for every component, or a
     template per component path; a component with none uses upstream's default.
     A template must contain ``<curr_param>`` and ``<side_info>``.
+    ``trace_max_tokens`` caps each example's rendered decision traces, when the
+    method reads them, and ``trace_before_seconds`` and ``trace_after_seconds``
+    size the windows around their key events. The defaults suit a tank round,
+    and a game with another clock sets its own. None has an upstream
+    counterpart.
     """
 
     max_metric_calls: int
@@ -66,6 +84,9 @@ class GEPAConfig:
     reflection_max_tokens: int = 4096
     reflection_temperature: float = 1.0
     rng_seed: int = 0
+    trace_max_tokens: int = DEFAULT_MAX_TOKENS
+    trace_before_seconds: float = DEFAULT_BEFORE_SECONDS
+    trace_after_seconds: float = DEFAULT_AFTER_SECONDS
 
     def __post_init__(self) -> None:
         require(self.max_metric_calls >= 0, f"max_metric_calls must be >= 0, got {self.max_metric_calls}")
@@ -77,6 +98,8 @@ class GEPAConfig:
             self.reflection_temperature >= 0.0,
             f"reflection_temperature must be >= 0, got {self.reflection_temperature}",
         )
+        require(self.trace_max_tokens >= 100, f"trace_max_tokens must be >= 100, got {self.trace_max_tokens}")
+        check_window(self.trace_before_seconds, self.trace_after_seconds)
 
     def template_for(self, path: str) -> str | None:
         """The template for one component, resolved as upstream's ``StatelessReflectionLM`` does."""
@@ -141,13 +164,21 @@ class GEPAMethod:
     archive stores validation scores in that order. The minibatches are drawn
     from ``EvolveContext.tasks``, which a move can set to a training split the
     gate never sees. After a move changes the weights, the search starts over
-    from the served harness (:meth:`Archive.restart_from_served`).
+    from the served harness (:meth:`Archive.restart_from_served`). With
+    ``traces``, an episode it can read is shown to reflection as its rendered
+    decisions instead of the runner's final output.
     """
 
     name = "gepa"
     state_schema_version = ARCHIVE_SCHEMA_VERSION
 
-    def __init__(self, chat_model: ChatModel, config: GEPAConfig, validation_task_ids: Sequence[str]) -> None:
+    def __init__(
+        self,
+        chat_model: ChatModel,
+        config: GEPAConfig,
+        validation_task_ids: Sequence[str],
+        traces: TraceSource | None = None,
+    ) -> None:
         # Only ``instructions`` is required of the runner: a runner without ``skill``
         # files (RA2's) must still accept GEPA. The seed decides which kinds are rewritten.
         self.requires = MethodRequirements(file_kinds=frozenset({"instructions"}))
@@ -155,6 +186,7 @@ class GEPAMethod:
         self.chat_model = chat_model
         self.config = config
         self.validation_task_ids = tuple(validation_task_ids)
+        self.traces = traces
         _require_gepa()
         from gepa.strategies.instruction_proposal import InstructionProposalSignature
 
@@ -296,7 +328,7 @@ class GEPAMethod:
         dataset = [
             {
                 "Inputs": task.prompt,
-                "Generated Outputs": record.outcome.final_output,
+                "Generated Outputs": self._outputs(record),
                 "Feedback": record.feedback or "",
             }
             for task, record in zip(batch, records, strict=True)
@@ -326,6 +358,18 @@ class GEPAMethod:
             _LOGGER.warning("GEPA reflection on %s failed: %s; proposing nothing this iteration", path, error)
             return ""
         return extract_text(reply.text)
+
+    def _outputs(self, record: EpisodeRecord) -> str:
+        """The episode's rendered decision traces, or the runner's final output when there are none to read."""
+        traces = self.traces.traces(record) if self.traces is not None else ()
+        if not traces:
+            return record.outcome.final_output
+        return render_traces(
+            traces,
+            max_tokens=self.config.trace_max_tokens,
+            before_seconds=self.config.trace_before_seconds,
+            after_seconds=self.config.trace_after_seconds,
+        )
 
 
 def settle(archive: Archive, evaluation: EvaluationResult, selected: bool) -> Archive:

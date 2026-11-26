@@ -1,0 +1,32 @@
+{
+  "seed": 3114,
+  "seat": "blue",
+  "opponent": "planner",
+  "map": "Loop Maze 066",
+  "map_revision": "loop-mazes-v3",
+  "winner": "red",
+  "reason": "hit",
+  "outcome": {
+    "blue": -1,
+    "red": 1
+  },
+  "ended": true,
+  "truncated": false,
+  "sim_seconds": 6,
+  "decisions": {
+    "blue": 29,
+    "red": 20
+  },
+  "shots": {
+    "blue": 5,
+    "red": 6
+  },
+  "self_hits": [],
+  "enemy_hits": [
+    "red"
+  ],
+  "interventions": {
+    "blue": 2,
+    "red": 5
+  }
+}

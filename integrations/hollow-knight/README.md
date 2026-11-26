@@ -12,6 +12,28 @@ weights are operator-supplied; only validation footage and traces are included h
 The [observation/action contract](API.md) defines every field, units, defaults, timing,
 visibility, command rejection and response-validation behavior.
 
+## Research scope
+
+Primary category: **Reactive combat**. Capability tags: navigation, platform movement, combat.
+
+Move between platforms and fight enemies in the supplied Unity imitation build.
+
+| Component | Responsibility in this configuration |
+| --- | --- |
+| Model | Choose among the 11 offered inputs. |
+| Harness | Expose player state, nearby enemies and scene exits. Set input windows, pause for inference and validate responses. |
+| Engine and other policies | Run Unity movement, combat, collisions and coroutines. |
+
+The current scene-state observation can include off-screen enemies and exits.
+This demo has no reward, campaign runner or deterministic reset/step contract.
+
+Suggested evaluation: Define a scene exit or combat goal first. Report
+observation visibility and action duration. A visible-only profile would need a
+separate comparison.
+
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
+
 ## Build the isolated demo
 
 The tested target is macOS with Unity 2019.4.2f1, Mono, and the game revision in `pins.json`.

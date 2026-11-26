@@ -5,7 +5,16 @@ block with the scenario. A task is one Tank War round on the seeded maze, with
 the policy in one seat and the planner opponent in the other. Every seed is
 played from both seats, because the two spawns are not equally placed on a
 given maze. Splits: ``train`` for a method's minibatches and for rollouts,
-``val`` for the gate, ``heldout`` for reports the gate never sees.
+``val`` for validation, ``heldout`` for reports no campaign sees.
+
+``val`` and ``heldout`` also have large seed pools beyond the suite file
+(:data:`SEED_POOLS`). The suite file's ``val`` tasks are a fixed set a method
+such as GEPA may select on. Every gate draws its rounds from the ``val`` pool
+instead, and no two gates of a campaign play the same seed
+(:class:`~honing.backends.tank.gate.FreshSeedEvaluator`). No campaign code
+path can ask for ``heldout``: :meth:`TankSuite.tasks` and :func:`pool_tasks`
+refuse it, and experiment scripts read it through
+:meth:`TankSuite.heldout_tasks`.
 
 Build the suite: ``python -m honing.backends.tank.scenarios <suite.jsonl>``
 """
@@ -31,6 +40,9 @@ SPLIT_SEEDS: dict[Split, range] = {
     "val": range(2001, 2009),
     "heldout": range(3001, 3009),
 }
+#: Seeds beyond the suite file, disjoint from its seeds and from each other. A
+#: pool round runs on the default clock, as the suite file's rounds do.
+SEED_POOLS: dict[Split, range] = {"val": range(100_000, 200_000), "heldout": range(200_000, 300_000)}
 
 
 @dataclass(frozen=True)
@@ -69,27 +81,61 @@ def _task_id(split: Split, scenario: TankScenario) -> str:
     return f"tank-{split}-s{scenario.seed}-{scenario.seat}"
 
 
+def _record(split: Split, scenario: TankScenario) -> dict[str, object]:
+    return {
+        "task_id": _task_id(split, scenario),
+        "prompt": _prompt(scenario),
+        "split": split,
+        "tank": asdict(scenario),
+    }
+
+
 def build_suite(seconds: float = 30.0) -> list[dict[str, object]]:
     """Every task, one record per split, seed, and seat, in a stable order (both seats of a seed together)."""
-    records: list[dict[str, object]] = []
-    for split, seeds in SPLIT_SEEDS.items():
-        for seed in seeds:
-            for seat in SEATS:
-                scenario = TankScenario(seed=seed, seat=seat, seconds=seconds)
-                records.append(
-                    {
-                        "task_id": _task_id(split, scenario),
-                        "prompt": _prompt(scenario),
-                        "split": split,
-                        "tank": asdict(scenario),
-                    }
-                )
-    return records
+    return [
+        _record(split, TankScenario(seed=seed, seat=seat, seconds=seconds))
+        for split, seeds in SPLIT_SEEDS.items()
+        for seed in seeds
+        for seat in SEATS
+    ]
+
+
+def _refuse_heldout(split: str) -> None:
+    require(split != "heldout", "heldout tasks are read only by experiment scripts, through TankSuite.heldout_tasks")
+
+
+def _pool_tasks(split: Split, seeds: Iterable[int]) -> tuple[Task, ...]:
+    tasks = []
+    for seed in seeds:
+        require(seed in SEED_POOLS[split], f"seed {seed} is not in the {split} pool")
+        for seat in SEATS:
+            record = _record(split, TankScenario(seed=seed, seat=seat))
+            tasks.append(Task(task_id=str(record["task_id"]), prompt=str(record["prompt"])))
+    return tuple(tasks)
+
+
+def _pool_scenario(split: Split, task_id: str) -> TankScenario | None:
+    """The scenario of the split's pool task named ``task_id``, or None when no pool task has that id."""
+    seed = task_id.removeprefix(f"tank-{split}-s").rpartition("-")[0]
+    if not (seed.isdigit() and int(seed) in SEED_POOLS[split]):
+        return None
+    for seat in SEATS:
+        scenario = TankScenario(int(seed), seat)
+        if _task_id(split, scenario) == task_id:
+            return scenario
+    return None
+
+
+def pool_tasks(split: Split, seeds: Iterable[int]) -> tuple[Task, ...]:
+    """Both seats of each seed from the split's pool, seed by seed. ``heldout`` is refused."""
+    require_choice(split, tuple(SEED_POOLS), "pool")
+    _refuse_heldout(split)
+    return _pool_tasks(split, seeds)
 
 
 @dataclass(frozen=True)
 class TankSuite:
-    """A loaded task suite: tasks by split, and the scenario behind each task."""
+    """A loaded task suite: tasks by split, and the scenario behind each task, pool tasks included."""
 
     records: tuple[Mapping[str, object], ...]
 
@@ -98,20 +144,52 @@ class TankSuite:
         require(len(set(ids)) == len(ids), "a task suite names each task once")
 
     def tasks(self, split: Split, *, limit: int | None = None) -> tuple[Task, ...]:
+        """The split's tasks in the suite file, in file order. ``heldout`` is refused."""
         require_choice(split, get_args(Split), "split")
+        _refuse_heldout(split)
+        return self._file_tasks(split, limit)
+
+    def heldout_tasks(self, seeds: Iterable[int] | None = None) -> tuple[Task, ...]:
+        """Heldout tasks, for experiment scripts. No campaign code path calls this.
+
+        Without ``seeds``, the suite file's heldout tasks in file order. With
+        them, both seats of each seed from the heldout pool.
+        """
+        return self._file_tasks("heldout", None) if seeds is None else _pool_tasks("heldout", seeds)
+
+    def scenario(self, task_id: str) -> TankScenario:
+        return TankScenario(**self._record(task_id)["tank"])  # type: ignore[arg-type]
+
+    def split_of(self, task_id: str) -> Split:
+        return self._record(task_id)["split"]  # type: ignore[return-value]
+
+    def pool_overlap(self, split: Split) -> dict[str, int]:
+        """The suite file's tasks a task of the split's pool could play, each with its seed.
+
+        A line reaches the pool if its seed is in it, or if its id is a pool
+        task's, since :meth:`scenario` reads the suite file before the pools.
+        """
+        require_choice(split, tuple(SEED_POOLS), "pool")
+        overlap = {}
+        for record in self.records:
+            task_id, seed = str(record["task_id"]), TankScenario(**record["tank"]).seed  # type: ignore[arg-type]
+            if seed in SEED_POOLS[split] or _pool_scenario(split, task_id) is not None:
+                overlap[task_id] = seed
+        return overlap
+
+    def _file_tasks(self, split: Split, limit: int | None) -> tuple[Task, ...]:
         chosen = [r for r in self.records if r["split"] == split]
         return tuple(Task(task_id=str(r["task_id"]), prompt=str(r["prompt"])) for r in chosen[:limit])
 
-    def scenario(self, task_id: str) -> TankScenario:
+    def _record(self, task_id: str) -> Mapping[str, object]:
+        """The task's suite line, or for a pool task the line it would have."""
         for record in self.records:
             if record["task_id"] == task_id:
-                return TankScenario(**record["tank"])  # type: ignore[arg-type]
-        raise ContractError(f"task {task_id!r} is not in the tank suite")
-
-    def split_of(self, task_id: str) -> Split:
-        for record in self.records:
-            if record["task_id"] == task_id:
-                return record["split"]  # type: ignore[return-value]
+                return record
+        for split in SEED_POOLS:
+            scenario = _pool_scenario(split, task_id)
+            if scenario is not None:
+                return _record(split, scenario)
         raise ContractError(f"task {task_id!r} is not in the tank suite")
 
 

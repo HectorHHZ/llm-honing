@@ -8,9 +8,11 @@ from typing import Protocol
 
 import pytest
 
+from honing.backends.tank.traces import TankTraceSource
 from honing.campaign import ScriptedScheduler
 from honing.core import (
     BackendSupport,
+    CampaignState,
     ChatReply,
     CheckpointRef,
     CompressionStep,
@@ -19,6 +21,7 @@ from honing.core import (
     DataContract,
     DecisionQuestion,
     DecisionSample,
+    DecisionTrace,
     EpisodeOutcome,
     EvaluationResult,
     Grade,
@@ -37,15 +40,24 @@ from honing.core import (
     QuantizePlan,
     QuantScheme,
     RecoverySpec,
+    StepRecord,
     TeacherRef,
+    TraceEvent,
     TrainingBatch,
     TrainJobSpec,
     UpdateCandidate,
     UpdatePolicy,
     protocols,
+    validate_scheduler_state,
 )
 from honing.harness import endpoints
-from honing.release import AcceptAll, EpisodeEvaluator, NoRegressionSelector, WinLossSelector
+from honing.release import (
+    AcceptAll,
+    EpisodeEvaluator,
+    NoRegressionSelector,
+    PairedIntervalSelector,
+    WinLossSelector,
+)
 from tests.fakes.builder import INT4_G128, TASKS
 from tests.fakes.compression import (
     ActivationCountScorer,
@@ -61,9 +73,11 @@ from tests.fakes.harness import (
     FakeEpisodeRunner,
     FakeProposerAgent,
     FakeTaskGrader,
+    FakeTraceSource,
     StaticPolicyEndpoints,
 )
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld, IdentityConverter, parameters_of, small_moe
+from tests.fakes.scheduler import HistoryScheduler
 
 
 def implementations() -> list[tuple[object, type]]:
@@ -87,12 +101,16 @@ def implementations() -> list[tuple[object, type]]:
         (StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (endpoints.StaticPolicyEndpoints({}), protocols.PolicyEndpoints),
         (FakeProposerAgent(), protocols.ProposerAgent),
+        (FakeTraceSource(), protocols.TraceSource),
+        (TankTraceSource(), protocols.TraceSource),
         (AppendInstructionMethod(), protocols.EvolveMethod),
         (WinLossSelector(), protocols.CandidateSelector),
         (NoRegressionSelector(0.1), protocols.CandidateSelector),
+        (PairedIntervalSelector(), protocols.CandidateSelector),
         (AcceptAll(), protocols.CandidateSelector),
         (EpisodeEvaluator(runner, grader, TASKS), protocols.Evaluator),
         (ScriptedScheduler([]), protocols.CoAdaptScheduler),
+        (HistoryScheduler([]), protocols.CoAdaptScheduler),
     ]
 
 
@@ -225,6 +243,35 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
         lambda: TrainingBatch("b", DataContract("typed_decisions"), token_batch().samples),
     ),
     ("preference training on decisions", lambda: TrainJobSpec(algorithm="dpo", contract="typed_decisions")),
+    ("a trace event before the episode began", lambda: TraceEvent(-0.1, "fired")),
+    ("a key event without a priority", lambda: TraceEvent(1.0, "fired", "missed shot")),
+    ("a priority without a label", lambda: TraceEvent(1.0, "fired", priority=1)),
+    ("a key event with a blank label", lambda: TraceEvent(1.0, "fired", " ", 0)),
+    ("a key event with a negative priority", lambda: TraceEvent(1.0, "fired", "missed shot", -1)),
+    (
+        "a decision trace without behavior probabilities",
+        lambda: DecisionTrace(
+            "e",
+            0,
+            0.0,
+            DecisionSample((), (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),), (("q", "a"),)),
+        ),
+    ),
+    (
+        "a decision trace whose events are out of time order",
+        lambda: DecisionTrace(
+            "e",
+            0,
+            0.0,
+            DecisionSample(
+                (),
+                (("q", DecisionQuestion("choice", "Next?", (("a", "A"), ("b", "B")))),),
+                (("q", "a"),),
+                behavior_probs=(("q", (("a", 0.5), ("b", 0.5))),),
+            ),
+            events=(TraceEvent(2.0, "fired"), TraceEvent(1.0, "hit")),
+        ),
+    ),
     (
         "a backend that trains on no data contract",
         lambda: BackendSupport("b", "uniform", frozenset({"bf16"}), frozenset({"hf_safetensors"}), (), frozenset()),
@@ -249,6 +296,40 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
         "method state with a boolean schema version",
         lambda: UpdateCandidate("init", None, _snapshot(), method_state={"schema_version": True}),
     ),
+    ("scheduler state holding a set", lambda: validate_scheduler_state({"schema_version": 1, "seen": {"a"}})),
+    ("scheduler state without a schema version", lambda: validate_scheduler_state({"next": 0})),
+    ("an unknown step result", lambda: StepRecord(0, Move(kind="train"), "abandoned", "r0000", "x")),  # type: ignore[arg-type]
+    (
+        "a published step without a release",
+        lambda: StepRecord(0, Move(kind="train"), "published", "r0000", "won", metrics_from="gate"),
+    ),
+    (
+        "a rejected step naming a release",
+        lambda: StepRecord(
+            0, Move(kind="train"), "rejected", "r0000", "lost", release_id="r0001", metrics_from="gate"
+        ),
+    ),
+    (
+        "a rejected step that says no source for its metrics",
+        lambda: StepRecord(0, Move(kind="train"), "rejected", "r0000", "lost"),
+    ),
+    (
+        "a skipped step that names a source for its metrics",
+        lambda: StepRecord(0, Move(kind="harness"), "skipped", "r0000", "none", metrics_from="method"),
+    ),
+    (
+        "an unknown source for a step's metrics",
+        lambda: StepRecord(0, Move(kind="train"), "rejected", "r0000", "lost", metrics_from="judge"),  # type: ignore[arg-type]
+    ),
+    (
+        "a skipped step with gate metrics",
+        lambda: StepRecord(0, Move(kind="harness"), "skipped", "r0000", "none", gate_metrics={"gate_tasks": 3.0}),
+    ),
+    ("a stop recorded as a step", lambda: StepRecord(0, Move(kind="stop"), "skipped", "r0000", "stopped")),
+    (
+        "a negative step index",
+        lambda: StepRecord(-1, Move(kind="train"), "rejected", "r0000", "lost", metrics_from="gate"),
+    ),
 ]
 
 
@@ -257,3 +338,23 @@ INVALID: list[tuple[str, Callable[[], object]]] = [
 def test_an_invalid_value_is_refused_at_construction(case: str, build: Callable[[], object]) -> None:
     with pytest.raises(ContractError):
         build()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("make", [ScriptedScheduler, HistoryScheduler], ids=["scripted", "history"])
+def test_a_schedulers_exported_state_restores_a_fresh_one_to_the_same_place(make: Callable[..., object]) -> None:
+    """What every scheduler owes the commit record: versioned JSON-native state that a fresh instance takes back."""
+    moves = [Move(kind="train"), Move(kind="harness")]
+    release = HoneRelease("r0000", UpdateCandidate("init", None, _snapshot()), None)
+    state = CampaignState(head=release, releases=(release,), step=0)
+    scheduler, fresh = make(moves), make(moves)
+    assert isinstance(scheduler, protocols.CoAdaptScheduler) and isinstance(fresh, protocols.CoAdaptScheduler)
+    scheduler.next_move(state)
+
+    exported = scheduler.export_state()
+    validate_scheduler_state(exported)
+    assert exported["schema_version"] == scheduler.state_schema_version
+    fresh.restore_state(exported)
+
+    assert fresh.export_state() == exported
+    assert fresh.next_move(state) == scheduler.next_move(state) == Move(kind="harness")

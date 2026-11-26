@@ -59,7 +59,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Runner speed varies about 2x: one Python version's job has taken 5 to 15 minutes.
+    # 3.11 also plays the tank dry run.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +81,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,docs,gepa]"
       - name: Test
+        env:
+          # The tank dry run takes minutes, and the e2e job plays its config on 3.12, so only 3.11 plays it here.
+          HONING_SKIP_TANK_DRY_RUN: ${{ matrix.python-version != '3.11' && '1' || '' }}
         run: python -m pytest -m "not gpu" --cov --cov-report=term-missing
 
   game-install:
@@ -330,7 +335,7 @@ jobs:
         run: |
           python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json --work-dir "$RUNNER_TEMP/tank-campaign"
           python scripts/e2e/check_campaign.py "$RUNNER_TEMP/tank-campaign" \
-            --expect harness=published --expect train=published --expect train="rolled back"
+            --expect harness=published --expect train="rolled back" --expect train="rolled back"
       - name: Tank harness runner contract
         run: python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json --work-dir "$RUNNER_TEMP/tank-runner-check"
       - name: Serving end to end (decision server process, the match's Node client stack)
@@ -424,3 +429,31 @@ jobs:
             ${{ runner.temp }}/pi-check/workspaces/*/agent.log
             ${{ runner.temp }}/pi/summary.json
           if-no-files-found: ignore
+
+  agent-gateway:
+    # The agent gateway's LiteLLM proxy, from its own environment installed from its lock
+    # (integrations/agent_gateway/README.md), in front of a loopback upstream that serves chat completions only,
+    # as SGLang does. No model or key: this catches a lock that no longer installs, a LiteLLM that no longer
+    # carries Anthropic messages and OpenAI responses over to chat completions, or a route outside the agents' own.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Honing and the gateway environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" uv
+          uv venv --python 3.12 integrations/agent_gateway/.venv
+          uv pip install --python integrations/agent_gateway/.venv/bin/python -r integrations/agent_gateway/requirements.txt
+      - name: Test
+        run: python -m pytest tests/test_agent_gateway.py
+        env:
+          # A test that needs the proxy fails rather than skips when its environment is missing.
+          HONING_REQUIRE_GATEWAY: "1"
