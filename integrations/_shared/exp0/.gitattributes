@@ -1,0 +1,5 @@
+# The diagnosis and collection settings pin the exact bytes of these files.
+*.py text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.md text eol=lf

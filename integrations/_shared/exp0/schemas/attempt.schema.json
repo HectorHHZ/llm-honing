@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:attempt:1",
+  "title": "Exp 0 v0 attempt record (one line of evaluator/attempts.jsonl; every attempt, kept or not)",
+  "type": "object",
+  "required": ["run", "condition", "scenario_group", "split", "attempt", "annotation_status", "selected_for_scoring"],
+  "properties": {
+    "run": {"type": "string"},
+    "condition": {"enum": ["no_injection", "harness", "weights", "controller"]},
+    "scenario_group": {"type": "string"},
+    "split": {"enum": ["train", "val", "test"]},
+    "attempt": {"type": ["integer", "null"], "minimum": 1},
+    "annotation_status": {"enum": ["control", "verified", "excluded"]},
+    "selected_for_scoring": {"type": "boolean"},
+    "exclusion_reason": {"type": "string", "minLength": 1},
+    "native_outcome": {"type": ["object", "null"]},
+    "validation": {"type": "object"}
+  },
+  "if": {"properties": {"annotation_status": {"const": "excluded"}}},
+  "then": {"required": ["exclusion_reason"], "properties": {"selected_for_scoring": {"const": false}}}
+}

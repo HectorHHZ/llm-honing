@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:episode-index:1",
+  "title": "Exp 0 v0 evaluator index (evaluator/episodes.json): the 40 scored episodes with their gold labels. Never a model input.",
+  "type": "array",
+  "minItems": 4,
+  "items": {
+    "type": "object",
+    "required": [
+      "episode_id",
+      "run",
+      "game_id",
+      "condition",
+      "scenario_group",
+      "split",
+      "attempt",
+      "identity",
+      "injection_layer",
+      "fault_family",
+      "fault_instance",
+      "changed_artifact",
+      "intervention",
+      "annotation_status",
+      "annotation_provenance",
+      "verification_procedure",
+      "verification_tool_sha256",
+      "reference_actions",
+      "outcome_effect",
+      "native_outcome",
+      "replay"
+    ],
+    "properties": {
+      "episode_id": {
+        "type": "string",
+        "pattern": "^[a-z]{1,3}[0-9]{3}$"
+      },
+      "run": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      },
+      "game_id": {
+        "type": "string"
+      },
+      "condition": {
+        "enum": [
+          "no_injection",
+          "harness",
+          "weights",
+          "controller"
+        ]
+      },
+      "injection_layer": {
+        "enum": [
+          "no_injection",
+          "harness",
+          "weights",
+          "controller"
+        ]
+      },
+      "verified_component": {
+        "enum": [
+          "harness",
+          "weights",
+          "controller"
+        ]
+      },
+      "scenario_group": {
+        "type": "string",
+        "minLength": 1
+      },
+      "split": {
+        "enum": [
+          "train",
+          "val",
+          "test"
+        ]
+      },
+      "attempt": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "identity": {
+        "type": "object",
+        "required": [
+          "code",
+          "game_build",
+          "scenario",
+          "selection",
+          "weights_sha256",
+          "harness",
+          "controller",
+          "observation",
+          "contract_version"
+        ]
+      },
+      "fault_family": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "fault_instance": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "changed_artifact": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "intervention": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "required": [
+              "component",
+              "family",
+              "instance",
+              "trigger_rule",
+              "trigger_index",
+              "changed_artifact",
+              "original_ref",
+              "altered_ref"
+            ]
+          }
+        ]
+      },
+      "annotation_status": {
+        "enum": [
+          "control",
+          "verified"
+        ]
+      },
+      "annotation_provenance": {
+        "type": "object",
+        "required": [
+          "verifier",
+          "revisions",
+          "disagreements"
+        ]
+      },
+      "verification_procedure": {
+        "type": "string",
+        "minLength": 1
+      },
+      "verification_tool_sha256": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "reference_actions": {
+        "type": "object",
+        "required": [
+          "status"
+        ]
+      },
+      "outcome_effect": {
+        "enum": [
+          "not_applicable",
+          "not_established",
+          "untested",
+          "established"
+        ]
+      },
+      "native_outcome": {
+        "type": "object",
+        "required": [
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "win",
+              "loss",
+              "timeout",
+              "other_terminal"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "replay": {
+        "type": "object",
+        "required": [
+          "method",
+          "verified",
+          "status"
+        ],
+        "properties": {
+          "method": {
+            "enum": [
+              "native_replay",
+              "contract_record",
+              "harness_replay_on_recorded_observations"
+            ]
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "win",
+              "loss",
+              "timeout",
+              "other_terminal"
+            ]
+          }
+        }
+      },
+      "evidence": {
+        "$ref": "#/$defs/evidence"
+      },
+      "paired_clean": {
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "release_level_score_drop": {
+        "enum": [
+          "untested",
+          "established",
+          "not_established"
+        ]
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "annotation_status": {
+              "const": "verified"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "verified_component",
+            "evidence",
+            "paired_clean",
+            "release_level_score_drop"
+          ],
+          "properties": {
+            "fault_instance": {
+              "type": "string"
+            },
+            "intervention": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "annotation_status": {
+              "const": "control"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "condition": {
+              "const": "no_injection"
+            },
+            "intervention": {
+              "type": "null"
+            },
+            "outcome_effect": {
+              "const": "not_applicable"
+            }
+          },
+          "not": {
+            "required": [
+              "verified_component"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "$defs": {
+    "probabilities": {
+      "anyOf": [
+        {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 2,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "description": "several questions (contract 0.2.0): {question: {option: p}}"
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "method",
+        "index",
+        "native_tick"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "request_vs_clean_render",
+            "selected_vs_executed",
+            "matched_clean_identical_request",
+            "same_request_reask"
+          ]
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "native_tick": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "request_vs_clean_render"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "request_differs",
+              "change_summary"
+            ],
+            "properties": {
+              "request_differs": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "selected_vs_executed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "selected",
+              "executed",
+              "window_mismatches"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "matched_clean_identical_request",
+                  "same_request_reask"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "clean_checkpoint",
+              "alternate_checkpoint",
+              "clean_probabilities",
+              "alternate_probabilities",
+              "max_probability_difference",
+              "tolerance",
+              "choice_changed"
+            ],
+            "properties": {
+              "clean_probabilities": {
+                "$ref": "#/$defs/probabilities"
+              },
+              "alternate_probabilities": {
+                "$ref": "#/$defs/probabilities"
+              },
+              "max_probability_difference": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "description": "Contract 0.2.0: a v0 release holds 40 episodes (10 per condition); the verifier enforces 4 x the plan's per_condition and per_condition 10 unless the plan and the bundle are marked as a dry run."
+}

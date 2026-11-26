@@ -123,6 +123,10 @@ select = [
 # Diagram sources set the matplotlib backend before importing pyplot, which
 # necessarily puts an import after a statement.
 "system-design/*.py" = ["E402"]
+# The Exp 0 v0 code is ported from the scripts that recorded the released
+# datasets: they import after their sys.path set-up and keep long strings.
+"integrations/**/exp0/**/*.py" = ["E402", "E501"]
+"tests/test_exp0_*.py" = ["E402", "E501"]
 
 [tool.mypy]
 python_version = "3.10"

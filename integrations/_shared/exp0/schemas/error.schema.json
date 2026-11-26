@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:episode-error:1",
+  "title": "Exp 0 v0 failed or interrupted attempt (error.json). An attempt with error.json is incomplete and is never scored.",
+  "type": "object",
+  "required": ["status", "type", "message", "at_index"],
+  "properties": {
+    "status": {"enum": ["rejected_response", "transport_error", "game_crash", "bridge_timeout", "identity_changed", "interrupted", "collector_error", "other"]},
+    "type": {"type": "string", "minLength": 1},
+    "message": {"type": "string"},
+    "at_index": {"type": ["integer", "null"], "minimum": 0},
+    "extra": {"type": "object"}
+  }
+}

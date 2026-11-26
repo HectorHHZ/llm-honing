@@ -42,3 +42,7 @@ python3 -m unittest tests.test_game_decision_contract
 
 The existing game tests cover their adapters and native boundaries. These
 portable tests do not establish native game performance or real-model evidence.
+
+The `exp0/` directory holds the Exp 0 v0 episode tooling that the VVVVVV and
+full Hollow Knight (ForestDango) dataset releases share; see its
+[README](exp0/README.md).

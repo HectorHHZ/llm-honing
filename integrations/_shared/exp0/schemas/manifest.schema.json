@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:episode-manifest:1",
+  "title": "Exp 0 v0 episode manifest (one attempt; written by the game collector before the first decision)",
+  "type": "object",
+  "required": [
+    "format", "contract_version", "game_id", "shape", "run", "condition", "reset_group", "attempt",
+    "scenario", "selection", "pins", "clean_weights_sha256", "intervention"
+  ],
+  "properties": {
+    "format": {"const": "honing-exp0-episode-v0"},
+    "contract_version": {"type": "string", "pattern": "^0\\.[0-9]+\\.[0-9]+$"},
+    "game_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "shape": {"enum": ["native", "option"]},
+    "run": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "condition": {"enum": ["no_injection", "harness", "weights", "controller"]},
+    "reset_group": {"type": "string", "minLength": 1},
+    "attempt": {
+      "type": "object",
+      "required": ["number", "slot"],
+      "properties": {
+        "number": {"type": "integer", "minimum": 1},
+        "slot": {"type": "string", "minLength": 3}
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "required": ["task", "start", "caps"],
+      "properties": {
+        "task": {"type": "string", "minLength": 1},
+        "start": {"type": "object"},
+        "seed": {"type": ["integer", "string", "null"]},
+        "caps": {
+          "type": "object",
+          "properties": {
+            "decisions": {"type": "integer", "minimum": 1},
+            "native_ticks": {"type": "integer", "minimum": 1},
+            "wall_seconds": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "required": ["rule"],
+      "properties": {
+        "rule": {"enum": ["argmax", "sample"]},
+        "seed": {"type": ["integer", "null"]}
+      },
+      "if": {"properties": {"rule": {"const": "sample"}}},
+      "then": {"required": ["seed"], "properties": {"seed": {"type": "integer"}}}
+    },
+    "pins": {
+      "type": "object",
+      "required": ["game_build", "code", "harness", "controller", "observation", "checkpoint"],
+      "properties": {
+        "game_build": {"$ref": "#/$defs/named_pin"},
+        "code": {
+          "type": "object",
+          "anyOf": [{"required": ["upstream_sha"]}, {"required": ["fingerprint"]}],
+          "properties": {
+            "upstream_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            "fingerprint": {"type": "string", "minLength": 8}
+          }
+        },
+        "harness": {"$ref": "#/$defs/named_pin"},
+        "controller": {"$ref": "#/$defs/named_pin"},
+        "observation": {
+          "type": "object",
+          "required": ["condition"],
+          "properties": {
+            "condition": {"type": "string", "minLength": 1},
+            "knobs": {"type": "object"}
+          }
+        },
+        "checkpoint": {"$ref": "#/$defs/checkpoint"}
+      }
+    },
+    "clean_weights_sha256": {"$ref": "#/$defs/sha256"},
+    "intervention": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["component", "family", "instance", "trigger_rule", "changed_artifact", "original_ref", "altered_ref"],
+          "properties": {
+            "component": {"enum": ["harness", "weights", "controller"]},
+            "family": {"type": "string", "minLength": 1},
+            "instance": {"type": "string", "minLength": 1},
+            "trigger_rule": {"type": "string", "minLength": 1},
+            "changed_artifact": {"type": "string", "minLength": 1},
+            "original_ref": {"type": "string", "minLength": 1},
+            "altered_ref": {"type": "string", "minLength": 1},
+            "builder": {"type": "object"}
+          }
+        }
+      ]
+    },
+    "started_at": {"type": "string"},
+    "runtime": {"type": "object"},
+    "extra": {"type": "object"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "named_pin": {
+      "type": "object",
+      "required": ["id"],
+      "anyOf": [{"required": ["sha256"]}, {"required": ["fingerprint"]}, {"required": ["version"]}],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "fingerprint": {"type": "string", "minLength": 8},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "required": ["weightsSha256", "role"],
+      "properties": {
+        "weightsSha256": {"$ref": "#/$defs/sha256"},
+        "role": {"enum": ["clean", "alternate"]},
+        "repo": {"type": "string"},
+        "revision": {"type": "string"}
+      }
+    }
+  }
+}
