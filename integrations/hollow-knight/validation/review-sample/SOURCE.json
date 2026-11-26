@@ -1,0 +1,31 @@
+{
+  "game": "hollow-knight-imitation (DanielDFY/Hollow-Knight-Imitation, revision c443c6262ab85d007c8ed6f3abb42a8b077df007)",
+  "evidence": "Author-side real Laya decision 1 of 47 in run eval_laya_v8_L1L2, started 2026-11-17 20:03 PST (2026-11-18 04:03:28 UTC).",
+  "producedBy": {
+    "harness": "Harness v8 as committed under integrations/hollow-knight/experiments/harness-v8, except one later fix in control.py that ignores a blank HUD right after a level exit. The repeat run eval2_laya_v8_L1L2 used the committed code and sent identical requests.",
+    "runtime": "Linux Unity 2019.4.2f1 Mono player with the visible bridge; Assembly-CSharp.dll SHA-256 4a86f2c5bda2b8b9c76683b78c93743ff5e2b3afdf23ad2daaf32234fa8852c7, capture on, HONING_OBSERVATION_PROFILE=visible.",
+    "guard": "The run used the harness guard of that time. check.py validates the same bytes with the shared receiver the committed code now calls."
+  },
+  "model": {
+    "repo": "convaiinnovations/laya-typed-decisions",
+    "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+    "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+    "layaVersion": "0.3.20",
+    "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+    "device": "cpu",
+    "threads": 4,
+    "training_performed": false
+  },
+  "includedSha256": {
+    "request.json": "46b59130fbc7a04b1a463a8c90ea486c9aac6a7883941b81ce0bc68291fbbfb5",
+    "response.raw": "79fe4ac07a6d0ab98a3a3b19a567efb9eab3e3b7e26d8678bc7f6505b9ccf07f",
+    "transition.json": "aa6f6a9e2ababe5aedba0b62c88270f6a3e6d2bdfb213ec8426b83d412adb9c5"
+  },
+  "limits": [
+    "One decision of one run. It shows that a real model response was checked and carried out; it says nothing about how often the harness succeeds.",
+    "Laya chose among options the harness computed and offered; every native window after the choice was chosen by harness code.",
+    "debugBefore and debugAfter are the game's evaluation trace. The harness and the model never read it.",
+    "No images, video, game assets, model weights or credentials are included.",
+    "response.raw is byte-exact and has no final newline; request.json and transition.json were re-serialized from the run records without editing values."
+  ]
+}
