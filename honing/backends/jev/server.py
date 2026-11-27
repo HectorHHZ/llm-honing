@@ -28,6 +28,14 @@ so one call is encoded while the GPU runs another, and ``run`` on the model
 thread. A malformed request is a 400 and a model failure is a 500, each with
 ``{"error": ...}``.
 
+With a recorder (``--reef-url`` and ``--reef-scenario``), every answered
+decide request is handed to it after the reply is sent, with the request's
+``x-reef-tag-*`` headers, and recorded in Reef on the recorder's own thread
+(``honing/backends/reef/recorder.py``, #223). Recording never delays or fails
+a decision, and never runs on the model thread. ``/v1/health`` then also
+reports the recorder's counts under ``"reef"``. The Bearer token is read from
+``REEF_TOKEN``.
+
 Run ``python -m honing.backends.jev.server --pins <pins.json> --gpu 0`` with the family's settings:
 
 - Laya: ``--model typed-decisions --model-config-dir <records> --laya-source <checkout>``
@@ -44,7 +52,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import math
+import os
 import queue
 import signal
 import sys
@@ -54,14 +64,29 @@ from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from honing.backends.jev.model import DecisionModel
 from honing.backends.jev.nanojev_tree import INFERENCE_MODES
 
+logger = logging.getLogger(__name__)
+
 MAX_BODY_BYTES = 16 * 1024 * 1024
 # Requests a decide body may add under ``branches``; Tank War sends one per admissible motion, at most nine.
 MAX_BRANCHES = 16
+
+
+class DecisionRecorder(Protocol):
+    """Takes answered decide requests and records them elsewhere.
+
+    :class:`~honing.backends.reef.recorder.ReefRecorder` records them in Reef.
+    """
+
+    def submit(self, body: bytes, reply: bytes, headers: Sequence[tuple[str, str]]) -> None: ...
+
+    def counts(self) -> Mapping[str, int]: ...
+
+    def close(self) -> None: ...
 
 
 class RequestError(ValueError):
@@ -149,9 +174,12 @@ class DecisionServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], model: DecisionModel) -> None:
+    def __init__(
+        self, address: tuple[str, int], model: DecisionModel, recorder: DecisionRecorder | None = None
+    ) -> None:
         super().__init__(address, _Handler)
         self.model = model
+        self.recorder = recorder
         self._decisions: queue.Queue[_Decision | None] = queue.Queue()
 
     def decide(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> dict[str, object]:
@@ -197,6 +225,8 @@ class DecisionServer(ThreadingHTTPServer):
         finally:
             self.shutdown()
             accepting.join()
+            if self.recorder is not None:
+                self.recorder.close()
 
     def _answer(self, decision: _Decision) -> None:
         model: Any = self.model
@@ -228,13 +258,19 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         return
 
-    def _send(self, status: HTTPStatus, payload: Mapping[str, object]) -> None:
+    def _send(self, status: HTTPStatus, payload: Mapping[str, object]) -> bytes:
         body = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+        return body
+
+    def _health(self, payload: dict[str, object]) -> dict[str, object]:
+        if self.server.recorder is not None:
+            payload["reef"] = dict(self.server.recorder.counts())
+        return payload
 
     def do_GET(self) -> None:
         if self.path != "/v1/health":
@@ -251,10 +287,10 @@ class _Handler(BaseHTTPRequestHandler):
             if reason is not None:
                 self._send(
                     HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"ready": False, "error": reason, "metadata": metadata, "maxBranches": MAX_BRANCHES},
+                    self._health({"ready": False, "error": reason, "metadata": metadata, "maxBranches": MAX_BRANCHES}),
                 )
                 return
-        self._send(HTTPStatus.OK, {"ready": True, "metadata": metadata, "maxBranches": MAX_BRANCHES})
+        self._send(HTTPStatus.OK, self._health({"ready": True, "metadata": metadata, "maxBranches": MAX_BRANCHES}))
 
     def do_POST(self) -> None:
         if self.path != "/v1/decide":
@@ -267,8 +303,9 @@ class _Handler(BaseHTTPRequestHandler):
         if length <= 0 or length > MAX_BODY_BYTES:
             self._send(HTTPStatus.BAD_REQUEST, {"error": f"body must be 1 to {MAX_BODY_BYTES} bytes"})
             return
+        body = self.rfile.read(length)
         try:
-            first, branches = parse_decide(self.rfile.read(length))
+            first, branches = parse_decide(body)
         except RequestError as error:
             self._send(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
@@ -285,9 +322,16 @@ class _Handler(BaseHTTPRequestHandler):
         if branches:
             response["branches"] = dict(zip(branches, responses[1:], strict=True))
         try:
-            self._send(HTTPStatus.OK, response)
+            reply = self._send(HTTPStatus.OK, response)
         except ValueError as error:  # a NaN or an infinity from the model, which strict JSON cannot write
             self._send(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"the model's answer is not JSON: {error}"})
+            return
+        recorder = self.server.recorder
+        if recorder is not None:
+            try:
+                recorder.submit(body, reply, list(self.headers.items()))
+            except Exception:  # the decision is answered; a recorder fault must not reach the game
+                logger.exception("the recorder could not take an answered request")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -336,20 +380,48 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--sglang-python", type=Path, help="engine sglang: the interpreter of the SGLang environment")
     parser.add_argument("--no-prefix-cache", action="store_true", help="engine sglang: turn the radix cache off")
+    parser.add_argument("--reef-url", help="record every answered decision in the Reef service at this URL")
+    parser.add_argument("--reef-scenario", help="with --reef-url: the Reef scenario the records go to")
+    parser.add_argument(
+        "--reef-max-pending-mib",
+        type=float,
+        default=256.0,
+        help="with --reef-url: decisions waiting for Reef past this many MiB are not recorded, and counted",
+    )
+    parser.add_argument(
+        "--reef-flush-seconds", type=float, default=10.0, help="with --reef-url: how long to keep sending at exit"
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port")
     args = parser.parse_args(argv)
+    if (args.reef_url is None) != (args.reef_scenario is None):
+        parser.error("--reef-url and --reef-scenario go together")
     # A launcher stops the server with SIGTERM; exit through the loading context so an engine it started stops too.
     if threading.current_thread() is threading.main_thread():
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     with _load(parser, args) as model:
-        server = DecisionServer((args.host, args.port), model)
+        server = DecisionServer((args.host, args.port), model, _recorder(args))
         # One line on stdout tells a launcher where the server is and what it loaded.
         print(json.dumps({"ready": True, "url": server.url, "metadata": dict(model.metadata)}), flush=True)
         try:
             server.serve()
         finally:
             server.server_close()
+
+
+def _recorder(args: argparse.Namespace) -> DecisionRecorder | None:
+    if args.reef_url is None:
+        return None
+    # Imported only here: reef_client is the optional `reef` extra.
+    from honing.backends.reef.recorder import ReefRecorder
+
+    return ReefRecorder(
+        args.reef_url,
+        args.reef_scenario,
+        token=os.environ.get("REEF_TOKEN"),
+        max_pending_bytes=int(args.reef_max_pending_mib * 1024 * 1024),
+        flush_seconds=args.reef_flush_seconds,
+    )
 
 
 def _load(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Any:

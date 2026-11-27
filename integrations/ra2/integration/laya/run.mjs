@@ -3,6 +3,7 @@ import {
     createDecisionClient,
     decisionClientOptions,
     inferenceCallUnit,
+    parseReefTags,
 } from "../models/factory.mjs";
 import {
     writeFileSync,
@@ -100,6 +101,9 @@ const decisionLogFormat = args["decision-log"] ?? "plain";
 if (!["plain", "gzip"].includes(decisionLogFormat))
     throw new Error("decision-log must be plain or gzip");
 const clientOptions = decisionClientOptions(args, candidateMode);
+// The run's Reef tags (#223): sent on every decision, and kept in the manifest so a grader finds the episode.
+const reefTags =
+    args["reef-tags"] === undefined ? null : parseReefTags(args["reef-tags"]);
 const out = resolve(ROOT, args.out ?? `runs/match-${layaSeat}-seed${seed}`);
 if (existsSync(out))
     throw new Error(
@@ -239,6 +243,7 @@ try {
         },
         questions: { path: questionsPath, sha256: sha256(questionsText) },
         modelFamily: clientOptions.family,
+        reef_tags: reefTags,
         inferenceCallUnit: inferenceCallUnit(clientOptions.family),
         decisionLogFormat,
         protocol:

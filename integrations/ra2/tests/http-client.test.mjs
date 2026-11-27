@@ -88,3 +88,22 @@ test("a URL without a scheme is refused", () => {
         /must start with http/,
     );
 });
+
+test("extra headers go on every decision, not on health checks", async (t) => {
+    const seen = [];
+    const { server, url } = await fakeServer((req, body) => {
+        seen.push([req.url, req.headers["x-reef-tag-episode"]]);
+        if (req.url === "/v1/health") return [200, { ready: true, metadata }];
+        return [200, { id: body.id, answers: {} }];
+    });
+    t.after(() => server.close());
+    const client = new HttpDecisionClient({
+        url,
+        headers: { "x-reef-tag-episode": "e-1" },
+    });
+    await client.predict({ parts: {}, questions: { q: {} } });
+    assert.deepEqual(seen, [
+        ["/v1/health", undefined],
+        ["/v1/decide", "e-1"],
+    ]);
+});

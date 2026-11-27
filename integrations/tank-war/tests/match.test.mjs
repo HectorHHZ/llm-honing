@@ -10,6 +10,7 @@ import {
     playMatch,
     loadHarness,
     parseController,
+    parseTags,
     CONTROLLER_PATH,
     QUESTIONS_PATH,
     OUTPUTS,
@@ -26,7 +27,8 @@ const lines = async (file) =>
 // A decision server that gives option i of n the probability (i + 1) / sum, so the last option is the most
 // probable and every option can be sampled. It echoes the state as Honing's server does.
 async function stubServer(t) {
-    const requests = [];
+    const requests = [],
+        headers = [];
     const server = createServer(async (req, res) => {
         res.setHeader("Content-Type", "application/json");
         if (req.url === "/v1/health")
@@ -40,6 +42,7 @@ async function stubServer(t) {
         for await (const chunk of req) body += chunk;
         const r = JSON.parse(body);
         requests.push(r);
+        headers.push(req.headers);
         const answers = {};
         for (const [head, q] of Object.entries(r.questions)) {
             const keys = Object.keys(q.criteria),
@@ -65,7 +68,11 @@ async function stubServer(t) {
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
     t.after(() => server.close());
-    return { url: `http://127.0.0.1:${server.address().port}`, requests };
+    return {
+        url: `http://127.0.0.1:${server.address().port}`,
+        requests,
+        headers,
+    };
 }
 
 async function harnessDir(files) {
@@ -409,4 +416,67 @@ test("sampled motion uses native probabilities before the safety projection", as
         reply.weapon_context,
         new RegExp(`SELECTED MOTION ${ids[1]}:`),
     );
+});
+
+test("--reef-tags go on every decision request as x-reef-tag-* headers and into the manifest (#223)", async (t) => {
+    const { url, requests, headers } = await stubServer(t);
+    const tags = { episode: "e-1", task: "tank-val-s2002-red", policy: "p" };
+    const out = await outDir();
+    await playMatch({
+        seed: 2002,
+        seat: "red",
+        out,
+        decisionServer: url,
+        seconds: 2,
+        reefTags: tags,
+    });
+    assert.ok(requests.length > 0);
+    for (const h of headers)
+        assert.deepEqual(
+            [
+                h["x-reef-tag-episode"],
+                h["x-reef-tag-task"],
+                h["x-reef-tag-policy"],
+            ],
+            [tags.episode, tags.task, tags.policy],
+        );
+    const manifest = JSON.parse(
+        await readFile(join(out, "manifest.json"), "utf8"),
+    );
+    assert.deepEqual(manifest.reef_tags, tags);
+});
+
+test("a round without --reef-tags sends no tag headers and records none", async (t) => {
+    const { url, headers } = await stubServer(t);
+    const out = await outDir();
+    await playMatch({
+        seed: 2002,
+        seat: "red",
+        out,
+        decisionServer: url,
+        seconds: 1,
+    });
+    assert.ok(headers.length > 0);
+    assert.ok(
+        headers.every(
+            (h) => !Object.keys(h).some((k) => k.startsWith("x-reef-tag-")),
+        ),
+    );
+    const manifest = JSON.parse(
+        await readFile(join(out, "manifest.json"), "utf8"),
+    );
+    assert.equal(manifest.reef_tags, null);
+});
+
+test("--reef-tags must be an object of Honing's tags to non-empty strings", () => {
+    assert.deepEqual(parseTags('{"episode": "e"}'), { episode: "e" });
+    for (const [text, message] of [
+        ["not json", /not JSON/],
+        ["[1]", /JSON object/],
+        ['{"seat": "red"}', /unknown tag seat/],
+        ['{"episode": ""}', /non-empty string/],
+        ['{"episode": " e"}', /surrounding spaces/],
+        ['{"episode": 1}', /non-empty string/],
+    ])
+        assert.throws(() => parseTags(text), message);
 });

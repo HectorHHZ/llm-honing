@@ -83,6 +83,45 @@ references allows. A tank round has a few hundred.
 request. A tank decision's parts are tens of KB, so `batches` splits by bytes
 too, under 9 MiB.
 
+## Recording decisions
+
+`recorder.py` (#223) records the decision server's answered requests. Start
+the server with `--reef-url <Reef> --reef-scenario <scenario>` and the
+`reef` extra installed. The Bearer token comes from `REEF_TOKEN`. The
+scenario is Reef's `x-reef-scenario`: one workload with its own records, which
+the first import creates if the deployment allows it.
+
+- **What is recorded.** After the reply is sent, the server hands the request,
+  the reply and the request's `x-reef-tag-*` headers to the recorder's thread.
+  The request makes one record, and each of its `branches` another, with
+  `branch` set to the branch's name (`decision_records`). An integer `id` is
+  recorded as its decimal string, as RA2 sends a counter. A request without an
+  `episode` tag, or one whose `id` is neither a string nor an integer, is
+  answered and counted but not recorded: its record could not have a stable
+  id. Tags other than `TAG_NAMES` are ignored and counted.
+- **Who tags.** Tank's match process and RA2's run take `--reef-tags`, send
+  the tags on every decision, and keep them in the run's `manifest.json` under
+  `reef_tags`, where a grader finds the episode. Honing's tank and RA2 runners set `episode` (new
+  on every attempt), `task`, `harness` and `policy`. They set no `release`,
+  since a runner is given the policy's weights, not the release.
+- **Reef down.** The recorder resends the same batch, with the same ids, after
+  a backoff of 0.5 s doubling to 30 s, until Reef takes it. A record Reef
+  refuses (400, or 409 for a known id with other content) is isolated by
+  splitting its batch, then logged and counted. The rest of its batch is stored.
+- **A wrong token or URL.** HTTP 401 or 403 (Reef rejected the token) and 404
+  (no such route, or a scenario Reef will not create) are retried the same
+  way, but logged as errors, once and then every 30 s, and counted apart, so a
+  deployment mistake does not look like an outage.
+- **Memory.** A queued request is charged its request and reply bytes until
+  all of its records are stored or refused. Past `--reef-max-pending-mib`
+  (256 by default) a new request is not queued but counted and logged. At exit
+  the recorder keeps sending for `--reef-flush-seconds` (10). A restart while
+  Reef is down loses what was queued.
+- **Counts.** `GET /v1/health` reports them under `reef`: `requests`, `sent`,
+  `refused`, `invalid`, `skipped_no_episode`, `skipped_no_id`,
+  `dropped_requests`, `ignored_tags`, `rejected_token`, `no_route`, `unsent`,
+  and what is pending.
+
 `RecordedDecision.sample` turns a record and its choice into the
 `DecisionSample` that `decision_from_row` builds from the `decisions.jsonl`
 row, and `tests/test_reef_records.py` checks this on the tank fixtures.
@@ -120,3 +159,6 @@ A pull request that pins a later Reef updates these links.
 | `records.py`, tags | [`with_request_tags`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L119) | Tags are written into `metadata.tags` directly, so one batch can carry several episodes |
 | `provider.py`, `ReefDataProvider` | [`JobStatus`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/component.py#L249), [`JobLoop.poll`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/jobs.py#L285) | Honing, not a Reef trainer, consumes the job data, and the job ends with no checkpoint |
 | `records.py`, `batches` | [`POST /reef/records/batch`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/routes/records.py#L15) | Splits by bytes as well as by count |
+| `recorder.py`, `ReefRecorder` | reef-client's [`upload_batch`](https://github.com/Human-Agent-Society/reef-client/blob/91af039292daa7392142b20a693a8dbf3e31cad3/reef_client/record_import.py#L66), through [`ReefClient.post`](https://github.com/Human-Agent-Society/reef-client/blob/91af039292daa7392142b20a693a8dbf3e31cad3/reef_client/client.py#L111) | Waits without a retry limit, tells a refusal from an outage, and isolates refused records by splitting the batch instead of stopping |
+| `recorder.py`, `request_tags`; the runners' `--reef-tags` | [`parse_request_headers`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L47), [`with_request_tags`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L119) | Keeps only Honing's tags, and writes them into each record's `metadata.tags`; the batch request carries no tag headers |
+| `tests/fakes/reef.py`, `FakeReef` | [`import_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/request_handling.py#L106), [`accept_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/dispatcher.py#L1022), [`RecordStore`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/storage/scenario/records.py#L54) | Only the import route; no recipe, storage or training |

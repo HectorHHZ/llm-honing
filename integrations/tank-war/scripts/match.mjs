@@ -2,7 +2,7 @@
 //
 // node scripts/match.mjs --seed=2001 --seat=blue --decision-server=http://127.0.0.1:8080 --out=runs/m1 \
 //     [--harness-dir=DIR] [--seconds=30] [--interval-ms=200] [--opponent=planner] [--opponent-interval-ms=300] \
-//     [--sample-seed=N] [--teacher]
+//     [--sample-seed=N] [--teacher] [--reef-tags=JSON]
 //
 // The game clock stops while a seat waits for its decision, so the result depends on the model's answers and
 // never on inference latency: the same seed, harness, and answers replay the same round. The agent's seat is
@@ -13,6 +13,11 @@
 // other file is shown to the model before the state as an operating note. Without it, config/ is used.
 // --sample-seed draws each policy choice from the model's probabilities (an on-policy rollout) instead of
 // taking the most probable one. --teacher plays the agent's seat with the planner teacher and needs no server.
+// --reef-tags is a JSON object of Reef tags (TAG_NAMES below); every decision request carries them as
+// x-reef-tag-<name> headers, so a decision server that records in Reef tags its records with them (#223), and the
+// manifest keeps them under "reef_tags". Its "episode" tag must be new for every attempt of every episode, since
+// the record ids are derived from it. Follows Reef's x-reef-tag-* headers (with_request_tags, reef/api/wire.py,
+// Reef bc8c150).
 //
 // states.jsonl holds what a decision was rendered from: a header line with the harness files' text and the
 // platform that recorded the round, then one line per agent decision with the raw game state
@@ -75,6 +80,15 @@ const INTERVENTIONS = [
     "plan_veto",
     "plan_intent_retained",
 ];
+// The tags Honing's Reef records carry: TAG_NAMES in honing/backends/reef/records.py.
+export const TAG_NAMES = [
+    "episode",
+    "task",
+    "release",
+    "harness",
+    "policy",
+    "game",
+];
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 // The match asks with no network delay: game time stops while a seat waits.
 const RTT_MS = 0;
@@ -99,6 +113,29 @@ export const PLATFORM = {
     node: process.versions.node,
 };
 export const stateHash = (state) => sha256(canonicalJSON(state));
+
+// --reef-tags, checked: a JSON object of TAG_NAMES to non-empty strings without surrounding spaces.
+export function parseTags(text) {
+    let tags;
+    try {
+        tags = JSON.parse(text);
+    } catch (e) {
+        throw Error(`--reef-tags is not JSON: ${e.message}`);
+    }
+    if (!tags || typeof tags !== "object" || Array.isArray(tags))
+        throw Error("--reef-tags must be a JSON object");
+    for (const [name, value] of Object.entries(tags)) {
+        if (!TAG_NAMES.includes(name))
+            throw Error(
+                `--reef-tags has unknown tag ${name}; the tags are ${TAG_NAMES}`,
+            );
+        if (typeof value !== "string" || !value || value !== value.trim())
+            throw Error(
+                `--reef-tags: ${name} must be a non-empty string without surrounding spaces`,
+            );
+    }
+    return tags;
+}
 
 // The controller settings a harness asks for, checked; throws on anything a match would misread.
 export function parseController(text) {
@@ -255,6 +292,7 @@ export async function playMatch({
     sampleSeed,
     teacher = false,
     token,
+    reefTags,
 }) {
     if (!Number.isInteger(seed) || seed < 0)
         throw Error("--seed must be a non-negative integer");
@@ -290,6 +328,12 @@ export async function playMatch({
             url: decisionServer.replace(/\/$/, ""),
             token,
             transport: "honing",
+            headers: Object.fromEntries(
+                Object.entries(reefTags ?? {}).map(([name, value]) => [
+                    "x-reef-tag-" + name,
+                    value,
+                ]),
+            ),
         };
         model = (
             await healthFor(backend, "tank-war", AbortSignal.timeout(60000))
@@ -318,6 +362,7 @@ export async function playMatch({
         opponent_interval_ms: opponentIntervalMs,
         sample_seed: sampleSeed ?? null,
         decision_server: teacher ? null : decisionServer,
+        reef_tags: reefTags ?? null,
         model,
         harness: harness.files,
         agent_seat: { ...harness.seat },
@@ -608,6 +653,7 @@ function parse(argv) {
         "opponent-interval-ms",
         "sample-seed",
         "teacher",
+        "reef-tags",
     ];
     const unknown = Object.keys(args).filter((k) => !known.includes(k));
     if (unknown.length) throw Error(`Unknown option --${unknown[0]}`);
@@ -625,6 +671,10 @@ function parse(argv) {
         sampleSeed: number("sample-seed"),
         teacher: args.teacher === true,
         token: process.env.HONING_TOKEN,
+        reefTags:
+            args["reef-tags"] === undefined
+                ? undefined
+                : parseTags(args["reef-tags"]),
     };
 }
 

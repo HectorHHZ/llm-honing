@@ -28,6 +28,21 @@ from honing.harness.endpoints import resolve_endpoint
 RESULT_FIELDS = ("winner", "reason", "outcome", "sim_seconds", "self_hits", "shots")
 
 
+def reef_tags(task: Task, spec: HarnessSpec, policy: PolicyRef) -> dict[str, str]:
+    """The Reef tags of one attempt of ``task``, which the match sends on every decision request (#223).
+
+    ``episode`` is new on every call, so a retried episode is a new attempt
+    and gets new record ids. ``release`` is left out: a runner is given the
+    policy's weights, not the release that holds them.
+    """
+    return {
+        "episode": uuid.uuid4().hex,
+        "task": task.task_id,
+        "harness": spec.spec_id,
+        "policy": policy.checkpoint.checksum,
+    }
+
+
 class TankEpisodeRunner:
     """Satisfies :class:`~honing.core.EpisodeRunner` for tank tasks.
 
@@ -147,7 +162,11 @@ class TankEpisodeRunner:
         harness_dir = self._runs_dir / f"{name}.harness"
         self.write_harness(spec, harness_dir)
         out = self._runs_dir / name
-        arguments = [*self.arguments(scenario, out, harness_dir), f"--decision-server={endpoint.base_url}"]
+        arguments = [
+            *self.arguments(scenario, out, harness_dir),
+            f"--decision-server={endpoint.base_url}",
+            f"--reef-tags={json.dumps(reef_tags(task, spec, policy))}",
+        ]
         if self._sample:
             arguments.append(f"--sample-seed={random.SystemRandom().randrange(2**31)}")
         exit_code = await self.play(arguments, name)

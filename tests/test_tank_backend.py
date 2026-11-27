@@ -204,6 +204,7 @@ def test_a_round_is_played_with_the_scenario_the_harness_and_the_policys_server(
         "decision-server": "http://strong:1",
     }
     assert "sample-seed" not in arguments
+    assert json.loads(arguments["reef-tags"]).keys() == {"episode", "task", "harness", "policy"}
     harness = Path(arguments["harness-dir"])
     assert json.loads((harness / "index.json").read_text()) == [
         {"path": CONTROLLER_PATH, "kind": "settings"},
@@ -600,3 +601,24 @@ def test_demonstrations_stop_when_the_fresh_seeds_run_out_and_refuse_a_seed_the_
     assert provider.next_batch(contract) is None
     with pytest.raises(ContractError, match=r"must be in no split; the suite already plays \[2001\]"):
         TankDemonstrationProvider(runner, tasks, SEED, fresh_seeds=(900_001, 2001))
+
+
+@pytest.mark.unit
+def test_every_attempt_tags_its_decisions_with_a_new_episode_and_its_task_harness_and_policy(tmp_path: Path) -> None:
+    # The decision server records in Reef under ids derived from the episode tag (#223), so a retried task
+    # must not reuse one. The runner is given no release, so it sets no release tag.
+    task = load_suite(SUITE_PATH).tasks("val")[1]
+    runner = _runner(tmp_path)
+    tags = []
+    for _ in range(2):
+        outcome = asyncio.run(runner.run(SEED, task, _policy("strong")))
+        manifest = json.loads((Path(outcome.workspace_location) / "manifest.json").read_text())  # type: ignore[arg-type]
+        tags.append(json.loads(manifest["arguments"]["reef-tags"]))
+    for tag in tags:
+        assert {k: tag[k] for k in ("task", "harness", "policy")} == {
+            "task": task.task_id,
+            "harness": SEED.spec_id,
+            "policy": "strong",
+        }
+        assert set(tag) == {"episode", "task", "harness", "policy"}
+    assert tags[0]["episode"] != tags[1]["episode"]
