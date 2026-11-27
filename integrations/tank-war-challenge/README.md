@@ -4,7 +4,7 @@ The public Tank War site, where people play against NanoJev at `/play/`, as it r
 
 ## Research scope
 
-Primary category: **Competitive decision-making**. Capability tags: public-site variant of tank war.
+Primary category: **Shooters**. Capability tags: public-site variant of tank war.
 
 Let a human player fight the configured model on the public site.
 

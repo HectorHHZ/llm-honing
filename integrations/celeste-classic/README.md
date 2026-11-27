@@ -17,7 +17,7 @@ Griddly have campaign/task/grader surfaces; this standalone demo does not.
 
 ## Research scope
 
-Primary category: **Precision control**. Capability tags: spatial control, action sequence, timing.
+Primary category: **Platformers**. Capability tags: spatial control, action sequence, timing.
 
 Climb rooms with movement, jumps and dashes. Spikes cause death and restart the
 room.

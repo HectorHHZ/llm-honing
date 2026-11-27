@@ -14,7 +14,7 @@ visibility, command rejection and response-validation behavior.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: navigation, platform movement, combat.
+Primary category: **Platformers**. Capability tags: navigation, platform movement, combat.
 
 Move between platforms and fight enemies in the supplied Unity imitation build.
 

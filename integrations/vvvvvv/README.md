@@ -14,7 +14,7 @@ with no EpisodeRunner, TaskGrader, training or completion claim.
 
 ## Research scope
 
-Primary category: **Precision control**. Capability tags: spatial control, timing.
+Primary category: **Platformers**. Capability tags: spatial control, timing.
 
 Move through obstacles and reverse gravity when the native rules permit it.
 

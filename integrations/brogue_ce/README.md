@@ -7,7 +7,7 @@ own `.broguerec` recordings. The official Tiles client plays them back.
 
 ## Research scope
 
-Primary category: **Exploration and resource planning**. Capability tags: exploration, resource use, risk decisions.
+Primary category: **Roguelikes**. Capability tags: exploration, resource use, risk decisions.
 
 Explore a native dungeon, fight enemies and use or identify items.
 

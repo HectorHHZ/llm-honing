@@ -38,7 +38,7 @@ omitted, and inference pauses the native loop.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: threat response, movement timing.
+Primary category: **Shooters**. Capability tags: threat response, movement timing.
 
 Move through a Stage 1 Easy segment and avoid moving bullets.
 
