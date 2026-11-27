@@ -110,11 +110,31 @@ class TankEpisodeRunner:
             sample=True,
         )
 
+    def with_controller_fault(self, fault_file: Path) -> TankEpisodeRunner:
+        """The same runner, with every match started under a test-only controller switch.
+
+        ``fault_file`` names the switch (``scripts/controller-faults.mjs``),
+        which changes how the agent's selected action is executed. The fault
+        library (:mod:`honing.backends.tank.faults`) plays a controller fault
+        this way: the same release, under a broken controller.
+        """
+        return TankEpisodeRunner(
+            suite=self._suite,
+            endpoints=self._endpoints,
+            integration_dir=self._integration_dir,
+            runs_dir=self._runs_dir,
+            command=[*self._command, f"--controller-fault-file={Path(fault_file).absolute()}"],
+            environment=self._environment,
+            concurrency=self._concurrency,
+            sample=self._sample,
+        )
+
     def check_spec(self, spec: HarnessSpec) -> None:
         """Refuse, before any match, a harness the match cannot read."""
         check_spec(spec, self._questions)
 
-    def write_harness(self, spec: HarnessSpec, directory: Path) -> None:
+    @staticmethod
+    def write_harness(spec: HarnessSpec, directory: Path) -> None:
         """Every harness file at its path under ``directory``, and ``index.json`` listing them with their kinds."""
         directory.mkdir(parents=True)
         for path, file in spec.files:

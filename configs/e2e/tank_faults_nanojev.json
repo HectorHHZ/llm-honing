@@ -1,0 +1,35 @@
+{
+  "description": "The Tank War fault library (#171) on real NanoJev weights, gated. The clean release is the pinned NanoJev release with one unit of the fire-minus-hold direction added on the weapon question (clean_fire_edit; null keeps the pinned release, the Exp 0 v0 clean weights, and skips the earlier-checkpoint fault). The teacher batch is the planner teacher's rounds on 16 train tasks under the seed harness. Weights faults come from the direction-edit trainer and from NanoJev sft on that batch with one question relabeled. The gate plays each fault and the clean release on 64 rounds against the planner, 32 fresh validation seeds from both seats, the next 32 for each fault, and keeps a fault when the 95% interval on clean minus fault per seed lies above 0 (#166's paired interval selector). It writes library.json, gate.json and the table. Needs the pinned NanoJev checkout (HONING_NANOJEV_SOURCE), two GPUs for the servers (HONING_NANOJEV_GPUS, for example 0,1), one for sft (HONING_NANOJEV_TRAIN_GPU), one for the edit's forward pass (HONING_NANOJEV_EDIT_GPU) and the pinned release in HF_HOME. Run: python scripts/e2e/tank_faults.py --config configs/e2e/tank_faults_nanojev.json --work-dir runs/tank-faults",
+  "integration_dir": "integrations/tank-war",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-faults",
+  "teacher_tasks": 16,
+  "clean_fire_edit": 1.0,
+  "sft_steps": 1,
+  "gate": {"rounds": 64, "confidence": 0.95},
+  "requires": {
+    "env": [
+      "HONING_NANOJEV_SOURCE",
+      "HONING_NANOJEV_GPUS",
+      "HONING_NANOJEV_TRAIN_GPU",
+      "HONING_NANOJEV_EDIT_GPU",
+      "HF_HOME"
+    ],
+    "commands": ["node"],
+    "paths": ["$HONING_NANOJEV_SOURCE/scripts/predict_toy_decisions.py"]
+  },
+  "components": {
+    "model_source": {"factory": "honing.backends.jev.e2e:model_source"},
+    "endpoints": {"factory": "honing.backends.jev.e2e:endpoints"},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner", "args": {"concurrency": 4}},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"},
+    "trainer": {
+      "factory": "honing.backends.jev.e2e:nanojev_trainer",
+      "args": {"max_length": 4096, "validation_groups": "^tank:\\d*[05]:"}
+    },
+    "trainers": {
+      "direction_edit": {"factory": "honing.backends.jev.e2e:direction_edit_trainer"}
+    },
+    "data": {"factory": "honing.backends.tank.e2e:demonstrations"}
+  }
+}
