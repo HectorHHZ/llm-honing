@@ -257,3 +257,77 @@ def test_retired_terms_stay_out_of_code_and_the_specification(repo_root: Path) -
         if RETIRED_TERMS.search(line)
     ]
     assert hits == [], "use 'manifest', 'record', 'metadata', or 'importance' instead:\n" + "\n".join(hits)
+
+
+# Integration directories and backend packages that serve every environment rather than being one.
+# One set for both, so a shared name such as reef stays shared when it gains a backend package.
+SHARED = {"_shared", "agent_gateway", "djev", "jev", "llm_gateway", "openhands", "pi", "reef", "sglang", "slime"}
+
+
+def environment_names(repo_root: Path) -> re.Pattern[str]:
+    """Every environment's name, from its integration directory and its backend package, as one pattern."""
+    integrations = {
+        path.name
+        for path in (repo_root / "integrations").iterdir()
+        if path.is_dir() and not path.name.startswith(("_", ".")) and path.name not in SHARED
+    }
+    backends = {
+        path.name
+        for path in (repo_root / "honing" / "backends").iterdir()
+        if (path / "__init__.py").is_file() and path.name not in SHARED
+    }
+    spelled = {re.sub(r"[-_]", "[-_ ]?", name) for name in integrations | backends}
+    return re.compile(r"\b(" + "|".join(sorted(spelled, key=len, reverse=True)) + r")\b", re.IGNORECASE)
+
+
+@pytest.mark.unit
+def test_core_names_no_environment(repo_root: Path) -> None:
+    """``honing/core`` serves every game and task, so no environment's name or vocabulary belongs in it."""
+    names = environment_names(repo_root)
+    assert names.search("from honing.backends.tank import TankGrader")
+    assert names.search("a Tank War round") and names.search("rea_issac") and not names.search("pipeline")
+    hits = [
+        f"{path.relative_to(repo_root)}:{number}: {line.strip()}"
+        for path in sorted((repo_root / "honing" / "core").rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        if names.search(line)
+    ]
+    assert hits == [], "move environment-specific code to its backend package:\n" + "\n".join(hits)
+
+
+def lazy_exports(init: Path) -> tuple[dict[str, str], list[str], dict[str, str]] | None:
+    """A PEP 562 package's ``_MODULES`` table, its ``__all__``, and its ``TYPE_CHECKING`` imports, or None."""
+    tree = ast.parse(init.read_text(encoding="utf-8"), filename=str(init))
+    table: dict[str, str] | None = None
+    exported: list[str] = []
+    typed: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id == "_MODULES":
+                table = ast.literal_eval(node.value)
+            elif node.targets[0].id == "__all__":
+                exported = list(ast.literal_eval(node.value))
+        elif isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING":
+            for statement in node.body:
+                if isinstance(statement, ast.ImportFrom) and statement.module:
+                    typed.update((alias.asname or alias.name, statement.module) for alias in statement.names)
+    return None if table is None else (table, exported, typed)
+
+
+@pytest.mark.unit
+def test_a_lazy_package_lists_each_export_in_its_table_all_and_type_imports(repo_root: Path) -> None:
+    """A package that imports its names on first use lists each in three places, and they must agree."""
+    checked = []
+    for init in sorted((repo_root / "honing").rglob("__init__.py")):
+        exports = lazy_exports(init)
+        if exports is None:
+            continue
+        table, exported, typed = exports
+        package = ".".join(init.parent.relative_to(repo_root).parts)
+        assert sorted(exported) == sorted(set(exported)), f"{package}: a name is in __all__ twice"
+        assert sorted(table) == sorted(exported), f"{package}: _MODULES and __all__ differ"
+        assert typed == {
+            name: f"{package}.{module}" for name, module in table.items()
+        }, f"{package}: the TYPE_CHECKING imports differ from _MODULES"
+        checked.append(package)
+    assert "honing.backends.tank" in checked
