@@ -219,11 +219,6 @@ def test_grpo_keeps_the_final_weights_and_climbs_the_advantage_weighted_log_prob
 
 
 @pytest.mark.functional
-@pytest.mark.xfail(
-    strict=True,
-    reason="LocalJevTrainer._policy_gradient never compares the saved weights with the base, unlike its sft path "
-    "and the Kev and NanoJev trainers, so a grpo run that changed nothing is returned as a new checkpoint",
-)
 def test_a_grpo_run_that_changes_no_weight_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, machine: fake.ProcessState
 ) -> None:
