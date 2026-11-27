@@ -23,6 +23,7 @@ from honing.core import (
     RunnerSupport,
     Task,
 )
+from honing.harness.endpoints import resolve_endpoint
 
 
 class ReaIssacEpisodeRunner:
@@ -59,7 +60,7 @@ class ReaIssacEpisodeRunner:
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
         self.check_spec(spec)
         scenario = self.suite.scenario(task.task_id)
-        endpoint = self._endpoints.resolve(policy)
+        endpoint = await resolve_endpoint(self._endpoints, policy)
         if endpoint.runtime != "jev_decision":
             raise ContractError("REA-Issac needs a typed Jev decision endpoint")
         # Do not use externally supplied task/checkpoint names as file paths.

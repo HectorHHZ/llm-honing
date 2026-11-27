@@ -1,0 +1,738 @@
+{
+ "readMe": "Numbers read from each run's own summary.json, manifest.json, launch.json and session/*.jsonl. runtime: original = Linux player with the visible bridge as committed here; speed-study = the same game and bridge rebuilt for faster stepping, used without capture. perScene counts native windows that started in that scene.",
+ "runs": [
+  {
+   "run": "run_09_v7_laya",
+   "round": 1,
+   "harness": "v7",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1",
+   "status": "scene changed to Level2",
+   "outcome": "pass",
+   "decisions": 34,
+   "windows": 727,
+   "frames": 3471,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 112.87,
+   "perScene": {
+    "Level1": {
+     "decisions": 34,
+     "windows": 723,
+     "frames": 3460,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 112.87
+    },
+    "Level2": {
+     "decisions": 0,
+     "windows": 4,
+     "frames": 11,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": -0.41
+    }
+   }
+  },
+  {
+   "run": "ctrl_v7_laya_shuffled_menu",
+   "round": 1,
+   "harness": "v7",
+   "policy": "laya (shuffled menu)",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1",
+   "status": "scene changed to Level2",
+   "outcome": "pass",
+   "decisions": 22,
+   "windows": 539,
+   "frames": 2637,
+   "deaths": 0,
+   "minHp": 3,
+   "xMax": 113.07,
+   "perScene": {
+    "Level1": {
+     "decisions": 22,
+     "windows": 536,
+     "frames": 2629,
+     "deaths": 0,
+     "minHp": 3,
+     "xMax": 113.07
+    },
+    "Level2": {
+     "decisions": 0,
+     "windows": 3,
+     "frames": 8,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": -0.21
+    }
+   }
+  },
+  {
+   "run": "ctrl_v7_random_choice",
+   "round": 1,
+   "harness": "v7",
+   "policy": "random",
+   "seed": 1,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1",
+   "status": "scene changed to Level2",
+   "outcome": "pass",
+   "decisions": 33,
+   "windows": 576,
+   "frames": 2940,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 112.73,
+   "perScene": {
+    "Level1": {
+     "decisions": 33,
+     "windows": 570,
+     "frames": 2919,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 112.73
+    },
+    "Level2": {
+     "decisions": 0,
+     "windows": 6,
+     "frames": 21,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 0.39
+    }
+   }
+  },
+  {
+   "run": "dev_12_v7_first_option",
+   "round": 1,
+   "harness": "v7",
+   "policy": "first",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1",
+   "status": "scene changed to Level2",
+   "outcome": "pass",
+   "decisions": 15,
+   "windows": 452,
+   "frames": 2246,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 112.64,
+   "perScene": {
+    "Level1": {
+     "decisions": 15,
+     "windows": 446,
+     "frames": 2225,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 112.64
+    },
+    "Level2": {
+     "decisions": 0,
+     "windows": 6,
+     "frames": 21,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 0.39
+    }
+   }
+  },
+  {
+   "run": "eval_laya_v8_L1L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1 -> Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 47,
+   "windows": 1166,
+   "frames": 4877,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 126.42,
+   "perScene": {
+    "Level1": {
+     "decisions": 34,
+     "windows": 708,
+     "frames": 3158,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 113.03
+    },
+    "Level2": {
+     "decisions": 13,
+     "windows": 458,
+     "frames": 1719,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.42
+    }
+   }
+  },
+  {
+   "run": "eval2_laya_v8_L1L2",
+   "round": 2,
+   "harness": "v8 final (this snapshot)",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1 -> Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 47,
+   "windows": 1166,
+   "frames": 4877,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 126.42,
+   "perScene": {
+    "Level1": {
+     "decisions": 34,
+     "windows": 708,
+     "frames": 3158,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 113.03
+    },
+    "Level2": {
+     "decisions": 13,
+     "windows": 458,
+     "frames": 1719,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.42
+    }
+   }
+  },
+  {
+   "run": "eval_laya_v8_L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 13,
+   "windows": 453,
+   "frames": 1713,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.41,
+   "perScene": {
+    "Level2": {
+     "decisions": 13,
+     "windows": 453,
+     "frames": 1713,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.41
+    }
+   }
+  },
+  {
+   "run": "eval2_laya_v8_L2",
+   "round": 2,
+   "harness": "v8 final (this snapshot)",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 13,
+   "windows": 453,
+   "frames": 1713,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.41,
+   "perScene": {
+    "Level2": {
+     "decisions": 13,
+     "windows": 453,
+     "frames": 1713,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.41
+    }
+   }
+  },
+  {
+   "run": "eval_first_v8_L1L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "first",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level1 -> Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 29,
+   "windows": 912,
+   "frames": 3764,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.42,
+   "perScene": {
+    "Level1": {
+     "decisions": 16,
+     "windows": 448,
+     "frames": 2018,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 112.94
+    },
+    "Level2": {
+     "decisions": 13,
+     "windows": 464,
+     "frames": 1746,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.42
+    }
+   }
+  },
+  {
+   "run": "orig_first_01_v8_L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "first",
+   "seed": null,
+   "runtime": "original",
+   "capture": true,
+   "span": "Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 16,
+   "windows": 538,
+   "frames": 1910,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.45,
+   "perScene": {
+    "Level2": {
+     "decisions": 16,
+     "windows": 538,
+     "frames": 1910,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.45
+    }
+   }
+  },
+  {
+   "run": "first_11_v8_L1L2",
+   "round": 2,
+   "harness": "v8 final (this snapshot)",
+   "policy": "first",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level1 -> Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 29,
+   "windows": 912,
+   "frames": 3764,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.42,
+   "perScene": {
+    "Level1": {
+     "decisions": 16,
+     "windows": 448,
+     "frames": 2018,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 112.94
+    },
+    "Level2": {
+     "decisions": 13,
+     "windows": 464,
+     "frames": 1746,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.42
+    }
+   }
+  },
+  {
+   "run": "first_10_v8_L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "first",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 16,
+   "windows": 538,
+   "frames": 1910,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.45,
+   "perScene": {
+    "Level2": {
+     "decisions": 16,
+     "windows": 538,
+     "frames": 1910,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.45
+    }
+   }
+  },
+  {
+   "run": "random_s1_v8_L1",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "random",
+   "seed": 1,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level1",
+   "status": "scene changed to Level2",
+   "outcome": "pass",
+   "decisions": 30,
+   "windows": 540,
+   "frames": 2567,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 112.43,
+   "perScene": {
+    "Level1": {
+     "decisions": 30,
+     "windows": 537,
+     "frames": 2552,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 112.43
+    },
+    "Level2": {
+     "decisions": 0,
+     "windows": 3,
+     "frames": 15,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": -0.81
+    }
+   }
+  },
+  {
+   "run": "random_s1_v8_L2",
+   "round": 2,
+   "harness": "v8 earlier state",
+   "policy": "random",
+   "seed": 1,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level2",
+   "status": "decision budget reached",
+   "outcome": "stopped: decision budget reached",
+   "decisions": 80,
+   "windows": 393,
+   "frames": 2290,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 9.33,
+   "perScene": {
+    "Level2": {
+     "decisions": 80,
+     "windows": 393,
+     "frames": 2290,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 9.33
+    }
+   }
+  },
+  {
+   "run": "random_s1b_v8_L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "random",
+   "seed": 1,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level2",
+   "status": "error: TimeoutError: no new visible observation; see player.log",
+   "outcome": "frozen (game hang)",
+   "decisions": 42,
+   "windows": 734,
+   "frames": 2960,
+   "deaths": 1,
+   "minHp": 0,
+   "xMax": 93.51,
+   "perScene": {
+    "Level2": {
+     "decisions": 42,
+     "windows": 734,
+     "frames": 2960,
+     "deaths": 1,
+     "minHp": 0,
+     "xMax": 93.51
+    }
+   }
+  },
+  {
+   "run": "random_s2_v8_L2",
+   "round": 2,
+   "harness": "v8 earlier state",
+   "policy": "random",
+   "seed": 2,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 36,
+   "windows": 658,
+   "frames": 2664,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 126.4,
+   "perScene": {
+    "Level2": {
+     "decisions": 36,
+     "windows": 658,
+     "frames": 2664,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 126.4
+    }
+   }
+  },
+  {
+   "run": "random_s3_v8_L2",
+   "round": 2,
+   "harness": "v8 final without the control.py HUD fix",
+   "policy": "random",
+   "seed": 3,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level2",
+   "status": "goal reached: Level2 x >= 124",
+   "outcome": "pass",
+   "decisions": 52,
+   "windows": 810,
+   "frames": 3354,
+   "deaths": 0,
+   "minHp": 2,
+   "xMax": 126.48,
+   "perScene": {
+    "Level2": {
+     "decisions": 52,
+     "windows": 810,
+     "frames": 3354,
+     "deaths": 0,
+     "minHp": 2,
+     "xMax": 126.48
+    }
+   }
+  },
+  {
+   "run": "laya_04_v8_L1L2",
+   "round": 2,
+   "harness": "v8 final (this snapshot)",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level1 -> Level2",
+   "status": "error: TimeoutError: no new visible observation; see player.log",
+   "outcome": "frozen (game hang)",
+   "decisions": 36,
+   "windows": 782,
+   "frames": 3492,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 113.03,
+   "perScene": {
+    "Level1": {
+     "decisions": 34,
+     "windows": 713,
+     "frames": 3187,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 113.03
+    },
+    "Level2": {
+     "decisions": 2,
+     "windows": 69,
+     "frames": 305,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 12.89
+    }
+   }
+  },
+  {
+   "run": "laya_03_v8_L1L2",
+   "round": 2,
+   "harness": "v8 earlier state",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level1 -> Level2",
+   "status": "error: TimeoutError: no new visible observation; see player.log",
+   "outcome": "frozen (game hang)",
+   "decisions": 36,
+   "windows": 782,
+   "frames": 3492,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 113.03,
+   "perScene": {
+    "Level1": {
+     "decisions": 34,
+     "windows": 713,
+     "frames": 3187,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 113.03
+    },
+    "Level2": {
+     "decisions": 2,
+     "windows": 69,
+     "frames": 305,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 12.89
+    }
+   }
+  },
+  {
+   "run": "laya_02_v8_L1L2",
+   "round": 2,
+   "harness": "v8 earlier state",
+   "policy": "laya",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level1 -> Level2",
+   "status": "error: TimeoutError: no new visible observation; see player.log",
+   "outcome": "frozen (game hang)",
+   "decisions": 36,
+   "windows": 782,
+   "frames": 3492,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 113.03,
+   "perScene": {
+    "Level1": {
+     "decisions": 34,
+     "windows": 713,
+     "frames": 3187,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 113.03
+    },
+    "Level2": {
+     "decisions": 2,
+     "windows": 69,
+     "frames": 305,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 12.89
+    }
+   }
+  },
+  {
+   "run": "first_02_v8_L2",
+   "round": 2,
+   "harness": "v8 earlier state",
+   "policy": "first",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level2",
+   "status": "error: TimeoutError: no new visible observation; see player.log",
+   "outcome": "frozen (game hang)",
+   "decisions": 4,
+   "windows": 92,
+   "frames": 341,
+   "deaths": 0,
+   "minHp": 4,
+   "xMax": 12.99,
+   "perScene": {
+    "Level2": {
+     "decisions": 4,
+     "windows": 92,
+     "frames": 341,
+     "deaths": 0,
+     "minHp": 4,
+     "xMax": 12.99
+    }
+   }
+  },
+  {
+   "run": "check_v7_first_L1",
+   "round": 2,
+   "harness": "v7",
+   "policy": "first",
+   "seed": null,
+   "runtime": "speed-study",
+   "capture": false,
+   "span": "Level1",
+   "status": "scene changed to Level2",
+   "outcome": "pass",
+   "decisions": 15,
+   "windows": 456,
+   "frames": 2278,
+   "deaths": 0,
+   "minHp": 5,
+   "xMax": 113.08,
+   "perScene": {
+    "Level1": {
+     "decisions": 15,
+     "windows": 453,
+     "frames": 2270,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": 113.08
+    },
+    "Level2": {
+     "decisions": 0,
+     "windows": 3,
+     "frames": 8,
+     "deaths": 0,
+     "minHp": 5,
+     "xMax": -0.21
+    }
+   }
+  }
+ ],
+ "repeatOfMainRun": {
+  "run": "eval2_laya_v8_L1L2",
+  "of": "eval_laya_v8_L1L2",
+  "decisionFieldsThatDiffer": [
+   "seconds"
+  ],
+  "requestsIdentical": true,
+  "choicesAndProbabilitiesIdentical": true,
+  "windowsIdentical": true,
+  "skillResultsIdentical": true,
+  "debugObservationLinesIdentical": true,
+  "debugObservationLines": 1167
+ }
+}

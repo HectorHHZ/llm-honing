@@ -13,7 +13,13 @@ st = pytest.importorskip("safetensors.torch")
 
 from honing.backends.hf_checkpoint import hf_snapshot  # noqa: E402
 from honing.backends.weight_edit import EditPlan, TensorEdit, WeightEditTrainer, weight_edit_trainer  # noqa: E402
-from honing.core import ContractError, EvaluationResult, TrainJobSpec, UpdatePolicy  # noqa: E402
+from honing.core import (  # noqa: E402
+    ContractError,
+    DirectionEditSpec,
+    EvaluationResult,
+    TrainJobSpec,
+    UpdatePolicy,
+)
 from honing.core.errors import CampaignRuleError  # noqa: E402
 from honing.e2e.components import PipelineContext  # noqa: E402
 from honing.e2e.pipeline import build, run  # noqa: E402
@@ -283,3 +289,15 @@ def test_factory_refuses_ambiguous_value_configuration(tmp_path: Path) -> None:
     )
     with pytest.raises(ContractError, match="not both"):
         edit.train(JOB, base, None)
+
+
+@pytest.mark.unit
+def test_a_trainer_with_a_fixed_modifier_refuses_a_job_that_names_its_own_direction(tmp_path: Path) -> None:
+    trainer = WeightEditTrainer(tmp_path / "edits", lambda base, batch: EditPlan(()), algorithm="direction_edit")
+    job = TrainJobSpec(
+        "direction_edit", contract="typed_decisions", direction_edit=DirectionEditSpec(None, "fire", 1.0)
+    )
+
+    with pytest.raises(ContractError, match="the job cannot choose the direction"):
+        trainer.modifier_for(job)
+    assert trainer.modifier_for(TrainJobSpec("direction_edit", contract="typed_decisions")) is trainer.modifier

@@ -3,7 +3,9 @@
 - ``honing.core`` imports only the standard library, so every plane can depend
   on it without pulling in a framework.
 - Only ``honing/backends/`` may import a training framework. Slime is the one
-  dependency; Reef is a design reference and is never imported.
+  training dependency.
+- Reef runs as its own service (#137). Only ``honing/backends/reef/`` imports
+  its client, ``reef_client``, and nothing imports ``reef`` itself.
 - ``honing/backends/hf_checkpoint.py``, which every backend uses to name a
   checkpoint, imports only the standard library and ``honing.core``.
 - Importing the decision-trace loader (``honing.backends.tank.traces``) or
@@ -23,6 +25,7 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import json
 import re
 import subprocess
@@ -83,6 +86,17 @@ def test_only_backend_packages_import_a_training_framework(repo_root: Path) -> N
 
 
 @pytest.mark.unit
+def test_only_the_reef_backend_imports_reef_client(repo_root: Path) -> None:
+    package = repo_root / "honing"
+    offenders = {
+        str(path.relative_to(repo_root)): sorted(names & {"reef", "reef_client"})
+        for path in sorted(package.rglob("*.py"))
+        if (names := imported_top_levels(path)) & {"reef", "reef_client"}
+        and ("reef" in names or path.relative_to(package).parts[:2] != ("backends", "reef"))
+    }
+    assert offenders == {}, f"Reef imports outside honing/backends/reef/, or of reef itself: {offenders}"
+
+
 def test_the_checkpoint_identity_imports_no_backend(repo_root: Path) -> None:
     """Backends name a Hugging Face checkpoint through hf_checkpoint, so it must not import any of them."""
     path = repo_root / "honing" / "backends" / "hf_checkpoint.py"
@@ -129,6 +143,28 @@ def test_importing_a_trace_reader_loads_only_core_and_the_modules_it_names(repo_
 
 
 @pytest.mark.unit
+def test_every_public_tank_name_is_listed_alike_in_all_three_places_and_resolves(repo_root: Path) -> None:
+    """``honing.backends.tank`` names each public name in its ``TYPE_CHECKING`` imports, in the table its lazy
+    ``__getattr__`` reads, and in ``__all__``. A merge that adds a name to one place can miss another."""
+    tank = importlib.import_module("honing.backends.tank")
+    tree = ast.parse((repo_root / "honing/backends/tank/__init__.py").read_text(encoding="utf-8"))
+    checked = {
+        alias.asname or alias.name: statement.module.rsplit(".", 1)[-1]
+        for node in tree.body
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+        for statement in node.body
+        if isinstance(statement, ast.ImportFrom) and statement.module
+        for alias in statement.names
+    }
+    table = tank._MODULES
+
+    assert checked == table
+    assert sorted(tank.__all__) == sorted(table)
+    for name, module in table.items():
+        assert getattr(tank, name) is getattr(importlib.import_module(f"honing.backends.tank.{module}"), name)
+
+
+@pytest.mark.unit
 def test_only_the_chat_client_imports_litellm(repo_root: Path) -> None:
     package = repo_root / "honing"
     importers = [
@@ -165,6 +201,44 @@ def test_honing_never_imports_openhands(repo_root: Path) -> None:
         if "openhands" in imported_top_levels(path)
     )
     assert offenders == []
+
+
+def resolve_calls(path: Path) -> list[str]:
+    """The function around each ``x.resolve(...)`` call with an argument in ``path`` (``Path.resolve()`` takes
+    none), or ``<module>``."""
+    found: list[str] = []
+
+    def visit(node: ast.AST, function: str) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function = node.name
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "resolve"
+            and node.args
+        ):
+            found.append(function)
+        for child in ast.iter_child_nodes(node):
+            visit(child, function)
+
+    visit(ast.parse(path.read_text(encoding="utf-8")), "<module>")
+    return found
+
+
+@pytest.mark.unit
+def test_runners_resolve_a_policy_only_through_resolve_endpoint(repo_root: Path) -> None:
+    """A resolve can start a server for minutes, so a runner on an event loop calls it through
+    ``resolve_endpoint``, on a thread (#154). The other calls run on no loop."""
+    calls = sorted(
+        f"{path.relative_to(repo_root)}:{function}"
+        for path in (repo_root / "honing").rglob("*.py")
+        for function in resolve_calls(path)
+    )
+    assert calls == [
+        "honing/backends/ra2/duel.py:_url",  # in the synchronous evaluate, before its asyncio.run
+        "honing/backends/sglang/endpoints.py:<module>",  # the command-line entry point
+        "honing/harness/endpoints.py:_resolve_on_thread",  # resolve_endpoint's thread
+    ]
 
 
 @pytest.mark.unit

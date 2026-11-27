@@ -14,7 +14,7 @@ visibility, command rejection and response-validation behavior.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: navigation, platform movement, combat.
+Primary category: **Platformers**. Capability tags: navigation, platform movement, combat.
 
 Move between platforms and fight enemies in the supplied Unity imitation build.
 
@@ -38,7 +38,8 @@ classification method and the shared model/harness responsibility matrix.
 
 The tested target is macOS with Unity 2019.4.2f1, Mono, and the game revision in `pins.json`.
 Apple Silicon also needs Rosetta for this editor's x86_64 Mono compiler and player.
-Linux and IL2CPP have not been tested.
+This builder has not been tested on Linux or with IL2CPP. The harness v8 experiment below assembles a Linux player by a
+separate route, described in its README.
 
 1. Clone the source and check out the pinned revision:
 
@@ -165,6 +166,15 @@ The policy chose `jump_left` every time and remained near the left wall; it did 
 the level. Health stayed at 5. Mean model latency in this run was about 597 ms. The video
 shows the model-to-game connection, not a trained policy's proficiency or a win-rate estimate.
 No weights or harness training was performed, and no training tracker run was needed.
+
+## Harness v8 experiment
+
+[`experiments/harness-v8`](experiments/harness-v8/README.md) adds a rule-based harness around the same frozen Laya
+model. The harness reads only the screen-only
+[visible observation profile](API.md#visible-observation-profile), turns it into a short situation text and a menu of
+behaviours, and carries out the behaviour Laya picks. One continuous run went from the start of `Level1` to the end of
+`Level2` with no deaths. Most of that result comes from the harness: a control that always takes the first menu option
+clears both levels too. The experiment README has the results, controls, limits and reproduction steps.
 
 ## Static analysis and verification
 

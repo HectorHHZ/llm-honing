@@ -23,7 +23,7 @@ models to this local integration now.
 
 ## Research scope
 
-Primary category: **Competitive decision-making**. Capability tags: opponent response, short-term prediction, control.
+Primary category: **Shooters**. Capability tags: opponent response, short-term prediction, control.
 
 Fight another tank in a maze with shells that can bounce and hit their owner.
 
@@ -322,9 +322,9 @@ The output includes `manifest.json` (scenario, model and source/harness hashes),
 `decisions.jsonl` (exact context, questions, probabilities and choices),
 `events.jsonl` and `result.json`. Each `shot` and `kill` event names its shell under
 `shell`, so a reader can tell which shot hit. Use a new output directory for each run. When
-the round ends, the manifest records the SHA-256 of the other three files under
-`outputs`. Honing's trace loader (`honing/backends/tank/traces.py`) refuses a run
-whose files do not match it.
+the round ends, the manifest records the SHA-256 of those three files and of
+`states.jsonl` under `outputs`. Honing's trace loader
+(`honing/backends/tank/traces.py`) refuses a run whose files do not match it.
 
 | Harness file           | Kind         | Purpose                                                             |
 | ---------------------- | ------------ | ------------------------------------------------------------------- |
@@ -368,6 +368,51 @@ integration directory, regenerate the suite with:
 ```bash
 python -m honing.backends.tank.scenarios tasks/suite.jsonl
 ```
+
+### Raw states, replay and teacher labels
+
+Every round also writes `states.jsonl`. Its first line names the format
+(`tank-raw-states`, version 1) and the platform that recorded the round (OS,
+CPU architecture and Node version), and holds the text of every harness file
+the round was played under. Each further line is one agent decision: the game state
+the controller built the decision's context from (`game`: both tanks with their
+commands and their dodge and shot history, every shell, the clock and the
+seats' settings), its SHA-256, the seat, the cadence, and the motion the weapon
+question asked about. Each `decisions.jsonl` row names its decision under
+`decision`, and no other row field changes. A 30 s round with the dry run's
+stand-in model gains about 136 KB, 19% of its run directory.
+
+From this integration directory:
+
+```bash
+node scripts/raw-states.mjs roundtrip runs/r1       # re-render every row's context and compare it byte for byte
+node scripts/raw-states.mjs replay runs/r1 --to=40  # play again from the seed, checking each state hash up to decision 40
+node scripts/raw-states.mjs label runs/r1           # write labels.jsonl, the planner teacher's answer to every question
+node scripts/raw-states.mjs render < items.jsonl    # re-render a batch of states under any harness, in one process
+```
+
+Every run command first checks the run's files against the SHA-256 its
+manifest records, so an edit to `states.jsonl` or `decisions.jsonl` is refused
+even when it keeps a state and its logged hash consistent. Every command then
+checks each saved state against its logged SHA-256 and refuses a state that no
+longer matches. From Python, `read_states` checks `states.jsonl` against the
+manifest the same way. `render` rebuilds the observation from
+the logged game state under the harness it is given. A changed controller setting, strategy, question text or note
+shows in the context as it would in a match. Without `--to`, `replay` plays the
+whole round and also compares `events.jsonl` and `result.json`. Replay is bit
+exact on the platform that recorded the round. Another OS, CPU or Node version
+can differ in the last bits of the engine's Math results, so replay a round on
+the machine that recorded it. A mismatch on another platform names both, for
+example `Recorded on linux-x64 node 22.23.5, replayed on darwin-arm64 node
+22.22.0: floating point may differ in the last bits.` Rendering and labelling
+start from the logged state, so they carry across platforms. The teacher
+answers a weapon question for the motion it asked about, and labels planned
+steering only. From Python, `honing.backends.tank.raw_states.TankRawStates` runs
+each command as one Node process with a timeout.
+`python scripts/e2e/check_raw_states.py --record DIR` (from the repository root)
+plays rounds with the dry run's stand-in model and checks all of this. Given run
+directories instead, it checks rounds recorded elsewhere, on the machine that
+recorded them.
 
 ## Verify
 

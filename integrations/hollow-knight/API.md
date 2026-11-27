@@ -70,6 +70,69 @@ The adapter replaces seven player input reads; it does not bypass movement, heal
 attack/dash cooldowns or coroutines. An accepted command means the input was delivered, not that
 the character necessarily moved, jumped, dealt damage or crossed a scene boundary.
 
+## Visible observation profile
+
+Setting `HONING_OBSERVATION_PROFILE=visible` in the player's environment replaces `observation.json` with what a person
+sees on the screen. Any other value, or no value, keeps the scene-state observation above and the behavior of the rest
+of this document. `run.py` does not set the variable. The [harness v8 experiment](experiments/harness-v8/README.md) does.
+This profile is the one that experiment used. It is not a settled observation format for other games.
+
+| File | Content with the profile on |
+| --- | --- |
+| `observation.json` | The `honing.visible.v1` envelope below; the only file the harness reads |
+| `visible_observations.jsonl` | One envelope per observation |
+| `debug_observation.json`, `observations.jsonl` | The scene-state observation, kept for evaluation |
+| `scene-inspection.txt` | Cameras, renderers and colliders of the first observed scene, for people checking the adapter |
+
+The envelope is published after the last frame of a window has been rendered. Game time stops at the same point as
+without the profile. Commands, `id` sequencing and window lengths work as described in this document, and `frame.id` is
+the `id` a command must echo.
+
+| Field | JSON type | Meaning |
+| --- | --- | --- |
+| `schema`, `adapter`, `profile`, `game` | string | `honing.visible.v1`, `hollow-knight-visible-v1`, `visible`, `hollow-knight-imitation` |
+| `frame.id`, `frame.tick`, `frame.simulation_time` | integer, integer, number | Observation id, completed action frames, Unity scaled time in seconds |
+| `view.screen_rect` | integer array | `[0, 0, 960, 540]`; screen pixels, `+x` right and `+y` down |
+| `view.world_from_screen` | number array | `[a, b, c, d, e, f]`: world x = `a*sx + c*sy + e`, world y = `b*sx + d*sy + f` for screen point `(sx, sy)` |
+| `terrain.cell_size`, `terrain.rows` | integer array, string array | Cell size in pixels and the grid, top row first |
+| `terrain.legend` | object | Descriptions of the classes below, except scenery |
+| `objects[]` | array of `{id, kind, bounds}` | Every thing with at least one visible pixel. `bounds` is `[x, y, width, height]` of those pixels in screen pixels |
+| `self.object_id` | string | The `objects` id of the player sprite; empty while no pixel of it is drawn, for example when it blinks after a hit |
+| `hud.health.value` | integer | Full hearts when all five heart images are drawn unobstructed. Otherwise 0, because Unity's JSON writer cannot omit the field: the first picture after a level exit can read 0 at full health |
+| `rules`, `capabilities`, `disclosure` | strings, booleans | Fixed text describing the game's rules and this observation's limits |
+
+The default grid has 48 columns and 27 rows of 20 pixel cells. `HONING_VISIBLE_CELL_PIXELS` selects another size between 5
+and 120 that divides both 960 and 540. Each character of `terrain.rows` is `U+0100 + mask`, where `mask` is the union of
+the classes of every pixel in that cell:
+
+| Bit | Class | Source |
+| --- | --- | --- |
+| 1 | background | Nothing was drawn at that pixel |
+| 2 | wall | Sprite on the `Wall` or `AirWall` layer |
+| 4 | platform | Sprite on the `Platform` layer |
+| 8 | hazard | Sprite on the `Trap` or `Projectile` layer |
+| 16 | actor | The player or an enemy |
+| 32 | interactable | Sprite on the `Switch` layer or a level exit |
+| 64 | unknown | Translucent or unsupported sprite pixels, UI rectangles, and the caption box |
+| 128 | scenery | Decoration and the player's own equipment |
+
+`objects[].kind` is one of `player`, `visible_equipment`, `enemy`, `visible_hazard`, `platform`, `wall`, `interactable` or
+`visible_scenery`. An `id` stays the same while the object exists.
+
+Classes come from a second render of the real camera in which each sprite is drawn in a flat label color, so sprite
+order and occlusion match the picture and anything hidden behind another sprite is not reported. Terrain classes describe
+what a sprite looks like, not its collider. An unknown cell is never evidence of free space. With `HONING_CAPTURE=1` the
+caption box the bridge draws into the recording (x 8 to 667, y 8 to 55) is unknown as well, so a captured run and an
+uncaptured run can see slightly different grids. `HONING_VISIBLE_MASK_CAPTURE=1` also saves each label image as
+`semantic-<id>.png` for people to inspect; label images are never model input.
+
+Withheld on purpose: anything off screen including exits, enemy health, the player's velocity, grounded state and
+remaining jumps, colliders without a sprite, and what a switch or secret does. A camera that is not an axis-aligned
+orthographic 960x540 view, a non-sprite renderer in view, or a sprite with an unsupported shader or mask raises an error
+in the bridge rather than publishing a partial observation, and the controller's observation timeout then ends the run.
+The `disclosure.resolution` text mentions a compact glyph adapter; none is part of this repository, and `terrain.rows`
+is always in the encoding described here.
+
 ## Commands
 
 | Field | JSON type | Required / default / interpretation |

@@ -57,7 +57,7 @@ public class HoningBridge : MonoBehaviour
     string session, modelLabel = "Waiting for a model";
     PlayerController player;
     int sequence, frame, remaining, fixedSteps;
-    bool capture, ready, needsObservation;
+    bool capture, ready, needsObservation, awaitingRenderedFrame, visibleProfile;
     float waitStart;
     double modelTimeoutSeconds = 180;
 
@@ -77,6 +77,8 @@ public class HoningBridge : MonoBehaviour
                                           CultureInfo.InvariantCulture);
         Directory.CreateDirectory(session);
         capture = Environment.GetEnvironmentVariable("HONING_CAPTURE") == "1";
+        // Only the exact value "visible" selects the screen-only observation; anything else keeps the scene state.
+        visibleProfile = Environment.GetEnvironmentVariable("HONING_OBSERVATION_PROFILE") == "visible";
         if (capture) Directory.CreateDirectory(Path.Combine(session, "frames"));
         Application.runInBackground = true;
         Application.targetFrameRate = 30;
@@ -88,6 +90,7 @@ public class HoningBridge : MonoBehaviour
         if (SceneManager.GetActiveScene().name != scene) SceneManager.LoadScene(scene);
         yield return null;
         yield return null;
+        if (visibleProfile) yield return new WaitForEndOfFrame();
         ready = true;
         Observe();
     }
@@ -134,8 +137,30 @@ public class HoningBridge : MonoBehaviour
             exits = FindObjectsOfType<NextLevel>().Select(e => e.GetComponent<Collider2D>().bounds)
                 .Select(b => new Exit { x = b.center.x, y = b.center.y, width = b.size.x, height = b.size.y }).ToArray()
         };
-        WriteJson("observation.json", obs);
+        if (visibleProfile) {
+            var visible = VisibleObservation.Capture(player, sequence, frame, capture, session);
+            WriteJson("observation.json", visible);
+            WriteJson("debug_observation.json", obs);
+            File.AppendAllText(Path.Combine(session, "visible_observations.jsonl"), JsonUtility.ToJson(visible) + "\n");
+            if (sequence == 1) File.WriteAllText(Path.Combine(session, "scene-inspection.txt"), InspectScene());
+        } else {
+            WriteJson("observation.json", obs);
+        }
         File.AppendAllText(Path.Combine(session, "observations.jsonl"), JsonUtility.ToJson(obs) + "\n");
+    }
+
+    // Diagnostic inventory of the first observed scene; it is written next to the trace and never sent to a model.
+    static string InspectScene()
+    {
+        var b = new System.Text.StringBuilder();
+        foreach (var c in FindObjectsOfType<Camera>()) b.AppendLine("CAM " + c.name + " pos=" + c.transform.position + " ortho=" + c.orthographic + " size=" + c.orthographicSize + " rect=" + c.pixelRect + " depth=" + c.depth + " mask=" + c.cullingMask);
+        foreach (var r in FindObjectsOfType<Renderer>()) {
+            b.AppendLine("RENDER " + r.GetType().Name + " name=" + r.name + " layer=" + LayerMask.LayerToName(r.gameObject.layer) + " enabled=" + r.enabled + " bounds=" + r.bounds + " sorting=" + r.sortingLayerName + "/" + r.sortingOrder + " material=" + (r.sharedMaterial == null ? "null" : r.sharedMaterial.shader.name));
+            var sr = r as SpriteRenderer;
+            if(sr != null) b.AppendLine(" SPRITE " + (sr.sprite == null ? "null" : sr.sprite.name + " read=" + sr.sprite.texture.isReadable + " tex=" + sr.sprite.texture.name + " rect=" + sr.sprite.rect + " size=" + sr.sprite.bounds + " mode=" + sr.drawMode) + " color=" + sr.color + " flip=" + sr.flipX + "," + sr.flipY);
+        }
+        foreach(var c in FindObjectsOfType<Collider2D>()) b.AppendLine("COL " + c.GetType().Name + " " + c.name + " layer=" + LayerMask.LayerToName(c.gameObject.layer) + " tag=" + c.tag + " trigger=" + c.isTrigger + " bounds=" + c.bounds + " render=" + (c.GetComponent<Renderer>() != null));
+        return b.ToString();
     }
 
     static float WallDistance(Vector2 origin, Vector2 direction, int mask)
@@ -145,7 +170,7 @@ public class HoningBridge : MonoBehaviour
 
     void Update()
     {
-        if (!ready || remaining > 0) return;
+        if (!ready || remaining > 0 || awaitingRenderedFrame) return;
         if (needsObservation) { if (BindPlayer()) Observe(); return; }
         string path = Path.Combine(session, "action.json");
         if (File.Exists(path)) {
@@ -175,7 +200,18 @@ public class HoningBridge : MonoBehaviour
         if (capture) ScreenCapture.CaptureScreenshot(Path.Combine(session, "frames", frame.ToString("D06") + ".png"));
         frame++;
         remaining--;
-        if (remaining == 0) Observe();
+        if (remaining == 0) {
+            if (visibleProfile) { Time.timeScale = 0; awaitingRenderedFrame = true; StartCoroutine(ObserveAfterRender()); }
+            else Observe();
+        }
+    }
+
+    // The visible profile labels what the camera drew, so it observes after this frame has been rendered.
+    System.Collections.IEnumerator ObserveAfterRender()
+    {
+        yield return new WaitForEndOfFrame();
+        Observe();
+        awaitingRenderedFrame = false;
     }
 
     void OnGUI()

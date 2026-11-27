@@ -17,7 +17,7 @@ condition must be named when reporting results.
 
 ## Research scope
 
-Primary category: **Spatial and tactical planning**. Capability tags: route planning, hazard avoidance.
+Primary category: **Survival and puzzle**. Capability tags: route planning, hazard avoidance.
 
 Reach the gem while avoiding moving spiders.
 
