@@ -1,0 +1,40 @@
+# Area labels for pull requests, by the paths they change (actions/labeler, .github/workflows/labeler.yml).
+# The areas are the ones CONTRIBUTING.md lists for issues. Every glob must match a tracked file
+# (tests/test_labeler.py), so a moved directory cannot leave a rule that never fires. Release notes
+# group merged pull requests by these labels (.github/release.yml).
+"area: core":
+  - changed-files:
+      - any-glob-to-any-file: ["honing/core/**", "honing/release/**"]
+"area: compression":
+  - changed-files:
+      - any-glob-to-any-file:
+          ["honing/backends/weight_edit.py", "honing/backends/jev/weight_edit.py", "honing/backends/jev/direction_edit.py"]
+"area: train":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "honing/backends/slime/**"
+          - "honing/backends/jev/*trainer.py"
+          - "honing/backends/jev/decision_training.py"
+"area: data":
+  - changed-files:
+      - any-glob-to-any-file: ["honing/backends/reef/**", "honing/core/data.py"]
+"area: harness":
+  - changed-files:
+      - any-glob-to-any-file: ["honing/harness/**", "honing/e2e/**", "integrations/**", "configs/**"]
+"area: campaign":
+  - changed-files:
+      - any-glob-to-any-file: ["honing/campaign/**"]
+"area: serve":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "honing/backends/sglang/**"
+          - "honing/backends/llm_gateway/**"
+          - "honing/backends/agent_gateway.py"
+          - "honing/backends/jev/server.py"
+          - "honing/backends/jev/*serving.py"
+"area: docs":
+  - changed-files:
+      - any-glob-to-any-file: ["system-design/**", "docs/**", "*.md"]
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", "scripts/**", ".pre-commit-config.yaml"]

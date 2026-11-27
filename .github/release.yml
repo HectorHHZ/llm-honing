@@ -1,0 +1,27 @@
+# Sections of the notes `gh release create --generate-notes` writes (.github/workflows/release.yml),
+# by the area labels .github/labeler.yml puts on each pull request. A pull request with two areas
+# appears under the first that matches.
+changelog:
+  exclude:
+    authors: ["dependabot"]
+  categories:
+    - title: Core
+      labels: ["area: core"]
+    - title: Campaign
+      labels: ["area: campaign"]
+    - title: Compression
+      labels: ["area: compression"]
+    - title: Training
+      labels: ["area: train"]
+    - title: Data
+      labels: ["area: data"]
+    - title: Harness and environments
+      labels: ["area: harness"]
+    - title: Serving
+      labels: ["area: serve"]
+    - title: Documentation
+      labels: ["area: docs"]
+    - title: CI and tooling
+      labels: ["area: ci"]
+    - title: Other changes
+      labels: ["*"]
