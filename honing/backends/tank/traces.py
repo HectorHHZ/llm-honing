@@ -8,6 +8,12 @@ it are the round's events up to the next decision, except the ``plan`` events
 (the row's ``applied`` already holds the agent's) and the opponent's controller
 interventions.
 
+A round that logs raw states also writes ``states.jsonl``, one line per agent
+decision after a header. Each of that decision's traces then has a
+``state_ref`` of ``states.jsonl:<line>``, the 1-based line of its raw state,
+which :func:`honing.backends.tank.raw_states.state_at` reads back. A round
+recorded before raw states were logged has none.
+
 The key events and their labels: the agent's tank destroyed by the opponent
 ("agent destroyed") or by its own shell ("agent self-hit"), the opponent's tank
 destroyed the same two ways ("opponent destroyed", "opponent self-hit"), and
@@ -43,6 +49,7 @@ from honing.backends.tank.decisions import decision_from_row
 from honing.core import ContractError, DecisionTrace, EpisodeRecord, Grade, TraceEvent
 
 OUTPUTS = ("decisions.jsonl", "events.jsonl", "result.json")
+STATES_FILE = "states.jsonl"
 SEATS = ("blue", "red")
 # The agent's own death is shown whatever the length, and the other key events as room allows.
 AGENT_DEATH_PRIORITY = 0
@@ -120,6 +127,7 @@ def load_run(
             index = bisect_right(times, traced.time_seconds + _TIME_TOLERANCE_SECONDS) - 1
             followed[max(index, 0)].append(traced)
     outcome = _outcome(result, seat) if hits is not None else f"{_outcome(result, seat)}. {UNNAMED_SHELLS}"
+    refs = _state_refs(run, manifest)
     return tuple(
         DecisionTrace(
             episode_id=run.name,
@@ -131,12 +139,24 @@ def load_run(
             events=tuple(followed[step]),
             constraints=_json(row.get("constraints")),
             applied=_json(row.get("applied")),
+            state_ref=refs.get(row.get("decision")),
             outcome=outcome,
             grade=grade,
             policy_checksum=policy_checksum,
         )
         for step, row in enumerate(rows)
     )
+
+
+def _state_refs(run: Path, manifest: Mapping[str, object]) -> Mapping[object, str]:
+    """``states.jsonl:<line>`` by decision, for a run whose manifest hashes its raw states, or nothing."""
+    outputs = manifest["outputs"]
+    if not isinstance(outputs, dict) or STATES_FILE not in outputs:
+        return {}
+    verify_outputs(run, (STATES_FILE,))
+    lines = (run / STATES_FILE).read_text(encoding="utf-8").splitlines()
+    # The first line is the header. Every decision row names its decision, and so does its state's line.
+    return {json.loads(text)["decision"]: f"{STATES_FILE}:{number}" for number, text in enumerate(lines[1:], 2)}
 
 
 def _lines(path: Path) -> list[dict[str, Any]]:

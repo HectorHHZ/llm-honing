@@ -12,7 +12,7 @@ import {
     writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
     playMatch,
@@ -357,6 +357,21 @@ test("a mismatch on a round recorded on another platform names both platforms", 
     await writeLines(join(run, "states.jsonl"), [header, ...states]);
     await reseal(run);
     await assert.rejects(replay(run), /The recording names no platform/);
+});
+
+test("--out writes the labels outside the run and leaves the run unchanged", async () => {
+    const run = await fixture(),
+        out = await mkdtemp(join(tmpdir(), "labels-")),
+        before = await readdir(run);
+    await label(run, { out });
+    assert.deepEqual(await readdir(run), before);
+    const [header, ...labelled] = await lines(
+        join(out, basename(run), LABELS_FILE),
+    );
+    assert.equal(header.source, "planner-teacher");
+    // The same labels as writing them into the run.
+    await label(run);
+    assert.deepEqual(labelled, (await lines(join(run, LABELS_FILE))).slice(1));
 });
 
 test("the teacher labels every question of a model's round, and its own choices on a teacher round", async () => {

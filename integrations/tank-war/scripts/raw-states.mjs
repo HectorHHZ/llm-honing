@@ -15,15 +15,17 @@
 //     also checks events.jsonl and result.json. Replay is bit exact on the platform that recorded the round. On
 //     another OS, CPU or Node version the engine's floating point can differ in the last bits, and a mismatch
 //     then names both platforms.
-// node scripts/raw-states.mjs label RUN...
+// node scripts/raw-states.mjs label RUN... [--out=DIR]
 //     Writes labels.jsonl next to decisions.jsonl: the planner teacher's answer to every question of every row.
+//     With --out it writes DIR/<the run's directory name>/labels.jsonl instead, so a frozen dataset's runs stay
+//     unchanged.
 //
 // Each run command first checks the run's files against the SHA-256 its manifest records when the round ends, then
 // every saved state against its logged state_sha256. Each prints one JSON line per run. Any mismatch exits 1 and
 // names the first decision it found.
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { adapter } from "../web/game/adapter.js";
 import { restoreGame } from "../web/game/snapshot.js";
@@ -354,13 +356,13 @@ async function replayRun(run, { manifest, harness, states, calls }, to) {
 
 // The planner teacher's answer to every question of every row, written to labels.jsonl. On a teacher's own
 // round the labels must be its recorded choices, and `recorded` counts the rows compared and those that matched.
-export async function label(run) {
+export async function label(run, { out } = {}) {
     const { manifest, harness, states, calls, rows } = await readRun(run);
     if (harness.seat.controllerMode !== "plans")
         throw Error(
             `${run} played raw controls, and the planner teacher labels planned steering only`,
         );
-    const out = [
+    const labelled = [
         {
             format: LABELS_FORMAT,
             version: LABELS_VERSION,
@@ -389,7 +391,7 @@ export async function label(run) {
             );
             questions += Object.keys(labels).length;
             if (same(labels, row.chosen)) matched++;
-            out.push({
+            labelled.push({
                 row: row.index,
                 decision: k,
                 request_id: row.request_id,
@@ -398,9 +400,11 @@ export async function label(run) {
             });
         }
     }
+    const dir = out === undefined ? run : join(out, basename(run));
+    await mkdir(dir, { recursive: true });
     await writeFile(
-        join(run, LABELS_FILE),
-        out.map((l) => JSON.stringify(l) + "\n").join(""),
+        join(dir, LABELS_FILE),
+        labelled.map((l) => JSON.stringify(l) + "\n").join(""),
     );
     const teacher = manifest.kind === "teacher-demonstration";
     if (teacher && matched !== rows.length)
@@ -434,7 +438,8 @@ function renderBatch(input) {
 
 async function main([command, ...args]) {
     const runs = args.filter((a) => !a.startsWith("--")),
-        to = args.find((a) => a.startsWith("--to="));
+        to = args.find((a) => a.startsWith("--to=")),
+        out = args.find((a) => a.startsWith("--out="));
     if (command === "render") {
         let input = "";
         for await (const chunk of process.stdin) input += chunk;
@@ -445,19 +450,21 @@ async function main([command, ...args]) {
     const tools = { roundtrip: roundTrip, replay, label };
     if (!tools[command] || !runs.length)
         throw Error(
-            "usage: raw-states.mjs render | roundtrip RUN... | replay RUN [--to=K] | label RUN...",
+            "usage: raw-states.mjs render | roundtrip RUN... | replay RUN [--to=K] | label RUN... [--out=DIR]",
         );
     if (to && (command !== "replay" || runs.length !== 1))
         throw Error("--to applies to replay of one run");
+    if (out && command !== "label") throw Error("--out applies to label");
+    // Two runs with one directory name would write the same DIR/<name>/labels.jsonl.
+    if (out && new Set(runs.map((r) => basename(r))).size !== runs.length)
+        throw Error("--out needs runs with different directory names");
+    const options = to
+        ? { to: Number(to.slice(5)) }
+        : out
+          ? { out: out.slice(6) }
+          : undefined;
     for (const run of runs)
-        console.log(
-            JSON.stringify(
-                await tools[command](
-                    run,
-                    to ? { to: Number(to.slice(5)) } : undefined,
-                ),
-            ),
-        );
+        console.log(JSON.stringify(await tools[command](run, options)));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || "").href)

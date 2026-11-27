@@ -15,7 +15,8 @@ from typing import Any
 import pytest
 
 from honing.backends.tank import seed_harness
-from honing.backends.tank.raw_states import TankRawStates, harness_files, read_labels, read_states
+from honing.backends.tank.raw_states import TankRawStates, harness_files, read_labels, read_states, state_at
+from honing.backends.tank.traces import load_run
 from honing.core import ContractError, HarnessFile, HarnessSpec
 
 REPO = Path(__file__).resolve().parents[1]
@@ -210,3 +211,54 @@ def test_a_run_named_relative_to_the_callers_directory_is_found(run: Path, monke
     # Re-rendering is the same on every platform, so this uses the recorded fixture (replay is not).
     assert report["run"] == str(run)
     assert tool.label([Path(run.name)])[0]["run"] == str(run)
+
+
+@pytest.mark.unit
+def test_each_trace_of_a_round_that_logs_raw_states_points_at_its_state(run: Path) -> None:
+    traces = load_run(run)
+    rows = [json.loads(line) for line in (run / "decisions.jsonl").read_text().splitlines()]
+    _, states = read_states(run)
+
+    assert len(traces) == len(rows) and all(trace.state_ref for trace in traces)
+    for trace, row in zip(traces, rows, strict=True):
+        assert state_at(run, trace.state_ref)["decision"] == row["decision"]  # type: ignore[arg-type]
+    # A decision with two questions has two rows and one state, so its traces share a state_ref.
+    assert {trace.state_ref for trace in traces} == {f"states.jsonl:{n}" for n in range(2, len(states) + 2)}
+
+
+@pytest.mark.unit
+def test_a_round_recorded_before_raw_states_has_no_state_ref(run: Path) -> None:
+    manifest = json.loads((run / "manifest.json").read_text())
+    del manifest["outputs"]["states.jsonl"]
+    (run / "manifest.json").write_text(json.dumps(manifest))
+    (run / "states.jsonl").unlink()
+
+    assert all(trace.state_ref is None for trace in load_run(run))
+
+
+@pytest.mark.unit
+def test_a_bad_state_ref_or_changed_states_are_refused(run: Path) -> None:
+    ref = load_run(run)[0].state_ref
+    assert ref is not None
+    for bad in ("states.jsonl:1", "states.jsonl:x", "decisions.jsonl:2", "states.jsonl:100000"):
+        with pytest.raises(ContractError):
+            state_at(run, bad)
+    with (run / "states.jsonl").open("a") as f:
+        f.write("{}\n")
+    for read in (lambda: state_at(run, ref), lambda: load_run(run)):
+        with pytest.raises(ContractError, match="does not match the SHA-256"):
+            read()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(NODE is None, reason="needs Node 22")
+def test_labels_written_elsewhere_leave_the_run_unchanged(run: Path, tmp_path: Path) -> None:
+    before = sorted(path.name for path in run.iterdir())
+    [summary] = TankRawStates(INTEGRATION).label([run], out=tmp_path / "labels")
+
+    assert sorted(path.name for path in run.iterdir()) == before
+    assert (tmp_path / "labels" / run.name / "labels.jsonl").is_file()
+    header, labels = read_labels(run, tmp_path / "labels")
+    assert header["source"] == "planner-teacher" and len(labels) == summary["rows"]
+    with pytest.raises(ContractError, match="Label the run first"):
+        read_labels(run)

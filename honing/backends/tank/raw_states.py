@@ -33,10 +33,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
-from honing.backends.tank.traces import verify_outputs
+from honing.backends.tank.traces import STATES_FILE, verify_outputs
 from honing.core import ContractError, HarnessSpec
 
-STATES_FILE = "states.jsonl"
 LABELS_FILE = "labels.jsonl"
 STATES_FORMAT = "tank-raw-states"
 STATES_VERSION = 1
@@ -82,11 +81,25 @@ def read_states(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     return header, states
 
 
-def read_labels(run: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """The header and the per-row lines of a run's ``labels.jsonl``."""
-    path = run / LABELS_FILE
+def state_at(run: Path, state_ref: str) -> dict[str, Any]:
+    """The line of ``states.jsonl`` that a trace's ``state_ref``, ``states.jsonl:<line>``, names.
+
+    The file must still match the SHA-256 the run's manifest records.
+    """
+    name, _, number = state_ref.partition(":")
+    if name != STATES_FILE or not number.isdigit() or int(number) < 2:
+        raise ContractError(f"{state_ref!r} names no decision line of {STATES_FILE}")
+    _, states = read_states(run)
+    if int(number) - 2 >= len(states):
+        raise ContractError(f"{run}/{STATES_FILE} has no line {number}")
+    return states[int(number) - 2]
+
+
+def read_labels(run: Path, out: Path | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The header and the per-row lines of a run's ``labels.jsonl``, in the run or where ``label(out=...)`` put it."""
+    path = (run if out is None else out / run.name) / LABELS_FILE
     if not path.exists():
-        raise ContractError(f"{run} has no {LABELS_FILE}. Label the run first")
+        raise ContractError(f"{path.parent} has no {LABELS_FILE}. Label the run first")
     header, *labels = _lines(path)
     return header, labels
 
@@ -177,9 +190,12 @@ class TankRawStates:
         (report,) = self._run(["replay", _absolute(run), *(() if to is None else (f"--to={to}",))])
         return report
 
-    def label(self, runs: Iterable[Path]) -> list[dict[str, Any]]:
-        """Write each run's ``labels.jsonl``. On a teacher's round, labels that differ from its choices are refused."""
-        return self._run(["label", *map(_absolute, runs)])
+    def label(self, runs: Iterable[Path], *, out: Path | None = None) -> list[dict[str, Any]]:
+        """Write each run's ``labels.jsonl``. On a teacher's round, labels that differ from its choices are refused.
+
+        With ``out`` each run's labels go to ``out/<run's name>/labels.jsonl`` and the run is left unchanged.
+        """
+        return self._run(["label", *map(_absolute, runs), *([f"--out={_absolute(out)}"] if out else [])])
 
 
 __all__ = [
@@ -192,4 +208,5 @@ __all__ = [
     "harness_files",
     "read_labels",
     "read_states",
+    "state_at",
 ]
