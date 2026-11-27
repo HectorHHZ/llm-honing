@@ -60,3 +60,30 @@ def test_a_conflict_is_labelled_and_the_author_told_once(
 def test_the_comment_asks_for_a_rebase_and_carries_its_mark() -> None:
     text = conflicts.message("lucas")
     assert text.startswith(conflicts.MARK) and "@lucas" in text and "rebase it onto `main`" in text
+
+
+type_label = load_script(".github/scripts/type_label.py")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("title", "label"),
+    [
+        ("feat(data): add a Reef recipe", "type: feature"),
+        ("feat!: drop the old plane", "type: feature"),
+        ("fix(train): refuse a no-op grpo run", "type: bug"),
+        ("docs: add AGENTS.md", "type: task"),
+        ("ci(ci): pin every action", "type: task"),
+        ("feature: not a Conventional Commits type", "type: task"),
+        ("Add a gate", "type: task"),
+    ],
+)
+def test_the_title_names_the_type_label(title: str, label: str) -> None:
+    assert type_label.type_label(title) == label
+
+
+@pytest.mark.unit
+def test_a_retitled_pull_request_ends_with_one_type_label() -> None:
+    assert type_label.changes("fix: x", ["type: feature", "area: core"]) == (["type: bug"], ["type: feature"])
+    assert type_label.changes("fix: x", ["type: bug"]) == ([], [])
+    assert set(type_label.LABELS) == {"type: feature", "type: bug", "type: task"}

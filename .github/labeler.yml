@@ -4,7 +4,7 @@
 # group merged pull requests by these labels (.github/release.yml).
 "area: core":
   - changed-files:
-      - any-glob-to-any-file: ["honing/core/**", "honing/release/**"]
+      - any-glob-to-any-file: ["honing/core/**", "honing/release/**", "tests/contracts/**"]
 "area: compression":
   - changed-files:
       - any-glob-to-any-file:
@@ -20,7 +20,20 @@
       - any-glob-to-any-file: ["honing/backends/reef/**", "honing/core/data.py"]
 "area: harness":
   - changed-files:
-      - any-glob-to-any-file: ["honing/harness/**", "honing/e2e/**", "integrations/**", "configs/**"]
+      - any-glob-to-any-file:
+          - "honing/harness/**"
+          - "honing/e2e/**"
+          - "integrations/**"
+          - "configs/**"
+          # The game and agent environments.
+          - "honing/backends/brogue_ce/**"
+          - "honing/backends/craftax/**"
+          - "honing/backends/griddly/**"
+          - "honing/backends/openhands/**"
+          - "honing/backends/pi/**"
+          - "honing/backends/ra2/**"
+          - "honing/backends/rea_issac*/**"
+          - "honing/backends/tank/**"
 "area: campaign":
   - changed-files:
       - any-glob-to-any-file: ["honing/campaign/**"]
