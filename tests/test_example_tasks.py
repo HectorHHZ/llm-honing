@@ -18,6 +18,9 @@ from honing.core import EpisodeOutcome, Grade
 from honing.harness.graders import CommandGrader
 from honing.harness.tasks import load_task_suite
 
+# Every test runs the suite's grader as a process.
+pytestmark = pytest.mark.functional
+
 SUITE = Path(__file__).resolve().parents[1] / "integrations" / "python-bugfix" / "tasks"
 TASK_IDS = ("clamp", "mean", "reverse_words")
 
