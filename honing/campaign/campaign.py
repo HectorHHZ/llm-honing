@@ -481,6 +481,7 @@ class Campaign:
             trained_numerics=job.numerics,
             method_state=self._method_state(head),
             metrics={**_size_metrics(result.snapshot), **result.metrics},
+            batch_id=None if batch is None else batch.batch_id,
         )
 
     def _prune_candidate(
@@ -502,6 +503,7 @@ class Campaign:
 
         snapshot = compression.editor.apply(head.master, plan)
         metrics = {"estimated_parameter_change": float(plan.estimated.parameters)}
+        batch_id = None
         if recovery_job is not None:
             # The edited weights are not published, so their rollout samples name no release.
             batch = self._batch_for(recovery_job, head, _policy_of(snapshot), release_id=None)
@@ -510,6 +512,7 @@ class Campaign:
             self._metering().charge_gpu_seconds(result.gpu_seconds)
             snapshot = result.snapshot
             metrics.update(result.metrics)
+            batch_id = None if batch is None else batch.batch_id
         return UpdateCandidate(
             kind="prune",
             parent_id=head.release_id,
@@ -519,6 +522,7 @@ class Campaign:
             trained_numerics=head.trained_numerics,
             method_state=self._method_state(head),
             metrics={**_size_metrics(snapshot), **metrics},
+            batch_id=batch_id,
         )
 
     def _quantize_candidate(self, scheme: QuantScheme, head: HoneRelease) -> UpdateCandidate:

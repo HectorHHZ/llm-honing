@@ -17,6 +17,8 @@ The records it reads are defined in `honing/backends/reef/records.py`, and
 
 ## Run it
 
+Reef stores artifacts with Git LFS, so `git lfs` must be on `PATH` or `reef serve` exits at startup.
+
 ```bash
 python3.12 -m venv .reef-venv
 .reef-venv/bin/pip install "reef-infra @ git+https://github.com/Human-Agent-Society/reef@bc8c15081bfdbd2ea0a4ceacc045545f020da668"
@@ -35,8 +37,8 @@ HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_recipe.py   # what th
    with no score trains nothing.
 3. `DecisionJobData` puts the samples into job data unchanged.
 4. The spool backend writes `<spool-dir>/<job id>.json` durably and keeps the
-   job running. Honing's data provider (#227) reads it at a train move and
-   writes `<job id>.consumed`. The job then finishes with no checkpoint, so
+   job running. Honing's `ReefDataProvider` (`honing/backends/reef/provider.py`)
+   reads it at a train move and writes `<job id>.consumed`. The job then finishes with no checkpoint, so
    Reef ends it and publishes nothing. `<job id>.cancelled` marks a job Reef
    cancelled, which Honing skips.
 

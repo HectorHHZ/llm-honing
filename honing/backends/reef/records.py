@@ -204,6 +204,7 @@ class RecordedDecision:
         release_id: str | None,
         harness_id: str | None,
         behavior: bool,
+        policy_checksum: str | None = None,
     ) -> DecisionSample:
         """The decision as a training sample, with ``chosen`` from the episode's report.
 
@@ -220,7 +221,13 @@ class RecordedDecision:
                 raise ContractError(f"decision {self.request_id}: {option!r} is not an option of {key}")
         row = {"contextParts": self.parts, "questions": self.questions, "answers": self.answers, "chosen": chosen}
         return decision_from_row(
-            row, reward=reward, group=group, release_id=release_id, harness_id=harness_id, behavior=behavior
+            row,
+            reward=reward,
+            group=group,
+            release_id=release_id,
+            harness_id=harness_id,
+            behavior=behavior,
+            policy_checksum=policy_checksum,
         )
 
 

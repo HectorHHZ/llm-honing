@@ -1,0 +1,79 @@
+{
+  "description": "The direction edit of tank_direction_edit.json, trained on Reef's job data instead of fresh teacher rounds (#227). Before it runs, a Reef of integrations/reef/deployment.yaml (job_samples set to the number of teacher rounds) holds the planner teacher's train-split rounds, imported with scripts/reef/import_tank_runs.py, and HONING_REEF_SPOOL names its spool directory. The train move draws one job as its batch, the commit record names that job, and the gate is the same 64 rounds on fresh validation seeds. Needs everything tank_direction_edit.json needs.",
+  "integration_dir": "integrations/tank-war",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-direction-edit-reef",
+  "validation_tasks": {
+    "split": "val",
+    "limit": 16
+  },
+  "gate": {
+    "rounds": 64,
+    "looks": 1,
+    "min_effect": 0.0,
+    "confidence": 0.95
+  },
+  "harness_tasks": {
+    "split": "train",
+    "limit": 16
+  },
+  "episode_budget": 0,
+  "samples_per_task": 1,
+  "schedule": [
+    {
+      "kind": "train",
+      "algorithm": "direction_edit",
+      "contract": "typed_decisions"
+    }
+  ],
+  "requires": {
+    "env": [
+      "HONING_NANOJEV_SOURCE",
+      "HONING_NANOJEV_GPUS",
+      "HONING_NANOJEV_EDIT_GPU",
+      "HF_HOME",
+      "HONING_REEF_SPOOL"
+    ],
+    "commands": [
+      "node"
+    ],
+    "paths": [
+      "$HONING_NANOJEV_SOURCE/scripts/predict_toy_decisions.py"
+    ]
+  },
+  "components": {
+    "model_source": {
+      "factory": "honing.backends.jev.e2e:model_source"
+    },
+    "endpoints": {
+      "factory": "honing.backends.jev.e2e:endpoints"
+    },
+    "runner": {
+      "factory": "honing.backends.tank.e2e:episode_runner",
+      "args": {
+        "concurrency": 4
+      }
+    },
+    "grader": {
+      "factory": "honing.backends.tank.e2e:grader"
+    },
+    "trainer": {
+      "factory": "honing.backends.jev.e2e:direction_edit_trainer",
+      "args": {
+        "question": "weapon",
+        "target": "fire",
+        "strength": 1.0
+      }
+    },
+    "data": {
+      "factory": "honing.backends.reef.e2e:data",
+      "args": {
+        "spool_dir": "$HONING_REEF_SPOOL",
+        "wait_s": 600
+      }
+    },
+    "method": {
+      "factory": "tests.fakes.pipeline:method"
+    }
+  }
+}

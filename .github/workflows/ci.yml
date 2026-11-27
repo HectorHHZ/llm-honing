@@ -212,7 +212,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,reef]"
           # Reef at the commit #137 pins, in a venv of its own.
           python -m venv "$RUNNER_TEMP/reef"
           "$RUNNER_TEMP/reef/bin/pip" install \
@@ -220,7 +220,7 @@ jobs:
       - name: Test
         env:
           HONING_REEF_BIN: ${{ runner.temp }}/reef/bin/reef
-        run: python -m pytest tests/test_reef_records.py tests/test_reef_recipe.py
+        run: python -m pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py
 
   test-sandbox:
     # The test job above runs the sandbox's Docker tests (the runners have Docker) but has no slime, so the tests of

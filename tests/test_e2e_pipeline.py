@@ -84,6 +84,10 @@ def test_the_pipeline_crosses_every_plane_and_restores_a_release(tmp_path: Path)
     records = [json.loads(line) for line in (tmp_path / "out/releases/commits.jsonl").read_text().splitlines()]
     assert [r.get("scheduler") for r in records] == [None, *["scripted"] * 9]
     assert records[-1]["op"] == "rollback" and records[-1]["scheduler_state"]["next"] == 8
+    # A trained candidate names the batch it trained on (a pruned one its recovery's), and nothing untrained does.
+    candidates = [r["candidate"] for r in records if "candidate" in r]
+    assert all(c["batch_id"] for c in candidates if c["kind"] == "train")
+    assert not any(c["batch_id"] for c in candidates if c["kind"] in ("init", "harness", "quantize"))
     pruned = summary["releases"][2]
     assert pruned["parameters"] < summary["releases"][1]["parameters"]
     # The harness episodes ran as agent processes that asked the policy server.

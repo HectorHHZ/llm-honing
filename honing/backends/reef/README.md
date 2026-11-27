@@ -9,7 +9,7 @@ environment. Honing reaches it only from this package, through
 
 `records.py` defines what Honing writes. Every writer and reader uses it: the
 decision server's recorder (#223), the grader's reports (#225), the recipe in
-`integrations/reef/` (#226) and the data provider (#227).
+`integrations/reef/` (#226) and the data provider (#227, below).
 
 **A decision record** is one request the decision server answered. It is an
 inference record whose payload is:
@@ -87,6 +87,26 @@ too, under 9 MiB.
 `DecisionSample` that `decision_from_row` builds from the `decisions.jsonl`
 row, and `tests/test_reef_records.py` checks this on the tank fixtures.
 
+## Job data
+
+`provider.py` reads what Reef hands back. Honing's recipe
+(`integrations/reef/`) has Reef spool each training job's data to
+`<spool>/<job id>.json` and keep the job running until Honing writes
+`<job id>.consumed`. `ReefDataProvider` is the campaign's `DataProvider` over
+that spool. At a train move it takes the oldest job no move consumed and Reef
+did not cancel, turns it into one `typed_decisions` batch, and marks it
+consumed. Reef then ends the job with nothing published.
+
+- Each decision is the `DecisionSample` that `decision_from_row` builds from
+  its row. The episode's score is its reward, its task the group, its
+  `release` and `harness` tags its sources, and it keeps behavior
+  probabilities when the contract asks for them.
+- The batch id is `reef:<scenario>/<job id>`, and the commit record of the
+  move names it (`candidate.batch_id`).
+- Reef consumed the job's records when it submitted the job, so data drawn for
+  a move the gate rejects never trains again, even after a restart.
+- How many episodes a batch holds is Reef's `pipeline.sample2job.job_samples`.
+
 ## The Reef code each module follows
 
 Reef [`bc8c150`](https://github.com/Human-Agent-Society/reef/tree/bc8c15081bfdbd2ea0a4ceacc045545f020da668),
@@ -98,4 +118,5 @@ A pull request that pins a later Reef updates these links.
 | `records.py`, `RecordedDecision` | [`AgentRecord`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/records_types.py#L49), [`import_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/request_handling.py#L106) | The payload is a decision, not a chat exchange, and the id is derived from the episode and the request, not drawn |
 | `records.py`, `EpisodeReport` | [`ReportPayload`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L65), [`validate_record`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/ingest.py#L82) | `metadata.honing.chosen` carries the policy's choice for each reference |
 | `records.py`, tags | [`with_request_tags`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L119) | Tags are written into `metadata.tags` directly, so one batch can carry several episodes |
+| `provider.py`, `ReefDataProvider` | [`JobStatus`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/component.py#L249), [`JobLoop.poll`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/jobs.py#L285) | Honing, not a Reef trainer, consumes the job data, and the job ends with no checkpoint |
 | `records.py`, `batches` | [`POST /reef/records/batch`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/routes/records.py#L15) | Splits by bytes as well as by count |
