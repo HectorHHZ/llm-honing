@@ -38,8 +38,9 @@ jobs:
           python -m mypy
 
   commit-subject:
-    # A squash merge derives the commit subject from the pull request title, so
-    # the title is what has to satisfy the commit rules.
+    # A pull request lands on main with a merge commit, so its title (the merge
+    # commit's description) and each of its commits have to satisfy the commit
+    # rules, and the branch must hold no merge from main (it is rebased instead).
     #
     # A bot's title is written by the tool, not by a contributor, and its wording
     # is not configurable: Dependabot always capitalizes "Bump ...". That is the
@@ -52,10 +53,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The base branch and the pull request's commits, to check each of them.
+          fetch-depth: 0
       - name: Check pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: python .github/scripts/check_commit_message.py --subject "$PR_TITLE"
+      - name: Check every commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python .github/scripts/check_commit_message.py --range "$BASE_SHA..$HEAD_SHA"
 
   test:
     runs-on: ubuntu-latest
