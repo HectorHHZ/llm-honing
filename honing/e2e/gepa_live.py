@@ -766,12 +766,16 @@ def check_run(
     records = _records(work_dir)
     moves = _moves(summary["steps"], records)
     chain = {r["release_id"]: r for r in records if r["op"] == "publish"}
-    harness_of = {rid: _spec(r["candidate"]["harness"]) for rid, r in chain.items()}
     gated = [m for m in moves if m.record is not None and m.record["op"] in ("publish", "reject")]
+
+    def harness_of() -> dict[str, HarnessSpec]:
+        # Read inside the checks that need it, so an unreadable publish record fails those checks.
+        return {rid: _spec(r["candidate"]["harness"]) for rid, r in chain.items()}
+
     runs: list[tuple[str, Callable[[], Check | list[Check]]]] = [
-        ("1 extracted", lambda: _check_extracted(gated, run_log, harness_of)),
+        ("1 extracted", lambda: _check_extracted(gated, run_log, harness_of())),
         ("2 reflection prompt", lambda: _check_prompts(moves, run_log)),
-        ("3 gate on real scores", lambda: _check_gate_scores(gated, run_log, harness_of, validation_ids)),
+        ("3 gate on real scores", lambda: _check_gate_scores(gated, run_log, harness_of(), validation_ids)),
         ("4 rejected stays", lambda: _check_rejected_stay(moves)),
         ("5 identities", lambda: _check_identities(moves, run_log, validation_ids)),
         ("6 rollback", lambda: _check_rollbacks(moves, run_log)),

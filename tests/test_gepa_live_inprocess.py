@@ -483,12 +483,6 @@ def test_a_check_that_cannot_read_the_records_fails_instead_of_losing_the_summar
 
 
 @pytest.mark.functional
-@pytest.mark.xfail(
-    strict=True,
-    raises=KeyError,
-    reason="check_run reads every publish record's harness before its per-check guard (gepa_live.py:764), so an "
-    "unreadable publish record loses the summary instead of failing a check",
-)
 def test_an_unreadable_published_record_fails_the_checks_instead_of_losing_the_summary(
     passing: LiveRun, tmp_path: Path
 ) -> None:
@@ -497,8 +491,10 @@ def test_an_unreadable_published_record_fails_the_checks_instead_of_losing_the_s
 
     checks = checked(passing, tmp_path, change)
 
-    assert not checks["1 extracted"].passed
-    assert checks["1 extracted"].detail.startswith("the check could not read the run: KeyError:")
+    for name in ("1 extracted", "3 gate on real scores"):
+        assert not checks[name].passed
+        assert checks[name].detail == "the check could not read the run: KeyError: 'harness'"
+    assert checks["2 reflection prompt"].passed and checks["budget stop"].passed
 
 
 @pytest.mark.functional
