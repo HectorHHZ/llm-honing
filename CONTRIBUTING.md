@@ -152,9 +152,11 @@ A pull request merges when every check is green on a branch that is up to date
 with `main` and every review thread is resolved. Two of those checks are the
 `gpu` status (below) and the `review` status, which passes when:
 
-- the pull request is the lead reviewer's (@Xuan-1998) own: the lead decides it
-  is ready, or
-- the lead reviewer approves it, for a pull request by anyone else.
+- the pull request is a lead reviewer's own: a lead decides it is ready, or
+- a lead reviewer approves it, for a pull request by anyone else.
+
+The lead reviewers are @Xuan-1998, @HectorHHZ, @Brocoliman and @jayzou3773
+(`LEADS` in `.github/scripts/review_gate.py`).
 
 Either way, nobody's latest review may request changes on the current diff. A
 review counts while the pull request's diff is the one reviewed: rebasing onto
