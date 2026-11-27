@@ -134,6 +134,11 @@ Branch from `main` and name the branch `<type>/<short-slug>`, e.g.
 follows the same Conventional Commits format as a commit subject, because the
 merge commit is derived from it.
 
+Bots label a pull request: an `area:` label for each area whose paths it
+changes (`.github/labeler.yml`), which also sorts it into a section of the
+release notes (`.github/release.yml`), and `needs-rebase` while it conflicts
+with `main`, with one comment asking the author to rebase.
+
 Fill in every section of the pull request template. In particular:
 
 - **Verification** lists the commands that actually ran and their real results.
