@@ -181,6 +181,10 @@ runner, and how to run the check by hand. When the runner is down, an admin who
 ran the check by hand on the head commit may set `gpu` to success with a link to
 the log.
 
+The runner also checks the head of `main` once a night and sets `gpu` on that
+commit, so a red check on a pull request can be told apart from a broken
+`main`.
+
 ## Releases
 
 A release is a tag `vMAJOR.MINOR.PATCH` on a merge commit of `main`. The
@@ -188,6 +192,11 @@ version comes from the tag (setuptools-scm), so nothing in the tree changes for
 a release. While the version starts with 0, a release that breaks a plane
 protocol, a configuration, a persisted format or the HoneRelease shape bumps
 MINOR. Anything else bumps PATCH.
+
+Releases come every two weeks, from the newest commit of `main` that passed
+both CI and the nightly GPU check, so a user can pin a version that was tested
+on a GPU. A fix for a regression in the last release gets its own PATCH release
+without waiting.
 
 1. Check that `main`'s head passed CI and the GPU check, and that no open issue
    reports a regression in it.
