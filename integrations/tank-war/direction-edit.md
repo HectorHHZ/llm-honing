@@ -184,7 +184,8 @@ same writer. Both enter the campaign through `Trainer` and use its release gate.
 algorithm on `typed_decisions` batches, so a campaign schedules it as a train
 move and gates it like any other candidate. Its settings choose the question
 (`weapon`), the target (an option such as `fire`, or `label` for the
-direction toward the batch's own labels) and the strength. The checkpoint has
+direction toward the batch's own labels) and the strength, unless the move
+states its own. The checkpoint has
 NanoJev's layout and a `checkpoint.json` manifest, which the decision server
 loads with `--checkpoint-manifest` and
 `honing.backends.jev.nanojev_serving.nanojev_endpoints` starts on demand, one
@@ -211,6 +212,52 @@ export HONING_NANOJEV_SOURCE=/path/to/NanoJev   # at the revision in integration
 export HONING_NANOJEV_GPUS=0,1 HONING_NANOJEV_EDIT_GPU=2 HF_HOME=/path/with/the/pinned/release
 python scripts/e2e/tank_campaign.py --config configs/e2e/tank_direction_edit.json
 ```
+
+### After supervised training
+
+A train step can state the edit itself, `"direction_edit": {"question":
+"weapon", "target": "fire", "strength": 1.0}`, which replaces the trainer's
+three settings for that step, and a campaign can hold this trainer beside
+another one. `configs/e2e/tank_nanojev_levers.json` does both: one epoch of
+sft on the teacher's rounds through the NanoJev trainer, then the fire edit
+at strength 1 on the weights sft produced. One run, on one node with 8 H100
+(add `HONING_NANOJEV_TRAIN_GPU=3` to the variables above), 56 minutes. It ran
+before the fresh-seed gate above existed, so each step was gated on the
+suite's 16 validation tasks, by wins and losses:
+
+| step                                           | val (16) | gate                                  | shots on the 16 rounds |
+| ---------------------------------------------- | -------- | ------------------------------------- | ---------------------- |
+| released NanoJev                               | 0.375    |                                       | 45                     |
+| sft, 1 epoch on 16 teacher rounds              | 0.5625   | published: 6 wins, 3 losses, 7 ties   | 83                     |
+| fire direction, strength 1, on the sft weights | 0.375    | rolled back: 3 wins, 6 losses, 7 ties | 109                    |
+
+Sft took the validation loss from 1.360 to 0.079 on 112 held-out examples
+(1,731 trained on). The edit did what the step asked: fire is the head's top
+option on 87% of the weapon questions after it, against 22% before. It still
+lost. On the sft head, one unit of the fire direction adds 25.7 logits of
+margin and leaves the head at cosine 0.10 to the one sft trained, so the edit
+replaces most of what sft taught the head. The strength that repairs the
+released head is too large for the trained one. A schedule that edits after
+training has to choose the strength for the head it edits. This is one run on
+16 rounds, and the two 0.375 scores are different rounds: the edited model
+and the released one differ on 8 of the 16.
+
+The same config ran again under the fresh-seed gate, 64 rounds on 32 seeds
+for each step with a 95% interval, in 81 minutes:
+
+| step                                                | candidate | head  | 95% interval on the difference | gate        |
+| --------------------------------------------------- | --------- | ----- | ------------------------------ | ----------- |
+| sft, 1 epoch on 16 teacher rounds                   | 0.578     | 0.320 | [-0.006, +0.487]               | rolled back |
+| fire direction, strength 1, on the released weights | 0.656     | 0.289 | [+0.131, +0.570]               | published   |
+
+Sft trained as before (validation loss 1.360 to 0.120) and gained 0.26 on
+the gate's seeds, but its interval misses zero by 0.006, so the head stayed
+the released model and the edit was made on it. There one unit of the fire
+direction adds 0.66 logits of margin, against 25.7 on the sft head, and
+leaves the head at cosine 0.43 to the released one. Fire becomes the top
+option on every weapon question, from 42%, and the edit is published, as it
+was in the run above this section. The two runs together say the same thing
+from both sides: strength 1 fits the released head and not the trained one.
 
 ## Limits
 

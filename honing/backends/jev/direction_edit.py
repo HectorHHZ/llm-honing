@@ -22,7 +22,10 @@ the head's input; ``target="label"`` reads the direction toward whatever the
 batch's labels chose.
 
 There are no gradients, no optimizer and no iterative fit: ``job.steps`` is
-ignored, and the edit is the same whichever order the decisions come in. The
+ignored, and the edit is the same whichever order the decisions come in. A job
+that carries a :class:`~honing.core.DirectionEditSpec` chooses the question,
+the target and the strength for that edit; any other job uses the trainer's
+settings. The
 checkpoint has NanoJev's layout plus a ``checkpoint.json`` manifest, so the
 decision server loads it with ``--checkpoint-manifest`` and
 :func:`~honing.backends.jev.nanojev_serving.nanojev_endpoints` starts it on
@@ -50,7 +53,7 @@ from honing.backends.jev.nanojev import (
     payload,
 )
 from honing.backends.jev.weight_edit import nanojev_layout
-from honing.backends.weight_edit import EditPlan, TensorEdit, WeightEditTrainer
+from honing.backends.weight_edit import EditPlan, Modifier, TensorEdit, WeightEditTrainer
 
 if TYPE_CHECKING:
     import numpy as np
@@ -92,7 +95,9 @@ class DirectionEditSettings:
     batch's own labels) or an option id (``"fire"``: the direction toward that
     option, whatever the label); a question without that option is skipped.
     ``strength`` multiplies the unit direction; the metrics report the logit
-    margin it adds on the batch. For compatibility, ``max_questions`` is the
+    margin it adds on the batch. These three are the trainer's defaults: a job
+    with its own :class:`~honing.core.DirectionEditSpec` replaces them for
+    that job. For compatibility, ``max_questions`` is the
     limit on decisions sent to the reader; each decision can contain several
     questions. It is not a limit on the total number of questions.
     ``pins_path`` names the pinned NanoJev source and release, as the other
@@ -230,12 +235,22 @@ class NanoJevDirectionEditTrainer(WeightEditTrainer):
             raise ContractError("the direction-edit trainer needs a typed_decisions batch with decisions")
         return super().train(job, base, batch)
 
-    def _plan(self, base: ModelSnapshot, batch: TrainingBatch | None) -> EditPlan:
+    def modifier_for(self, job: TrainJobSpec) -> Modifier:
+        """This trainer's plan, under the job's own question, target and strength when it names them."""
+        spec = job.direction_edit
+        if spec is None:
+            return self.modifier
+        settings = replace(self._settings, question=spec.question, target=spec.target, strength=spec.strength)
+        return functools.partial(self._plan, settings=settings)
+
+    def _plan(
+        self, base: ModelSnapshot, batch: TrainingBatch | None, settings: DirectionEditSettings | None = None
+    ) -> EditPlan:
         import numpy as np
         from safetensors.numpy import load_file
 
         assert batch is not None  # validated by the Trainer contract
-        settings = self._settings
+        settings = settings or self._settings
         parent = Path(base.checkpoint.location)
         inputs = self._reader(batch.decisions[: settings.max_questions], parent)
         unit, stats = direction(inputs, settings.question, settings.target)

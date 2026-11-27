@@ -336,7 +336,7 @@ def test_the_default_health_timeout_leaves_slow_answers_to_sglang_s_own_20_s_lim
 
 
 def test_a_running_server_is_probed_at_most_once_every_five_minutes_by_default() -> None:
-    # Resolve runs on the runners' event loop (#154), and a probe holds it at least 1 s.
+    # The episodes that resolve while a probe runs wait for it, at least 1 s.
     assert ServingSettings(python=Path("python"), gpus=("0",)).health_ttl_seconds == 300.0
 
 

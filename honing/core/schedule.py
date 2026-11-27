@@ -16,6 +16,8 @@ from honing.core.training import RecoverySpec, TrainJobSpec
 
 MoveKind = Literal["train", "prune", "quantize", "harness", "stop"]
 StepResult = Literal["published", "rejected", "skipped"]
+#: Whose run a step's gate metrics come from.
+MetricsSource = Literal["gate", "method"]
 
 
 @dataclass(frozen=True)
@@ -23,7 +25,10 @@ class Move:
     """One step a scheduler asks for.
 
     The optional fields override the campaign's defaults for this move only, and
-    each belongs to exactly one kind of move.
+    each belongs to exactly one kind of move, except ``trainer``. ``trainer``
+    names the registered trainer that runs a train move's job or a prune move's
+    recovery; ``None`` means the campaign's default trainer. A harness move
+    names its method in ``harness.method``.
     """
 
     kind: MoveKind
@@ -32,6 +37,7 @@ class Move:
     recovery: RecoverySpec | None = None
     scheme: QuantScheme | None = None
     harness: HarnessMoveConfig | None = None
+    trainer: str | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.kind, get_args(MoveKind), "Move.kind")
@@ -42,6 +48,11 @@ class Move:
         )
         require(self.scheme is None or self.kind == "quantize", "a quantization scheme belongs to a quantize move")
         require(self.harness is None or self.kind == "harness", "a harness config belongs to a harness move")
+        require(
+            self.trainer is None or self.kind in ("train", "prune"),
+            "a trainer belongs to a train move, or to a prune move for its recovery",
+        )
+        require(self.trainer is None or bool(self.trainer), "Move.trainer must name a trainer or be None")
 
 
 @dataclass(frozen=True)
@@ -53,7 +64,11 @@ class StepRecord:
     published, set only when it was published. ``reason`` is the gate's reason,
     or why a harness method proposed nothing. ``gate_metrics`` are the
     evaluation's numbers that every gated candidate records (the ``gate_*``
-    metrics). A skipped move reached no gate, so it has none.
+    metrics), and ``metrics_from`` says whose run they come from. It is
+    ``"gate"`` for the campaign's gate, and ``"method"`` when a harness
+    method's own selector rejected the candidate on the method's evaluator
+    (``HarnessComponents.method_evaluator``), so the gate never ran. A
+    skipped move reached no gate, so it has neither.
     """
 
     step: int
@@ -64,6 +79,7 @@ class StepRecord:
     label: str | None = None
     release_id: str | None = None
     gate_metrics: Mapping[str, float] = field(default_factory=dict)
+    metrics_from: MetricsSource | None = None
 
     def __post_init__(self) -> None:
         require(self.step >= 0, f"StepRecord.step must be >= 0, got {self.step}")
@@ -74,6 +90,12 @@ class StepRecord:
             "a step names a release exactly when it was published",
         )
         require(self.result != "skipped" or not self.gate_metrics, "a skipped step reached no gate")
+        require(
+            (self.metrics_from is None) == (self.result == "skipped"),
+            "a step says whose run its gate metrics come from exactly when it was not skipped",
+        )
+        if self.metrics_from is not None:
+            require_choice(self.metrics_from, get_args(MetricsSource), "StepRecord.metrics_from")
         require(all(math.isfinite(value) for value in self.gate_metrics.values()), "gate metrics must be finite")
 
 

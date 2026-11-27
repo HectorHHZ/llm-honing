@@ -25,12 +25,13 @@ import re
 import shutil
 import tarfile
 from collections import Counter
+from collections.abc import Sequence
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
 
-from honing.backends.tank.traces import OUTPUTS, TankTraceSource, load_run
+from honing.backends.tank.traces import OUTPUTS, UNNAMED_SHELLS, TankTraceSource, load_run
 from honing.core import (
     ChatMessage,
     ContractError,
@@ -230,16 +231,28 @@ def test_the_hit_is_the_shell_the_kill_names_even_when_later_shots_were_fired(ru
 
 
 @pytest.mark.unit
-def test_a_kill_by_the_agents_shell_that_names_no_shell_is_refused(tmp_path: Path, runs: dict[str, Path]) -> None:
-    run = _copy(tmp_path, runs[KILL])
+@pytest.mark.parametrize(
+    ("name", "key_events"), [(KILL, {"opponent destroyed": 1}), (DESTROYED, {"agent self-hit": 1})]
+)
+def test_a_round_recorded_before_the_engine_named_shells_loads_with_no_shot_marked_missed(
+    tmp_path: Path, runs: dict[str, Path], name: str, key_events: dict[str, int]
+) -> None:
+    # A win by a hit, and the #198 review's case: s3114's death rewritten as a self-hit. Such rounds name no
+    # shell, so which shot hit is unknown.
+    run = _copy(tmp_path, runs[name])
     events = _lines(run / "events.jsonl")
     for event in events:
         event.pop("shell", None)
+        if name == DESTROYED and event["type"] == "kill":
+            event.update(player=event["victim"], self=True)
     (run / "events.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events))
     _rehash(run)
 
-    with pytest.raises(ContractError, match="names no shell"):
-        load_run(run)
+    traces = load_run(run)
+
+    assert Counter(event.label for trace in traces for event in trace.events if event.label) == key_events
+    assert all(trace.outcome.endswith(f". {UNNAMED_SHELLS}") for trace in traces)
+    assert f"Outcome: {traces[0].outcome}." in render_traces(traces)
 
 
 @pytest.mark.unit
@@ -398,8 +411,10 @@ def test_over_the_cap_missed_shots_leave_first_then_state_fields_then_the_text_i
     # and the death at 6.000 s opens its window at decision 38, the first asked from 4.000 s.
     assert _windows(full) == [list(range(0, 32)), list(range(38, 58))]
     assert traces[37].time_seconds < 4.0 <= traces[38].time_seconds
-    # Every missed shot's decision leaves before the death's, and the death's window loses its earliest first.
-    assert sorted(_blocks(default)) == [*range(53, 58)]
+    # Every missed shot's decision leaves before the death's, and the death's window loses its earliest first. At the
+    # default cap the rest reach 1.3 s before the death, longer than a shell's shortest flight of 1.1 s.
+    assert sorted(_blocks(default)) == [*range(45, 58)]
+    assert 6.0 - traces[45].time_seconds > 1.1
     # The motion asked with the weapon decision the death followed is the last to leave before it.
     assert sorted(_blocks(two)) == [56, 57] and traces[56].time_seconds == traces[57].time_seconds
     assert sorted(_blocks(deaths_only)) == [57]
@@ -434,6 +449,19 @@ def test_a_later_decision_lists_what_changed_and_what_is_gone_since_the_one_show
     assert "  state, 1 of 1 field changed:\n    Me at 2.\n  weapon" in blocks[2]
     assert "  state, 0 of 1 field changed\n" in blocks[3]
     assert "  weapon: fire 0.250, hold 0.750; chose hold" in blocks[3]
+
+
+@pytest.mark.unit
+def test_a_new_field_replaces_the_old_one_with_its_name_that_it_starts_most_like() -> None:
+    # The #198 review's case: two enemies share the name "Enemy", and only the second is left.
+    traces = [_trace(0, "Enemy 1 at 3. Enemy 2 at 7."), _trace(1, "Enemy 2 at 8.")]
+    later = _blocks(render_traces(traces, before_seconds=3.0))[1]
+    assert "  state, 1 of 1 field changed, 1 gone:\n    Enemy 2 at 8.\n    gone: Enemy 1 at 3.\n" in later
+
+    # On a tie the earliest old field is replaced, and a field of another name never is.
+    traces = [_trace(0, "Enemy 1 at 3. Enemy 2 at 3. Me at 1."), _trace(1, "Enemy 9 at 3. Me at 1.")]
+    later = _blocks(render_traces(traces, before_seconds=3.0))[1]
+    assert "  state, 1 of 2 fields changed, 1 gone:\n    Enemy 9 at 3.\n    gone: Enemy 2 at 3.\n" in later
 
 
 @pytest.mark.unit
@@ -612,6 +640,67 @@ def test_meta_harness_writes_each_search_episodes_rendered_decisions_for_the_pro
     for folder, task in zip(folders, tasks, strict=True):
         unavailable = (tmp_path / "again/traces/seed" / folder / "decisions.unavailable").read_text(encoding="utf-8")
         assert unavailable == f"{archive.get('seed').traces[task.task_id].decisions}\n"
+
+
+@pytest.mark.unit
+def test_both_methods_render_with_the_window_and_cap_their_config_sets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The defaults suit a tank round, so a game with another clock sets the window in the method's config (#211)."""
+    pytest.importorskip("gepa", reason="requires the optional 'gepa' extra")
+    from honing.harness.methods import gepa
+    from honing.harness.methods.meta_harness import method as meta_harness
+
+    settings = {"max_tokens": 900, "before_seconds": 6.0, "after_seconds": 1.5}
+    calls: list[dict[str, object]] = []
+
+    def spy(traces: Sequence[DecisionTrace], **kwargs: object) -> str:
+        calls.append(kwargs)
+        return render_traces(traces, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(gepa.method, "render_traces", spy)
+    monkeypatch.setattr(meta_harness, "render_traces", spy)
+    world = FakeWorld()
+    tasks = (Task(task_id="t0", prompt="Add."),)
+    config = gepa.GEPAConfig(
+        max_metric_calls=100,
+        minibatch_size=1,
+        trace_max_tokens=900,
+        trace_before_seconds=6.0,
+        trace_after_seconds=1.5,
+    )
+    methods = [
+        gepa.GEPAMethod(FakeChatModel(["```\nSolve it.\n```"]), config, ("v0",), traces=FakeTraceSource()),
+        MetaHarnessMethod(
+            FakeProposerAgent(),
+            tmp_path / "mh",
+            traces=FakeTraceSource(),
+            trace_max_tokens=900,
+            trace_before_seconds=6.0,
+            trace_after_seconds=1.5,
+        ),
+    ]
+    for method in methods:
+        calls.clear()
+        method.propose(
+            EvolveContext(
+                current=SEED_HARNESS,
+                policy=_policy(world),
+                tasks=tasks,
+                records=(),
+                state=method.initial_state(SEED_HARNESS),
+                runner=FakeEpisodeRunner(world),
+                grader=FakeTaskGrader(),
+                episode_budget=100,
+            )
+        )
+        assert calls and all(call == settings for call in calls)
+
+    for seconds in (-0.1, math.inf, math.nan):
+        with pytest.raises(ContractError, match="finite and >= 0"):
+            gepa.GEPAConfig(max_metric_calls=1, trace_before_seconds=seconds)
+        with pytest.raises(ContractError, match="finite and >= 0"):
+            MetaHarnessMethod(FakeProposerAgent(), tmp_path / "bad", trace_after_seconds=seconds)
 
 
 @pytest.mark.unit

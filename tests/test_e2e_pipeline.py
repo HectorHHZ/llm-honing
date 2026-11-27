@@ -13,6 +13,7 @@ import json
 import os
 import signal
 import sys
+import warnings
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ from honing.core import (
     ProposeResult,
     RunnerSupport,
     Task,
+    method_states,
 )
 from honing.e2e import (
     WorkspaceDeliveryProbe,
@@ -150,7 +152,8 @@ def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_the
         expect=[],
     )
 
-    pipeline = build(config, REPO, tmp_path / "out")
+    with pytest.warns(UserWarning, match=r"so the schedule's moves \(harness\) are not run"):
+        pipeline = build(config, REPO, tmp_path / "out")
     summary = run(pipeline)
 
     # The rollback runs after one move, as in the schedule. The scheduler then goes on until it stops.
@@ -175,6 +178,18 @@ def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_the
 
 
 @pytest.mark.unit
+def test_a_scheduler_without_move_entries_in_the_schedule_warns_nothing(tmp_path: Path) -> None:
+    config = _config(**_with_scheduler(["train"]), schedule=[{"kind": "rollback", "to": "r0000"}], expect=[])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pipeline = build(config, REPO, tmp_path / "out")
+
+    assert isinstance(pipeline.scheduler, HistoryScheduler)
+
+
+@pytest.mark.unit
+@pytest.mark.filterwarnings("ignore:the 'history' scheduler chooses every move:UserWarning")
 def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -> None:
     config = _config(
         **_with_scheduler(["train"]),
@@ -190,6 +205,7 @@ def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -
 
 
 @pytest.mark.unit
+@pytest.mark.filterwarnings("ignore:the 'history' scheduler chooses every move:UserWarning")
 def test_a_run_that_ran_another_number_of_steps_than_expected_fails(tmp_path: Path) -> None:
     config = _config(**_with_scheduler(["train", "train"]), schedule=[{"kind": "train"}], expect=["published"])
 
@@ -659,3 +675,69 @@ def test_the_check_command_runs_on_a_config(tmp_path: Path, capsys: pytest.Captu
     code = check_main(["--config", str(ALL_PLANES), "--root", str(REPO), "--work-dir", str(tmp_path / "check")])
     assert code == 0
     assert "runner check: ok" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- several trainers and methods in one config
+
+
+def _levers(**changes: Any) -> dict[str, Any]:
+    """The Meta-Harness dry run with a second method and a second trainer the schedule can name."""
+    config = json.loads((REPO / "configs/e2e/meta_harness_dry_run.json").read_text())
+    config["components"]["methods"] = [{"factory": "tests.fakes.pipeline:method"}]
+    config["components"]["trainers"] = {"strong": {"factory": "tests.fakes.pipeline:trainer", "args": {"gain": 0.2}}}
+    config["schedule"] = [
+        {"kind": "harness", "label": "verify"},
+        {"kind": "train", "algorithm": "sft", "steps": 10, "trainer": "strong"},
+        {"kind": "harness", "method": "append_instruction"},
+    ]
+    config["expect"] = ["published", "published", "skipped"]
+    return {**config, **changes}
+
+
+@pytest.mark.unit
+def test_a_pipeline_step_names_one_of_several_trainers_or_methods(tmp_path: Path) -> None:
+    pipeline = build(_levers(), REPO, tmp_path / "out")
+
+    summary = run(pipeline)
+
+    assert [step["result"] for step in summary["steps"]] == ["published", "published", "skipped"]
+    assert summary["failures"] == []
+    records = [json.loads(line) for line in pipeline.campaign.chain.record_path.read_text().splitlines()]
+    assert [record["op"] for record in records] == ["publish", "publish", "publish", "skip"]
+    assert (records[3]["method"], records[3]["reason"]) == (
+        "append_instruction",
+        "append_instruction proposed nothing",
+    )
+    states = method_states(records[3]["method_state"])
+    assert sorted(states) == ["append_instruction", "meta_harness"]
+    assert states["append_instruction"]["attempts"] == 1
+    # The named trainer's gain is twice the default's, and it is the one that trained.
+    trained = pipeline.campaign.chain.get("r0002").master.checkpoint.checksum
+    before = pipeline.campaign.chain.get("r0001").master.checkpoint.checksum
+    quality = pipeline.context.shared["world"].quality  # type: ignore[attr-defined]
+    assert quality[trained] == pytest.approx(quality[before] + 0.2)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("schedule", "message"),
+    [
+        ([{"kind": "train", "trainer": "weak"}], "trainer 'weak', but the campaign has 'strong'"),
+        ([{"kind": "prune", "trainer": "weak"}], "trainer 'weak'"),
+        ([{"kind": "harness", "method": "gepa"}], "method 'gepa', but the campaign runs 'meta_harness', 'append_inst"),
+    ],
+)
+def test_a_step_for_a_trainer_or_method_the_config_does_not_build_is_refused_before_anything_runs(
+    tmp_path: Path, schedule: list[dict[str, Any]], message: str
+) -> None:
+    with pytest.raises(ContractError, match=message):
+        build(_levers(schedule=schedule, expect=[]), REPO, tmp_path / "out")
+
+
+@pytest.mark.unit
+def test_two_entries_for_one_method_are_refused(tmp_path: Path) -> None:
+    config = _levers()
+    config["components"]["methods"] = [{"factory": "tests.fakes.pipeline:method"}] * 2
+
+    with pytest.raises(ContractError, match="names each harness method once"):
+        build(config, REPO, tmp_path / "out")

@@ -1,0 +1,20 @@
+{
+ "id": 22,
+ "parts": {
+  "essential": [
+   "You guide a knight through a 2D side-scrolling platformer level. Reach the exit of the level alive. Levels like this lead to the right. Spikes kill at once. Enemies hurt on touch; three sword strikes kill one. You choose a behaviour; reflexes carry it out and stop when something changes.",
+   "Situation: Health 5 of 5. You stand on a stone floor. To the right the floor continues as far as you can see. To the left a wall blocks the way after 2 steps. A wall on the left can be climbed with wall jumps; what is above is not known. No enemy in sight."
+  ]
+ },
+ "questions": {
+  "action": {
+   "type": "choice",
+   "instructions": "Choose the behaviour that makes progress toward the exit while keeping the knight alive.",
+   "criteria": {
+    "advance_right": "Go right toward the exit: walk, jump to the next platform. Now: the way is open.",
+    "retreat_left": "Step back left, up to 3 steps, away from the exit.",
+    "wait": "Stand still for one second and watch."
+   }
+  }
+ }
+}

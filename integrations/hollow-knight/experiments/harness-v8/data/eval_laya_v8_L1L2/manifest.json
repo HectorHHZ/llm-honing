@@ -1,0 +1,36 @@
+{
+ "harness": "v8",
+ "policy": "laya",
+ "menu_order": "harness",
+ "max_decisions": 110,
+ "capture": true,
+ "max_frames": 60000,
+ "seed": 0,
+ "scene": "Level1",
+ "goal": "Level2:124",
+ "through": true,
+ "started": "2026-11-18 04:03:28 +0000",
+ "model_health": {
+  "ready": true,
+  "metadata": {
+   "repo": "convaiinnovations/laya-typed-decisions",
+   "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+   "path": "huggingface-cache/models--convaiinnovations--laya-typed-decisions/snapshots/1a793eb568e6718f15941d08f85432581df534e3",
+   "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+   "layaVersion": "0.3.20",
+   "torch": "2.8.0+cu128",
+   "transformers": "4.56.2",
+   "device": "cpu",
+   "dtype": "torch.float32",
+   "threads": 4,
+   "python": "3.11.15",
+   "maxLen": 2048,
+   "headMaxLen": 512,
+   "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+   "backend": "honing.backends.jev.laya.LayaDecisionModel",
+   "launcher": "isolated_cpu",
+   "training_performed": false
+  },
+  "maxBranches": 16
+ }
+}
