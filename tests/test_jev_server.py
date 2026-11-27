@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import http.client
 import json
+import math
 import threading
 import time
 import urllib.error
@@ -14,7 +16,7 @@ from typing import ClassVar
 import pytest
 
 from honing.backends.jev import DecisionModel, JevEndpoints
-from honing.backends.jev.server import DecisionServer, RequestError, parse_decide
+from honing.backends.jev.server import MAX_BODY_BYTES, MAX_BRANCHES, DecisionServer, RequestError, parse_decide
 from honing.core import ContractError, PolicyEndpoint, PolicyRef
 from tests.fakes.model import FakeModelSource, FakeWorld
 
@@ -366,3 +368,127 @@ def test_a_model_s_own_batch_and_split_calls_are_used(split: bool) -> None:
         assert model.batches == [3, 1] and serving[0] not in model.prepared_on
     else:
         assert model.batches == [3] and not model.prepared_on
+
+
+def post_raw(
+    url: str, body: bytes, length: str | None = None, path: str = "/v1/decide"
+) -> tuple[int, dict[str, object]]:
+    """POST ``body`` as it is, with ``length`` as the Content-Length header ("omit" sends none) when given.
+
+    The response must be strict JSON with a matching Content-Type and Content-Length.
+    """
+    host, port = url.removeprefix("http://").split(":")
+    connection = http.client.HTTPConnection(host, int(port), timeout=10)
+    try:
+        connection.putrequest("POST", path, skip_accept_encoding=True)
+        if length != "omit":
+            connection.putheader("Content-Length", str(len(body)) if length is None else length)
+        connection.endheaders(body)
+        response = connection.getresponse()
+        data = response.read()
+        assert response.getheader("Content-Type") == "application/json"
+        assert response.getheader("Content-Length") == str(len(data))
+        return response.status, json.loads(data, parse_constant=lambda name: pytest.fail(f"response has {name}"))
+    finally:
+        connection.close()
+
+
+# Found by tests/test_jev_server_fuzz.py: each of these used to escape parse_decide or _send, so the server
+# dropped the connection instead of answering, the last one after running the model.
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("body", "length", "message"),
+    [
+        (b"\xff", None, "not JSON"),
+        (b"[" * 100_000, None, "not JSON"),
+        (b'{"id": 1e999, "parts": {}, "questions": {"q": {}}}', None, "out of range"),
+        (b'{"id": NaN, "parts": {}, "questions": {"q": {}}}', None, "NaN, which is not JSON"),
+        (b"{}", "two", "body must be 1 to"),
+        (b"", "omit", "body must be 1 to"),
+    ],
+)
+def test_a_body_the_parser_cannot_carry_is_a_400(serve, body, length, message) -> None:  # type: ignore[no-untyped-def]
+    model = FakeDecisionModel()
+    url = serve(model)
+    status, reply = post_raw(url, body, length)
+    assert status == 400 and message in str(reply["error"])
+    assert model.peak == 0
+
+
+# Found by mutation testing with ``mutmut``: each test below kills mutants that the tests above let survive.
+@pytest.mark.unit
+def test_exactly_the_branch_limit_is_answered_and_one_more_refused(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(FakeDecisionModel())
+    request = {"parts": {}, "questions": QUESTION}
+    status, body = call(url, "/v1/decide", {**request, "branches": {str(i): request for i in range(MAX_BRANCHES)}})
+    assert status == 200 and len(body["branches"]) == MAX_BRANCHES  # type: ignore[arg-type]
+    status, body = call(url, "/v1/decide", {**request, "branches": {str(i): request for i in range(MAX_BRANCHES + 1)}})
+    assert status == 400 and "at most 16" in str(body["error"])
+
+
+@pytest.mark.unit
+def test_a_body_at_the_size_limit_is_read_and_one_byte_more_refused(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(FakeDecisionModel())
+    request = json.dumps({"parts": {}, "questions": QUESTION}).encode()
+    at_limit = request + b" " * (MAX_BODY_BYTES - len(request))
+    assert post_raw(url, at_limit)[0] == 200
+    status, body = post_raw(url, b"{}", str(MAX_BODY_BYTES + 1))
+    assert status == 400 and "body must be 1 to" in str(body["error"])
+
+
+@pytest.mark.unit
+def test_a_body_that_is_not_an_object_and_an_unknown_field_are_named(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(FakeDecisionModel())
+    assert call(url, "/v1/decide", [1])[1]["error"] == "body must be a JSON object"
+    reply = call(url, "/v1/decide", {"parts": {}, "questions": QUESTION, "b": 1, "a": 2})[1]
+    assert reply["error"] == "unknown fields: a, b"
+    assert call(url, "/v1/other")[1]["error"] == "no route /v1/other"
+    assert post_raw(url, b"{}", path="/v1/other") == (404, {"error": "no route /v1/other"})
+
+
+class NaNModel(FakeDecisionModel):
+    def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
+        return {"answers": {key: {"choice": "power", "probabilities": {"power": math.nan}} for key in questions}}
+
+
+@pytest.mark.unit
+def test_an_answer_strict_json_cannot_write_is_a_500(serve) -> None:  # type: ignore[no-untyped-def]
+    status, body = post_raw(serve(NaNModel()), json.dumps({"parts": {}, "questions": QUESTION}).encode())
+    assert status == 500 and "the model's answer is not JSON" in str(body["error"])
+
+
+class ConcurrentModel(FakeDecisionModel):
+    """An engine that batches concurrent calls itself, as SGLang does."""
+
+    concurrent = True
+
+    def __init__(self) -> None:
+        super().__init__(delay=0.1)
+        self.threads: set[int] = set()
+        self.seen: list[tuple[object, object]] = []
+
+    def predict(self, parts: Mapping[str, object], questions: Mapping[str, object]) -> Mapping[str, object]:
+        self.threads.add(threading.get_ident())
+        self.seen.append((dict(parts), dict(questions)))
+        return super().predict(parts, questions)
+
+
+@pytest.mark.unit
+def test_a_concurrent_model_is_called_on_the_request_threads_at_once(serve) -> None:  # type: ignore[no-untyped-def]
+    model = ConcurrentModel()
+    url = serve(model)
+    request = {"parts": {"essential": ["tick 1"]}, "questions": QUESTION}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        replies = list(pool.map(lambda _: call(url, "/v1/decide", request), range(4)))
+    assert [status for status, _ in replies] == [200] * 4
+    assert model.peak > 1 and len(model.threads) > 1
+    assert model.seen == [(request["parts"], request["questions"])] * 4
+
+
+@pytest.mark.unit
+def test_one_branch_is_answered_through_predict_many(serve) -> None:  # type: ignore[no-untyped-def]
+    model = SplitModel(split=False)
+    url = serve(model)
+    request = {"parts": {}, "questions": QUESTION}
+    assert call(url, "/v1/decide", {**request, "branches": {"x": request}})[0] == 200
+    assert model.batches == [2]
