@@ -285,7 +285,7 @@ def test_a_grpo_job_returns_new_hf_weights_with_a_manifest(tmp_path: Path) -> No
     assert "slime_opd_reverse_kl" not in result.metrics
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_job_charges_its_time_with_the_gpus_held_for_every_gpu(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

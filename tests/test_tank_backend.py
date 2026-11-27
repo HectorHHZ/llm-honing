@@ -603,7 +603,7 @@ def test_demonstrations_stop_when_the_fresh_seeds_run_out_and_refuse_a_seed_the_
         TankDemonstrationProvider(runner, tasks, SEED, fresh_seeds=(900_001, 2001))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_attempt_tags_its_decisions_with_a_new_episode_and_its_task_harness_and_policy(tmp_path: Path) -> None:
     # The decision server records in Reef under ids derived from the episode tag (#223), so a retried task
     # must not reuse one. The runner is given no release, so it sets no release tag.

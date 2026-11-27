@@ -43,7 +43,7 @@ def test_a_stronger_candidate_wins_every_game_in_both_seats(tmp_path: Path) -> N
     assert result.candidate_scores == (1.0,) * 4 and result.incumbent_scores == (0.0,) * 4
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_game_is_charged_as_one_gate_episode(tmp_path: Path) -> None:
     candidate, incumbent = pair()
     meter = CostMeter(None)

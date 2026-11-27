@@ -32,7 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/reef"))
 from import_tank_runs import main as import_runs
 
 REEF = os.environ.get("HONING_REEF_BIN")
-pytestmark = pytest.mark.skipif(not REEF, reason="HONING_REEF_BIN names no Reef executable")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not REEF, reason="HONING_REEF_BIN names no Reef executable"),
+]
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = sorted((ROOT / "tests" / "fixtures" / "decision_traces").glob("*/decisions.jsonl"))

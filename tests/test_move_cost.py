@@ -421,7 +421,7 @@ def _all_planes(tmp_path: Path, exit_code: int = 0, **changes: Any) -> Path:
     return work
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_move_of_the_all_planes_run_has_a_cost_that_sums_to_the_summary(tmp_path: Path) -> None:
     work = _all_planes(tmp_path)
 
@@ -441,7 +441,7 @@ def test_every_move_of_the_all_planes_run_has_a_cost_that_sums_to_the_summary(tm
     assert problems(work, []) == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_budget_limited_pipeline_stops_and_still_checks_out(tmp_path: Path) -> None:
     # The config's expect lists 9 steps and ends on a rollback. A stop at the limit cuts both short, and is no failure.
     work = _all_planes(tmp_path, budget={"unit": "usd", "limit": 1.0, "gpu_hour_usd": 3600.0})
@@ -463,7 +463,7 @@ def test_a_budget_limited_pipeline_stops_and_still_checks_out(tmp_path: Path) ->
     assert problems(work, []) == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_no_rollback_runs_after_the_budget_stops_the_pipeline(tmp_path: Path) -> None:
     # The first train move spends the whole budget, so the rollback after it, which costs nothing, does not run.
     schedule = [{"kind": "train", "algorithm": "sft", "steps": 10}, {"kind": "rollback", "to": "r0000"}]
@@ -480,7 +480,7 @@ def test_no_rollback_runs_after_the_budget_stops_the_pipeline(tmp_path: Path) ->
     assert [line["op"] for line in _records(work)] == ["publish", "publish"]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_pipeline_whose_spend_cannot_be_priced_stops_writes_its_summary_and_fails(tmp_path: Path) -> None:
     config = json.loads(ALL_PLANES.read_text())
     trainer = {**config["components"]["trainer"], "args": {"gain": 0.1, "gpu_seconds_per_step": None}}
@@ -542,7 +542,7 @@ def _rewrite(work: Path, change_record: Any = None, change_summary: Any = None) 
     (work / "summary.json").write_text(json.dumps(summary))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_checker_reads_a_run_written_before_costs_and_catches_costs_that_do_not_add_up(tmp_path: Path) -> None:
     work = _all_planes(tmp_path)
 
@@ -729,7 +729,7 @@ def test_only_a_stop_right_after_the_first_move_to_reach_the_limit_counts_as_a_s
     assert not _stopped_at_limit(budget, report, [])
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_checker_accepts_lines_with_scheduler_state_and_cost_and_old_lines_with_neither(tmp_path: Path) -> None:
     work = _all_planes(tmp_path)
     lines = _records(work)
@@ -979,7 +979,7 @@ def test_the_gepa_live_policy_is_a_hosted_api_still_priced_behind_metered_endpoi
     assert live_options(config, MeteredPolicyEndpoints(hosted)) == plain  # type: ignore[arg-type]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_pipeline_endpoints_component_is_metered(tmp_path: Path) -> None:
     context = PipelineContext(root=REPO, work_dir=tmp_path)
     built = build_component({"factory": "tests.fakes.pipeline:endpoints"}, context, "endpoints", PolicyEndpoints)
