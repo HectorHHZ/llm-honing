@@ -1,4 +1,4 @@
-"""The merge rule: the review status, and the ruleset that requires it with every CI job."""
+"""The merge rule: the review status, and the ruleset that requires it with every CI job and the GPU check."""
 
 from __future__ import annotations
 
@@ -16,54 +16,53 @@ from review_gate import LEAD, Event, changes, decide
 T0 = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc)
 
 
-def at(days: float) -> dt.datetime:
-    return T0 + dt.timedelta(days=days)
-
-
-def ask(days: float) -> Event:
-    return Event("review_requested", LEAD, at(days))
-
-
-def review(who: str, state: str, days: float) -> Event:
-    return Event("reviewed", who, at(days), state)
+def review(who: str, state: str, days: float, commit: str = "") -> Event:
+    return Event("reviewed", who, T0 + dt.timedelta(days=days), state, commit)
 
 
 @pytest.mark.unit
-def test_one_approval_passes() -> None:
-    assert decide(LEAD, [ask(0), review("a", "approved", 1)], at(1)) == ("success", "Approved by a")
-    events = [ask(0), review("a", "approved", 1), review("b", "approved", 2)]
-    assert decide(LEAD, events, at(2)) == ("success", "Approved by a and 1 more")
+def test_the_lead_reviewers_own_pull_request_passes_without_a_review() -> None:
+    assert decide(LEAD, []) == ("success", "The lead reviewer's own pull request")
+    assert decide(LEAD, [review(LEAD, "approved", 1)])[0] == "success"
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "events",
     [
-        [ask(0)],
-        [review(LEAD, "approved", 2)],  # the author's own does not count
-        [review("ci[bot]", "approved", 2)],  # nor a bot's
-        [review("a", "approved", 1), review("a", "changes_requested", 2)],  # a reviewer's latest verdict counts
-        [review("a", "approved", 1), review("c", "changes_requested", 3)],
-        [review("a", "approved", 1), review("a", "dismissed", 3)],  # an admin dismissed it
+        [],
+        [review("a", "approved", 1)],  # anyone but the lead reviewer
+        [review("ci[bot]", "approved", 1)],
+        [review(LEAD, "approved", 1), review(LEAD, "changes_requested", 2)],  # the lead's latest verdict counts
+        [review(LEAD, "approved", 1), review(LEAD, "dismissed", 2)],  # an admin dismissed it
+        [review(LEAD, "approved", 1), review("a", "changes_requested", 2)],
     ],
 )
-def test_no_approval_or_a_change_request_do_not(events: list[Event]) -> None:
-    assert decide(LEAD, events, at(3))[0] == "pending"
+def test_anyone_elses_pull_request_needs_the_lead_reviewers_approval(events: list[Event]) -> None:
+    assert decide("lucas", events)[0] == "pending"
 
 
 @pytest.mark.unit
-def test_an_approval_counts_while_the_diff_is_the_one_approved() -> None:
-    def approve(who: str, days: float, commit: str) -> Event:
-        return Event("reviewed", who, at(days), "approved", commit)
-
-    events = [approve("a", 1, "old")]
-    assert decide(LEAD, events, at(2), current=lambda commit: True)[0] == "success"  # main merged in
-    state, description = decide(LEAD, events, at(2), current=lambda commit: commit == "head")
-    assert state == "pending" and description.startswith("0/1 approvals")  # a push changed the diff
+def test_the_lead_reviewers_approval_passes_anyone_elses_pull_request() -> None:
+    assert decide("lucas", [review(LEAD, "approved", 1)]) == ("success", f"Approved by {LEAD}")
+    later = [review(LEAD, "changes_requested", 1), review(LEAD, "approved", 2)]
+    assert decide("lucas", later)[0] == "success"
+    kept = [review(LEAD, "approved", 1), review(LEAD, "commented", 2)]  # a comment keeps the verdict
+    assert decide("lucas", kept)[0] == "success"
 
 
 @pytest.mark.unit
-def test_a_merge_from_main_leaves_the_diff_the_same() -> None:
+def test_a_review_counts_while_the_diff_is_the_one_reviewed() -> None:
+    approved = [review(LEAD, "approved", 1, "old")]
+    assert decide("lucas", approved, current=lambda commit: True)[0] == "success"  # rebased onto main
+    assert decide("lucas", approved, current=lambda commit: commit == "head")[0] == "pending"  # the diff changed
+    blocked = [review("a", "changes_requested", 1, "old")]
+    assert decide(LEAD, blocked, current=lambda commit: True) == ("pending", "Changes requested by a")
+    assert decide(LEAD, blocked, current=lambda commit: commit == "head")[0] == "success"  # answered by a push
+
+
+@pytest.mark.unit
+def test_a_rebase_onto_main_leaves_the_diff_the_same() -> None:
     before = [{"filename": "a.py", "status": "modified", "patch": "@@ -10,3 +10,3 @@ def f\n x = 1\n-y = 2\n+y = 3"}]
     after = [{"filename": "a.py", "status": "modified", "patch": "@@ -40,3 +40,3 @@ def f\n x = 0\n-y = 2\n+y = 3"}]
     pushed = [{"filename": "a.py", "status": "modified", "patch": "@@ -40,3 +40,3 @@ def f\n x = 0\n-y = 2\n+y = 4"}]
@@ -73,70 +72,11 @@ def test_a_merge_from_main_leaves_the_diff_the_same() -> None:
 
 
 @pytest.mark.unit
-def test_anyone_elses_pull_request_needs_the_lead_reviewers_approval() -> None:
-    assert decide("lucas", [review("a", "approved", 1)], at(1)) == ("pending", f"Needs @{LEAD}'s approval")
-    assert decide("lucas", [ask(0)], at(30))[0] == "pending"  # silence does not stand in for it
-    assert decide("lucas", [review(LEAD, "approved", 1)], at(1)) == ("success", f"Approved by {LEAD}")
-    blocked = [review(LEAD, "approved", 1), review("a", "changes_requested", 2)]
-    assert decide("lucas", blocked, at(2))[0] == "pending"
-    stale = [Event("reviewed", LEAD, at(1), "approved", "old")]
-    assert decide("lucas", stale, at(1), current=lambda commit: commit == "head")[0] == "pending"
-
-
-@pytest.mark.unit
-def test_a_later_approval_replaces_the_same_reviewers_change_request() -> None:
-    events = [review("a", "changes_requested", 1), review("a", "approved", 2), review("b", "approved", 3)]
-    assert decide(LEAD, events, at(3))[0] == "success"
-
-
-@pytest.mark.unit
-def test_a_comment_only_review_keeps_the_reviewers_earlier_verdict() -> None:
-    events = [review("a", "approved", 1), review("a", "commented", 2), review("b", "approved", 3)]
-    assert decide(LEAD, events, at(3))[0] == "success"
-
-
-@pytest.mark.unit
-def test_five_silent_days_after_the_ask_pass() -> None:
-    assert decide(LEAD, [ask(0)], at(5) - dt.timedelta(seconds=1))[0] == "pending"
-    assert decide(LEAD, [ask(0)], at(5)) == ("success", "No reply from a reviewer in the 5 days since 2026-11-01")
-
-
-@pytest.mark.unit
-def test_the_clock_starts_at_the_first_ask_after_the_reviewers_last_word() -> None:
-    events = [ask(0), review("a", "changes_requested", 1), Event("commented", LEAD, at(2)), ask(4)]
-    assert decide(LEAD, events, at(6))[0] == "pending"
-    assert decide(LEAD, events, at(7))[0] == "success"
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("reply", [review("a", "commented", 3), Event("commented", "someone", at(3))])
-def test_any_reply_stops_the_clock_until_the_author_asks_again(reply: Event) -> None:
-    state, description = decide(LEAD, [ask(0), reply], at(30))
-    assert state == "pending" and "asking again" in description
-    assert decide(LEAD, [ask(0), reply, Event("commented", LEAD, at(31))], at(36))[0] == "success"
-
-
-@pytest.mark.unit
-def test_a_bot_comment_does_not_stop_the_clock() -> None:
-    assert decide(LEAD, [ask(0), Event("commented", "codecov[bot]", at(1))], at(5))[0] == "success"
-
-
-@pytest.mark.unit
-def test_without_an_ask_nothing_passes_on_silence() -> None:
-    assert decide(LEAD, [], at(100))[0] == "pending"
-
-
-@pytest.mark.unit
 def test_every_description_fits_a_commit_status() -> None:
     longest = [f"{i}".rjust(39, "x") for i in range(5)]  # a GitHub login has at most 39 characters
-    cases = [
-        [review(who, "approved", 1) for who in longest],
-        [review(who, "changes_requested", 1) for who in longest],
-        [*(review(who, "changes_requested", 1) for who in longest), Event("commented", LEAD, at(2))],
-        [ask(0)],
-    ]
-    for events in cases:
-        assert len(decide(LEAD, events, at(3))[1]) <= 140
+    for author in (LEAD, "y" * 39):
+        for events in ([review(who, "changes_requested", 1) for who in longest], [review(LEAD, "approved", 1)], []):
+            assert len(decide(author, events)[1]) <= 140
 
 
 def ci_jobs(workflow: str) -> set[str]:
@@ -150,10 +90,10 @@ def ci_jobs(workflow: str) -> set[str]:
 def test_the_ruleset_requires_the_review_status_and_every_ci_job(repo_root: Path) -> None:
     ruleset = json.loads((repo_root / ".github" / "rulesets" / "main.json").read_text())
     rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
-    # Approvals are counted by the review status, which also knows the five-day rule. A native count would block it.
+    # The review status knows the lead reviewer. A native approval count would block the lead's own pull requests.
     assert rules["pull_request"]["required_approving_review_count"] == 0
     # The review status drops an approval when the diff changes. A native dismissal would drop it on every
-    # update from main, which the strict up-to-date rule makes before each merge.
+    # rebase onto main, which the strict up-to-date rule makes before each merge.
     assert not rules["pull_request"]["dismiss_stale_reviews_on_push"] and ruleset["bypass_actors"] == []
     assert rules["required_status_checks"]["strict_required_status_checks_policy"]
     required = {check["context"] for check in rules["required_status_checks"]["required_status_checks"]}
@@ -161,3 +101,5 @@ def test_the_ruleset_requires_the_review_status_and_every_ci_job(repo_root: Path
     for job in ci_jobs((repo_root / ".github" / "workflows" / "ci.yml").read_text()):
         matrix = any(name.startswith(f"{job} (") for name in required)  # such as "test (3.12)"
         assert job in required or matrix, f"ci.yml's {job} is not required"
+    # Branches are rebased onto main to update them, and land on main with a merge commit.
+    assert rules["pull_request"]["allowed_merge_methods"] == ["merge"]

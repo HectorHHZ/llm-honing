@@ -1,12 +1,10 @@
 """Set each open pull request's commit status ``review``, the merge rule CONTRIBUTING.md states.
 
-Success when someone other than the author approves and nobody's latest review requests changes, or when
-the author asked for review (a review request or a comment) and five days passed with no review or comment
-from anyone else. A pull request by anyone but the lead reviewer needs the lead reviewer's approval, and
-silence does not stand in for it. Pending otherwise. An approval counts while the pull request's diff is
-the one approved: updating the branch from main keeps it, a push that changes the diff drops it. The
-``review`` workflow runs this on every comment and push, and every 15 minutes, which picks up new reviews
-and lets the five days run out. Usage: ``review_gate.py [--dry-run]`` with GH_TOKEN and GITHUB_REPOSITORY set.
+The lead reviewer's own pull request passes: the lead decides it is ready. Anyone else's passes when the lead
+reviewer approves it. Either way nobody's latest review may request changes on the current diff. A review
+counts while the pull request's diff is the one reviewed: rebasing onto main keeps it, a push that changes the
+diff drops it. The ``review`` workflow runs this on every review, comment and push, and every 15 minutes.
+Usage: ``review_gate.py [--dry-run]`` with GH_TOKEN and GITHUB_REPOSITORY set.
 """
 
 from __future__ import annotations
@@ -19,9 +17,7 @@ import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-APPROVALS = 1
-SILENCE = dt.timedelta(days=5)
-#: The maintainers' lead reviewer: every pull request by someone else needs this approval to merge.
+#: The maintainers' lead reviewer: their own pull requests need no other review, and everyone else's need theirs.
 LEAD = "Xuan-1998"
 
 
@@ -43,7 +39,7 @@ def names(people: list[str]) -> str:
 
 
 def decide(
-    author: str, events: Iterable[Event], now: dt.datetime, current: Callable[[str], bool] = lambda commit: True
+    author: str, events: Iterable[Event], current: Callable[[str], bool] = lambda commit: True
 ) -> tuple[str, str]:
     """The ``review`` status as (state, description) for a pull request by ``author``.
 
@@ -51,28 +47,15 @@ def decide(
     """
     events = sorted((e for e in events if not e.who.endswith("[bot]")), key=lambda e: e.when)
     latest = {e.who: e for e in events if e.kind == "reviewed" and e.who != author and e.state != "commented"}
-    approvers = sorted(who for who, e in latest.items() if e.state == "approved" and current(e.commit))
-    blockers = sorted(who for who, e in latest.items() if e.state == "changes_requested")
-    if author != LEAD and LEAD not in approvers:
-        have = f"Needs @{LEAD}'s approval" + (f", changes requested by {names(blockers)}" if blockers else "")
-        return "pending", have
-    if len(approvers) >= APPROVALS and not blockers:
-        return "success", f"Approved by {names(approvers)}"
-    heard = [e.when for e in events if e.who != author and e.kind in ("reviewed", "commented")]
-    asks = [e.when for e in events if (e.kind == "review_requested" or (e.kind == "commented" and e.who == author))]
-    asks = [when for when in asks if not heard or when > max(heard)]
-    if asks and now - min(asks) >= SILENCE:
-        return "success", f"No reply from a reviewer in the 5 days since {min(asks):%Y-%m-%d}"
-    have = f"{len(approvers)}/{APPROVALS} approvals"
+    blockers = sorted(who for who, e in latest.items() if e.state == "changes_requested" and current(e.commit))
     if blockers:
-        have += f", changes requested by {names(blockers)}"
-    if not asks:
-        return "pending", f"{have}. The author asking again starts the 5 days"
-    until, left = min(asks) + SILENCE, SILENCE - (now - min(asks))
-    return (
-        "pending",
-        f"{have}, or silence until {until:%Y-%m-%d %H:%M} UTC ({left.days}d {left.seconds // 3600}h left)",
-    )
+        return "pending", f"Changes requested by {names(blockers)}"
+    if author == LEAD:
+        return "success", "The lead reviewer's own pull request"
+    lead = latest.get(LEAD)
+    if lead is not None and lead.state == "approved" and current(lead.commit):
+        return "success", f"Approved by {LEAD}"
+    return "pending", f"Needs @{LEAD}'s approval of the current diff"
 
 
 def gh(*args: str) -> object:
@@ -122,7 +105,6 @@ def timeline(repo: str, number: int) -> list[Event]:
 
 def main() -> None:
     repo, dry = os.environ["GITHUB_REPOSITORY"], "--dry-run" in sys.argv
-    now = dt.datetime.now(dt.timezone.utc)
     pulls = gh("api", f"repos/{repo}/pulls?state=open&per_page=100", "--paginate", "--slurp")
     seen: dict[str, object] = {}
     for pull in (p for page in pulls for p in page):  # type: ignore[union-attr]
@@ -133,7 +115,7 @@ def main() -> None:
                 bool(commit) and diff_of(repo, base, commit, seen) == diff_of(repo, base, head, seen)
             )
 
-        state, description = decide(pull["user"]["login"], timeline(repo, pull["number"]), now, current)
+        state, description = decide(pull["user"]["login"], timeline(repo, pull["number"]), current)
         print(f"#{pull['number']} {state}: {description}")
         if not dry:
             gh(

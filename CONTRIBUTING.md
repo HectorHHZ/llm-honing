@@ -149,19 +149,21 @@ Fill in every section of the pull request template. In particular:
 - **AI assistance** names any tool that made a non-trivial contribution.
 
 A pull request merges when every check is green on a branch that is up to date
-with `main` and every review thread is resolved. One of those checks, the
-`review` status, passes in either of two cases:
+with `main` and every review thread is resolved. Two of those checks are the
+`gpu` status (below) and the `review` status, which passes when:
 
-- someone other than the author approves, and nobody's latest review requests
-  changes (for a pull request by anyone but the lead reviewer, @Xuan-1998, that
-  approval must be the lead reviewer's);
-- the author asked for review (a review request, or a comment after the
-  reviewers' last word) and five days passed with no review or comment from
-  anyone else. This applies only to the lead reviewer's own pull requests.
+- the pull request is the lead reviewer's (@Xuan-1998) own: the lead decides it
+  is ready, or
+- the lead reviewer approves it, for a pull request by anyone else.
 
-An approval counts while the pull request's diff is the one approved: updating
-the branch from `main` keeps it, and a push that changes the diff drops it.
-Merges use squash, so the pull request title becomes the commit subject.
+Either way, nobody's latest review may request changes on the current diff. A
+review counts while the pull request's diff is the one reviewed: rebasing onto
+`main` keeps it, and a push that changes the diff drops it.
+
+Update a branch by rebasing it onto `main` (`git rebase origin/main`, or
+"Update branch" with rebase), never by merging `main` into it. A pull request
+lands on `main` with a merge commit, so every commit on the branch reaches
+`main`: give each one a Conventional Commit subject.
 `.github/rulesets/main.json` is the ruleset that enforces this on `main`, so a
 change to these rules is a pull request too. An admin applies it with
 `gh api repos/HectorHHZ/llm-honing/rulesets --method POST --input .github/rulesets/main.json`.
