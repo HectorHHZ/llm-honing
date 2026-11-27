@@ -2,10 +2,11 @@
 
 Success when someone other than the author approves and nobody's latest review requests changes, or when
 the author asked for review (a review request or a comment) and five days passed with no review or comment
-from anyone else. Pending otherwise. An approval counts while the pull request's diff is the one approved:
-updating the branch from main keeps it, a push that changes the diff drops it. The ``review`` workflow runs
-this on every comment and push, and every 15 minutes, which picks up new reviews and lets the five days run
-out. Usage: ``review_gate.py [--dry-run]`` with GH_TOKEN and GITHUB_REPOSITORY set.
+from anyone else. A pull request by anyone but the lead reviewer needs the lead reviewer's approval, and
+silence does not stand in for it. Pending otherwise. An approval counts while the pull request's diff is
+the one approved: updating the branch from main keeps it, a push that changes the diff drops it. The
+``review`` workflow runs this on every comment and push, and every 15 minutes, which picks up new reviews
+and lets the five days run out. Usage: ``review_gate.py [--dry-run]`` with GH_TOKEN and GITHUB_REPOSITORY set.
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ from dataclasses import dataclass
 
 APPROVALS = 1
 SILENCE = dt.timedelta(days=5)
+#: The maintainers' lead reviewer: every pull request by someone else needs this approval to merge.
+LEAD = "Xuan-1998"
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,9 @@ def decide(
     latest = {e.who: e for e in events if e.kind == "reviewed" and e.who != author and e.state != "commented"}
     approvers = sorted(who for who, e in latest.items() if e.state == "approved" and current(e.commit))
     blockers = sorted(who for who, e in latest.items() if e.state == "changes_requested")
+    if author != LEAD and LEAD not in approvers:
+        have = f"Needs @{LEAD}'s approval" + (f", changes requested by {names(blockers)}" if blockers else "")
+        return "pending", have
     if len(approvers) >= APPROVALS and not blockers:
         return "success", f"Approved by {names(approvers)}"
     heard = [e.when for e in events if e.who != author and e.kind in ("reviewed", "commented")]

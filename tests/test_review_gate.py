@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from review_gate import Event, changes, decide
+from review_gate import LEAD, Event, changes, decide
 
 T0 = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc)
 
@@ -21,7 +21,7 @@ def at(days: float) -> dt.datetime:
 
 
 def ask(days: float) -> Event:
-    return Event("review_requested", "author", at(days))
+    return Event("review_requested", LEAD, at(days))
 
 
 def review(who: str, state: str, days: float) -> Event:
@@ -30,9 +30,9 @@ def review(who: str, state: str, days: float) -> Event:
 
 @pytest.mark.unit
 def test_one_approval_passes() -> None:
-    assert decide("author", [ask(0), review("a", "approved", 1)], at(1)) == ("success", "Approved by a")
+    assert decide(LEAD, [ask(0), review("a", "approved", 1)], at(1)) == ("success", "Approved by a")
     events = [ask(0), review("a", "approved", 1), review("b", "approved", 2)]
-    assert decide("author", events, at(2)) == ("success", "Approved by a and 1 more")
+    assert decide(LEAD, events, at(2)) == ("success", "Approved by a and 1 more")
 
 
 @pytest.mark.unit
@@ -40,7 +40,7 @@ def test_one_approval_passes() -> None:
     "events",
     [
         [ask(0)],
-        [review("author", "approved", 2)],  # the author's own does not count
+        [review(LEAD, "approved", 2)],  # the author's own does not count
         [review("ci[bot]", "approved", 2)],  # nor a bot's
         [review("a", "approved", 1), review("a", "changes_requested", 2)],  # a reviewer's latest verdict counts
         [review("a", "approved", 1), review("c", "changes_requested", 3)],
@@ -48,7 +48,7 @@ def test_one_approval_passes() -> None:
     ],
 )
 def test_no_approval_or_a_change_request_do_not(events: list[Event]) -> None:
-    assert decide("author", events, at(3))[0] == "pending"
+    assert decide(LEAD, events, at(3))[0] == "pending"
 
 
 @pytest.mark.unit
@@ -57,8 +57,8 @@ def test_an_approval_counts_while_the_diff_is_the_one_approved() -> None:
         return Event("reviewed", who, at(days), "approved", commit)
 
     events = [approve("a", 1, "old")]
-    assert decide("author", events, at(2), current=lambda commit: True)[0] == "success"  # main merged in
-    state, description = decide("author", events, at(2), current=lambda commit: commit == "head")
+    assert decide(LEAD, events, at(2), current=lambda commit: True)[0] == "success"  # main merged in
+    state, description = decide(LEAD, events, at(2), current=lambda commit: commit == "head")
     assert state == "pending" and description.startswith("0/1 approvals")  # a push changed the diff
 
 
@@ -73,46 +73,57 @@ def test_a_merge_from_main_leaves_the_diff_the_same() -> None:
 
 
 @pytest.mark.unit
+def test_anyone_elses_pull_request_needs_the_lead_reviewers_approval() -> None:
+    assert decide("lucas", [review("a", "approved", 1)], at(1)) == ("pending", f"Needs @{LEAD}'s approval")
+    assert decide("lucas", [ask(0)], at(30))[0] == "pending"  # silence does not stand in for it
+    assert decide("lucas", [review(LEAD, "approved", 1)], at(1)) == ("success", f"Approved by {LEAD}")
+    blocked = [review(LEAD, "approved", 1), review("a", "changes_requested", 2)]
+    assert decide("lucas", blocked, at(2))[0] == "pending"
+    stale = [Event("reviewed", LEAD, at(1), "approved", "old")]
+    assert decide("lucas", stale, at(1), current=lambda commit: commit == "head")[0] == "pending"
+
+
+@pytest.mark.unit
 def test_a_later_approval_replaces_the_same_reviewers_change_request() -> None:
     events = [review("a", "changes_requested", 1), review("a", "approved", 2), review("b", "approved", 3)]
-    assert decide("author", events, at(3))[0] == "success"
+    assert decide(LEAD, events, at(3))[0] == "success"
 
 
 @pytest.mark.unit
 def test_a_comment_only_review_keeps_the_reviewers_earlier_verdict() -> None:
     events = [review("a", "approved", 1), review("a", "commented", 2), review("b", "approved", 3)]
-    assert decide("author", events, at(3))[0] == "success"
+    assert decide(LEAD, events, at(3))[0] == "success"
 
 
 @pytest.mark.unit
 def test_five_silent_days_after_the_ask_pass() -> None:
-    assert decide("author", [ask(0)], at(5) - dt.timedelta(seconds=1))[0] == "pending"
-    assert decide("author", [ask(0)], at(5)) == ("success", "No reply from a reviewer in the 5 days since 2026-11-01")
+    assert decide(LEAD, [ask(0)], at(5) - dt.timedelta(seconds=1))[0] == "pending"
+    assert decide(LEAD, [ask(0)], at(5)) == ("success", "No reply from a reviewer in the 5 days since 2026-11-01")
 
 
 @pytest.mark.unit
 def test_the_clock_starts_at_the_first_ask_after_the_reviewers_last_word() -> None:
-    events = [ask(0), review("a", "changes_requested", 1), Event("commented", "author", at(2)), ask(4)]
-    assert decide("author", events, at(6))[0] == "pending"
-    assert decide("author", events, at(7))[0] == "success"
+    events = [ask(0), review("a", "changes_requested", 1), Event("commented", LEAD, at(2)), ask(4)]
+    assert decide(LEAD, events, at(6))[0] == "pending"
+    assert decide(LEAD, events, at(7))[0] == "success"
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("reply", [review("a", "commented", 3), Event("commented", "someone", at(3))])
 def test_any_reply_stops_the_clock_until_the_author_asks_again(reply: Event) -> None:
-    state, description = decide("author", [ask(0), reply], at(30))
+    state, description = decide(LEAD, [ask(0), reply], at(30))
     assert state == "pending" and "asking again" in description
-    assert decide("author", [ask(0), reply, Event("commented", "author", at(31))], at(36))[0] == "success"
+    assert decide(LEAD, [ask(0), reply, Event("commented", LEAD, at(31))], at(36))[0] == "success"
 
 
 @pytest.mark.unit
 def test_a_bot_comment_does_not_stop_the_clock() -> None:
-    assert decide("author", [ask(0), Event("commented", "codecov[bot]", at(1))], at(5))[0] == "success"
+    assert decide(LEAD, [ask(0), Event("commented", "codecov[bot]", at(1))], at(5))[0] == "success"
 
 
 @pytest.mark.unit
 def test_without_an_ask_nothing_passes_on_silence() -> None:
-    assert decide("author", [], at(100))[0] == "pending"
+    assert decide(LEAD, [], at(100))[0] == "pending"
 
 
 @pytest.mark.unit
@@ -121,11 +132,11 @@ def test_every_description_fits_a_commit_status() -> None:
     cases = [
         [review(who, "approved", 1) for who in longest],
         [review(who, "changes_requested", 1) for who in longest],
-        [*(review(who, "changes_requested", 1) for who in longest), Event("commented", "author", at(2))],
+        [*(review(who, "changes_requested", 1) for who in longest), Event("commented", LEAD, at(2))],
         [ask(0)],
     ]
     for events in cases:
-        assert len(decide("author", events, at(3))[1]) <= 140
+        assert len(decide(LEAD, events, at(3))[1]) <= 140
 
 
 def ci_jobs(workflow: str) -> set[str]:

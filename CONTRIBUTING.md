@@ -153,10 +153,11 @@ with `main` and every review thread is resolved. One of those checks, the
 `review` status, passes in either of two cases:
 
 - someone other than the author approves, and nobody's latest review requests
-  changes;
+  changes (for a pull request by anyone but the lead reviewer, @Xuan-1998, that
+  approval must be the lead reviewer's);
 - the author asked for review (a review request, or a comment after the
   reviewers' last word) and five days passed with no review or comment from
-  anyone else.
+  anyone else. This applies only to the lead reviewer's own pull requests.
 
 An approval counts while the pull request's diff is the one approved: updating
 the branch from `main` keeps it, and a push that changes the diff drops it.
