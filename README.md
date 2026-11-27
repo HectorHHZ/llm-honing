@@ -9,25 +9,27 @@ infra it runs on is being built here.
 See [game runtime and adapter locations](integrations/README.md) for the
 Python import paths, package contents and replay compatibility.
 
-The games are grouped by the decisions a model must make under a specified
-harness. These categories describe research tasks; measured model ability
-requires evaluation under that configuration.
+The games are grouped into categories by game type. What a model decides in a
+game also depends on the harness: each game's research scope lists those
+decisions and what the model, the harness and the engine supply.
 
-| Category | Main decision demand | Games |
+| Category | What it asks for | Games |
 | --- | --- | --- |
-| Precision control | Select movement actions in the required sequence and at the required time. | [Celeste Classic](integrations/celeste-classic/README.md#research-scope), [VVVVVV](integrations/vvvvvv/README.md#research-scope) |
-| Reactive combat | Select movement and combat actions as threats change. | [Taisei](integrations/taisei/README.md#research-scope), [Hurrican](integrations/hurrican/README.md#research-scope), [Hollow Knight imitation](integrations/hollow-knight/README.md#research-scope), [Soul Knight student project](integrations/soul-knight/README.md#research-scope), [REA-Issac](integrations/rea_issac/README.md#research-scope), [Ember Vault](integrations/ember-vault/README.md#research-scope) |
-| Spatial and tactical planning | Select routes and account for later action effects. | [Griddly Spiders](integrations/griddly/README.md#research-scope), [Frost Circuit](integrations/frost-circuit/README.md#research-scope) |
-| Exploration and resource planning | Use information and resources to complete dependent goals. | [Craftax](integrations/craftax/README.md#research-scope), [Brogue CE](integrations/brogue_ce/README.md#research-scope) |
-| Competitive decision-making | Select tactics or strategy against an opponent. | [Tank War](integrations/tank-war/README.md#research-scope), [Red Alert 2](integrations/ra2/README.md#research-scope) |
-| Cooperative coordination | Select actions that support a shared task with a teammate. | [Overcooked-AI](integrations/overcooked/README.md#research-scope) |
+| Strategy | Long horizon, economy | [Red Alert 2](integrations/ra2/README.md#research-scope) (real-time strategy) |
+| Shooters | Aim, dodge, timing | [Tank War](integrations/tank-war/README.md#research-scope) (maze tank duel), [Space Invaders](docs/space-invaders-environment.md) (Atari arcade), [Taisei](integrations/taisei/README.md#research-scope) (bullet hell), [Hurrican](integrations/hurrican/README.md#research-scope) (run-and-gun) |
+| Platformers | Precise movement | [Celeste Classic](integrations/celeste-classic/README.md#research-scope) (precision jumps), [VVVVVV](integrations/vvvvvv/README.md#research-scope) (gravity flips), [Hollow Knight imitation](integrations/hollow-knight/README.md#research-scope) (action, Unity) |
+| Roguelikes | Explore, partial view | [Brogue CE](integrations/brogue_ce/README.md#research-scope) (turn-based dungeon), [Frost Circuit](integrations/frost-circuit/README.md#research-scope) (turn-based tactics), [REA-Issac](integrations/rea_issac/README.md#research-scope) (real-time rooms), [Ember Vault](integrations/ember-vault/README.md#research-scope) (real-time action), [Soul Knight student project](integrations/soul-knight/README.md#research-scope) (real-time, Unity) |
+| Survival and puzzle | Crafting, planning | [Craftax](integrations/craftax/README.md#research-scope) (2D Minecraft-like), [Griddly Spiders](integrations/griddly/README.md#research-scope) (grid puzzle) |
+| Co-op | Work with a teammate | [Overcooked-AI](integrations/overcooked/README.md#research-scope) (2-chef cooking) |
 
 The [research index and responsibility matrix](integrations/README.md#research-categories)
 explain what the model, harness and engine each supply. Each game link above
 opens its research scope. The [public Tank War site](integrations/tank-war-challenge/README.md#research-scope)
 is a separate configuration of Tank War.
 
-### Red Alert 2
+### Strategy
+
+#### Red Alert 2
 
 https://github.com/user-attachments/assets/08a30342-5381-4f22-a8ae-6b438cff2994
 
@@ -44,7 +46,9 @@ match runner that records every request and command, supported model families
 behind one decision server, and the SFT, GRPO, and GEPA integration. The video shows SFT; the RA2
 controller does not yet sample actions for GRPO.
 
-### Tank War
+### Shooters
+
+#### Tank War
 
 https://github.com/user-attachments/assets/9dca9289-bb7d-4b51-bd0b-8b896fabd42d
 
@@ -65,31 +69,39 @@ on the model server; the browser needs no GPU.
 game, the arena, the headless rounds, and the controller changes that made
 version 4.
 
-### Ember Vault
+### Roguelikes
 
-[`integrations/ember-vault/`](integrations/ember-vault/README.md) adds an original
-top-down action roguelike with seeded vaults, a playable browser UI, a rule
-controller and deterministic action replay.
+#### Brogue CE
 
-### Griddly Spiders
+[`integrations/brogue_ce/`](integrations/brogue_ce/README.md) connects the
+native WebBrogue keyboard and display interface to Python. Run a seeded
+dungeon and watch its recording in the original graphical client.
 
-[`integrations/griddly/`](integrations/griddly/README.md) adds native Griddly
-Spiders: reach a gem while avoiding moving enemies. It supplies global
-structured observations, native legal actions, isolated headless episodes,
-verified replay, a typed decision runner/grader, rule-teacher SFT data and
-sampled GRPO rollout data. Its global observation condition is named separately
-from the original local-view task. A project-local launcher and English HTML
-replay support local inspection. The runtime is optional; native HTTP contract
-checks use a rule stand-in. A real NanoJev smoke episode reached the step limit
-after choosing WAIT throughout. Real model training remains to be run.
-
-### Frost Circuit
+#### Frost Circuit
 
 [`integrations/frost-circuit/`](integrations/frost-circuit/README.md) adds an
 original turn-based roguelike with seeded stations, visible attack warnings,
 browser play, and a headless runner for deterministic action replay.
 
-### Craftax
+#### REA-Issac
+
+[`integrations/rea_issac/`](integrations/rea_issac/README.md) adds an independent
+Isaac-inspired room-combat simulation informed by REA resource analysis. It has
+a real-time browser UI, deterministic action replay, a rule baseline, and the
+same typed model interface with seeded tasks and boss-defeat grading. The CPU
+engine needs only the Python standard library. It is not the original Isaac
+engine and includes no original game assets. Model integration is checked with
+a local protocol stand-in; no model performance result is claimed yet.
+
+#### Ember Vault
+
+[`integrations/ember-vault/`](integrations/ember-vault/README.md) adds an original
+top-down action roguelike with seeded vaults, a playable browser UI, a rule
+controller and deterministic action replay.
+
+### Survival and puzzle
+
+#### Craftax
 
 [`integrations/craftax/`](integrations/craftax/README.md) adds the full Craftax
 roguelike environment with its upstream pixel graphics, 43 native actions,
@@ -100,21 +112,17 @@ crafting in the full game; it does not measure full-game victory. Game runtime
 dependencies are installed separately, and this integration does not train a
 model or claim a model performance result.
 
-### REA-Issac
+#### Griddly Spiders
 
-[`integrations/rea_issac/`](integrations/rea_issac/README.md) adds an independent
-Isaac-inspired room-combat simulation informed by REA resource analysis. It has
-a real-time browser UI, deterministic action replay, a rule baseline, and the
-same typed model interface with seeded tasks and boss-defeat grading. The CPU
-engine needs only the Python standard library. It is not the original Isaac
-engine and includes no original game assets. Model integration is checked with
-a local protocol stand-in; no model performance result is claimed yet.
-
-### Brogue CE
-
-[`integrations/brogue_ce/`](integrations/brogue_ce/README.md) connects the
-native WebBrogue keyboard and display interface to Python. Run a seeded
-dungeon and watch its recording in the original graphical client.
+[`integrations/griddly/`](integrations/griddly/README.md) adds native Griddly
+Spiders: reach a gem while avoiding moving enemies. It supplies global
+structured observations, native legal actions, isolated headless episodes,
+verified replay, a typed decision runner/grader, rule-teacher SFT data and
+sampled GRPO rollout data. Its global observation condition is named separately
+from the original local-view task. A project-local launcher and English HTML
+replay support local inspection. The runtime is optional; native HTTP contract
+checks use a rule stand-in. A real NanoJev smoke episode reached the step limit
+after choosing WAIT throughout. Real model training remains to be run.
 
 ### Bring your own model
 

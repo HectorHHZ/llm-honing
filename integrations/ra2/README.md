@@ -26,7 +26,7 @@ gate, trainers, and harness methods run on top of it.
 
 ## Research scope
 
-Primary category: **Competitive decision-making**. Capability tags: opponent response, resources, longer planning.
+Primary category: **Strategy**. Capability tags: opponent response, resources, longer planning.
 
 Build a base, produce units and attack an opponent.
 
