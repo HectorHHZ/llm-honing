@@ -1,0 +1,36 @@
+name: conflicts
+
+# Labels the open pull requests that conflict with main `needs-rebase` and asks the author once to
+# rebase (.github/scripts/conflicts.py). A push to main is what makes a pull request conflict, and the
+# hourly run catches a pull request whose mergeability GitHub was still computing at the push.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: conflicts
+  cancel-in-progress: false
+
+jobs:
+  conflicts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Label conflicting pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create needs-rebase --color D93F0B --description "Conflicts with main: rebase onto main" \
+            -R "$GITHUB_REPOSITORY" 2>/dev/null || true
+          python .github/scripts/conflicts.py
