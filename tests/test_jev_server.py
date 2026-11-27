@@ -162,6 +162,15 @@ def test_a_decision_is_answered_and_its_id_echoed(serve) -> None:  # type: ignor
 
 
 @pytest.mark.unit
+def test_a_decision_after_an_idle_spell_is_still_answered(serve) -> None:  # type: ignore[no-untyped-def]
+    """The serving loop wakes once a second while idle and must keep going, not stop, when nothing arrived."""
+    url = serve(FakeDecisionModel())
+    time.sleep(1.5)
+    status, body = call(url, "/v1/decide", {"id": 8, "parts": {"essential": ["tick 31"]}, "questions": QUESTION}, timeout=5)
+    assert status == 200 and body["id"] == 8
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("body", "message"),
     [
