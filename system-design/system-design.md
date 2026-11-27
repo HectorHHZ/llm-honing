@@ -134,6 +134,10 @@ attribution, so changing the questions a model is asked invalidates older sample
 
 Rollout samples carry `source_release` and `source_harness`; offline samples carry
 neither. That attribution is what the `batch_from_one_release` rule reads (P4).
+A decision whose option was chosen by someone other than the acting policy names
+them in `label_source`: a teacher, or System 2 correcting a decision it blamed on
+the weights. Those corrected decisions carry the release and harness they were
+diagnosed under, and their provider refuses to mix releases in one batch.
 
 ### 2.4 Train Plane — five independent choices
 

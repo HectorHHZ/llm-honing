@@ -136,6 +136,9 @@ class DecisionSample:
     its sources: ``source_release`` and ``source_harness``, and
     ``source_policy``, the checksum of the weights that made it, for a source
     that knows the weights it served but not their release.
+    ``label_source`` names who chose ``chosen`` when it was not the acting
+    policy, such as a teacher, or System 2 correcting a decision it blamed on
+    the weights.
     """
 
     parts: tuple[tuple[str, tuple[str, ...]], ...]
@@ -147,9 +150,11 @@ class DecisionSample:
     source_release: str | None = None
     source_harness: str | None = None
     source_policy: str | None = None
+    label_source: str | None = None
 
     def __post_init__(self) -> None:
         require(self.source_policy is None or bool(self.source_policy), "a decision's policy checksum must be set")
+        require(self.label_source is None or bool(self.label_source), "a decision's label source must not be empty")
         sections = [name for name, _ in self.parts]
         require(len(set(sections)) == len(sections), "a decision's state names each section once")
         keys = [key for key, _ in self.questions]
