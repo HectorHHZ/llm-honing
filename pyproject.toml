@@ -49,6 +49,9 @@ space-invaders = ["gymnasium==1.2.3", "ale-py==0.11.2", "numpy==1.26.4"]
 # The ChatModel client (honing/harness/models.py). Pinned exactly, never a range: 1.82.7 and 1.82.8
 # were compromised on PyPI on 2026-03-24. Each upgrade is its own reviewed pull request.
 litellm = ["litellm==1.106.6"]
+# Reef's client (honing/backends/reef/), standard library only. Pinned exactly: 0.4.0 is
+# reef-client 91af039, the commit #137 pins. A Reef bump updates it with the links in the READMEs.
+reef = ["reef-client==0.4.0"]
 # Opt-in W&B logging for end-to-end runs (honing/e2e/tracking.py). Pinned exactly, like litellm.
 wandb = ["wandb==0.31.0"]
 
