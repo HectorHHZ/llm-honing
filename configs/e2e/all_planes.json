@@ -1,6 +1,11 @@
 {
   "description": "Every plane in one campaign with no GPU, model, or game: the walking skeleton's fakes for model, data, training, compression, and the harness method, and the reference workspace runner around a stand-in agent process that calls a stand-in OpenAI-compatible policy server. Replace the runner and grader entries to test a harness framework (OpenHands, Reef) in a full campaign.",
   "work_dir": "runs/e2e-all-planes",
+  "budget": {
+    "unit": "usd",
+    "limit": 50.0,
+    "gpu_hour_usd": 2.5
+  },
   "requires": {
     "env": [],
     "commands": [],

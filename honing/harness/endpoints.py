@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import http.client
 import os
 import threading
@@ -76,6 +77,9 @@ async def resolve_endpoint(endpoints: PolicyEndpoints, policy: PolicyRef) -> Pol
     exits, on a Ctrl-C too, does not wait for a start in progress, as it would for a pool's worker (joined at
     exit) or the loop's default executor (joined when ``asyncio.run`` ends). A caller cancelled meanwhile stops
     waiting, but the resolve runs on, and whatever it starts stays with the map, which stops it on close.
+
+    The thread runs in a copy of the caller's context, as :func:`asyncio.to_thread` would run it, so a policy map
+    metered for the move in progress (:func:`~honing.core.charging`) charges the resolve to that move.
     """
     loop = asyncio.get_running_loop()
     with _IN_FLIGHT_LOCK:
@@ -87,8 +91,8 @@ async def resolve_endpoint(endpoints: PolicyEndpoints, policy: PolicyRef) -> Pol
         future = in_flight[key] = loop.create_future()
         future.add_done_callback(_retrieve)
         threading.Thread(
-            target=_resolve_on_thread,
-            args=(endpoints, policy, loop, future, in_flight, key),
+            target=contextvars.copy_context().run,
+            args=(_resolve_on_thread, endpoints, policy, loop, future, in_flight, key),
             name="honing-resolve",
             daemon=True,
         ).start()

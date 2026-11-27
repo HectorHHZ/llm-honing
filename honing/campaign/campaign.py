@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Literal
 
 from honing.campaign import rules
+from honing.campaign.cost import CampaignBudget, CostMeter
 from honing.core import (
     CampaignState,
     CandidateSelector,
@@ -15,6 +18,7 @@ from honing.core import (
     CompressionStep,
     ContractError,
     DataProvider,
+    EpisodePurpose,
     EpisodeRecord,
     EpisodeRunner,
     EvaluationResult,
@@ -30,6 +34,7 @@ from honing.core import (
     ModelSnapshot,
     ModelSource,
     Move,
+    MoveCost,
     PolicyRef,
     PruneSelector,
     QuantizePlan,
@@ -48,6 +53,7 @@ from honing.core import (
     TrainJobSpec,
     TransformManifest,
     UpdateCandidate,
+    charging,
     keyed_method_state,
     method_states,
     require,
@@ -121,7 +127,8 @@ class StepOutcome:
     ``gate_metrics`` are the gate's numbers the settled candidate's record
     holds, computed once, so the history and the record cannot disagree.
     ``metrics_from`` says whose run they come from, as on
-    :class:`~honing.core.StepRecord`.
+    :class:`~honing.core.StepRecord`. ``cost`` is what the move spent, whatever
+    its verdict; a campaign always sets it.
     """
 
     move: Move
@@ -131,6 +138,7 @@ class StepOutcome:
     skipped_reason: str | None = None
     gate_metrics: Mapping[str, float] = field(default_factory=dict)
     metrics_from: MetricsSource | None = None
+    cost: MoveCost | None = None
 
 
 def _size_metrics(snapshot: ModelSnapshot) -> dict[str, float]:
@@ -168,6 +176,8 @@ def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
         release_id=release.release_id if release is not None else None,
         gate_metrics=outcome.gate_metrics,
         metrics_from=outcome.metrics_from,
+        # The cost its commit record line holds, so a scheduler can weigh a move's gain against what it spent.
+        cost=outcome.cost,
     )
 
 
@@ -216,6 +226,15 @@ class Campaign:
     several it holds each method's own state under its name
     (:func:`~honing.core.keyed_method_state`), so a rollback restores them
     together; each method and its selector still see only their own.
+
+    Every move's :class:`~honing.core.MoveCost` is written to its commit record
+    (published, rejected or skipped) and its known parts to the candidate's
+    ``cost_*`` metrics. With a ``budget``, :meth:`step` admits no move once the
+    spend reaches the limit; a move already admitted runs to the end, so the
+    spend can overshoot the limit by at most one move's cost. Under a dollar
+    budget, a move whose dollars are unknown is recorded and then stops the
+    campaign the same way, because it can no longer tell what it has spent;
+    :meth:`budget_report` names what could not be priced.
     """
 
     def __init__(
@@ -230,6 +249,7 @@ class Campaign:
         defaults: CampaignDefaults,
         rollout: RolloutProvider | None = None,
         trainers: Mapping[str, Trainer] | None = None,
+        budget: CampaignBudget | None = None,
     ) -> None:
         self._chain = chain
         self._gate = gate
@@ -244,6 +264,11 @@ class Campaign:
         self._pending_method_state: Mapping[str, object] | None = None
         self._recent_records: tuple[EpisodeRecord, ...] = ()
         self._history: list[StepRecord] = []
+        self._budget = budget
+        self._spent = MoveCost()
+        self._meter: CostMeter | None = None
+        self._stopped: Literal["limit", "unknown_cost"] | None = None
+        self._stop_reason: str | None = None
 
     @property
     def chain(self) -> ReleaseChain:
@@ -257,6 +282,51 @@ class Campaign:
             step=len(self._history),
             history=tuple(self._history),
         )
+
+    @property
+    def budget(self) -> CampaignBudget | None:
+        """The budget the campaign keeps to, or ``None`` when it has none."""
+        return self._budget
+
+    @property
+    def spent(self) -> MoveCost:
+        """The sum of every move's cost so far."""
+        return self._spent
+
+    def admits_move(self) -> bool:
+        """Whether the budget leaves room for another move; always true without a budget.
+
+        Once it returns false the campaign counts as stopped by its budget.
+        """
+        if self._budget is None:
+            return True
+        if self._stopped == "unknown_cost":
+            return False
+        spent = self._budget.spent(self._spent)
+        if spent is not None and spent < self._budget.limit:
+            return True
+        self._stopped = "limit"
+        self._stop_reason = f"spent {spent} of the {self._budget.limit} {self._budget.unit} budget"
+        return False
+
+    def budget_report(self) -> dict[str, object] | None:
+        """The budget's unit and limit, what was spent in that unit, the overshoot, and what stopped the run.
+
+        ``stopped`` is ``None`` while the budget admits moves, ``"limit"`` once the
+        spend reached the limit, and ``"unknown_cost"`` once a move's dollars could
+        not be priced under a dollar budget; ``reason`` says which.
+        """
+        if self._budget is None:
+            return None
+        spent = self._budget.spent(self._spent)
+        return {
+            "unit": self._budget.unit,
+            "limit": self._budget.limit,
+            "spent": spent,
+            "overshoot": None if spent is None else max(0.0, spent - self._budget.limit),
+            "stopped": self._stopped,
+            "reason": self._stop_reason,
+        }
 
     def start(self, source: ModelSource, work_dir: Path, harness_seed: HarnessSpec) -> HoneRelease:
         """Check the planes fit together, materialize the initial model, and publish it as release 0."""
@@ -296,6 +366,11 @@ class Campaign:
     def step(self, scheduler: CoAdaptScheduler) -> StepOutcome | None:
         """Ask ``scheduler`` for the next move and advance it. Returns ``None`` when the scheduler stops.
 
+        It also returns ``None``, without asking the scheduler, once the budget
+        admits no more moves (:meth:`admits_move`), so the scheduler's state
+        never records a choice for a move that does not run.
+        :meth:`budget_report` tells the two stops apart.
+
         The scheduler's state is exported right after its choice, before the
         move's result is known, checked against its declared schema, and
         written into every record line from here on. The scheduler reads the
@@ -304,6 +379,8 @@ class Campaign:
         without the last move's result (see
         :class:`~honing.core.CoAdaptScheduler`).
         """
+        if not self.admits_move():
+            return None
         move = scheduler.next_move(self.state())
         exported = scheduler.export_state()
         # Refused now, not at a restart hours later when the state could no longer be restored.
@@ -327,9 +404,34 @@ class Campaign:
             self._method_for(move.harness if move.harness is not None else HarnessMoveConfig())
 
     def advance(self, move: Move) -> StepOutcome:
-        """Build, check, and settle the candidate for one move, and add the move to the history."""
+        """Build, check, and settle the candidate for one move, charge what it spends, and add it to the history."""
         parent_id = self._chain.head().release_id
-        outcome = self._advance(move)
+        meter = CostMeter(self._budget)
+        self._meter = meter
+        try:
+            with charging(meter):
+                outcome = self._advance(move)
+        finally:
+            self._meter = None
+        assert outcome.cost is not None
+        self._spent = self._spent.plus(outcome.cost)
+        if self._budget is not None and self._budget.unit == "usd" and outcome.cost.usd is None:
+            # The move is already recorded; stopping here keeps an unpriced spend from passing as free.
+            unknown = [
+                f"chat model {model} returned no price; set budget.chat_usd_per_million_tokens[{model}]"
+                for model in meter.unpriced_models
+            ]
+            unknown += [
+                f"the endpoint {endpoint} reported no GPUs; whoever starts it must set PolicyEndpoint.gpus"
+                for endpoint in meter.unreported_endpoints
+            ]
+            if meter.training_gpu_seconds is None:
+                unknown.append(
+                    f"the trainer {type(self._trainer_for(move)).__name__} reported no gpu_seconds; it must set "
+                    "TrainResult.gpu_seconds"
+                )
+            self._stopped = "unknown_cost"
+            self._stop_reason = f"the {move.kind} move's dollars are unknown: " + "; ".join(unknown)
         self._history.append(_step_record(len(self._history), parent_id, outcome))
         return outcome
 
@@ -369,6 +471,7 @@ class Campaign:
         batch = self._batch_for(job, head, head.policy(), release_id=head.release_id)
         rules.batch_meets_contract(job, batch)
         result = trainer.train(job, head.master, batch)
+        self._metering().charge_gpu_seconds(result.gpu_seconds)
         rules.architecture_supported(result.snapshot.architecture, trainer.support)
         return UpdateCandidate(
             kind="train",
@@ -404,6 +507,7 @@ class Campaign:
             batch = self._batch_for(recovery_job, head, _policy_of(snapshot), release_id=None)
             rules.batch_meets_contract(recovery_job, batch)
             result = trainer.train(recovery_job, snapshot, batch)
+            self._metering().charge_gpu_seconds(result.gpu_seconds)
             snapshot = result.snapshot
             metrics.update(result.metrics)
         return UpdateCandidate(
@@ -454,11 +558,13 @@ class Campaign:
             grader=harness.grader,
             episode_budget=harness.episode_budget if config.episode_budget is None else config.episode_budget,
         )
-        result = method.propose(context)
+        with self._purpose("method"):
+            result = method.propose(context)
         proposal = result.proposal
         if proposal is None:
             reason = f"{method.name} proposed nothing"
             skipped = self._with_own_state(carried, method, result.state)
+            cost = self._metering().close()
             # Recorded before the pending state moves, so a restart can see what the attempt spent.
             self._chain.record_skip(
                 parent_id=head.release_id,
@@ -467,9 +573,12 @@ class Campaign:
                 state=skipped,
                 episodes_spent=result.episodes_spent,
                 label=config.label,
+                cost=cost,
             )
             self._pending_method_state = skipped
-            return StepOutcome(move=move, decision=None, evaluation=None, release=None, skipped_reason=reason)
+            return StepOutcome(
+                move=move, decision=None, evaluation=None, release=None, skipped_reason=reason, cost=cost
+            )
         rules.spec_runnable(proposal.spec, runner.support)
         candidate = UpdateCandidate(
             kind="harness",
@@ -486,14 +595,19 @@ class Campaign:
         selector = _OwnStateSelector(method.selector, result.state) if self._keyed else method.selector
         metrics_from: MetricsSource = "gate"
         if harness.method_evaluator is None:
-            evaluation, decision = self._gate.judge(candidate, head, selector=selector)
+            with self._purpose("gate"):
+                evaluation, decision = self._gate.judge(candidate, head, selector=selector)
             method_evaluation = evaluation
         else:
             method_gate = Gate(harness.method_evaluator, default_selector=selector)
-            method_evaluation, decision = method_gate.judge(candidate, head)
+            # The method's own validation run is its selection work, as upstream GEPA charges it to its budget,
+            # so "gate" counts only the campaign gate's episodes, the same overhead for every move kind.
+            with self._purpose("method"):
+                method_evaluation, decision = method_gate.judge(candidate, head)
             evaluation, metrics_from = method_evaluation, "method"
             if decision.selected:
-                evaluation, verdict = self._gate.judge(candidate, head)
+                with self._purpose("gate"):
+                    evaluation, verdict = self._gate.judge(candidate, head)
                 decision, metrics_from = _both(decision, verdict), "gate"
         self._recent_records = method_evaluation.records
         # The method learns from every verdict, so its new state is attached
@@ -508,7 +622,8 @@ class Campaign:
         self, move: Move, candidate: UpdateCandidate, head: HoneRelease, selector: CandidateSelector | None
     ) -> StepOutcome:
         self._check_candidate(candidate)
-        evaluation, decision = self._gate.judge(candidate, head, selector=selector)
+        with self._purpose("gate"):
+            evaluation, decision = self._gate.judge(candidate, head, selector=selector)
         return self._publish_or_reject(move, candidate, evaluation, decision)
 
     def _publish_or_reject(
@@ -522,13 +637,14 @@ class Campaign:
         # Published and rejected candidates both carry the gate result, so the
         # record shows how close a rejection was, not only that it happened.
         metrics = gate_metrics(evaluation)
-        candidate = replace(candidate, metrics={**candidate.metrics, **metrics})
+        cost = self._metering().close()
+        candidate = replace(candidate, metrics={**candidate.metrics, **metrics, **cost.metrics()})
         release: HoneRelease | None = None
         if decision.selected:
-            release = self._chain.commit(candidate, decision)
+            release = self._chain.commit(candidate, decision, cost=cost)
             self._pending_method_state = None
         else:
-            self._chain.record_rejection(candidate, decision)
+            self._chain.record_rejection(candidate, decision, cost=cost)
             self._pending_method_state = candidate.method_state
         return StepOutcome(
             move=move,
@@ -537,7 +653,18 @@ class Campaign:
             release=release,
             gate_metrics=metrics,
             metrics_from=metrics_from,
+            cost=cost,
         )
+
+    def _metering(self) -> CostMeter:
+        if self._meter is None:
+            raise ContractError("a move's cost is metered only inside Campaign.advance")
+        return self._meter
+
+    @contextmanager
+    def _purpose(self, purpose: EpisodePurpose) -> Iterator[None]:
+        with self._metering().purpose(purpose):
+            yield
 
     @staticmethod
     def _check_candidate(candidate: UpdateCandidate) -> None:
@@ -602,15 +729,17 @@ class Campaign:
         if not requirements.requires_batch:
             return None
         if not requirements.requires_rollout:
-            return self._data.next_batch(requirements.data_contract())
+            with self._purpose("demonstration"):
+                return self._data.next_batch(requirements.data_contract())
         if self._rollout is None:
             raise ContractError(f"{job.algorithm} learns from rollouts, but the campaign has no rollout provider")
-        batch = self._rollout.collect(
-            self._harness.tasks,
-            policy,
-            head.harness if job.rollout == "harness" else None,
-            release_id,
-            self._harness.samples_per_task,
-        )
+        with self._purpose("rollout"):
+            batch = self._rollout.collect(
+                self._harness.tasks,
+                policy,
+                head.harness if job.rollout == "harness" else None,
+                release_id,
+                self._harness.samples_per_task,
+            )
         rules.batch_from_one_release(batch, head)
         return batch

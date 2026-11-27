@@ -286,6 +286,28 @@ def test_a_grpo_job_returns_new_hf_weights_with_a_manifest(tmp_path: Path) -> No
 
 
 @pytest.mark.unit
+def test_a_job_charges_its_time_with_the_gpus_held_for_every_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+    import types
+
+    import honing.backends.slime.trainer as trainer_module
+
+    readings = iter([100.0, 103.0])  # the GPUs are held for 3 seconds
+    clock = types.SimpleNamespace(strftime=time.strftime, monotonic=lambda: next(readings))
+    monkeypatch.setattr(trainer_module, "time", clock)
+    settings = SlimeTrainerSettings(
+        environment=fake_environment(tmp_path), work_dir=tmp_path / "runs", lock_gpus=False, gpus=("0", "1")
+    )
+    base = hf_snapshot(write_checkpoint(tmp_path / "base"))
+
+    result = SlimeTrainer(settings).train(GRPO, base, grpo_batch())
+
+    assert result.gpu_seconds == 6.0
+
+
+@pytest.mark.unit
 def test_each_job_trains_into_a_fresh_directory(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     trainer = fake_trainer(tmp_path)

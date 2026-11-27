@@ -237,6 +237,8 @@ class SlimeTrainer:
         )
         locks = gpu_locks(settings.gpus, settings.lock_dir) if settings.lock_gpus else contextlib.nullcontext()
         with locks:
+            # Timed once the GPUs are held, and charged for every one of them.
+            held = time.monotonic()
             # Indices, not UUIDs: Slime's Ray placement parses CUDA_VISIBLE_DEVICES as integers.
             visible = {"CUDA_VISIBLE_DEVICES": ",".join(settings.gpus)}
             worker = [settings.environment.python, "-m", "honing.backends.slime.worker"]
@@ -256,6 +258,7 @@ class SlimeTrainer:
             self._run(
                 [*worker, "metrics", str(run / "tensorboard"), str(run / "metrics.json")], run, "metrics", visible
             )
+            gpu_seconds = (time.monotonic() - held) * len(settings.gpus)
 
         trained = run / "hf" / "0"
         snapshot = hf_snapshot(trained)
@@ -273,7 +276,7 @@ class SlimeTrainer:
             "metrics": metrics,
         }
         (run / "checkpoint.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        return TrainResult(snapshot=snapshot, metrics=metrics)
+        return TrainResult(snapshot=snapshot, metrics=metrics, gpu_seconds=gpu_seconds)
 
     def _teacher(self, teacher: TeacherRef, base: Path) -> Path | None:
         """The checkpoint an ``opd`` teacher names, or ``None`` when the samples carry its scores.

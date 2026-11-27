@@ -15,7 +15,7 @@ Every script here runs on a CPU with no GPU or game. CI's `e2e` job runs each on
 | `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run.json` | a tank campaign on real rounds (the Node match process against the planner opponent, Honing's `DecisionServer`) with a stand-in decision model: a GEPA harness move, sft on planner-teacher demonstrations, and grpo on sampled rollouts |
 | `python scripts/e2e/tank_campaign.py --config configs/e2e/tank_levers_dry_run.json` | two harness methods and two trainers in one tank campaign, on the same real rounds and stand-in model: GEPA, teacher sft, a direction edit with the step's own parameters, Meta-Harness, and sft again on fresh teacher rounds |
 | `python scripts/e2e/check_runner.py --config configs/e2e/tank_runner_check.json` | the harness runner checks on the tank runner |
-| `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2 or tank campaign run wrote: a result for every step, the release chain, every gated episode's run directory, and no seed played by two gates |
+| `python scripts/e2e/check_campaign.py <work-dir> [--expect MOVE=RESULT ...]` | what an RA2, tank or pipeline campaign run wrote: a result for every step, the release chain, every gated episode's run directory, no seed played by two gates, and that every move's cost adds up to the summary's total |
 | `scripts/e2e/serving.sh` | a decision server process and the RA2 match's Node client stack; `DECISION_SERVER=<url>` checks a running server instead, such as a real model on a GPU |
 | `node scripts/e2e/tank-war.mjs` | a decision server, Tank War's HTTP bridge, and both decision interfaces; `HONING_URL=<url>` plays against a running server, and `TANK_SECONDS` sets how long each interface plays |
 | `python scripts/e2e/check_raw_states.py --record <new-dir>` (or `RUN...`) | tank rounds' raw states: every decision re-renders to its logged context, every round replays to its logged state hashes, and the planner teacher labels every question. `--record` first plays 4 seeds from both seats with the stand-in model and with the teacher. Named run directories, such as a NanoJev round from a GPU, are checked as they are, on the machine that recorded them |
@@ -36,6 +36,14 @@ One script is the exception: `gepa_live.py` calls real model APIs, needs a key, 
 | Campaign | `scheduler` (optional) | `ScriptedScheduler` over the moves of `schedule` |
 
 `schedule` lists the steps and `expect` their results; a run whose results differ exits 1. A `scheduler` component chooses every move itself, until it stops. A `rollback` entry still runs once the moves before it in `schedule` have run, and the run fails when the scheduler stops before it. The tank and RA2 campaign scripts take the same `scheduler` slot. The run writes `summary.json`, the release chain, and the agents' workspaces under `--work-dir`.
+
+Every move records a cost (#167) in its commit record, its summary step and, for its known parts, its release metrics: episodes by purpose (`gate`, `method`, `rollout`, `demonstration`), GPU-seconds, chat tokens and dollars, total dollars, and wall-clock seconds. GPU-seconds include serving: every block of episodes run for one purpose is charged its wall time times the summed GPUs of the distinct endpoints its episodes resolved (`PolicyEndpoint.gpus`, reported by whoever started the server, 0 for a remote API), and `serving_gpu_seconds` holds that part on its own. Demonstrations from a scripted teacher resolve no endpoint, so they cost no serving time. A part that cannot be known (a trainer that does not report GPU time, an endpoint that does not report its GPUs, a chat reply with no price) is `null`, never 0. An optional `budget` block, in the pipeline, tank and RA2 configs alike, sets one unit and a limit:
+
+```json
+"budget": {"unit": "usd", "limit": 50.0, "gpu_hour_usd": 2.5, "chat_usd_per_million_tokens": {"hosted_vllm/qwen": {"input": 0.1, "output": 0.4}}}
+```
+
+`unit` is `usd` (GPU time at `gpu_hour_usd`, which it then requires, plus the chat calls' price) or `wall_seconds`. A chat model a `usd` budget cannot price is refused before the run starts, and so is Meta-Harness with the `claude_code` proposer, whose sessions are not metered; `chat_usd_per_million_tokens` prices a model whose client returns no price, such as one served locally. The run admits no move once the spend reaches the limit, so it can overshoot by at most the cost of the last move it admitted. A move whose dollars a `usd` budget cannot price (a reply with no price, a trainer that reports no GPU time, an endpoint that reports no GPUs) is recorded and then stops the run, which writes its summary and exits 1. `summary.json` reports `cost_total` and `budget` (`unit`, `limit`, `spent`, `overshoot`, `stopped` as `null`, `"limit"` or `"unknown_cost"`, and a `reason` naming the model and the config key, or the trainer).
 
 ## The Slime trainer
 
@@ -140,7 +148,7 @@ python scripts/e2e/gepa_live.py --config runs/gepa_live.logged.json --work-dir r
 | --- | --- |
 | one step per schedule step, rollbacks and abandoned moves included: `move/kind`, `move/label`, `move/result`, `move/release`, `move/published` | history |
 | the gate's metrics, the candidate's size and `method_episodes`, as `candidate/*`; the selector's metrics as `selector/*` (for GEPA, `selector/gepa_metric_calls`, archive and front sizes, both means) | history |
-| the gate's episode count (`gate/episodes`); for `gepa_live.py`, each move's agent processes, policy and reflection calls, tokens and cost (`usage/*`) | history |
+| each move's cost as `cost/*` (an unknown part is not logged); the gate's episode count (`gate/episodes`); for `gepa_live.py`, each move's agent processes, policy and reflection calls, tokens and cost (`usage/*`) | history |
 | the script, the git commit, the pinned model and the config (variable names only) | run config |
 | `summary.json` and `releases/commits.jsonl`, uploaded at the end as copies that name the work directory, the repository and the home directory `<work_dir>`, `<repo>` and `~` | files |
 

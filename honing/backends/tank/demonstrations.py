@@ -22,7 +22,15 @@ from dataclasses import replace
 from honing.backends.tank.decisions import decisions_from_log
 from honing.backends.tank.runner import TankEpisodeRunner
 from honing.backends.tank.scenarios import DEMONSTRATION_SEEDS, TankScenario
-from honing.core import ContractError, DataContract, DecisionSample, HarnessSpec, Task, TrainingBatch
+from honing.core import (
+    ContractError,
+    DataContract,
+    DecisionSample,
+    HarnessSpec,
+    Task,
+    TrainingBatch,
+    charge_episode,
+)
 
 
 class TankDemonstrationProvider:
@@ -90,6 +98,8 @@ class TankDemonstrationProvider:
             *self._runner.arguments(scenario, directory, self._runner.runs_dir / f"{name}.harness"),
             "--teacher",
         ]
+        # A teacher round is played directly, not through run_graded, so it is charged here.
+        charge_episode()
         exit_code = await self._runner.play(arguments, name)
         if exit_code != 0:
             raise ContractError(f"the teacher round for {label} exited {exit_code}; see {directory}.log")

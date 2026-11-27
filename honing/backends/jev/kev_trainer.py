@@ -29,7 +29,7 @@ import re
 import time
 import uuid
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -132,7 +132,10 @@ class KevTrainer:
         run.mkdir(parents=True)
         try:
             with gpu_lock(self._settings.gpu, self._settings.lock_dir):
-                return self._run(job, base, batch, run)
+                # Timed while the one GPU is held, so waiting for the lock is not charged as GPU time.
+                held = time.monotonic()
+                result = self._run(job, base, batch, run)
+                return replace(result, gpu_seconds=time.monotonic() - held)
         except Exception as error:
             (run / "error.json").write_text(json.dumps({"error": str(error)}) + "\n")
             raise

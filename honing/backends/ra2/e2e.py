@@ -41,6 +41,7 @@ from honing.campaign import (
     HarnessComponents,
     StepOutcome,
 )
+from honing.campaign.cost import budget_from_config, cost_summary
 from honing.core import (
     CoAdaptScheduler,
     CompressionBudget,
@@ -213,6 +214,8 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
     work.mkdir(parents=True, exist_ok=False)
     suite = load_suite(integration_dir / config.get("suite", "tasks/suite.jsonl"))
     context = E2EContext(root=root.resolve(), integration_dir=integration_dir, work_dir=work, suite=suite)
+    budget = budget_from_config(config.get("budget"))
+    context.shared["budget"] = budget
     components = config.get("components", {})
     for slot, protocol, required in SLOTS:
         if slot in components:
@@ -245,6 +248,7 @@ def build(config: Mapping[str, Any], root: Path, work_dir: Path | None = None) -
             scheme=QuantScheme(weight_format="int4", granularity="group", group_size=128),
         ),
         rollout=c.get("rollout"),  # type: ignore[arg-type]
+        budget=budget,
     )
     campaign.start(c["model_source"], work, harness_seed=seed_harness(integration_dir))  # type: ignore[arg-type]
     moves = tuple(_move(entry) for entry in config.get("schedule", ({"kind": "harness"}, {"kind": "train"})))
@@ -266,12 +270,15 @@ def summarize(outcomes: Sequence[StepOutcome], run: E2ERun) -> dict[str, object]
                 "incumbent_mean": statistics.fmean(evaluation.incumbent_scores) if evaluation else None,
                 "episodes": len(evaluation.records) if evaluation else 0,
                 "workspaces": [r.outcome.workspace_location for r in evaluation.records] if evaluation else [],
+                "cost": outcome.cost.to_record() if outcome.cost is not None else None,
             }
         )
     work = run.context.work_dir
     return {
         "head": run.campaign.chain.head().release_id,
         "steps": steps,
+        "cost_total": cost_summary([outcome.cost for outcome in outcomes if outcome.cost is not None]),
+        "budget": run.campaign.budget_report(),
         "releases": str(work / "releases"),
         "runs": str(work / "runs"),
     }
@@ -303,6 +310,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(f"{step['move']}: {step['result']}{scores}: {step['reason']}")
     print(f"head {summary['head']}; releases in {summary['releases']}; episodes in {summary['runs']}")
+    budget = summary["budget"]
+    if isinstance(budget, dict) and budget["stopped"] is not None:
+        print(f"budget stopped the run: {budget['reason']}", file=sys.stderr)
+        # A spend that could not be priced fails the run; reaching the limit is how a budget ends one.
+        return 1 if budget["stopped"] == "unknown_cost" else 0
     return 0
 
 

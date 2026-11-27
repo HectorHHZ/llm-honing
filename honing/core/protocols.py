@@ -16,6 +16,7 @@ from honing.core.backend import BackendSupport
 from honing.core.candidate import EvaluationResult, PolicyRef, SelectionDecision, UpdateCandidate
 from honing.core.chat import ChatMessage, ChatReply
 from honing.core.compression import CompressionBudget, ImportanceMap, PrunePlan, QuantizePlan, SignalKind
+from honing.core.cost import charge_episode
 from honing.core.data import DataContract, TrainingBatch
 from honing.core.endpoints import PolicyEndpoint
 from honing.core.errors import ContractError, require
@@ -212,7 +213,11 @@ async def run_graded(
     An outcome whose ``failure`` is set is never passed to the grader: it is recorded
     with score 0 and ``failure`` as its feedback, whatever the grader would have done
     with it, so the rule holds for every grader.
+
+    The episode is charged to the move in progress (see :mod:`honing.core.cost`)
+    before it runs, so an episode that fails or raises is still counted.
     """
+    charge_episode()
     outcome = await runner.run(spec, task, policy)
     if (outcome.task_id, outcome.spec_id, outcome.policy_checksum) != (
         task.task_id,

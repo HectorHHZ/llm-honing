@@ -384,6 +384,16 @@ def test_the_fronts_are_non_trivial(run: Run) -> None:
 
 
 @pytest.mark.unit
+def _without_wall_clock(record: dict[str, object]) -> dict[str, object]:
+    """The record minus the move's wall-clock seconds, the one part a seed cannot fix."""
+    record = json.loads(json.dumps(record))
+    if "cost" in record:
+        assert isinstance(record["cost"]["wall_seconds"], float)  # type: ignore[index]
+        record["cost"]["wall_seconds"] = None  # type: ignore[index]
+        record.get("candidate", {}).get("metrics", {}).pop("cost_wall_seconds", None)  # type: ignore[union-attr]
+    return record
+
+
 def test_the_same_seed_writes_the_same_commit_record(run: Run, tmp_path: Path) -> None:
     again = _campaign(tmp_path)
-    assert again.records == run.records
+    assert [_without_wall_clock(r) for r in again.records] == [_without_wall_clock(r) for r in run.records]

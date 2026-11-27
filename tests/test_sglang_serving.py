@@ -293,6 +293,15 @@ def test_endpoints_start_a_checkpoint_once_and_stop_the_least_recently_used_when
     assert sorted(starts.stopped) == ["a", "b", "c"]
 
 
+@pytest.mark.parametrize("runtime", ["sglang", "jev_decision"])
+def test_an_endpoint_reports_the_gpus_its_server_was_started_on(tmp_path: Path, runtime: str) -> None:
+    a, b = (policy(write_checkpoint(tmp_path / name, bytes([i]))) for i, name in enumerate("ab"))
+    settings = ServingSettings(python=Path("python"), gpus=("0,1", "2"), runtime=runtime)  # type: ignore[arg-type]
+    with SGLangPolicyEndpoints(settings, start=FakeStarts()) as endpoints:
+        assert endpoints.resolve(a).gpus == 2  # tensor parallel over devices 0 and 1
+        assert endpoints.resolve(b).gpus == 1
+
+
 def test_endpoints_refuse_weights_other_than_the_policy_names_and_non_hf_checkpoints(tmp_path: Path) -> None:
     good = policy(write_checkpoint(tmp_path / "m"))
     starts = FakeStarts()

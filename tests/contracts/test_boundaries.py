@@ -237,6 +237,7 @@ def test_runners_resolve_a_policy_only_through_resolve_endpoint(repo_root: Path)
     assert calls == [
         "honing/backends/ra2/duel.py:_url",  # in the synchronous evaluate, before its asyncio.run
         "honing/backends/sglang/endpoints.py:<module>",  # the command-line entry point
+        "honing/campaign/cost.py:resolve",  # MeteredPolicyEndpoints, a map: runs where its own resolve is called
         "honing/harness/endpoints.py:_resolve_on_thread",  # resolve_endpoint's thread
     ]
 

@@ -33,6 +33,7 @@ from honing.core import (
     CandidateKind,
     ContractError,
     HoneRelease,
+    MoveCost,
     ReleaseError,
     SelectionDecision,
     UpdateCandidate,
@@ -66,6 +67,12 @@ def _json_default(value: object) -> object:
 
 def _candidate_record(candidate: UpdateCandidate) -> dict[str, object]:
     return dataclasses.asdict(candidate)
+
+
+def _cost_record(cost: MoveCost | None) -> dict[str, object]:
+    # The key is left out, not null, when there is no cost, so a record without it reads as one written before
+    # costs were recorded.
+    return {} if cost is None else {"cost": cost.to_record()}
 
 
 class ReleaseChain:
@@ -107,8 +114,10 @@ class ReleaseChain:
         self._publish(release)
         return release
 
-    def commit(self, candidate: UpdateCandidate, decision: SelectionDecision) -> HoneRelease:
-        """Publish a selected candidate as the new head."""
+    def commit(
+        self, candidate: UpdateCandidate, decision: SelectionDecision, *, cost: MoveCost | None = None
+    ) -> HoneRelease:
+        """Publish a selected candidate as the new head. ``cost``, when given, is written with it."""
         head = self.head()
         if candidate.parent_id != head.release_id:
             raise ReleaseError(
@@ -117,13 +126,20 @@ class ReleaseChain:
         if not decision.selected:
             raise ReleaseError(f"a rejected candidate cannot be committed: {decision.reason}")
         release = HoneRelease(release_id=self._next_id(), candidate=candidate, decision=decision)
-        self._publish(release)
+        self._publish(release, cost)
         return release
 
-    def record_rejection(self, candidate: UpdateCandidate, decision: SelectionDecision) -> None:
-        """Record a rejected candidate. The head does not move."""
+    def record_rejection(
+        self, candidate: UpdateCandidate, decision: SelectionDecision, *, cost: MoveCost | None = None
+    ) -> None:
+        """Record a rejected candidate, and what it cost when given. The head does not move."""
         self._append_record(
-            {"op": "reject", "candidate": _candidate_record(candidate), "decision": dataclasses.asdict(decision)}
+            {
+                "op": "reject",
+                "candidate": _candidate_record(candidate),
+                "decision": dataclasses.asdict(decision),
+                **_cost_record(cost),
+            }
         )
 
     def record_skip(
@@ -135,6 +151,7 @@ class ReleaseChain:
         state: Mapping[str, object],
         episodes_spent: int,
         label: str | None = None,
+        cost: MoveCost | None = None,
     ) -> None:
         """Record a harness attempt that proposed nothing. The head does not move.
 
@@ -155,6 +172,7 @@ class ReleaseChain:
                 "reason": reason,
                 "episodes_spent": episodes_spent,
                 "method_state": dict(state),
+                **_cost_record(cost),
             }
         )
 
@@ -191,13 +209,14 @@ class ReleaseChain:
             for release in self.releases()
         )
 
-    def _publish(self, release: HoneRelease) -> None:
+    def _publish(self, release: HoneRelease, cost: MoveCost | None = None) -> None:
         self._append_record(
             {
                 "op": "publish",
                 "release_id": release.release_id,
                 "candidate": _candidate_record(release.candidate),
                 "decision": None if release.decision is None else dataclasses.asdict(release.decision),
+                **_cost_record(cost),
             }
         )
         self._releases[release.release_id] = release

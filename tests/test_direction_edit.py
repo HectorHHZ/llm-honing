@@ -165,6 +165,8 @@ def test_the_trainer_changes_only_the_scalar_head_and_writes_a_servable_manifest
     unit, _ = direction(_inputs(), "weapon", "fire")
     assert np.allclose(after[HEAD_WEIGHT], before[HEAD_WEIGHT] + unit, atol=1e-6)
     assert result.metrics["entries_changed"] == HIDDEN and result.metrics["questions"] == 20
+    # The edit's whole run is charged as one GPU's time, so a usd budget can price it.
+    assert result.gpu_seconds is not None and result.gpu_seconds > 0
     assert result.metrics["target_argmax_after"] == 1.0 and 0.9 < result.metrics["margin_added"] < 1.1
     manifest_path = trained_manifest(edited)
     assert manifest_path is not None

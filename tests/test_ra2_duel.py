@@ -10,7 +10,8 @@ import pytest
 
 from honing.backends.ra2 import DuelEvaluator, load_suite
 from honing.backends.ra2.duel import result_score
-from honing.core import ContractError, HarnessFile, HoneRelease, UpdateCandidate
+from honing.campaign.cost import CostMeter
+from honing.core import ContractError, HarnessFile, HoneRelease, UpdateCandidate, charging
 from honing.release import Gate, WinLossSelector
 from tests.test_ra2_backend import FAKES, REPO, SPEC, SUITE_PATH, _endpoints, _snapshot
 
@@ -40,6 +41,15 @@ def test_a_stronger_candidate_wins_every_game_in_both_seats(tmp_path: Path) -> N
     result = evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1").evaluate(candidate, incumbent)
     assert result.task_ids == tuple(f"{t.task_id}@candidate-{seat}" for t in TASKS for seat in ("red", "blue"))
     assert result.candidate_scores == (1.0,) * 4 and result.incumbent_scores == (0.0,) * 4
+
+
+@pytest.mark.unit
+def test_every_game_is_charged_as_one_gate_episode(tmp_path: Path) -> None:
+    candidate, incumbent = pair()
+    meter = CostMeter(None)
+    with charging(meter), meter.purpose("gate"):
+        evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1").evaluate(candidate, incumbent)
+    assert meter.close().episodes["gate"] == 2 * len(TASKS)
 
 
 @pytest.mark.unit

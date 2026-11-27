@@ -691,3 +691,15 @@ def test_a_timed_out_container_is_killed_by_name(tmp_path: Path, docker: Path) -
 def test_a_container_cannot_follow_linked_mounts(tmp_path: Path) -> None:
     with pytest.raises(ContractError, match="copy them"):
         _runner(tmp_path, container=CONTAINER, mount_mode="link")
+
+
+@pytest.mark.unit
+def test_endpoints_metered_by_a_pipeline_still_give_the_runner_the_gateway_key_and_prices(tmp_path: Path) -> None:
+    from honing.campaign.cost import MeteredPolicyEndpoints
+
+    policy = _policy()
+    endpoint = GatewayEndpoints(MODEL).resolve(policy)
+    plain = _runner(tmp_path)._access(policy, endpoint)
+    metered = _runner(tmp_path, endpoints=MeteredPolicyEndpoints(GatewayEndpoints(MODEL)))._access(policy, endpoint)
+
+    assert metered == plain and metered["api_key_env"] == "HONING_TEST_KEY" and "input_cost_per_token" in metered

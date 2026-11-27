@@ -39,8 +39,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from honing.campaign.cost import MeteredChatModel, unmetered
 from honing.core import (
     ChatMessage,
+    ChatModel,
     ChatReply,
     ContractError,
     EpisodeOutcome,
@@ -254,7 +256,7 @@ class RecordingChatModel:
     A call marks the end of the parent's minibatch: the episodes after it are the child's.
     """
 
-    def __init__(self, inner: LiteLLMChatModel, run_log: RunLog) -> None:
+    def __init__(self, inner: ChatModel, run_log: RunLog) -> None:
         self._inner = inner
         self._run_log = run_log
 
@@ -318,7 +320,7 @@ class OpenAIEndpoints:
 
     def __init__(self, base_url: str, model: str) -> None:
         self._endpoint = PolicyEndpoint(
-            base_url=base_url, tokenizer_location="remote", served_model=model, runtime="openai_chat"
+            base_url=base_url, tokenizer_location="remote", served_model=model, runtime="openai_chat", gpus=0
         )
 
     @property
@@ -442,7 +444,9 @@ def gepa_method(
     """GEPA validating on the suite's ``validation_split``, which must be the gate's tasks in order."""
     run_log = _run_log(context)
     validation = [task.task_id for task in _suite(context, manifest).tasks(validation_split)]  # type: ignore[arg-type]
-    chat = RecordingChatModel(LiteLLMChatModel(**{**reflection, "model": litellm_model(reflection["model"])}), run_log)
+    client = LiteLLMChatModel(**{**reflection, "model": litellm_model(reflection["model"])})
+    # Metered so the reflection's tokens and dollars reach each move's cost record too.
+    chat = RecordingChatModel(MeteredChatModel(client), run_log)
     return LiveGEPAMethod(run_log, chat, GEPAConfig(**gepa), validation)
 
 
@@ -461,6 +465,7 @@ def live_options(config: Mapping[str, Any], endpoints: object) -> LiveOptions:
     live = config.get("live", {})
     price_model = litellm_model(config["model"]) if "model" in config else None
     # Only a policy behind OpenAIEndpoints has a URL to check; any other is not priced.
+    endpoints = unmetered(endpoints)
     if price_model is None or not isinstance(endpoints, OpenAIEndpoints):
         return LiveOptions(max_consecutive_faults=int(live.get("max_consecutive_faults", 3)))
     return LiveOptions(

@@ -33,6 +33,7 @@ from honing.core import (
     PolicyRef,
     Task,
     UpdateCandidate,
+    charge_episode,
 )
 
 SEATS = ("red", "blue")
@@ -104,6 +105,8 @@ class DuelEvaluator:
             *([f"--questions={questions}"] if questions else []),
         ]
         async with slots:
+            # One game plays both sides, so it is one gate episode; it does not go through run_graded.
+            charge_episode()
             with (self._runs_dir / f"{out.name}.log").open("wb") as log:
                 process = await asyncio.create_subprocess_exec(
                     *arguments,

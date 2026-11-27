@@ -187,7 +187,7 @@ class QualityServers:
                 threading.Thread(target=server.serve, daemon=True).start()
                 self._servers[quality] = server
             url = self._servers[quality].url
-        return PolicyEndpoint(url, "fake-tokenizer", f"forecast-q{quality:.3f}", runtime="jev_decision")
+        return PolicyEndpoint(url, "fake-tokenizer", f"forecast-q{quality:.3f}", runtime="jev_decision", gpus=1)
 
 
 def endpoints(context: Any) -> QualityServers:
@@ -214,10 +214,17 @@ class DecisionReadingChatModel(FakeChatModel):
 
 
 def chat(
-    context: object, replies: tuple[str, ...] = (EAGER_QUESTIONS,), expect_decisions: bool = False
+    context: object,
+    replies: tuple[str, ...] = (EAGER_QUESTIONS,),
+    expect_decisions: bool = False,
+    cost_per_call: float | None = None,
 ) -> FakeChatModel:
-    """GEPA's reflection model: returns ``replies`` in order, and with ``expect_decisions`` checks each prompt."""
-    return DecisionReadingChatModel(list(replies)) if expect_decisions else FakeChatModel(list(replies))
+    """GEPA's reflection model: returns ``replies`` in order, each priced at ``cost_per_call``.
+
+    With ``expect_decisions`` it checks each prompt shows the rounds' decisions.
+    """
+    model = DecisionReadingChatModel if expect_decisions else FakeChatModel
+    return model(list(replies), cost_per_call=cost_per_call)
 
 
 class FakeDirectionEditTrainer(FakeTrainer):
