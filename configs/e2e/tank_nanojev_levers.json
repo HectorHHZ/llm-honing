@@ -1,0 +1,47 @@
+{
+  "description": "Two trainers on real NanoJev weights in one tank campaign, both gated: supervised training on the planner teacher's rounds through the NanoJev trainer, then a direction edit through the trainer named direction_edit, with the step's own question, target and strength. The pinned NanoJev release is the first model. The gate plays the candidate and the incumbent on 64 rounds against the planner, 32 fresh validation seeds from both seats, each through its own decision server started on demand, and publishes the candidate if the 95% interval on the mean difference per seed lies above 0. The sft step holds out the teacher rounds whose seed ends in 0 or 5 for validation. Needs the pinned NanoJev checkout (HONING_NANOJEV_SOURCE), two GPUs for the servers (HONING_NANOJEV_GPUS, for example 0,1), one for training (HONING_NANOJEV_TRAIN_GPU), one for the edit's forward pass (HONING_NANOJEV_EDIT_GPU) and the pinned release in HF_HOME. Run: python scripts/e2e/tank_campaign.py --config configs/e2e/tank_nanojev_levers.json. The method slot is required by the tank campaign but never scheduled here, so it names the all-planes stand-in.",
+  "integration_dir": "integrations/tank-war",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-nanojev-levers",
+  "validation_tasks": {"split": "val", "limit": 16},
+  "gate": {"rounds": 64, "looks": 1, "min_effect": 0.0, "confidence": 0.95},
+  "harness_tasks": {"split": "train", "limit": 16},
+  "episode_budget": 0,
+  "samples_per_task": 1,
+  "schedule": [
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"},
+    {
+      "kind": "train",
+      "algorithm": "direction_edit",
+      "contract": "typed_decisions",
+      "trainer": "direction_edit",
+      "direction_edit": {"question": "weapon", "target": "fire", "strength": 1.0}
+    }
+  ],
+  "requires": {
+    "env": [
+      "HONING_NANOJEV_SOURCE",
+      "HONING_NANOJEV_GPUS",
+      "HONING_NANOJEV_TRAIN_GPU",
+      "HONING_NANOJEV_EDIT_GPU",
+      "HF_HOME"
+    ],
+    "commands": ["node"],
+    "paths": ["$HONING_NANOJEV_SOURCE/scripts/predict_toy_decisions.py"]
+  },
+  "components": {
+    "model_source": {"factory": "honing.backends.jev.e2e:model_source"},
+    "endpoints": {"factory": "honing.backends.jev.e2e:endpoints"},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner", "args": {"concurrency": 4}},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"},
+    "trainer": {
+      "factory": "honing.backends.jev.e2e:nanojev_trainer",
+      "args": {"max_length": 4096, "validation_groups": "^tank:\\d*[05]:"}
+    },
+    "trainers": {
+      "direction_edit": {"factory": "honing.backends.jev.e2e:direction_edit_trainer"}
+    },
+    "data": {"factory": "honing.backends.tank.e2e:demonstrations", "args": {"limit": 16}},
+    "method": {"factory": "tests.fakes.pipeline:method"}
+  }
+}

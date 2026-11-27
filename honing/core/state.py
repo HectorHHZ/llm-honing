@@ -11,6 +11,10 @@ Every non-empty state carries an integer ``schema_version``. A component's
 state changes shape as the component evolves, and a rollback or a restart can
 hand old state to newer code; the version is what lets the campaign refuse that
 instead of letting the component misread it.
+
+A campaign with one method publishes that method's state as it is. A campaign
+with several publishes one state that holds each method's own under its name
+(:func:`keyed_method_state`), so a release still restores all of them together.
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ from honing.core.errors import ContractError
 
 METHOD_STATE_VERSION_KEY = "schema_version"
 SCHEDULER_STATE_VERSION_KEY = "schema_version"
+METHOD_STATES_KEY = "methods"
+KEYED_STATE_SCHEMA_VERSION = 1
 
 
 def json_native_problem(value: object, path: str = "state") -> str | None:
@@ -83,3 +89,28 @@ def scheduler_state_version(state: Mapping[str, object]) -> int | None:
 def validate_scheduler_state(state: Mapping[str, object]) -> None:
     """Refuse scheduler state that would not survive the commit record, or that has no schema version."""
     _validate_state(state, "scheduler", SCHEDULER_STATE_VERSION_KEY)
+
+
+def keyed_method_state(states: Mapping[str, Mapping[str, object]]) -> dict[str, object]:
+    """One state holding several methods' own states, each under its method's name."""
+    for name in states:
+        if not isinstance(name, str) or not name:
+            raise ContractError(f"a method's state is keyed by its name, got {name!r}")
+    return {
+        METHOD_STATE_VERSION_KEY: KEYED_STATE_SCHEMA_VERSION,
+        METHOD_STATES_KEY: {name: dict(state) for name, state in states.items()},
+    }
+
+
+def method_states(state: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
+    """Each method's own state from a :func:`keyed_method_state`; refuses any other shape or version."""
+    version = method_state_version(state)
+    keyed = state.get(METHOD_STATES_KEY)
+    if version != KEYED_STATE_SCHEMA_VERSION or set(state) != {METHOD_STATE_VERSION_KEY, METHOD_STATES_KEY}:
+        raise ContractError(
+            f"expected method states keyed by method name under schema version {KEYED_STATE_SCHEMA_VERSION},"
+            f" got version {version} with keys {sorted(state)}"
+        )
+    if not isinstance(keyed, dict) or not all(isinstance(own, dict) for own in keyed.values()):
+        raise ContractError(f"{METHOD_STATES_KEY!r} must map each method's name to its state")
+    return dict(keyed)

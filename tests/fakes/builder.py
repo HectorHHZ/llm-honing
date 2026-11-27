@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from honing.core import (
     RolloutProvider,
     Task,
     TeacherRef,
+    Trainer,
     TrainJobSpec,
 )
 from honing.release import EpisodeEvaluator, Gate, NoRegressionSelector, ReleaseChain, WinLossSelector
@@ -73,6 +74,8 @@ def build_campaign(
     gate_tasks: Sequence[Task] = TASKS,
     harness_selector: CandidateSelector | None = None,
     method_tasks: Sequence[Task] | None = None,
+    methods: Sequence[EvolveMethod] = (),
+    make_trainers: Callable[[FakeWorld], Mapping[str, Trainer]] | None = None,
 ) -> CampaignFixture:
     """A started campaign: release 0 is published and every plane is a fake.
 
@@ -80,6 +83,8 @@ def build_campaign(
     ``harness_selector`` is the gate's selector for harness candidates. With
     ``method_tasks``, a harness candidate must pass the method's selector on
     those tasks and then the gate's (``HarnessComponents.method_evaluator``).
+    ``methods`` are further harness methods a move can name, and
+    ``make_trainers`` builds the trainers a move can name, in the campaign's world.
     """
     world = FakeWorld()
     trainer = FakeTrainer(world, support=support, gain=trainer_gain)
@@ -114,7 +119,12 @@ def build_campaign(
             telemetry=FixedTelemetryStore(skewed_expert_telemetry(small_moe())),
         ),
         harness=HarnessComponents(
-            runner=runner, grader=grader, method=method, tasks=tuple(gate_tasks), method_evaluator=method_evaluator
+            runner=runner,
+            grader=grader,
+            method=method,
+            tasks=tuple(gate_tasks),
+            method_evaluator=method_evaluator,
+            methods=tuple(methods),
         ),
         defaults=CampaignDefaults(
             train=TrainJobSpec(algorithm="sft", steps=10),
@@ -127,6 +137,7 @@ def build_campaign(
             scheme=INT4_G128,
         ),
         rollout=rollout,
+        trainers=make_trainers(world) if make_trainers is not None else None,
     )
     campaign.start(FakeModelSource(world), work_dir, harness_seed=SEED_HARNESS)
     return CampaignFixture(campaign, world, trainer, editor, quantizer, runner, grader, method, data)

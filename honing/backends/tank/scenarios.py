@@ -43,6 +43,9 @@ SPLIT_SEEDS: dict[Split, range] = {
 #: Seeds beyond the suite file, disjoint from its seeds and from each other. A
 #: pool round runs on the default clock, as the suite file's rounds do.
 SEED_POOLS: dict[Split, range] = {"val": range(100_000, 200_000), "heldout": range(200_000, 300_000)}
+#: Seeds for teacher demonstrations after the first batch. They are in no split and no suite file, so no gate
+#: and no report plays them.
+DEMONSTRATION_SEEDS = range(300_000, 400_000)
 
 
 @dataclass(frozen=True)

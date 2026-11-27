@@ -126,13 +126,15 @@ def test_a_new_trainer_and_runner_are_tried_by_changing_the_config(tmp_path: Pat
 def test_the_schedule_runs_through_the_scheduler_slot_unless_the_config_names_a_scheduler(tmp_path: Path) -> None:
     scripted = build(_config(), REPO, tmp_path / "scripted")
     assert isinstance(scripted.scheduler, ScriptedScheduler)
-    assert scripted.scheduler.export_state() == {"schema_version": 1, "next": 0, "moves": 2}
+    exported = scripted.scheduler.export_state()
+    assert (exported["schema_version"], exported["next"], exported["moves"]) == (2, 0, 2)
 
     components = {
         **_config()["components"],  # type: ignore[dict-item]
         "scheduler": {"factory": "tests.fakes.scheduler:history_scheduler", "args": {"kinds": ["train"]}},
     }
-    run = build(_config(components=components), REPO, tmp_path / "named")
+    with pytest.warns(UserWarning, match=r"the 'history' scheduler chooses every move, so the schedule's moves"):
+        run = build(_config(components=components), REPO, tmp_path / "named")
     assert isinstance(run.scheduler, HistoryScheduler)
     (train,) = run.campaign.run(run.scheduler)
 

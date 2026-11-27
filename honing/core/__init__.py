@@ -81,11 +81,15 @@ from honing.core.protocols import (
     run_graded,
 )
 from honing.core.release import HoneRelease
-from honing.core.schedule import CampaignState, Move, MoveKind, StepRecord, StepResult
+from honing.core.schedule import CampaignState, MetricsSource, Move, MoveKind, StepRecord, StepResult
 from honing.core.state import (
+    KEYED_STATE_SCHEMA_VERSION,
     METHOD_STATE_VERSION_KEY,
+    METHOD_STATES_KEY,
     SCHEDULER_STATE_VERSION_KEY,
+    keyed_method_state,
     method_state_version,
+    method_states,
     scheduler_state_version,
     validate_method_state,
     validate_scheduler_state,
@@ -108,6 +112,7 @@ from honing.core.training import (
     DECISION_REQUIREMENTS,
     AlgorithmName,
     AlgorithmRequirements,
+    DirectionEditSpec,
     Executor,
     RecoverySpec,
     RolloutKind,
@@ -125,8 +130,10 @@ from honing.core.weights import MASTER_WEIGHT_FORMAT, CheckpointRef, ModelSnapsh
 __all__ = [
     "ALGORITHM_REQUIREMENTS",
     "DECISION_REQUIREMENTS",
+    "KEYED_STATE_SCHEMA_VERSION",
     "LANGUAGE_MODEL_CONTRACTS",
     "MASTER_WEIGHT_FORMAT",
+    "METHOD_STATES_KEY",
     "METHOD_STATE_VERSION_KEY",
     "SCHEDULER_STATE_VERSION_KEY",
     "AlgorithmName",
@@ -157,6 +164,7 @@ __all__ = [
     "DecisionQuestion",
     "DecisionSample",
     "DecisionTrace",
+    "DirectionEditSpec",
     "EndpointRuntime",
     "EpisodeOutcome",
     "EpisodeRecord",
@@ -183,6 +191,7 @@ __all__ = [
     "Layer",
     "LayerShape",
     "MethodRequirements",
+    "MetricsSource",
     "ModelEditor",
     "ModelSnapshot",
     "ModelSource",
@@ -237,7 +246,9 @@ __all__ = [
     "UtilizationTelemetry",
     "WeightConverter",
     "WeightFormat",
+    "keyed_method_state",
     "method_state_version",
+    "method_states",
     "require",
     "require_choice",
     "requirements_for",

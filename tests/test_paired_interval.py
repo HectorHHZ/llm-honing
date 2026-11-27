@@ -25,7 +25,13 @@ from honing.core import (
     Task,
     UpdateCandidate,
 )
-from honing.release import Gate, PairedDifference, PairedIntervalSelector, betting_paired_difference
+from honing.release import (
+    Gate,
+    PairedDifference,
+    PairedIntervalSelector,
+    betting_paired_difference,
+    paired_difference,
+)
 from tests.fakes.builder import TASKS, build_campaign
 from tests.fakes.harness import FakeEpisodeRunner
 from tests.fakes.model import parameters_of, small_moe
@@ -86,7 +92,8 @@ def _select_rate(
     for _ in range(GATES):
         differences = rng.choices(values, weights, k=rounds)
         for look in range(1, looks + 1):
-            decision = selector.look(CANDIDATE, _evaluation(differences[: look * block]), final=look == looks)
+            evaluation = _evaluation(differences[: look * block])
+            decision = selector.look(CANDIDATE, evaluation, final=look == looks, planned=rounds)
             if decision is not None:
                 selected += decision.selected
                 played += look * block
@@ -109,36 +116,77 @@ def test_the_betting_interval_needs_no_spread_and_holds_from_one_task() -> None:
     assert (sweep.low, sweep.high) == pytest.approx((0.122895, 1.0), abs=1e-5)
     nothing = betting_paired_difference(_evaluation([0.0] * 40), confidence=0.95)
     assert (nothing.low, nothing.high) == pytest.approx((-0.116478, 0.116478), abs=1e-5)
+    # Stakes tuned to more tasks are smaller, so the same 40 ties give a wider interval.
+    planned = betting_paired_difference(_evaluation([0.0] * 40), confidence=0.95, planned=160)
+    assert planned.low < nothing.low and planned.high > nothing.high
     with pytest.raises(ContractError, match="confidence"):
         betting_paired_difference(_evaluation([1.0]), confidence=1.0)
+    with pytest.raises(ContractError, match="tuned to 39 planned tasks, but the evaluation has 40"):
+        betting_paired_difference(_evaluation([0.0] * 40), confidence=0.95, planned=39)
+
+
+@pytest.mark.unit
+def test_the_interval_keeps_the_highest_capital_the_bets_reached() -> None:
+    # Ten straight wins clear zero. Ten losses after them bring the mean back to 0 and the capital back below the
+    # level, but Ville's bound covers the capital's running maximum, so the low end keeps what the wins reached.
+    # A candidate with no effect wins ten straight rounds less than 0.1% of the time.
+    rose = betting_paired_difference(_evaluation([1.0] * 10), confidence=0.95, planned=20)
+    fell = betting_paired_difference(_evaluation([1.0] * 10 + [-1.0] * 10), confidence=0.95)
+    assert rose.low > 0.25 and fell.mean == 0.0 and fell.low == pytest.approx(rose.low, abs=1e-6)
+    assert PairedIntervalSelector().decide(CANDIDATE, _evaluation([1.0] * 10 + [-1.0] * 10)).selected
+    # The same twenty differences, alternating, never lift the capital that far.
+    assert betting_paired_difference(_evaluation([1.0, -1.0] * 10), confidence=0.95).low < 0.0
+
+    # Sixty losses after the wins push the high end below the low end. No single mean fits, so the gate rejects.
+    crossed = PairedIntervalSelector().decide(CANDIDATE, _evaluation([1.0] * 10 + [-1.0] * 60))
+    assert crossed.metrics["difference_low"] > crossed.metrics["difference_high"]
+    assert not crossed.selected and crossed.reason.endswith("Its ends crossed, so no single mean fits the differences")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("scores", [(1.7, 0.0), (0.0, 1.2)])
+def test_a_difference_outside_minus_one_to_one_is_refused(scores: tuple[float, float]) -> None:
+    # A Grade keeps scores in [0, 1], but an EvaluationResult built by hand does not.
+    evaluation = EvaluationResult(
+        task_ids=("t0", "t1"),
+        candidate_scores=(0.5, scores[0]),
+        incumbent_scores=(0.5, scores[1]),
+        evaluated_variant="master",
+    )
+    with pytest.raises(ContractError, match=r"task t1 scores .* a difference of [+-]1\.\d+\. The interval needs"):
+        betting_paired_difference(evaluation, confidence=0.95)
+    with pytest.raises(ContractError, match="task t1 scores"):
+        paired_difference(evaluation)
 
 
 @pytest.mark.unit
 def test_it_selects_only_when_the_whole_interval_is_above_min_effect() -> None:
-    mostly_wins = _evaluation([1.0] * 30 + [0.0] * 10)
+    mostly_wins = _evaluation([1.0, 1.0, 1.0, 0.0] * 10)
     decision = PairedIntervalSelector().decide(CANDIDATE, mostly_wins)
     assert decision.selected
     assert decision.metrics["difference_low"] > 0.0
     assert decision.metrics["interval_confidence"] == 0.95
-    assert decision.metrics["tasks"] == 40.0
-    # The mean, 0.75, is above 0.7, but the interval reaches down to 0.50.
+    assert (decision.metrics["tasks"], decision.metrics["planned_tasks"]) == (40.0, 40.0)
+    # The mean, 0.75, is above 0.7, but the interval reaches down to 0.52.
     assert not PairedIntervalSelector(min_effect=0.7).decide(CANDIDATE, mostly_wins).selected
     assert not PairedIntervalSelector().decide(CANDIDATE, _evaluation([0.0] * 40)).selected
 
 
 @pytest.mark.unit
 def test_an_interim_look_stops_only_when_the_interval_clears_min_effect() -> None:
+    # The first of four looks at 40 rounds each.
     selector = PairedIntervalSelector(looks=4)
     mixed = _evaluation([1.0, -1.0, 0.0, 0.5] * 10)
-    assert selector.look(CANDIDATE, mixed, final=False) is None
+    assert selector.look(CANDIDATE, mixed, final=False, planned=160) is None
     last = selector.look(CANDIDATE, mixed, final=True)
     assert last is not None and not last.selected
 
-    clear_win = selector.look(CANDIDATE, _evaluation([1.0] * 36 + [-1.0] * 4), final=False)
+    clear_win = selector.look(CANDIDATE, _evaluation([1.0] * 36 + [-1.0] * 4), final=False, planned=160)
     assert clear_win is not None and clear_win.selected
-    assert clear_win.metrics["interval_confidence"] == pytest.approx(1 - 0.1 * 0.05 / 3)
+    # Every look reads the same betting process, so each uses the full level.
+    assert (clear_win.metrics["interval_confidence"], clear_win.metrics["planned_tasks"]) == (0.95, 160.0)
 
-    clear_loss = selector.look(CANDIDATE, _evaluation([-1.0] * 36 + [1.0] * 4), final=False)
+    clear_loss = selector.look(CANDIDATE, _evaluation([-1.0] * 36 + [1.0] * 4), final=False, planned=160)
     assert clear_loss is not None and not clear_loss.selected
 
 
@@ -152,17 +200,19 @@ def test_it_refuses_settings_and_looks_that_cannot_work() -> None:
         with pytest.raises(ContractError, match="min_effect"):
             PairedIntervalSelector(min_effect=min_effect)
     with pytest.raises(ContractError, match="no interim looks"):
-        PairedIntervalSelector().look(CANDIDATE, _evaluation([1.0, 0.0]), final=False)
+        PairedIntervalSelector().look(CANDIDATE, _evaluation([1.0, 0.0]), final=False, planned=4)
+    with pytest.raises(ContractError, match="an interim look needs the planned rounds"):
+        PairedIntervalSelector(looks=2).look(CANDIDATE, _evaluation([1.0, 0.0]), final=False)
     with pytest.raises(ContractError, match="effect must be above"):
         PairedIntervalSelector(min_effect=0.1).rounds_needed(paired_sd=0.5, effect=0.1)
 
 
 @pytest.mark.unit
-def test_the_gate_size_is_where_the_capital_is_expected_to_clear_the_final_level() -> None:
-    # At its final look a four-look gate's capital must reach 2 / (0.9 * 0.05) where a fixed gate's must reach
-    # 2 / 0.05, and the count rounds up to whole blocks of 84.
-    assert PairedIntervalSelector().rounds_needed(paired_sd=0.5, effect=EFFECT) == 327
-    assert PairedIntervalSelector(looks=4).rounds_needed(paired_sd=0.5, effect=EFFECT) == 336
+def test_the_gate_size_is_where_the_capital_is_likely_to_have_reached_the_level() -> None:
+    # Every look bets at the full level, so a four-look gate needs only the fixed gate's count rounded up to whole
+    # blocks of 70.
+    assert PairedIntervalSelector().rounds_needed(paired_sd=0.5, effect=EFFECT) == 279
+    assert PairedIntervalSelector(looks=4).rounds_needed(paired_sd=0.5, effect=EFFECT) == 280
 
 
 @pytest.mark.unit
@@ -173,10 +223,12 @@ def test_a_planned_gate_can_play_every_look_and_select() -> None:
     assert rounds >= 2 * 4 and rounds % 4 == 0
     differences = [0.4, 0.6] * (rounds // 2)
     block = rounds // 4
-    for look in range(1, 4):
-        assert selector.look(CANDIDATE, _evaluation(differences[: look * block]), final=False) is None
-    last = selector.look(CANDIDATE, _evaluation(differences), final=True)
-    assert last is not None and last.selected
+    decisions = [
+        selector.look(CANDIDATE, _evaluation(differences[: look * block]), final=look == 4, planned=rounds)
+        for look in range(1, 5)
+    ]
+    # The third look already selects, and so would the last.
+    assert [decision and decision.selected for decision in decisions] == [None, None, True, True]
 
 
 # ---------------------------------------------------------------- the gate's blocks and harness moves
@@ -194,10 +246,22 @@ class _Blocks:
         return _evaluation(self.differences[first : first + self.block], first)
 
 
+class _Sizes:
+    """An evaluator that plays blocks of these sizes on new tasks, every one a tie."""
+
+    def __init__(self, sizes: list[int]) -> None:
+        self.sizes, self.played = sizes, 0
+
+    def evaluate(self, candidate: UpdateCandidate, incumbent: HoneRelease) -> EvaluationResult:
+        size = self.sizes.pop(0)
+        self.played += size
+        return _evaluation([0.0] * size, self.played - size)
+
+
 @pytest.mark.unit
 def test_a_sequential_gate_plays_blocks_until_a_look_decides() -> None:
     selector = PairedIntervalSelector(looks=4)
-    # 19 wins and a loss clear an interim look's 99.83% interval. Nine and a loss do not.
+    # 19 wins and a loss clear zero at the first look of a gate that plans 80 rounds.
     clear = _Blocks([1.0] * 19 + [-1.0] + [0.0] * 60, block=20)
     evaluation, decision = Gate(clear, selector).judge(CANDIDATE, INCUMBENT)
     assert (clear.calls, evaluation.task_ids) == (1, TASK_IDS[:20])
@@ -211,6 +275,10 @@ def test_a_sequential_gate_plays_blocks_until_a_look_decides() -> None:
     # An evaluator that plays the same tasks again would count their rounds twice.
     with pytest.raises(ContractError, match="scores each task once"):
         Gate(_Blocks([1.0, -1.0] * 5, block=10, replay=True), selector).judge(CANDIDATE, INCUMBENT)
+
+    # The bets are tuned to four blocks of the first one's size, so blocks that add up to more are refused.
+    with pytest.raises(ContractError, match="tuned to 40 planned tasks, but the evaluation has 55"):
+        Gate(_Sizes([10, 15, 15, 15]), selector).judge(CANDIDATE, INCUMBENT)
 
 
 @pytest.mark.unit
@@ -232,6 +300,9 @@ def test_a_harness_move_with_a_method_evaluator_must_pass_both_selectors(tmp_pat
         assert outcome.evaluation is not None and len(outcome.evaluation.task_ids) == len(gate_tasks)
         record = json.loads(fixture.campaign.chain.record_path.read_text().splitlines()[-1])
         assert record["candidate"]["method_state"]["accepted"] == int(published)
+        # The gate ran, so the history's gate metrics are its twelve tasks.
+        (step,) = fixture.campaign.state().history
+        assert (step.metrics_from, step.gate_metrics["gate_tasks"]) == ("gate", 12.0)
 
     # A candidate the method rejects never reaches the gate.
     fixture = build_campaign(
@@ -243,6 +314,9 @@ def test_a_harness_move_with_a_method_evaluator_must_pass_both_selectors(tmp_pat
     outcome = fixture.campaign.advance(Move(kind="harness"))
     assert outcome.decision is not None and outcome.decision.policy == "win_loss" and outcome.release is None
     assert fixture.runner.runs == 2 * 2  # two tasks, under the candidate and the incumbent
+    # The history's gate metrics then come from the method's two tasks, and it says so.
+    (step,) = fixture.campaign.state().history
+    assert (step.result, step.metrics_from, step.gate_metrics["gate_tasks"]) == ("rejected", "method", 2.0)
 
 
 # ---------------------------------------------------------------- error rates over 2,000 simulated gates

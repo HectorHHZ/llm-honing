@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from honing.campaign import rules
@@ -25,6 +25,7 @@ from honing.core import (
     HarnessSpec,
     HoneRelease,
     ImportanceScorer,
+    MetricsSource,
     ModelEditor,
     ModelSnapshot,
     ModelSource,
@@ -47,6 +48,8 @@ from honing.core import (
     TrainJobSpec,
     TransformManifest,
     UpdateCandidate,
+    keyed_method_state,
+    method_states,
     require,
     requirements_for,
 )
@@ -74,6 +77,10 @@ class HarnessComponents:
     sees that run, so a method such as GEPA keeps its own fixed validation
     tasks. A candidate it selects then goes through the gate with the gate's
     own selector, on the gate's evaluator, which may draw fresh tasks.
+
+    ``method`` runs a harness move that names no method. ``methods`` are the
+    further methods a move can name. A method is named by its own ``name``, so
+    no two of them may share one.
     """
 
     runner: EpisodeRunner
@@ -83,10 +90,18 @@ class HarnessComponents:
     episode_budget: int = 0
     samples_per_task: int = 1
     method_evaluator: Evaluator | None = None
+    methods: tuple[EvolveMethod, ...] = ()
 
     def __post_init__(self) -> None:
         require(len(self.tasks) > 0, "a campaign needs at least one task")
         require(self.samples_per_task > 0, "samples_per_task must be > 0")
+        names = [method.name for method in self.all_methods]
+        require(len(set(names)) == len(names), f"a campaign names each harness method once, got {names}")
+
+    @property
+    def all_methods(self) -> tuple[EvolveMethod, ...]:
+        """The default method first, then the others in the order given."""
+        return (self.method, *self.methods)
 
 
 @dataclass(frozen=True)
@@ -101,13 +116,21 @@ class CampaignDefaults:
 
 @dataclass(frozen=True)
 class StepOutcome:
-    """What one move produced. ``release`` is set only when the candidate was published."""
+    """What one move produced. ``release`` is set only when the candidate was published.
+
+    ``gate_metrics`` are the gate's numbers the settled candidate's record
+    holds, computed once, so the history and the record cannot disagree.
+    ``metrics_from`` says whose run they come from, as on
+    :class:`~honing.core.StepRecord`.
+    """
 
     move: Move
     decision: SelectionDecision | None
     evaluation: EvaluationResult | None
     release: HoneRelease | None
     skipped_reason: str | None = None
+    gate_metrics: Mapping[str, float] = field(default_factory=dict)
+    metrics_from: MetricsSource | None = None
 
 
 def _size_metrics(snapshot: ModelSnapshot) -> dict[str, float]:
@@ -129,7 +152,7 @@ def _both(method: SelectionDecision, gate: SelectionDecision) -> SelectionDecisi
 
 
 def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
-    decision, release, evaluation = outcome.decision, outcome.release, outcome.evaluation
+    decision, release = outcome.decision, outcome.release
     result: StepResult
     if decision is None:
         result, reason = "skipped", outcome.skipped_reason or ""
@@ -143,9 +166,30 @@ def _step_record(step: int, parent_id: str, outcome: StepOutcome) -> StepRecord:
         reason=reason,
         label=outcome.move.harness.label if outcome.move.harness is not None else None,
         release_id=release.release_id if release is not None else None,
-        # The same numbers the settled candidate's record holds: the bootstrap is seeded.
-        gate_metrics=gate_metrics(evaluation) if evaluation is not None else {},
+        gate_metrics=outcome.gate_metrics,
+        metrics_from=outcome.metrics_from,
     )
+
+
+def _names(names: Iterable[str]) -> str:
+    return ", ".join(repr(name) for name in names)
+
+
+class _OwnStateSelector:
+    """Shows a method's selector its own state on a candidate that carries every method's.
+
+    A method's selector reads ``candidate.method_state`` as that method wrote
+    it. In a campaign with several methods the candidate carries all of their
+    states, so the selector is given a copy holding only its own.
+    """
+
+    def __init__(self, selector: CandidateSelector, own: Mapping[str, object]) -> None:
+        self.name = selector.name
+        self._selector = selector
+        self._own = own
+
+    def decide(self, candidate: UpdateCandidate, evaluation: EvaluationResult) -> SelectionDecision:
+        return self._selector.decide(replace(candidate, method_state=self._own), evaluation)
 
 
 class Campaign:
@@ -161,6 +205,17 @@ class Campaign:
     history a scheduler reads from :meth:`state`. When a scheduler chooses the
     move (:meth:`step`), its state is written into every commit record line
     from then on, and neither a rejection nor a rollback changes it.
+
+    ``trainer`` and ``harness.method`` run a move that names neither. A move
+    can name any trainer in ``trainers`` and any method in ``harness.methods``
+    instead, so one campaign can mix, for example, supervised training with a
+    weight edit, and GEPA with Meta-Harness. A name the campaign does not have
+    is refused before the move runs anything.
+
+    With one method, a release's ``method_state`` is that method's state. With
+    several it holds each method's own state under its name
+    (:func:`~honing.core.keyed_method_state`), so a rollback restores them
+    together; each method and its selector still see only their own.
     """
 
     def __init__(
@@ -174,10 +229,13 @@ class Campaign:
         harness: HarnessComponents,
         defaults: CampaignDefaults,
         rollout: RolloutProvider | None = None,
+        trainers: Mapping[str, Trainer] | None = None,
     ) -> None:
         self._chain = chain
         self._gate = gate
         self._trainer = trainer
+        self._trainers = dict(trainers or {})
+        require(all(self._trainers), "a registered trainer needs a name")
         self._data = data
         self._compression = compression
         self._harness = harness
@@ -202,13 +260,17 @@ class Campaign:
 
     def start(self, source: ModelSource, work_dir: Path, harness_seed: HarnessSpec) -> HoneRelease:
         """Check the planes fit together, materialize the initial model, and publish it as release 0."""
-        method = self._harness.method
-        rules.method_supported_by_runner(method.requires, self._harness.runner.support)
+        methods = self._harness.all_methods
+        for method in methods:
+            rules.method_supported_by_runner(method.requires, self._harness.runner.support)
         rules.spec_runnable(harness_seed, self._harness.runner.support)
-        initial_state = method.initial_state(harness_seed)
-        rules.method_state_schema_matches(initial_state, method.name, method.state_schema_version)
+        own_states = {method.name: method.initial_state(harness_seed) for method in methods}
+        for method in methods:
+            rules.method_state_schema_matches(own_states[method.name], method.name, method.state_schema_version)
+        initial_state = keyed_method_state(own_states) if self._keyed else own_states[self._harness.method.name]
         snapshot = source.materialize(work_dir)
-        rules.architecture_supported(snapshot.architecture, self._trainer.support)
+        for trainer in (self._trainer, *self._trainers.values()):
+            rules.architecture_supported(snapshot.architecture, trainer.support)
         candidate = UpdateCandidate(
             kind="init",
             parent_id=None,
@@ -253,6 +315,17 @@ class Campaign:
             return None
         return self.advance(move)
 
+    def check_move(self, move: Move) -> None:
+        """Refuse a move that names a trainer or a method this campaign does not have.
+
+        :meth:`advance` refuses the same moves before it runs anything. A
+        caller with a fixed schedule can check all of it before the first move.
+        """
+        if move.kind in ("train", "prune"):
+            self._trainer_for(move)
+        elif move.kind == "harness":
+            self._method_for(move.harness if move.harness is not None else HarnessMoveConfig())
+
     def advance(self, move: Move) -> StepOutcome:
         """Build, check, and settle the candidate for one move, and add the move to the history."""
         parent_id = self._chain.head().release_id
@@ -265,11 +338,14 @@ class Campaign:
         if move.kind == "harness":
             return self._advance_harness(move, head)
         if move.kind == "train":
-            candidate = self._train_candidate(move.train if move.train is not None else self._defaults.train, head)
+            trainer = self._trainer_for(move)
+            job = move.train if move.train is not None else self._defaults.train
+            candidate = self._train_candidate(job, head, trainer)
         elif move.kind == "prune":
+            trainer = self._trainer_for(move)
             budget = move.budget if move.budget is not None else self._defaults.budget
             recovery = move.recovery if move.recovery is not None else self._defaults.recovery
-            candidate = self._prune_candidate(budget, recovery, head)
+            candidate = self._prune_candidate(budget, recovery, head, trainer)
         elif move.kind == "quantize":
             candidate = self._quantize_candidate(
                 move.scheme if move.scheme is not None else self._defaults.scheme, head
@@ -288,12 +364,12 @@ class Campaign:
 
     # ------------------------------------------------------------ weight candidates
 
-    def _train_candidate(self, job: TrainJobSpec, head: HoneRelease) -> UpdateCandidate:
-        self._check_job(job)
+    def _train_candidate(self, job: TrainJobSpec, head: HoneRelease, trainer: Trainer) -> UpdateCandidate:
+        self._check_job(job, trainer)
         batch = self._batch_for(job, head, head.policy(), release_id=head.release_id)
         rules.batch_meets_contract(job, batch)
-        result = self._trainer.train(job, head.master, batch)
-        rules.architecture_supported(result.snapshot.architecture, self._trainer.support)
+        result = trainer.train(job, head.master, batch)
+        rules.architecture_supported(result.snapshot.architecture, trainer.support)
         return UpdateCandidate(
             kind="train",
             parent_id=head.release_id,
@@ -305,7 +381,7 @@ class Campaign:
         )
 
     def _prune_candidate(
-        self, budget: CompressionBudget, recovery: RecoverySpec | None, head: HoneRelease
+        self, budget: CompressionBudget, recovery: RecoverySpec | None, head: HoneRelease, trainer: Trainer
     ) -> UpdateCandidate:
         compression = self._compression
         importance = compression.scorer.score(head.master, compression.telemetry.window())
@@ -316,10 +392,10 @@ class Campaign:
             recovery_job = step.recovery.as_job(head.trained_numerics)
         # Everything that can be checked without the edited weights is checked
         # here, so a refused plan never reaches the editor.
-        rules.architecture_supported(plan.after, self._trainer.support)
+        rules.architecture_supported(plan.after, trainer.support)
         rules.recovery_teacher_fits_new_shape(step)
         if recovery_job is not None:
-            self._check_job(recovery_job)
+            self._check_job(recovery_job, trainer)
 
         snapshot = compression.editor.apply(head.master, plan)
         metrics = {"estimated_parameter_change": float(plan.estimated.parameters)}
@@ -327,7 +403,7 @@ class Campaign:
             # The edited weights are not published, so their rollout samples name no release.
             batch = self._batch_for(recovery_job, head, _policy_of(snapshot), release_id=None)
             rules.batch_meets_contract(recovery_job, batch)
-            result = self._trainer.train(recovery_job, snapshot, batch)
+            result = trainer.train(recovery_job, snapshot, batch)
             snapshot = result.snapshot
             metrics.update(result.metrics)
         return UpdateCandidate(
@@ -360,14 +436,13 @@ class Campaign:
     # ------------------------------------------------------------ harness candidates
 
     def _advance_harness(self, move: Move, head: HoneRelease) -> StepOutcome:
-        harness = self._harness
-        method, runner = harness.method, harness.runner
+        harness, runner = self._harness, self._harness.runner
+        config = move.harness if move.harness is not None else HarnessMoveConfig()
+        method = self._method_for(config)
         if head.harness is None:
             raise ContractError("the head has no harness to evolve; start the campaign with a harness seed")
-        config = move.harness if move.harness is not None else HarnessMoveConfig()
-        if config.method is not None and config.method != method.name:
-            raise ContractError(f"the move is for method {config.method!r}, but the campaign runs {method.name!r}")
-        state = self._method_state(head)
+        carried = self._method_state(head)
+        state = self._own_state(carried, method)
         rules.method_state_schema_matches(state, method.name, method.state_schema_version)
         context = EvolveContext(
             current=head.harness,
@@ -383,16 +458,17 @@ class Campaign:
         proposal = result.proposal
         if proposal is None:
             reason = f"{method.name} proposed nothing"
+            skipped = self._with_own_state(carried, method, result.state)
             # Recorded before the pending state moves, so a restart can see what the attempt spent.
             self._chain.record_skip(
                 parent_id=head.release_id,
                 method=method.name,
                 reason=reason,
-                state=result.state,
+                state=skipped,
                 episodes_spent=result.episodes_spent,
                 label=config.label,
             )
-            self._pending_method_state = result.state
+            self._pending_method_state = skipped
             return StepOutcome(move=move, decision=None, evaluation=None, release=None, skipped_reason=reason)
         rules.spec_runnable(proposal.spec, runner.support)
         candidate = UpdateCandidate(
@@ -402,26 +478,29 @@ class Campaign:
             serving=head.serving,
             harness=proposal.spec,
             trained_numerics=head.trained_numerics,
-            method_state=result.state,
+            method_state=self._with_own_state(carried, method, result.state),
             metrics={**_size_metrics(head.master), "method_episodes": float(result.episodes_spent)},
             move_label=config.label,
         )
         self._check_candidate(candidate)
+        selector = _OwnStateSelector(method.selector, result.state) if self._keyed else method.selector
+        metrics_from: MetricsSource = "gate"
         if harness.method_evaluator is None:
-            evaluation, decision = self._gate.judge(candidate, head, selector=method.selector)
+            evaluation, decision = self._gate.judge(candidate, head, selector=selector)
             method_evaluation = evaluation
         else:
-            method_gate = Gate(harness.method_evaluator, default_selector=method.selector)
+            method_gate = Gate(harness.method_evaluator, default_selector=selector)
             method_evaluation, decision = method_gate.judge(candidate, head)
-            evaluation = method_evaluation
+            evaluation, metrics_from = method_evaluation, "method"
             if decision.selected:
                 evaluation, verdict = self._gate.judge(candidate, head)
-                decision = _both(decision, verdict)
+                decision, metrics_from = _both(decision, verdict), "gate"
         self._recent_records = method_evaluation.records
         # The method learns from every verdict, so its new state is attached
         # whether the candidate is published or rejected.
-        settled = replace(candidate, method_state=method.record(result.state, proposal, method_evaluation, decision))
-        return self._publish_or_reject(move, settled, evaluation, decision)
+        recorded = method.record(result.state, proposal, method_evaluation, decision)
+        settled = replace(candidate, method_state=self._with_own_state(carried, method, recorded))
+        return self._publish_or_reject(move, settled, evaluation, decision, metrics_from)
 
     # ------------------------------------------------------------ shared
 
@@ -433,31 +512,88 @@ class Campaign:
         return self._publish_or_reject(move, candidate, evaluation, decision)
 
     def _publish_or_reject(
-        self, move: Move, candidate: UpdateCandidate, evaluation: EvaluationResult, decision: SelectionDecision
+        self,
+        move: Move,
+        candidate: UpdateCandidate,
+        evaluation: EvaluationResult,
+        decision: SelectionDecision,
+        metrics_from: MetricsSource = "gate",
     ) -> StepOutcome:
         # Published and rejected candidates both carry the gate result, so the
         # record shows how close a rejection was, not only that it happened.
-        candidate = replace(candidate, metrics={**candidate.metrics, **gate_metrics(evaluation)})
+        metrics = gate_metrics(evaluation)
+        candidate = replace(candidate, metrics={**candidate.metrics, **metrics})
+        release: HoneRelease | None = None
         if decision.selected:
             release = self._chain.commit(candidate, decision)
             self._pending_method_state = None
-            return StepOutcome(move=move, decision=decision, evaluation=evaluation, release=release)
-        self._chain.record_rejection(candidate, decision)
-        self._pending_method_state = candidate.method_state
-        return StepOutcome(move=move, decision=decision, evaluation=evaluation, release=None)
+        else:
+            self._chain.record_rejection(candidate, decision)
+            self._pending_method_state = candidate.method_state
+        return StepOutcome(
+            move=move,
+            decision=decision,
+            evaluation=evaluation,
+            release=release,
+            gate_metrics=metrics,
+            metrics_from=metrics_from,
+        )
 
     @staticmethod
     def _check_candidate(candidate: UpdateCandidate) -> None:
         rules.master_is_hf_safetensors(candidate)
         rules.serving_built_from_master(candidate)
 
-    def _check_job(self, job: TrainJobSpec) -> None:
-        rules.algorithm_requirements_met(job, self._trainer.support)
+    def _check_job(self, job: TrainJobSpec, trainer: Trainer) -> None:
+        rules.algorithm_requirements_met(job, trainer.support)
         if requirements_for(job).requires_rollout and self._rollout is None:
             raise ContractError(f"{job.algorithm} learns from rollouts, but the campaign has no rollout provider")
 
     def _method_state(self, head: HoneRelease) -> Mapping[str, object]:
         return self._pending_method_state if self._pending_method_state is not None else head.method_state
+
+    # ------------------------------------------------------------ named trainers and methods
+
+    @property
+    def _keyed(self) -> bool:
+        """Whether a release's method state holds several methods' states under their names."""
+        return bool(self._harness.methods)
+
+    def _trainer_for(self, move: Move) -> Trainer:
+        if move.trainer is None:
+            return self._trainer
+        if move.trainer not in self._trainers:
+            known = _names(sorted(self._trainers)) if self._trainers else "no named trainers"
+            raise ContractError(f"the move is for trainer {move.trainer!r}, but the campaign has {known}")
+        return self._trainers[move.trainer]
+
+    def _method_for(self, config: HarnessMoveConfig) -> EvolveMethod:
+        if config.method is None:
+            return self._harness.method
+        for method in self._harness.all_methods:
+            if method.name == config.method:
+                return method
+        running = _names(method.name for method in self._harness.all_methods)
+        raise ContractError(f"the move is for method {config.method!r}, but the campaign runs {running}")
+
+    def _own_state(self, carried: Mapping[str, object], method: EvolveMethod) -> Mapping[str, object]:
+        """``method``'s own state from the state a release carries."""
+        if not self._keyed:
+            return carried
+        states = method_states(carried)
+        if method.name not in states:
+            raise ContractError(
+                f"the head's method state holds {_names(sorted(states))}, and nothing for {method.name!r}"
+            )
+        return states[method.name]
+
+    def _with_own_state(
+        self, carried: Mapping[str, object], method: EvolveMethod, own: Mapping[str, object]
+    ) -> Mapping[str, object]:
+        """The state a release carries, with ``method``'s own replaced; the other methods' are kept."""
+        if not self._keyed:
+            return own
+        return keyed_method_state({**method_states(carried), method.name: own})
 
     def _batch_for(
         self, job: TrainJobSpec, head: HoneRelease, policy: PolicyRef, *, release_id: str | None
