@@ -38,7 +38,7 @@ omitted, and inference pauses the native loop.
 
 ## Research scope
 
-Genre: **Shooters**. Capability tags: threat response, movement timing.
+Primary category: **Shooters**. Capability tags: threat response, movement timing.
 
 Move through a Stage 1 Easy segment and avoid moving bullets.
 
@@ -55,8 +55,8 @@ Suggested evaluation: Measure hits and survival within a fixed segment. Record
 practice-start settings and omitted hazards. Test movement timing separately
 from the fixed firing policy.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## Install and run
 

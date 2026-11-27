@@ -30,7 +30,7 @@ node integrations/ember-vault/scripts/bundle.cjs /tmp/ember-vault.html
 
 ## Research scope
 
-Genre: **Roguelikes**. Capability tags: combat, resource use, upgrade choice.
+Primary category: **Roguelikes**. Capability tags: combat, resource use, upgrade choice.
 
 Clear the vaults, choose upgrades, defeat the Furnace and reach the final gate.
 
@@ -46,8 +46,8 @@ do not establish a decision-model run.
 Suggested evaluation: Measure gate completion, damage and upgrade choices. Use
 separate configuration names for explicit model aim and automatic aim.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## Drive the engine
 

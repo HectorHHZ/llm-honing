@@ -9,7 +9,7 @@ All integration code lives here; the root wheel and core protocols are unchanged
 
 ## Research scope
 
-Genre: **Co-op**. Capability tags: spatial planning, resource sequence, cooperation.
+Primary category: **Co-op**. Capability tags: spatial planning, resource sequence, cooperation.
 
 Prepare and serve food with a teammate in a shared kitchen.
 
@@ -26,8 +26,8 @@ Suggested evaluation: Report raw team score and a chef-0 STAY control under the
 same layout, budget and teammate. Test new teammates, seats and layouts
 separately.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## Why this game and what comes next
 

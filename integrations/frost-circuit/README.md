@@ -28,7 +28,7 @@ node integrations/frost-circuit/scripts/bundle.cjs /tmp/frost-circuit.html
 
 ## Research scope
 
-Genre: **Roguelikes**. Capability tags: route planning, tactical timing, resource use.
+Primary category: **Roguelikes**. Capability tags: route planning, tactical timing, resource use.
 
 Recover station cores, avoid warned attacks, disable the Warden and extract
 through the airlock.
@@ -47,8 +47,8 @@ Suggested evaluation: Measure extraction success, damage and Pulse use. An
 experiment that removes warnings needs a separate observation profile and
 validation.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## Drive the engine
 

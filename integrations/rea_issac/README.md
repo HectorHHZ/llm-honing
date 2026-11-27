@@ -18,7 +18,7 @@ implementations. See [ANALYSIS.md](ANALYSIS.md) for the source and scope of that
 
 ## Research scope
 
-Genre: **Roguelikes**. Capability tags: room navigation, combat, resource use.
+Primary category: **Roguelikes**. Capability tags: room navigation, combat, resource use.
 
 Explore connected rooms and defeat the Warden in the independent Isaac-inspired
 simulation.
@@ -37,8 +37,8 @@ Suggested evaluation: Measure Warden success, room progress, damage and
 resource use. Compare the model with the rule baseline on matched seeds and the
 same observation configuration.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## Play with the UI
 

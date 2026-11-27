@@ -4,22 +4,21 @@ The game runtime owns game state, rules, native engine calls, actions, rendering
 and standalone controls. The Honing adapter owns task splits, harness files,
 model requests, episode execution, grading and training data conversion.
 
-## Game genres
+## Research categories
 
 This index covers the 15 games in this checkout that have a research scope, the
 Tank War public-site variant and Space Invaders. Space Invaders has an
 environment and replay here but no research scope yet, so its link opens the
-environment document. Each game has one genre, for navigation, and several
-capability tags.
-The genre names the kind of game. The capability tags and the game's research
-scope say what the model decides in a given configuration: a change to
-visibility, action abstraction or assistance can change those decisions
-without changing the genre.
+environment document. Each game has one primary category for navigation and
+several capability tags. The category names the kind of game. The capability
+tags and the game's research scope say what the model decides in a given
+configuration: a change to visibility, action abstraction or assistance can
+change those decisions without changing the category.
 
 The descriptions summarize the integration documents. Some integrations provide
 a control API and rule demo; their entries identify model use as future work.
 
-| Genre | What it asks for | Games |
+| Category | What it asks for | Games |
 | --- | --- | --- |
 | Strategy | Long horizon, economy | [Red Alert 2](ra2/README.md#research-scope) (real-time strategy) |
 | Shooters | Aim, dodge, timing | [Tank War](tank-war/README.md#research-scope) (maze tank duel), [Space Invaders](../docs/space-invaders-environment.md) (Atari arcade), [Taisei](taisei/README.md#research-scope) (bullet hell), [Hurrican](hurrican/README.md#research-scope) (run-and-gun) |
@@ -73,7 +72,7 @@ combinations on matched tasks:
 | Original model M0 | Baseline | Harness change |
 | Changed model M1 | Model change | Joint change |
 
-Report the effect of each change and their interaction. The genres apply
+Report the effect of each change and their interaction. These categories apply
 across model families; they do not rank NanoJev, Laya or other models.
 
 Record the following information so that readers can compare results:
@@ -93,7 +92,7 @@ primitive-input and auto-explore conditions in Brogue. A control that is not
 implemented remains proposed work.
 
 Treat related seats, repeated resets and decisions from one episode as grouped
-observations. Report each game's results before any genre aggregate. Raw
+observations. Report each game's results before any category aggregate. Raw
 scores from different games do not have a common unit.
 
 ## Runtime and adapter locations

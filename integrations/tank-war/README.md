@@ -23,7 +23,7 @@ models to this local integration now.
 
 ## Research scope
 
-Genre: **Shooters**. Capability tags: opponent response, short-term prediction, control.
+Primary category: **Shooters**. Capability tags: opponent response, short-term prediction, control.
 
 Fight another tank in a maze with shells that can bounce and hit their owner.
 
@@ -41,8 +41,8 @@ Suggested evaluation: Compare matched seeds from both seats under the same
 opponent. Report win/draw/loss and group paired seats by seed. Vary assistance
 separately from model weights.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## Quick start
 

@@ -4,7 +4,7 @@ The public Tank War site, where people play against NanoJev at `/play/`, as it r
 
 ## Research scope
 
-Genre: **Shooters**. Capability tags: public-site variant of tank war.
+Primary category: **Shooters**. Capability tags: public-site variant of tank war.
 
 Let a human player fight the configured model on the public site.
 
@@ -22,8 +22,8 @@ Suggested evaluation: Record the site revision, question text and player
 modifiers. Keep modified rounds and public-site results separate from the main
 Tank War evaluation.
 
-See the [game research index](../README.md#game-genres) for the genres
-and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#research-categories) for the
+classification method and the shared model/harness responsibility matrix.
 
 ## What a player gets
 

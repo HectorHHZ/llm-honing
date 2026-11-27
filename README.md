@@ -9,11 +9,11 @@ infra it runs on is being built here.
 See [game runtime and adapter locations](integrations/README.md) for the
 Python import paths, package contents and replay compatibility.
 
-The games are grouped by genre. A genre says what kind of game it is. What a
-model decides in it also depends on the harness: each game's research scope
-lists those decisions and what the model, the harness and the engine supply.
+The games are grouped into categories by game type. What a model decides in a
+game also depends on the harness: each game's research scope lists those
+decisions and what the model, the harness and the engine supply.
 
-| Genre | What it asks for | Games |
+| Category | What it asks for | Games |
 | --- | --- | --- |
 | Strategy | Long horizon, economy | [Red Alert 2](integrations/ra2/README.md#research-scope) (real-time strategy) |
 | Shooters | Aim, dodge, timing | [Tank War](integrations/tank-war/README.md#research-scope) (maze tank duel), [Space Invaders](docs/space-invaders-environment.md) (Atari arcade), [Taisei](integrations/taisei/README.md#research-scope) (bullet hell), [Hurrican](integrations/hurrican/README.md#research-scope) (run-and-gun) |
@@ -22,7 +22,7 @@ lists those decisions and what the model, the harness and the engine supply.
 | Survival and puzzle | Crafting, planning | [Craftax](integrations/craftax/README.md#research-scope) (2D Minecraft-like), [Griddly Spiders](integrations/griddly/README.md#research-scope) (grid puzzle) |
 | Co-op | Work with a teammate | [Overcooked-AI](integrations/overcooked/README.md#research-scope) (2-chef cooking) |
 
-The [research index and responsibility matrix](integrations/README.md#game-genres)
+The [research index and responsibility matrix](integrations/README.md#research-categories)
 explain what the model, harness and engine each supply. Each game link above
 opens its research scope. The [public Tank War site](integrations/tank-war-challenge/README.md#research-scope)
 is a separate configuration of Tank War.
