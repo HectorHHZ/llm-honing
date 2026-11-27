@@ -259,9 +259,9 @@ def test_retired_terms_stay_out_of_code_and_the_specification(repo_root: Path) -
     assert hits == [], "use 'manifest', 'record', 'metadata', or 'importance' instead:\n" + "\n".join(hits)
 
 
-# Backend packages that serve every environment rather than being one.
-SHARED_BACKENDS = {"jev", "llm_gateway", "sglang", "slime", "openhands", "pi"}
-SHARED_INTEGRATIONS = {"_shared", "agent_gateway", "djev", "openhands", "pi", "reef"}
+# Integration directories and backend packages that serve every environment rather than being one.
+# One set for both, so a shared name such as reef stays shared when it gains a backend package.
+SHARED = {"_shared", "agent_gateway", "djev", "jev", "llm_gateway", "openhands", "pi", "reef", "sglang", "slime"}
 
 
 def environment_names(repo_root: Path) -> re.Pattern[str]:
@@ -269,12 +269,12 @@ def environment_names(repo_root: Path) -> re.Pattern[str]:
     integrations = {
         path.name
         for path in (repo_root / "integrations").iterdir()
-        if path.is_dir() and not path.name.startswith(("_", ".")) and path.name not in SHARED_INTEGRATIONS
+        if path.is_dir() and not path.name.startswith(("_", ".")) and path.name not in SHARED
     }
     backends = {
         path.name
         for path in (repo_root / "honing" / "backends").iterdir()
-        if (path / "__init__.py").is_file() and path.name not in SHARED_BACKENDS
+        if (path / "__init__.py").is_file() and path.name not in SHARED
     }
     spelled = {re.sub(r"[-_]", "[-_ ]?", name) for name in integrations | backends}
     return re.compile(r"\b(" + "|".join(sorted(spelled, key=len, reverse=True)) + r")\b", re.IGNORECASE)
