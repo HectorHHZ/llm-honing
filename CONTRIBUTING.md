@@ -194,6 +194,13 @@ The runner also checks the head of `main` once a night and sets `gpu` on that
 commit, so a red check on a pull request can be told apart from a broken
 `main`.
 
+### Workflows
+
+A workflow names each action by a full commit SHA with its version in a
+comment, such as `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`,
+never by a tag, which can be moved to other code. Dependabot updates both
+together, and `tests/test_workflow_pins.py` fails on a tag.
+
 ## Releases
 
 A release is a tag `vMAJOR.MINOR.PATCH` on a merge commit of `main`. The
