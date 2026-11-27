@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +14,18 @@ torch = pytest.importorskip("torch")
 st = pytest.importorskip("safetensors.torch")
 
 from honing.backends.hf_checkpoint import hf_snapshot  # noqa: E402
-from honing.backends.weight_edit import EditPlan, TensorEdit, WeightEditTrainer, weight_edit_trainer  # noqa: E402
+from honing.backends.weight_edit import (  # noqa: E402
+    CheckpointLayout,
+    EditPlan,
+    NoTrainingData,
+    TensorEdit,
+    WeightEditTrainer,
+    no_data,
+    weight_edit_trainer,
+)
 from honing.core import (  # noqa: E402
     ContractError,
+    DataContract,
     DirectionEditSpec,
     EvaluationResult,
     TrainJobSpec,
@@ -301,3 +312,201 @@ def test_a_trainer_with_a_fixed_modifier_refuses_a_job_that_names_its_own_direct
     with pytest.raises(ContractError, match="the job cannot choose the direction"):
         trainer.modifier_for(job)
     assert trainer.modifier_for(TrainJobSpec("direction_edit", contract="typed_decisions")) is trainer.modifier
+
+
+# ---------------------------------------------------------------- refusals before any write
+
+
+def plan_trainer(tmp_path: Path, plan: EditPlan, **kwargs: Any) -> WeightEditTrainer:
+    return WeightEditTrainer(kwargs.pop("work_dir", tmp_path / "edits"), lambda base, batch: plan, **kwargs)
+
+
+SCALE = TensorEdit("head.weight", "scale", 2)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("lora job", "weight edits cannot apply a lora update"),
+        ("megatron base", "weight edits need hf_safetensors master weights"),
+        ("output inside base", "the edit output directory must be outside the base checkpoint"),
+        ("nonfinite metric", "edit metrics must be finite"),
+        ("unnamed parameter", "an edit must name its parameter"),
+    ],
+)
+def test_an_edit_the_trainer_cannot_publish_is_refused_before_anything_is_written(
+    tmp_path: Path, change: str, message: str
+) -> None:
+    parent = checkpoint(tmp_path)
+    base = hf_snapshot(parent)
+    job, plan, work_dir = JOB, EditPlan((SCALE,)), tmp_path / "edits"
+    if change == "lora job":
+        job = TrainJobSpec("weight_edit", update_policy=UpdatePolicy("lora", lora_rank=4))
+    elif change == "megatron base":
+        base = replace(base, checkpoint=replace(base.checkpoint, weight_format="megatron_torch_dist"))
+    elif change == "output inside base":
+        work_dir = parent / "edits"
+    elif change == "nonfinite metric":
+        plan = EditPlan((SCALE,), metrics={"margin": float("inf")})
+    else:
+        plan = EditPlan((TensorEdit("", "scale", 2),))
+    with pytest.raises(ContractError, match=message):
+        plan_trainer(tmp_path, plan, work_dir=work_dir).train(job, base, None)
+    assert not work_dir.exists()
+
+
+@pytest.mark.unit
+def test_an_unknown_algorithm_and_metadata_json_cannot_hold_are_refused(tmp_path: Path) -> None:
+    with pytest.raises(ContractError, match="unsupported weight-edit algorithm 'sft'"):
+        WeightEditTrainer(tmp_path, lambda base, batch: EditPlan(()), algorithm="sft")  # type: ignore[arg-type]
+    base = hf_snapshot(checkpoint(tmp_path))
+    with pytest.raises(ValueError, match="Out of range float values are not JSON compliant"):
+        plan_trainer(tmp_path, EditPlan((SCALE,), metadata={"norm": float("nan")})).train(JOB, base, None)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        (lambda parent: [], "checkpoint layout must select distinct weight files"),
+        (lambda parent: [parent / "model.safetensors"] * 2, "checkpoint layout must select distinct weight files"),
+        (lambda parent: [parent / ".." / "model.safetensors"], "weight file paths must stay within the checkpoint"),
+        (
+            lambda parent: [parent / "model.safetensors", parent / "copy.safetensors"],
+            "duplicate tensor backbone.weight across checkpoint shards",
+        ),
+    ],
+)
+def test_a_layout_that_selects_no_files_files_outside_or_one_tensor_twice_is_refused(
+    tmp_path: Path, files: Any, message: str
+) -> None:
+    parent = checkpoint(tmp_path)
+    (parent / "copy.safetensors").write_bytes((parent / "model.safetensors").read_bytes())
+    layout = CheckpointLayout(checksum=lambda path: "fixed", files=files)
+    base = replace(hf_snapshot(parent), checkpoint=replace(hf_snapshot(parent).checkpoint, checksum="fixed"))
+    with pytest.raises(ContractError, match=message):
+        plan_trainer(tmp_path, EditPlan((SCALE,)), layout=layout).train(JOB, base, None)
+    assert not list((tmp_path / "edits").glob("*/checkpoint"))
+
+
+@pytest.mark.unit
+def test_an_edit_the_layouts_checksum_cannot_see_is_refused_and_its_files_removed(tmp_path: Path) -> None:
+    parent = checkpoint(tmp_path)
+    base = replace(hf_snapshot(parent), checkpoint=replace(hf_snapshot(parent).checkpoint, checksum="blind"))
+    layout = CheckpointLayout(checksum=lambda path: "blind")
+    with pytest.raises(ContractError, match="the edit did not change the weights"):
+        plan_trainer(tmp_path, EditPlan((SCALE,)), layout=layout).train(JOB, base, None)
+    (run,) = (tmp_path / "edits").iterdir()
+    assert not (run / "checkpoint").exists() and not (run / "checkpoint.json").exists()
+    assert json.loads((run / "error.json").read_text()) == {"error": "the edit did not change the weights"}
+
+
+# ---------------------------------------------------------------- what the candidate holds
+
+
+@pytest.mark.unit
+def test_edits_in_two_shards_rewrite_both_and_record_each_result(tmp_path: Path) -> None:
+    parent = checkpoint(tmp_path, sharded=True)
+    (parent / "checkpoint.json").write_text("{}")
+    (parent / "SHA256_MANIFEST.json").write_text("{}")
+    base = hf_snapshot(parent)
+
+    result = trainer(
+        tmp_path, TensorEdit("head.bias", "add", [0.5, 0.5]), TensorEdit("backbone.weight", "scale", -1)
+    ).train(JOB, base, None)
+
+    out = Path(result.snapshot.checkpoint.location)
+    first = st.load_file(str(out / "model-00001-of-00002.safetensors"))
+    second = st.load_file(str(out / "model-00002-of-00002.safetensors"))
+    assert torch.equal(first["backbone.weight"], -torch.arange(6, dtype=torch.bfloat16).reshape(2, 3))
+    assert torch.equal(second["head.bias"], torch.tensor([1.5, 2.5], dtype=torch.float16))
+    assert torch.equal(first["counter"], torch.tensor([7])) and torch.equal(second["head.weight"], torch.ones((2, 3)))
+    assert result.metrics == {"entries_changed": 7.0, "tensors_edited": 2.0}  # -0 == 0, so one entry is unchanged
+    assert not (out / "checkpoint.json").exists() and not (out / "SHA256_MANIFEST.json").exists()
+    manifest = json.loads((out.parent / "checkpoint.json").read_text())
+    stored = {"backbone.weight": first["backbone.weight"], "head.bias": second["head.bias"]}
+    for operation in manifest["operations"]:
+        tensor = stored[operation["parameter"]]
+        digest = hashlib.sha256(tensor.reshape(-1).view(torch.uint8).numpy().tobytes()).hexdigest()
+        assert (operation["resultSha256"], operation["dtype"]) == (digest, str(tensor.dtype))
+    assert [o["entriesChanged"] for o in manifest["operations"]] == [5, 2]
+
+
+@pytest.mark.unit
+def test_a_float64_weight_is_edited_in_float64(tmp_path: Path) -> None:
+    parent = checkpoint(tmp_path)
+    state = st.load_file(str(parent / "model.safetensors"))
+    state["precise"] = torch.full((2,), 1.0, dtype=torch.float64)
+    st.save_file(state, str(parent / "model.safetensors"))
+    tiny = 1e-12  # lost in float32: 1 + 1e-12 rounds to 1
+
+    result = trainer(tmp_path, TensorEdit("precise", "add", [tiny, 0.0])).train(JOB, hf_snapshot(parent), None)
+
+    out = Path(result.snapshot.checkpoint.location)
+    assert st.load_file(str(out / "model.safetensors"))["precise"].tolist() == [1.0 + tiny, 1.0]
+    assert st.load_file(str(out.parent / "edit-values.safetensors"))["precise"].dtype == torch.float64
+
+
+@pytest.mark.unit
+def test_a_layouts_manifest_fields_reach_the_manifest_and_its_kind_names_the_candidate(tmp_path: Path) -> None:
+    layout = CheckpointLayout(manifest_fields={"kind": "trained-model", "parent": {"repo": "org/model"}})
+    result = plan_trainer(
+        tmp_path, EditPlan((SCALE,), metrics={"margin": 0.5}, metadata={"why": "test"}), layout=layout
+    )
+    out = Path(result.train(JOB, hf_snapshot(checkpoint(tmp_path)), None).snapshot.checkpoint.location)
+    manifest = json.loads((out.parent / "checkpoint.json").read_text())
+    assert (manifest["kind"], manifest["parent"], manifest["edit"]) == (
+        "trained-model",
+        {"repo": "org/model"},
+        {"why": "test"},
+    )
+    assert manifest["metrics"] == {"margin": 0.5, "entries_changed": 6.0, "tensors_edited": 1.0}
+    assert manifest["updatePolicy"] == {"kind": "full", "trainablePatterns": []}
+
+
+# ---------------------------------------------------------------- the pipeline factories
+
+
+@pytest.mark.unit
+def test_a_file_value_resolves_against_the_config_root_and_defaults_to_the_parameters_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = hf_snapshot(checkpoint(tmp_path))
+    (tmp_path / "values").mkdir()
+    st.save_file({"head.weight": torch.full((2, 3), 3.0)}, str(tmp_path / "values" / "head.safetensors"))
+    monkeypatch.setenv("EDIT_VALUES", "values")
+    context = PipelineContext(root=tmp_path, work_dir=tmp_path / "out")
+    edit = weight_edit_trainer(
+        context, [{"parameter": "head.weight", "operation": "replace", "value_file": "$EDIT_VALUES/head.safetensors"}]
+    )
+    out = Path(edit.train(JOB, base, None).snapshot.checkpoint.location)
+    assert torch.equal(st.load_file(str(out / "model.safetensors"))["head.weight"], torch.full((2, 3), 3.0))
+    assert out.parent.parent == tmp_path / "out" / "weight-edits"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        ({"parameter": "head.weight", "operation": "scale", "value": 2, "note": "x"}, "unknown weight-edit"),
+        ({"parameter": "head.weight", "operation": "scale"}, "give value or value_file"),
+        (
+            {"parameter": "head.weight", "operation": "scale", "value": 2, "value_tensor": "t"},
+            "give value or value_file",
+        ),
+    ],
+)
+def test_the_factory_refuses_an_entry_it_cannot_read(tmp_path: Path, entry: dict[str, Any], message: str) -> None:
+    base = hf_snapshot(checkpoint(tmp_path))
+    edit = weight_edit_trainer(PipelineContext(root=tmp_path, work_dir=tmp_path / "out"), [entry])
+    with pytest.raises(ContractError, match=message):
+        edit.train(JOB, base, None)
+
+
+@pytest.mark.unit
+def test_a_campaign_without_data_refuses_every_request_for_it() -> None:
+    provider = no_data(None)
+    assert isinstance(provider, NoTrainingData)
+    with pytest.raises(ContractError, match="this campaign has no training data"):
+        provider.next_batch(DataContract("token_sequences"))

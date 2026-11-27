@@ -4,6 +4,7 @@ model. The loop tests need torch; the CI job that installs CPU torch runs them."
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator, Sequence
 from typing import Any
 
@@ -13,6 +14,7 @@ from honing.backends.jev.decision_training import (
     decision_examples,
     deduplicated_split,
     group_advantages,
+    laya_question,
     policy_gradient_epochs,
     policy_gradient_record,
     record_start,
@@ -202,3 +204,131 @@ def test_a_grpo_record_counts_decisions_without_signal() -> None:
         "policy_loss": -0.5, "approx_kl": 0.01, "clipped_fraction": 0.25, "examples": 2.0,
         "decisions_without_signal": 1.0,
     }  # fmt: skip
+
+
+# ------------------------------------------------------------------ what the split and the loops refuse
+
+
+@pytest.mark.unit
+def test_one_input_with_two_labels_is_refused_within_a_split_and_across_splits() -> None:
+    a = {"ids": [1], "markers": [0], "label": 0}
+    with pytest.raises(ContractError, match="Conflicting labels for the same complete model input"):
+        deduplicated_split([a, {**a, "label": 1}], [], 0)
+    with pytest.raises(ContractError, match="Conflicting labels across episode splits"):
+        deduplicated_split([a], [{**a, "label": 2}], 0)
+    with pytest.raises(ContractError, match="choice questions only, not score"):
+        laya_question(DecisionQuestion("score", "How good?", (("1", "Poor"), ("5", "Great"))))
+
+
+@pytest.mark.unit
+def test_a_nonfinite_training_loss_stops_the_run_before_the_optimizer_steps(torch: Any) -> None:
+    model = toy(torch)
+    before = model.weight.detach().clone()
+    forward = forward_of(torch, model)
+
+    def poisoned(chunk: Sequence[dict[str, Any]]) -> tuple[Any, Any, Any]:
+        logits, labels, _ = forward(chunk)
+        return logits * float("nan"), labels, None
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    with pytest.raises(ContractError, match="nonfinite training loss"):
+        supervised_epochs(
+            torch, model, optimizer, vectors(4), vectors(2, offset=9), forward=poisoned,
+            epochs=1, batch_size=4, seed=0, save=lambda: None,
+        )  # fmt: skip
+    assert torch.equal(model.weight, before)
+
+
+@pytest.mark.unit
+def test_only_an_epoch_that_improves_validation_saves(torch: Any) -> None:
+    model = toy(torch)
+    saves: list[int] = []
+    run = supervised_epochs(
+        torch, model, torch.optim.SGD(model.parameters(), lr=0.0), vectors(6), vectors(3, offset=20),
+        forward=forward_of(torch, model), epochs=3, batch_size=4, seed=0, save=lambda: saves.append(1),
+    )  # fmt: skip
+    assert len(saves) == 1  # the first epoch beats infinity; later epochs only tie
+    assert run.best == run.initial[0] == run.history[2]["validationLoss"]
+    assert [entry["trainLoss"] for entry in run.history] == pytest.approx([run.history[0]["trainLoss"]] * 3)
+
+
+# ------------------------------------------------------------------ the clipped surrogate, exactly
+
+
+def started(torch: Any, model: Any, advantage: float, ratio: float) -> list[dict[str, Any]]:
+    """Examples whose starting log-probability puts the current weights at ``ratio`` times it."""
+    rows = [{**row, "advantage": advantage, "behavior": None} for row in vectors(4)]
+    record_start(torch, model, rows, forward=forward_of(torch, model), batch_size=8)
+    for row in rows:
+        row["old"] -= math.log(ratio)
+    return rows
+
+
+@pytest.mark.unit
+def test_a_ratio_past_the_clip_with_a_positive_advantage_gives_no_gradient(torch: Any) -> None:
+    model = toy(torch)
+    before = model.weight.detach().clone()
+    examples = started(torch, model, advantage=1.0, ratio=1.5)
+
+    (epoch,) = policy_gradient_epochs(
+        torch, model, torch.optim.SGD(model.parameters(), lr=0.5), examples, forward=forward_of(torch, model),
+        epochs=1, batch_size=8, seed=0, clip_ratio=0.2,
+    )  # fmt: skip
+
+    assert torch.equal(model.weight, before)  # the surrogate is the constant 1.2 * A
+    assert epoch["loss"] == pytest.approx(-1.2) and epoch["ratio"] == pytest.approx(1.5)
+    assert epoch["clipped"] == 1.0 and epoch["kl"] == pytest.approx(-math.log(1.5))
+
+
+@pytest.mark.unit
+def test_a_ratio_past_the_clip_with_a_negative_advantage_still_pushes_the_choice_down(torch: Any) -> None:
+    model = toy(torch)
+    examples = started(torch, model, advantage=-1.0, ratio=1.5)
+    forward = forward_of(torch, model)
+    with torch.no_grad():
+        logits, labels, _ = forward(examples)
+        start = torch.log_softmax(logits, -1).gather(1, labels[:, None]).mean()
+
+    (epoch,) = policy_gradient_epochs(
+        torch, model, torch.optim.SGD(model.parameters(), lr=0.5), examples, forward=forward,
+        epochs=1, batch_size=8, seed=0, clip_ratio=0.2,
+    )  # fmt: skip
+
+    assert epoch["loss"] == pytest.approx(1.5)  # min(1.5 * -1, 1.2 * -1): the unclipped term
+    with torch.no_grad():
+        logits, labels, _ = forward(examples)
+        assert torch.log_softmax(logits, -1).gather(1, labels[:, None]).mean() < start
+
+
+@pytest.mark.unit
+def test_policy_gradient_keeps_the_auxiliary_output_steps_the_schedule_and_refuses_a_nonfinite_loss(
+    torch: Any,
+) -> None:
+    model = toy(torch)
+    examples = started(torch, model, advantage=1.0, ratio=1.0)
+    schedule = CountingSchedule()
+    history = policy_gradient_epochs(
+        torch, model, torch.optim.SGD(model.parameters(), lr=0.1), examples, forward=forward_of(torch, model, True),
+        epochs=2, batch_size=3, seed=0, clip_ratio=0.2, schedule=schedule,
+    )  # fmt: skip
+    assert schedule.steps == 2 * 2 and [entry["epoch"] for entry in history] == [1, 2]
+
+    def poisoned(chunk: Sequence[dict[str, Any]]) -> tuple[Any, Any, Any]:
+        logits, labels, _ = forward_of(torch, model)(chunk)
+        return logits, labels, logits * float("inf")
+
+    with pytest.raises(ContractError, match="nonfinite policy-gradient loss"):
+        policy_gradient_epochs(
+            torch, model, torch.optim.SGD(model.parameters(), lr=0.1), examples, forward=poisoned,
+            epochs=1, batch_size=4, seed=0, clip_ratio=0.2,
+        )  # fmt: skip
+
+
+@pytest.mark.unit
+def test_record_start_reports_no_gap_when_the_rollout_recorded_no_probabilities(torch: Any) -> None:
+    model = toy(torch)
+    rows = [{**row, "advantage": 1.0, "behavior": None} for row in vectors(5)]
+    assert record_start(torch, model, rows, forward=forward_of(torch, model), batch_size=2) is None
+    with torch.no_grad():
+        expected = torch.log_softmax(model(torch.tensor([x["x"] for x in rows])), -1)
+    assert [x["old"] for x in rows] == pytest.approx([float(expected[i, x["label"]]) for i, x in enumerate(rows)])

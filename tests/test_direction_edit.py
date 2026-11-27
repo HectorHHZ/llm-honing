@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,15 +14,17 @@ np = pytest.importorskip("numpy")
 safetensors = pytest.importorskip("safetensors.numpy")
 pytest.importorskip("torch")
 
+from honing.backends.jev.decision_training import laya_question  # noqa: E402
 from honing.backends.jev.direction_edit import (  # noqa: E402
     HEAD_WEIGHT,
     SUPPORT,
     DirectionEditSettings,
     NanoJevDirectionEditTrainer,
+    _target_share,
     direction,
     edited_head,
 )
-from honing.backends.jev.nanojev import nanojev_snapshot  # noqa: E402
+from honing.backends.jev.nanojev import nanojev_snapshot, payload  # noqa: E402
 from honing.backends.jev.nanojev_serving import trained_manifest  # noqa: E402
 from honing.campaign import rules  # noqa: E402
 from honing.core import (  # noqa: E402
@@ -33,6 +38,7 @@ from honing.core import (  # noqa: E402
     TrainResult,
 )
 from honing.core.training import requirements_for  # noqa: E402
+from tests.fakes import decision_models as fake  # noqa: E402
 
 HIDDEN = 8
 RNG = np.random.default_rng(3)
@@ -271,3 +277,179 @@ def test_a_job_with_its_own_spec_edits_along_that_direction_and_the_next_job_use
     with pytest.raises(ContractError, match="no question in the batch offers a direction toward 'fire' on question"):
         other = DirectionEditSpec(question="motion", target="fire", strength=1.0)
         trainer.train(TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=other), base, _batch())
+
+
+# ---------------------------------------------------------------- settings, the direction and the plan's refusals
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        ({"strength": float("nan")}, "strength must be a finite, nonzero number"),
+        ({"max_questions": 0}, "max_questions and max_length must be positive"),
+        ({"max_length": -1}, "max_questions and max_length must be positive"),
+        ({"target": ""}, "target must be 'label' or an option id"),
+    ],
+)
+def test_settings_refuse_a_direction_they_cannot_read(
+    tmp_path: Path, settings: dict[str, object], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        DirectionEditSettings(pins_path=tmp_path, source_dir=tmp_path, work_dir=tmp_path, **settings)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_a_question_with_one_option_gives_no_direction_and_coinciding_options_are_refused() -> None:
+    h_in, meta = _inputs(rows=4)
+    single = [{**m, "options": ["fire"], "label": 0} for m in meta]
+    with pytest.raises(ContractError, match="no question in the batch offers a direction toward 'fire'"):
+        direction((h_in, single), None, "fire")
+    unit, stats = direction((h_in, meta[:2] + single[2:]), None, "fire")
+    assert stats["questions"] == 2 and unit[0] > 0.95
+    same = np.repeat(h_in[:, :1], 9, axis=1)
+    with pytest.raises(ContractError, match="the target and the other options coincide"):
+        direction((same, meta), None, "fire")
+
+
+@pytest.mark.unit
+def test_the_target_share_counts_only_the_selected_questions_that_offer_the_target() -> None:
+    h_in, meta = _inputs(rows=4)
+    meta[3] = {**meta[3], "question": "motion"}
+    toward_fire = np.eye(HIDDEN, dtype=np.float32)[0]
+    assert _target_share((h_in, meta), toward_fire, "weapon", "fire") == 1.0
+    assert _target_share((h_in, meta), -toward_fire, None, "fire") == 0.0
+    assert _target_share((h_in, meta), -toward_fire, None, "label") == 1.0  # every label is hold
+    assert np.isnan(_target_share((h_in, meta), toward_fire, "weapon", "left"))
+
+
+@pytest.mark.unit
+def test_the_reader_sees_at_most_max_questions_decisions(tmp_path: Path) -> None:
+    base = nanojev_snapshot(_base_checkpoint(tmp_path))
+    seen: list[int] = []
+
+    def reader(decisions: object, parent: Path) -> tuple[np.ndarray, list[dict[str, object]]]:
+        seen.append(len(decisions))  # type: ignore[arg-type]
+        return _inputs(len(decisions))  # type: ignore[arg-type]
+
+    settings = DirectionEditSettings(
+        pins_path=_pins(tmp_path), source_dir=tmp_path, work_dir=tmp_path / "edits", target="fire", max_questions=5
+    )
+    result = NanoJevDirectionEditTrainer(settings, reader=reader).train(
+        TrainJobSpec("direction_edit", contract="typed_decisions"), base, _batch(20)
+    )
+    assert seen == [5] and result.metrics["questions"] == 5
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("head", "message"),
+    [(None, "the base checkpoint has no scalar.weight"), ((1, 4), "scalar.weight has 4 entries, the head's input 8")],
+)
+def test_a_head_the_direction_does_not_fit_is_refused_and_leaves_no_candidate(
+    tmp_path: Path, head: tuple[int, int] | None, message: str
+) -> None:
+    checkpoint = _base_checkpoint(tmp_path)
+    state = safetensors.load_file(str(checkpoint / "best.safetensors"))
+    del state[HEAD_WEIGHT]
+    if head is not None:
+        state[HEAD_WEIGHT] = np.ones(head, dtype=np.float32)
+    safetensors.save_file(state, str(checkpoint / "best.safetensors"))
+    with pytest.raises(ContractError, match=message):
+        _trainer(tmp_path).train(
+            TrainJobSpec("direction_edit", contract="typed_decisions"), nanojev_snapshot(checkpoint), _batch()
+        )
+    assert not list((tmp_path / "edits").glob("*/checkpoint"))
+
+
+# ---------------------------------------------------------------- the forward pass, on a stand-in NanoJev
+
+
+@pytest.fixture
+def nanojev(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """NanoJev's predictor module and a GPU lock that need no GPU; tensors sent to cuda stay on the CPU."""
+    from honing.backends.jev import direction_edit as module
+    from honing.backends.jev import laya
+
+    fake.keep_process_state(monkeypatch)
+    monkeypatch.setattr(module, "import_nanojev", lambda source, pins: (fake.nanojev_upstream(), "rev"))
+    monkeypatch.setattr(laya, "gpu_lock", fake.any_gpu)
+    with fake.cuda_on_cpu():
+        yield
+
+
+def _two_question_decisions(rows: int) -> tuple[DecisionSample, ...]:
+    """Decisions that ask the three-option question, the second and every fourth also the two-option weapon one."""
+    weapon = DecisionQuestion(kind="choice", instructions="Fire?", options=(("fire", "Fire"), ("hold", "Hold")))
+    out = []
+    for i in range(rows):
+        sample = fake.decision(i, ("wait", "build", "attack")[i % 3], f"m:7:{i}")
+        if i % 4 == 1:
+            sample = dataclasses.replace(
+                sample, questions=(*sample.questions, ("weapon", weapon)), chosen=(*sample.chosen, ("weapon", "hold"))
+            )
+        out.append(sample)
+    return tuple(out)
+
+
+@pytest.mark.unit
+def test_the_reader_keeps_the_input_the_scalar_head_reads_for_every_option(tmp_path: Path, nanojev: None) -> None:
+    import torch
+
+    checkpoint = fake.nanojev_checkpoint(tmp_path / "release")
+    decisions = _two_question_decisions(10)
+
+    h_in, meta = _trainer(tmp_path)._read(decisions, checkpoint)
+
+    assert h_in.shape == (13, 3, fake.HIDDEN) and h_in.dtype == np.float32 and len(meta) == 13
+    assert [m["question"] for m in meta[:3]] == ["next", "next", "weapon"]
+    assert meta[2] == {"question": "weapon", "options": ["fire", "hold"], "label": 1}
+    assert [m["label"] for m in meta if m["question"] == "next"] == [i % 3 for i in range(10)]
+    assert not h_in[2, 2].any()  # the two-option question has no third option
+    # The kept vectors are exactly what the scalar head scores: weight . h + bias reproduces the model's logits.
+    predictor = fake.DecisionPredictor(str(checkpoint), 4096, "cpu", "fp32")
+    weight = safetensors.load_file(str(checkpoint / "best.safetensors"))
+    examples = [
+        example
+        for d in decisions
+        for example in fake.prepare_examples(
+            payload("\n".join(d.parts[0][1]), {k: laya_question(q) for k, q in d.questions}), predictor.tokenizer, 4096
+        )
+    ]
+    with torch.no_grad():
+        logits, _ = predictor.model(examples, 0)
+    for row, example in enumerate(examples):
+        k = len(example["candidate_ids"])
+        scores = h_in[row, :k] @ weight[HEAD_WEIGHT][0] + weight["scalar.bias"][0]
+        assert np.allclose(scores, logits[row, :k].numpy(), atol=1e-5)
+    assert os.environ["HF_HUB_OFFLINE"] == "1" and os.environ["TRANSFORMERS_OFFLINE"] == "1"
+
+
+@pytest.mark.functional
+def test_a_trainer_without_a_reader_edits_along_what_the_model_itself_reads(tmp_path: Path, nanojev: None) -> None:
+    checkpoint = fake.nanojev_checkpoint(tmp_path / "release")
+    settings = DirectionEditSettings(
+        pins_path=_pins(tmp_path), source_dir=tmp_path, work_dir=tmp_path / "edits", question="next", target="build"
+    )
+    trainer = NanoJevDirectionEditTrainer(settings)
+    decisions = _two_question_decisions(10)
+    batch = TrainingBatch("teacher", DataContract("typed_decisions"), decisions=decisions)
+
+    result = trainer.train(
+        TrainJobSpec("direction_edit", contract="typed_decisions"), nanojev_snapshot(checkpoint), batch
+    )
+
+    unit, stats = direction(trainer._read(decisions, checkpoint), "next", "build")
+    before = safetensors.load_file(str(checkpoint / "best.safetensors"))[HEAD_WEIGHT]
+    after = safetensors.load_file(str(Path(result.snapshot.checkpoint.location) / "best.safetensors"))[HEAD_WEIGHT]
+    assert np.allclose(after, before + unit, atol=1e-6)
+    assert result.metrics["questions"] == stats["questions"] == 10
+    assert result.metrics["margin_added"] == pytest.approx(stats["margin_per_unit"])
+    assert 0.0 <= result.metrics["target_argmax_before"] <= result.metrics["target_argmax_after"] <= 1.0
+    manifest = trained_manifest(Path(result.snapshot.checkpoint.location))
+    assert manifest is not None
+    assert json.loads(manifest.read_text())["settings"] == {
+        "model": "nanojev",
+        "maxQuestions": 1024,
+        "maxLength": 4096,
+    }
