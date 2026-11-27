@@ -181,6 +181,24 @@ runner, and how to run the check by hand. When the runner is down, an admin who
 ran the check by hand on the head commit may set `gpu` to success with a link to
 the log.
 
+## Releases
+
+A release is a tag `vMAJOR.MINOR.PATCH` on a merge commit of `main`. The
+version comes from the tag (setuptools-scm), so nothing in the tree changes for
+a release. While the version starts with 0, a release that breaks a plane
+protocol, a configuration, a persisted format or the HoneRelease shape bumps
+MINOR. Anything else bumps PATCH.
+
+1. Check that `main`'s head passed CI and the GPU check, and that no open issue
+   reports a regression in it.
+2. Tag it and push the tag:
+   `git tag -a v0.1.0 -m "v0.1.0" <commit> && git push origin v0.1.0`.
+3. `.github/workflows/release.yml` builds the sdist and wheel and publishes a
+   GitHub release with them and notes generated from the merged pull requests.
+4. Edit the release: above the generated notes, add Highlights (what changed
+   for a user, in a few lines) and Upgrade notes (each breaking change and what
+   to do about it, or "None").
+
 ## AI-assisted contributions
 
 AI-assisted work is welcome when it is directed, understood, and verified by
