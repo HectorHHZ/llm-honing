@@ -152,7 +152,7 @@ A pull request merges when every check is green on a branch that is up to date
 with `main` and every review thread is resolved. One of those checks, the
 `review` status, passes in either of two cases:
 
-- two people other than the author approve, and nobody's latest review requests
+- someone other than the author approves, and nobody's latest review requests
   changes;
 - the author asked for review (a review request, or a comment after the
   reviewers' last word) and five days passed with no review or comment from

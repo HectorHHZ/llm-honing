@@ -1,7 +1,7 @@
 name: review
 
-# Sets every open pull request's commit status `review` (.github/scripts/review_gate.py): success with two
-# approvals, or five days with no reply after the author asked. The ruleset in .github/rulesets/main.json requires it.
+# Sets every open pull request's commit status `review` (.github/scripts/review_gate.py): success with an
+# approval, or five days with no reply after the author asked. The ruleset in .github/rulesets/main.json requires it.
 #
 # Only triggers that run main's copy of this workflow and the script, so a pull request cannot change its own
 # gate: pushes (pull_request_target), comments, and a run every 15 minutes, which also picks up new reviews.

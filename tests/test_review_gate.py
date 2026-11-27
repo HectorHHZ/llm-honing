@@ -29,7 +29,8 @@ def review(who: str, state: str, days: float) -> Event:
 
 
 @pytest.mark.unit
-def test_two_approvals_pass() -> None:
+def test_one_approval_passes() -> None:
+    assert decide("author", [ask(0), review("a", "approved", 1)], at(1)) == ("success", "Approved by a")
     events = [ask(0), review("a", "approved", 1), review("b", "approved", 2)]
     assert decide("author", events, at(2)) == ("success", "Approved by a and 1 more")
 
@@ -38,15 +39,15 @@ def test_two_approvals_pass() -> None:
 @pytest.mark.parametrize(
     "events",
     [
-        [review("a", "approved", 1)],
-        [review("a", "approved", 1), review("a", "approved", 2)],  # one person twice is one approval
-        [review("a", "approved", 1), review("author", "approved", 2)],  # the author's own does not count
-        [review("a", "approved", 1), review("ci[bot]", "approved", 2)],  # nor a bot's
-        [review("a", "approved", 1), review("b", "approved", 2), review("c", "changes_requested", 3)],
-        [review("a", "approved", 1), review("b", "approved", 2), review("b", "dismissed", 3)],  # a push dismissed it
+        [ask(0)],
+        [review("author", "approved", 2)],  # the author's own does not count
+        [review("ci[bot]", "approved", 2)],  # nor a bot's
+        [review("a", "approved", 1), review("a", "changes_requested", 2)],  # a reviewer's latest verdict counts
+        [review("a", "approved", 1), review("c", "changes_requested", 3)],
+        [review("a", "approved", 1), review("a", "dismissed", 3)],  # an admin dismissed it
     ],
 )
-def test_fewer_than_two_approvals_or_a_change_request_do_not(events: list[Event]) -> None:
+def test_no_approval_or_a_change_request_do_not(events: list[Event]) -> None:
     assert decide("author", events, at(3))[0] == "pending"
 
 
@@ -55,10 +56,10 @@ def test_an_approval_counts_while_the_diff_is_the_one_approved() -> None:
     def approve(who: str, days: float, commit: str) -> Event:
         return Event("reviewed", who, at(days), "approved", commit)
 
-    events = [approve("a", 1, "old"), approve("b", 2, "head")]
+    events = [approve("a", 1, "old")]
     assert decide("author", events, at(2), current=lambda commit: True)[0] == "success"  # main merged in
     state, description = decide("author", events, at(2), current=lambda commit: commit == "head")
-    assert state == "pending" and description.startswith("1/2 approvals")  # a push changed the diff
+    assert state == "pending" and description.startswith("0/1 approvals")  # a push changed the diff
 
 
 @pytest.mark.unit

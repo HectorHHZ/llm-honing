@@ -1,6 +1,6 @@
 """Set each open pull request's commit status ``review``, the merge rule CONTRIBUTING.md states.
 
-Success when two people other than the author approve and nobody's latest review requests changes, or when
+Success when someone other than the author approves and nobody's latest review requests changes, or when
 the author asked for review (a review request or a comment) and five days passed with no review or comment
 from anyone else. Pending otherwise. An approval counts while the pull request's diff is the one approved:
 updating the branch from main keeps it, a push that changes the diff drops it. The ``review`` workflow runs
@@ -18,7 +18,7 @@ import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-APPROVALS = 2
+APPROVALS = 1
 SILENCE = dt.timedelta(days=5)
 
 
