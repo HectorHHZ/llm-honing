@@ -1,18 +1,30 @@
-"""Corrected decisions (#177): weights diagnoses turned into a typed-decisions batch."""
+"""Corrected decisions (#177): weights diagnoses turned into a typed-decisions batch, and a tank dry run on them."""
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from honing.backends.tank.corrected import CorrectedDecisionProvider
+from honing.backends.tank.e2e import build
+from honing.backends.tank.harness import seed_harness
+from honing.backends.tank.raw_states import TankRawStates, read_labels
+from honing.campaign import ScriptedScheduler
 from honing.core import ContractError, DataContract, DataProvider, TrainingBatch
 from honing.harness.diagnosis import Cause, DiagnosedDecision, Diagnosis
 
+REPO = Path(__file__).resolve().parents[1]
+INTEGRATION = REPO / "integrations/tank-war"
+DRY_RUN = REPO / "configs/e2e/tank_dry_run.json"
+# A rollout round of the stand-in model under the seed harness (#204), every file of its run directory, gzipped.
+FIXTURE = INTEGRATION / "tests/fixtures/rollout-s2002-blue.json.gz"
+NODE = shutil.which("node")
 SFT = DataContract("typed_decisions")
 
 MOTION = {
@@ -182,3 +194,48 @@ def test_a_diagnosis_and_a_label_source_are_checked_when_made(tmp_path: Path) ->
     sample, _ = _batch(CorrectedDecisionProvider([_diagnosis("lost")], runs)).decisions
     with pytest.raises(ContractError, match="label source must not be empty"):
         replace(sample, label_source="")
+
+
+@pytest.mark.functional
+@pytest.mark.slow
+@pytest.mark.skipif(NODE is None, reason="needs Node 22")
+def test_a_scripted_weights_diagnosis_feeds_an_sft_move_that_publishes(tmp_path: Path) -> None:
+    """The tank dry run's campaign with one sft move, fed by a scripted diagnosis instead of teacher rounds.
+
+    The diagnosed round is #204's recorded rollout, labelled here by the
+    planner teacher through ``raw-states.mjs``. The gate plays real rounds with
+    the stand-in model, which fires once training has raised its quality.
+    """
+    lost = tmp_path / "episodes/lost"
+    lost.mkdir(parents=True)
+    for name, content in json.loads(gzip.decompress(FIXTURE.read_bytes())).items():
+        (lost / name).write_text(content, encoding="utf-8")
+    TankRawStates(INTEGRATION).label([lost])
+    config = json.loads(DRY_RUN.read_text())
+    config["schedule"] = [{"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"}]
+    components = config["components"]
+    del components["rollout"]
+    components["data"] = {
+        "factory": "tests.fakes.tank:scripted_corrections",
+        "args": {"runs": {"lost": str(lost)}, "causes": {"lost": "weights", "lost-to-harness": "harness"}},
+    }
+
+    run = build(config, REPO, tmp_path / "out")
+    [outcome] = run.campaign.run(ScriptedScheduler(run.moves))
+
+    assert outcome.release is not None and outcome.release.release_id == "r0001"
+    [batch] = run.context.components["trainer"].batches  # type: ignore[attr-defined]
+    _, labels = read_labels(lost)
+    rows = [json.loads(line) for line in (lost / "decisions.jsonl").read_text().splitlines()]
+    assert batch.batch_id == "tank-corrected-decisions"
+    assert [dict(d.chosen) for d in batch.decisions] == [line["labels"] for line in labels]
+    # The teacher would have chosen otherwise at 36 of the round's 44 decisions.
+    assert sum(dict(d.chosen) != row["chosen"] for d, row in zip(batch.decisions, rows, strict=True)) == 36
+    assert {d.label_source for d in batch.decisions} == {"planner-teacher"}
+    assert batch.source_releases == {"r0000"}
+    assert batch.source_harnesses == {seed_harness(INTEGRATION).spec_id}
+    records = [json.loads(line) for line in run.campaign.chain.record_path.read_text().splitlines()]
+    assert [(record["op"], record["candidate"]["kind"]) for record in records] == [
+        ("publish", "init"),
+        ("publish", "train"),
+    ]
