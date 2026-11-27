@@ -1,7 +1,7 @@
 <!--
 Title this pull request as a Conventional Commit subject, e.g.
   feat(compression): add expert-drop scoring over router activation counts
-Merges are squashed, so this title becomes the commit subject.
+Each commit lands on main through a merge commit, so give each one such a subject too.
 -->
 
 ## Motivation

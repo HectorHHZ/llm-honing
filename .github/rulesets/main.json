@@ -1,0 +1,106 @@
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "~DEFAULT_BRANCH"
+      ],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "allowed_merge_methods": [
+          "merge"
+        ]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [
+          {
+            "context": "lint"
+          },
+          {
+            "context": "commit-subject"
+          },
+          {
+            "context": "test (3.10)"
+          },
+          {
+            "context": "test (3.11)"
+          },
+          {
+            "context": "test (3.12)"
+          },
+          {
+            "context": "test-litellm"
+          },
+          {
+            "context": "test-sandbox"
+          },
+          {
+            "context": "test-agent-worker"
+          },
+          {
+            "context": "game-install"
+          },
+          {
+            "context": "weight-edit"
+          },
+          {
+            "context": "griddly"
+          },
+          {
+            "context": "craftax"
+          },
+          {
+            "context": "rea-issac"
+          },
+          {
+            "context": "ra2-integration"
+          },
+          {
+            "context": "tank-war"
+          },
+          {
+            "context": "e2e"
+          },
+          {
+            "context": "openhands"
+          },
+          {
+            "context": "pi"
+          },
+          {
+            "context": "agent-gateway"
+          },
+          {
+            "context": "gpu"
+          },
+          {
+            "context": "review"
+          }
+        ]
+      }
+    }
+  ]
+}
