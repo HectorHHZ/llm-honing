@@ -14,7 +14,7 @@ completed model-controlled Boss route have not been established.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: movement, target selection, combat.
+Primary category: **Roguelikes**. Capability tags: movement, target selection, combat.
 
 Move and fight through ordinary, elite and Boss encounters in the student game.
 
