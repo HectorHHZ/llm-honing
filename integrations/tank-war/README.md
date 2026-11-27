@@ -23,7 +23,7 @@ models to this local integration now.
 
 ## Research scope
 
-Primary category: **Competitive decision-making**. Capability tags: opponent response, short-term prediction, control.
+Primary category: **Shooters**. Capability tags: opponent response, short-term prediction, control.
 
 Fight another tank in a maze with shells that can bounce and hit their owner.
 

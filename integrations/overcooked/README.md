@@ -9,7 +9,7 @@ All integration code lives here; the root wheel and core protocols are unchanged
 
 ## Research scope
 
-Primary category: **Cooperative coordination**. Capability tags: spatial planning, resource sequence, cooperation.
+Primary category: **Co-op**. Capability tags: spatial planning, resource sequence, cooperation.
 
 Prepare and serve food with a teammate in a shared kitchen.
 

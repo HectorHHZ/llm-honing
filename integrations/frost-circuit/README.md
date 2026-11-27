@@ -28,7 +28,7 @@ node integrations/frost-circuit/scripts/bundle.cjs /tmp/frost-circuit.html
 
 ## Research scope
 
-Primary category: **Spatial and tactical planning**. Capability tags: route planning, tactical timing, resource use.
+Primary category: **Roguelikes**. Capability tags: route planning, tactical timing, resource use.
 
 Recover station cores, avoid warned attacks, disable the Warden and extract
 through the airlock.

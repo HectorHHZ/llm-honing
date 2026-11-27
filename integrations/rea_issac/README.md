@@ -18,7 +18,7 @@ implementations. See [ANALYSIS.md](ANALYSIS.md) for the source and scope of that
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: room navigation, combat, resource use.
+Primary category: **Roguelikes**. Capability tags: room navigation, combat, resource use.
 
 Explore connected rooms and defeat the Warden in the independent Isaac-inspired
 simulation.
