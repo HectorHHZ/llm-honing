@@ -86,6 +86,12 @@ MIRRORED_TURNS = tuple(
     for drive in ("forward", "reverse", "stop")
     for turn, other in (("left", "right"), ("right", "left"))
 )
+STOPPED_MOTION = tuple(
+    (f"{drive}_{turn}", "stop_none")
+    for drive in ("forward", "reverse", "stop")
+    for turn in ("left", "none", "right")
+    if (drive, turn) != ("stop", "none")
+)
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,27 @@ FAULTS: tuple[Fault, ...] = (
         harness_kind="extreme_standoff",
     ),
     Fault(
+        "harness-penalize-safe-shots",
+        "harness",
+        ("motion",),
+        "The planner's strategy scores plans with a verified safe shot lower: fewer safe shots, a lower score.",
+        harness_kind="penalize_safe_shots",
+    ),
+    Fault(
+        "harness-reward-shell-danger",
+        "harness",
+        ("motion",),
+        "The planner's strategy prefers paths close to observed shells: more deaths to shells.",
+        harness_kind="reward_shell_danger",
+    ),
+    Fault(
+        "harness-point-blank-pursuit",
+        "harness",
+        ("motion",),
+        "The planner's strategy closes to under 30 px of the enemy: standoff shots are skipped, more return fire.",
+        harness_kind="point_blank_pursuit",
+    ),
+    Fault(
         "weights-earlier-checkpoint",
         "weights",
         ("weapon",),
@@ -167,6 +194,20 @@ FAULTS: tuple[Fault, ...] = (
         ("motion",),
         "Trained on the teacher's motions with left and right swapped: turns away from its aim.",
         relabel=("motion", MIRRORED_TURNS),
+    ),
+    Fault(
+        "weights-stop-edit",
+        "weights",
+        ("motion",),
+        "Three units of the stop_none direction added to the head: the tank stands still at most decisions.",
+        edit=DirectionEditSpec("motion", "stop_none", 3.0),
+    ),
+    Fault(
+        "weights-sft-stopped-motion",
+        "weights",
+        ("motion",),
+        "Trained on the teacher's rounds with every motion relabeled stop_none: the tank stops instead of moving.",
+        relabel=("motion", STOPPED_MOTION),
     ),
     Fault(
         "controller-swap-selected-turn",

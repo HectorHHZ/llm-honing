@@ -164,11 +164,12 @@ def test_each_fault_changes_only_its_own_causes_part_of_the_clean_release(tmp_pa
         release = library.releases[entry["id"]]
         assert release.weights.checkpoint.checksum == entry["artifacts"]["weights"]
     # The trainers ran from the clean weights: the reverse edit as stated, and sft on relabeled teacher labels.
-    assert [job.direction_edit for job in editor.jobs] == [DirectionEditSpec("weapon", "fire", -3.0)]
-    assert [job.algorithm for job in trainer.jobs] == ["sft", "sft"]
-    weapon, motion = trainer.batches
+    assert [job.direction_edit for job in editor.jobs] == [fault.edit for fault in FAULTS if fault.edit]
+    assert [job.algorithm for job in trainer.jobs] == ["sft", "sft", "sft"]
+    weapon, motion, stopped = trainer.batches
     assert _chosen(weapon, "weapon") == Counter({"fire": 21, "hold": 8})
     assert _chosen(motion, "motion") == Counter({_mirror(o): n for o, n in _chosen(_batch(), "motion").items()})
+    assert _chosen(stopped, "motion") == Counter({"stop_none": sum(_chosen(_batch(), "motion").values())})
 
 
 @pytest.mark.unit

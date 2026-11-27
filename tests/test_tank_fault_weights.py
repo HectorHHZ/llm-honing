@@ -51,7 +51,12 @@ def test_the_reverse_fire_edit_builds_twice_to_one_checkpoint_that_changes_only_
     base = nanojev_snapshot(_base_checkpoint(tmp_path))
     job = TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=FIRE_EDIT)
     clean = _editor(tmp_path / "clean-edit").train(job, base, _batch()).snapshot
-    faults = tuple(fault for fault in FAULTS if fault.edit or fault.earlier or fault.cause == "chance")
+    # The stand-in reader gives the head inputs of weapon questions only.
+    faults = tuple(
+        fault
+        for fault in FAULTS
+        if (fault.edit and fault.edit.question == "weapon") or fault.earlier or fault.cause == "chance"
+    )
 
     first, second = (
         build_library(
