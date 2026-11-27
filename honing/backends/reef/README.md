@@ -122,6 +122,41 @@ the first import creates if the deployment allows it.
   `dropped_requests`, `ignored_tags`, `rejected_token`, `no_route`, `unsent`,
   and what is pending.
 
+## Reporting grades
+
+`reporter.py` (#225) posts one report per graded episode. `ReefReportingGrader`
+wraps a `TaskGrader`: it returns the grade as the wrapped grader gave it, then
+queues the episode for `ReefReporter`'s thread, which posts to `/reef/report`.
+The tank grader factory turns it on with `reef_url` and `reef_scenario` in its
+`args` (the decision server's `--reef-url` and `--reef-scenario`); the token is
+`REEF_TOKEN`. Without them the factory returns `TankGrader` as before.
+
+- **What is reported.** `EpisodeReport.from_rows` over the run's
+  `decisions.jsonl`: the grade's score and feedback, `metadata.task`, one
+  reference per row in play order, and each row's `chosen`. The episode is the
+  `episode` tag in `manifest.json`'s `reef_tags`. The report id is
+  `episode_report_id(episode)`, so grading the same episode again with the same
+  grade is a retry, and with another grade is refused (409) and logged.
+- **What is skipped.** A run with no `reef_tags` episode (`skipped_no_tags`), no
+  decision rows (`skipped_no_decisions`), or files #229's checks refuse or tagged
+  with another task (`invalid`). The grade is never affected.
+- **Records first.** Reef refuses a report that references a record it has not
+  stored, with a 400 that says `must identify an existing inference`. The
+  recorder sends on its own thread, so such a report is sent again, whole, for
+  `reference_wait_seconds` (300), and then logged with its episode and counted
+  as `unknown_reference`. Missing references are never dropped to make it fit.
+- **Reef down, a wrong token or URL, memory, exit.** As the recorder:
+  unlimited retries with backoff, 401/403/404 logged as errors and counted
+  apart, past `max_pending_reports` (10000) an episode is counted as
+  `dropped`, and `close()` sends for `flush_seconds` (10). The tank campaign's
+  `main` closes the grader when the campaign ends.
+- **The report type.** `integrations/reef/report.py` declares
+  `HoningEpisodeReport`, a `ScoredRolloutReport` with a required `task`. Reef
+  checks it at admission only when the deployment's recipe returns it from
+  `report_type`. A report type can declare only `score` on top and flat
+  `metadata` fields, so `feedback` and `metadata.honing` pass through
+  unchecked, and their reader checks them with `EpisodeReport.from_payload`.
+
 `RecordedDecision.sample` turns a record and its choice into the
 `DecisionSample` that `decision_from_row` builds from the `decisions.jsonl`
 row, and `tests/test_reef_records.py` checks this on the tank fixtures.
@@ -161,4 +196,7 @@ A pull request that pins a later Reef updates these links.
 | `records.py`, `batches` | [`POST /reef/records/batch`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/routes/records.py#L15) | Splits by bytes as well as by count |
 | `recorder.py`, `ReefRecorder` | reef-client's [`upload_batch`](https://github.com/Human-Agent-Society/reef-client/blob/91af039292daa7392142b20a693a8dbf3e31cad3/reef_client/record_import.py#L66), through [`ReefClient.post`](https://github.com/Human-Agent-Society/reef-client/blob/91af039292daa7392142b20a693a8dbf3e31cad3/reef_client/client.py#L111) | Waits without a retry limit, tells a refusal from an outage, and isolates refused records by splitting the batch instead of stopping |
 | `recorder.py`, `request_tags`; the runners' `--reef-tags` | [`parse_request_headers`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L47), [`with_request_tags`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L119) | Keeps only Honing's tags, and writes them into each record's `metadata.tags`; the batch request carries no tag headers |
-| `tests/fakes/reef.py`, `FakeReef` | [`import_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/request_handling.py#L106), [`accept_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/dispatcher.py#L1022), [`RecordStore`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/storage/scenario/records.py#L54) | Only the import route; no recipe, storage or training |
+| `reporter.py`, `ReefReporter`, `ReefReportingGrader` | reef-client's [`ReefClient.report`](https://github.com/Human-Agent-Society/reef-client/blob/91af039292daa7392142b20a693a8dbf3e31cad3/reef_client/client.py#L77), Reef's [`POST /reef/report`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/routes/records.py#L96) and [`validate_record`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/ingest.py#L82) | Retries without a limit, and waits for missing references before it counts them |
+| `integrations/reef/report.py`, `HoningEpisodeReport` | [`ScoredRolloutReport`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/reports/scored_rollout.py#L11), [`ReportBase`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/reports/base.py#L61) | Requires `metadata.task` |
+| `tests/fakes/reef_recipe.py`, `EpisodeReportRecipe` | [`Recipe.report_type`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/recipe/base.py#L118) | Test only: records, trains nothing |
+| `tests/fakes/reef.py`, `FakeReef` | [`import_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/request_handling.py#L106), [`accept_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/dispatcher.py#L1022), [`RecordStore`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/storage/scenario/records.py#L54) | The import and report routes; no report type, recipe, storage or training |
