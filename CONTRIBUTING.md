@@ -153,12 +153,11 @@ Merges use squash, so the pull request title becomes the commit subject.
 
 ### The GPU check
 
-CI's runners have no GPU. A pull request that changes model or engine code (the
-paths in `scripts/gpu/paths.txt`) keeps the `gpu` status pending until a
-reviewer comments `/gpu` and the GPU runner passes `scripts/gpu/check.sh` on its
-head commit: the tests marked `gpu`, and the tank direction edit on a real
-NanoJev, whose train move must publish. Any other pull request gets `gpu` as
-success. A push sets it back to pending. `scripts/gpu/README.md` describes the
+CI's runners have no GPU. Every pull request keeps the `gpu` status pending
+until a reviewer comments `/gpu` and the GPU runner passes
+`scripts/gpu/check.sh` on its head commit: the tests marked `gpu`, and the tank
+direction edit on a real NanoJev, whose train move must publish. No pull
+request merges without it, whatever it changes. A push sets it back to pending. `scripts/gpu/README.md` describes the
 runner, and how to run the check by hand.
 
 ## AI-assisted contributions
