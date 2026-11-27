@@ -36,7 +36,7 @@ def _config(**changes: object) -> dict[str, object]:
     return {**config, **changes}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_dry_run_rolls_back_a_tied_harness_move_and_publishes_a_winning_train_move(tmp_path: Path) -> None:
     code = main(["--config", str(DRY_RUN), "--root", str(REPO), "--work-dir", str(tmp_path / "out")])
 
@@ -99,7 +99,7 @@ def recording_trainer(context: E2EContext) -> RecordingTrainer:
     return trainer
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_new_trainer_and_runner_are_tried_by_changing_the_config(tmp_path: Path) -> None:
     config = _config()
     components = dict(config["components"])  # type: ignore[call-overload]
@@ -122,7 +122,7 @@ def test_a_new_trainer_and_runner_are_tried_by_changing_the_config(tmp_path: Pat
     assert len(RecordingRunner.played) == 16  # two gates, 4 tasks, candidate and incumbent
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_schedule_runs_through_the_scheduler_slot_unless_the_config_names_a_scheduler(tmp_path: Path) -> None:
     scripted = build(_config(), REPO, tmp_path / "scripted")
     assert isinstance(scripted.scheduler, ScriptedScheduler)

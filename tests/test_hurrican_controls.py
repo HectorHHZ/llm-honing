@@ -17,7 +17,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 HERE = Path(__file__).parents[1] / "integrations/hurrican"
-pytestmark = pytest.mark.unit
 
 
 def load_run():
@@ -28,6 +27,7 @@ def load_run():
     return module
 
 
+@pytest.mark.functional
 def test_compiled_production_parser_and_jump_masks(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
@@ -118,6 +118,7 @@ static void glPixelStorei(int,int) {} static void glReadPixels(int,int,int,int,i
     assert observations[-1]["error"] == "invalid step"
 
 
+@pytest.mark.unit
 def test_original_forced_action_priority(tmp_path: Path) -> None:
     source = os.environ.get("HONING_HURRICAN_SOURCE")
     compiler = shutil.which("c++")
@@ -166,6 +167,7 @@ int main() {
     subprocess.run([str(binary)], check=True)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("timeout", [300, 0.1, 3570])
 def test_native_timeout_margin_overrides_inherited_setting(tmp_path: Path, timeout: float) -> None:
     run = load_run()
@@ -182,6 +184,7 @@ def test_native_timeout_margin_overrides_inherited_setting(tmp_path: Path, timeo
     native.log.close()
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("timeout", [True, 0, -1, float("inf"), float("nan"), 3570.1, "300"])
 def test_invalid_native_timeout_has_no_process_or_output(tmp_path: Path, timeout) -> None:
     run = load_run()
@@ -190,6 +193,7 @@ def test_invalid_native_timeout_has_no_process_or_output(tmp_path: Path, timeout
     assert not popen.called and list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.unit
 def test_rendered_request_describes_counted_release() -> None:
     request = load_run().request_for({"id": 0, "tick": 0}, 1)
     text = request["parts"]["essential"][0]
@@ -197,6 +201,7 @@ def test_rendered_request_describes_counted_release() -> None:
 
 
 @pytest.mark.parametrize("failure", ["launch_receipt", "thread_start", "popen"])
+@pytest.mark.functional
 def test_constructor_failure_reaps_only_owned_child_and_closes_log(tmp_path: Path, failure: str) -> None:
     run = load_run()
     game = tmp_path / "fixture-game"

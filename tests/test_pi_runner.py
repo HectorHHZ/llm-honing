@@ -121,7 +121,7 @@ def test_the_runner_satisfies_the_episode_runner_protocol(tmp_path: Path) -> Non
     assert runner.support.local_policy_only is False
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_episode_directory_holds_the_harness_the_plan_the_models_and_the_mounts(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path, model_settings={"contextWindow": 32768}))
 
@@ -156,7 +156,7 @@ def test_an_episode_directory_holds_the_harness_the_plan_the_models_and_the_moun
     assert episode["agent"]["routes"]["skills/search/SKILL.md"] == "skill:search"
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_each_episode_gets_its_own_copy_of_a_mount(tmp_path: Path) -> None:
     runner = _runner(tmp_path)
     (tmp_path / "corpus" / "doc.txt").write_text("original\n")
@@ -169,7 +169,7 @@ def test_each_episode_gets_its_own_copy_of_a_mount(tmp_path: Path) -> None:
     assert (Path(second.workspace_location or "") / "work" / "corpus" / "doc.txt").read_text() == "original\n"
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_link_mode_shares_the_mount(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path, mount_mode="link"))
 
@@ -177,7 +177,7 @@ def test_link_mode_shares_the_mount(tmp_path: Path) -> None:
     assert linked.is_symlink() and linked.resolve() == (tmp_path / "corpus").resolve()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_api_key_is_passed_through_the_environment_and_never_written(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path))
 
@@ -205,7 +205,7 @@ class _Endpoints:
         return PolicyEndpoint("http://127.0.0.1:1/v1", "tokenizer", "local-model", runtime=self.runtime)  # type: ignore[arg-type]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_local_sglang_model_needs_no_key(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path, endpoints=_Endpoints("sglang")))
 
@@ -236,7 +236,7 @@ def test_a_harness_the_policy_forbids_is_refused_without_starting_the_agent(tmp_
     assert not (root / "episode.json").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_gate_rejects_a_refused_harness_instead_of_stopping(tmp_path: Path) -> None:
     class _FinishedGrader:
         async def grade(self, task: Task, outcome: EpisodeOutcome) -> Grade:
@@ -253,7 +253,7 @@ def test_the_gate_rejects_a_refused_harness_instead_of_stopping(tmp_path: Path) 
     assert not decision.selected
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_worker_sees_only_allowed_environment_variables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HF_TOKEN", "hf-secret")
     monkeypatch.setenv("LC_ALL", "C")
@@ -266,7 +266,7 @@ def test_the_worker_sees_only_allowed_environment_variables(tmp_path: Path, monk
     assert "HF_TOKEN" not in seen
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_proxy_reaches_the_worker_only_when_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
 
@@ -277,7 +277,7 @@ def test_a_proxy_reaches_the_worker_only_when_named(tmp_path: Path, monkeypatch:
     assert "HTTPS_PROXY" in named
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_timeout_kills_the_worker_and_its_children_and_scores_zero_with_feedback(tmp_path: Path) -> None:
     started = time.monotonic()
     record = _graded(_runner(tmp_path, timeout_seconds=2, environment=HANG))
@@ -290,7 +290,7 @@ def test_a_timeout_kills_the_worker_and_its_children_and_scores_zero_with_feedba
     assert "did not finish within 2 seconds" in (record.grade.feedback or "")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("status", "error", "reason"),
     [
@@ -311,7 +311,7 @@ def test_an_aborted_run_or_a_provider_error_scores_zero_with_feedback(
     assert reason in (record.grade.feedback or "")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_cancelled_episode_kills_its_worker(tmp_path: Path) -> None:
     runner = _runner(tmp_path, environment=HANG)
 
@@ -328,7 +328,7 @@ def test_a_cancelled_episode_kills_its_worker(tmp_path: Path) -> None:
     assert _gone(int((root / "child.pid").read_text()))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_concurrent_episodes_get_separate_directories(tmp_path: Path) -> None:
     runner = _runner(tmp_path, concurrency=2)
 
@@ -338,7 +338,7 @@ def test_concurrent_episodes_get_separate_directories(tmp_path: Path) -> None:
     assert len({o.workspace_location for o in asyncio.run(three())}) == 3
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_probe_counts_a_file_only_when_the_worker_reports_its_content(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path))
     probe = PiDeliveryProbe()

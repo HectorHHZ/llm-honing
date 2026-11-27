@@ -87,6 +87,7 @@ def bridge_probe(tmp_path_factory):
         (320, 240),
     ],
 )
+@pytest.mark.functional
 def test_actual_observation_grid_uses_floor(bridge_probe, tmp_path, x, y):
     subprocess.run([bridge_probe, "observe", str(tmp_path), str(x), str(y)], check=True)
     state = json.loads((tmp_path / "observation.json").read_text())
@@ -116,6 +117,7 @@ def test_actual_observation_grid_uses_floor(bridge_probe, tmp_path, x, y):
         ("flip_right", False, True),
     ],
 )
+@pytest.mark.functional
 def test_actual_input_masks_and_release_edge(bridge_probe, action, left, right):
     for tick in (0, 1, 2):
         bits = subprocess.check_output([bridge_probe, "input", action, str(tick)], text=True)
@@ -139,10 +141,12 @@ def test_actual_input_masks_and_release_edge(bridge_probe, action, left, right):
         ("1 right 15" + " " * 129, False),
     ],
 )
+@pytest.mark.functional
 def test_actual_native_command_parser(bridge_probe, command, accepted):
     assert subprocess.check_output([bridge_probe, "parse", command], text=True) == str(int(accepted))
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("launch_write_failure", [False, True])
 def test_missing_procfs_and_launch_failure_reap_owned_game(tmp_path, monkeypatch, launch_write_failure):
     game = tmp_path / "game"
@@ -207,6 +211,7 @@ def test_missing_procfs_and_launch_failure_reap_owned_game(tmp_path, monkeypatch
         unrelated.wait(timeout=5)
 
 
+@pytest.mark.unit
 def test_procfs_identity_handles_parenthesized_process_names(monkeypatch):
     class Process:
         def __init__(self):
@@ -222,6 +227,7 @@ def test_procfs_identity_handles_parenthesized_process_names(monkeypatch):
     }
 
 
+@pytest.mark.unit
 def test_request_text_exposes_actual_tick_edge_and_grid():
     state = {"id": 9, "localOriginTiles": [-5, -4], "localSolidRows": ["?" * 9] * 9}
     request = demo.request_for(state, 15)

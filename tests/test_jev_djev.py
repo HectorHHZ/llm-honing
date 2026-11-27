@@ -65,6 +65,7 @@ def upstream():
         server.server_close()
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("suffix", ["", "/", "/v1", "/v1/"])
 def test_complete_state_and_native_distribution_are_preserved(upstream, suffix):
     url, handler = upstream
@@ -90,6 +91,7 @@ def test_complete_state_and_native_distribution_are_preserved(upstream, suffix):
     assert model.metadata["remoteWeightsVerified"] is False
 
 
+@pytest.mark.functional
 def test_startup_refuses_an_unserved_model(upstream):
     with (
         pytest.raises(ValueError, match="does not advertise"),
@@ -114,6 +116,7 @@ def test_startup_refuses_an_unserved_model(upstream):
         {"answers": {"action": {**ANSWER, "confidence": 0.4}}},
     ],
 )
+@pytest.mark.functional
 def test_invalid_upstream_answers_fail_without_a_fallback(upstream, change):
     url, handler = upstream
     handler.reply = {**handler.reply, **change}
@@ -122,6 +125,7 @@ def test_invalid_upstream_answers_fail_without_a_fallback(upstream, change):
     assert len(handler.requests) == 1
 
 
+@pytest.mark.functional
 def test_upstream_context_error_is_not_hidden_or_retried(upstream):
     url, handler = upstream
     handler.status, handler.reply = 422, {"error": {"message": "maximum context exceeded"}}
@@ -130,6 +134,7 @@ def test_upstream_context_error_is_not_hidden_or_retried(upstream):
     assert len(handler.requests) == 1
 
 
+@pytest.mark.unit
 def test_noul_and_score_keep_the_upstream_mean_and_legend():
     qs = {
         "urgent": {"type": "noul", "instructions": "Urgent?"},
@@ -162,6 +167,7 @@ def test_noul_and_score_keep_the_upstream_mean_and_legend():
         {"type": "score", "instructions": "Risk?", "criteria": ["same", "same"]},
     ],
 )
+@pytest.mark.functional
 def test_unsupported_schemas_fail_before_the_upstream_call(upstream, question):
     url, handler = upstream
     with pytest.raises(ValueError):
@@ -169,6 +175,7 @@ def test_unsupported_schemas_fail_before_the_upstream_call(upstream, question):
     assert not handler.requests
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("parts", [{"essential": "abc"}, {"essential": ["x"], "hidden": []}, {"essential": []}])
 def test_invalid_context_is_not_silently_dropped(parts):
     with pytest.raises(ValueError):
@@ -187,6 +194,7 @@ def test_invalid_context_is_not_silently_dropped(parts):
         {"model": ""},
     ],
 )
+@pytest.mark.unit
 def test_invalid_connection_and_sampling_settings_are_refused(setting):
     with pytest.raises(ValueError):
         DjevSettings(**{"url": "http://localhost:8011", "model": "dgemma", **setting})

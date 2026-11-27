@@ -66,3 +66,40 @@ def close_sglang_endpoints(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
     for endpoints in opened:
         endpoints.close()
+
+
+#: The kind every test declares with exactly one marker (CONTRIBUTING.md, Tests).
+KINDS = ("unit", "functional", "integration", "gpu")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Refuse a test that declares no kind or two, so every test says what it is and where it runs."""
+    wrong = [item.nodeid for item in items if sum(item.get_closest_marker(kind) is not None for kind in KINDS) != 1]
+    if wrong:
+        listed = "\n  ".join(wrong[:20]) + (f"\n  ... and {len(wrong) - 20} more" if len(wrong) > 20 else "")
+        raise pytest.UsageError(
+            f"{len(wrong)} tests do not declare exactly one kind of {', '.join(KINDS)}:\n  {listed}"
+        )
+
+
+def _refuse(what: str) -> Any:
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise AssertionError(f"a unit test {what}: mark it functional or integration, or use a fake (tests/fakes)")
+
+    return refuse
+
+
+@pytest.fixture(autouse=True)
+def unit_tests_start_no_process_and_open_no_socket(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A test marked ``unit`` that starts a process or connects or binds a socket fails, so the marker stays
+    true. A fake the test installs itself takes precedence, since the test's own patches come after this one."""
+    if request.node.get_closest_marker("unit") is None:
+        return
+    import socket
+    import subprocess
+
+    monkeypatch.setattr(subprocess.Popen, "_execute_child", _refuse("started a process"))
+    for name in ("connect", "connect_ex", "bind"):
+        monkeypatch.setattr(socket.socket, name, _refuse("opened a socket"))

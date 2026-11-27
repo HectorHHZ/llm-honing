@@ -380,7 +380,7 @@ def test_training_label_is_sampled_choice_not_server_argmax() -> None:
     assert samples[0].source_release == "r1" and samples[0].source_harness == "h1"
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_base_import_and_help_do_not_load_native_packages() -> None:
     code = (
         "import sys; sys.modules['griddly']=None; sys.modules['numpy']=None; "

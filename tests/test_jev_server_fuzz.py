@@ -74,7 +74,7 @@ def server_url() -> Iterator[str]:
     server.server_close()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(BODY.filter(bool))
 def test_the_server_answers_every_body(server_url: str, body: bytes) -> None:

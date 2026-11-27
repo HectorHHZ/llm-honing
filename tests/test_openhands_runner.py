@@ -123,7 +123,7 @@ def test_the_runner_satisfies_the_episode_runner_protocol(tmp_path: Path) -> Non
     assert runner.support.local_policy_only is False
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_episode_directory_holds_the_harness_the_plan_and_the_mounts(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path))
 
@@ -153,7 +153,7 @@ def test_an_episode_directory_holds_the_harness_the_plan_and_the_mounts(tmp_path
     assert episode["limits"] == {"max_budget_usd": None, "llm_timeout_seconds": 120}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_each_episode_gets_its_own_copy_of_a_mount(tmp_path: Path) -> None:
     runner = _runner(tmp_path)
     (tmp_path / "corpus" / "doc.txt").write_text("original\n")
@@ -166,7 +166,7 @@ def test_each_episode_gets_its_own_copy_of_a_mount(tmp_path: Path) -> None:
     assert (Path(second.workspace_location or "") / "work" / "corpus" / "doc.txt").read_text() == "original\n"
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_link_mode_shares_the_mount(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path, mount_mode="link"))
 
@@ -174,7 +174,7 @@ def test_link_mode_shares_the_mount(tmp_path: Path) -> None:
     assert linked.is_symlink() and linked.resolve() == (tmp_path / "corpus").resolve()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_api_key_is_passed_through_the_environment_and_never_written(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path))
 
@@ -203,7 +203,7 @@ def test_a_harness_the_policy_forbids_is_refused_without_starting_the_agent(tmp_
     assert not (root / "episode.json").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_gate_rejects_a_refused_harness_instead_of_stopping(tmp_path: Path) -> None:
     snapshot = MODEL.snapshot()
     incumbent = HoneRelease("r0000", UpdateCandidate("init", None, snapshot, harness=SEED), None)
@@ -216,7 +216,7 @@ def test_the_gate_rejects_a_refused_harness_instead_of_stopping(tmp_path: Path) 
     assert not decision.selected
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_worker_sees_only_allowed_environment_variables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HF_TOKEN", "hf-secret")
     monkeypatch.setenv("LC_ALL", "C")
@@ -228,7 +228,7 @@ def test_the_worker_sees_only_allowed_environment_variables(tmp_path: Path, monk
     assert "HF_TOKEN" not in seen
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_proxy_reaches_the_worker_only_when_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
 
@@ -239,7 +239,7 @@ def test_a_proxy_reaches_the_worker_only_when_named(tmp_path: Path, monkeypatch:
     assert "HTTPS_PROXY" in named
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_timeout_kills_the_worker_and_its_children(tmp_path: Path) -> None:
     started = time.monotonic()
     outcome = _run(_runner(tmp_path, timeout_seconds=2, environment=HANG))
@@ -249,7 +249,7 @@ def test_a_timeout_kills_the_worker_and_its_children(tmp_path: Path) -> None:
     assert _gone(int((Path(outcome.workspace_location or "") / "child.pid").read_text()))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_cancelled_episode_kills_its_worker(tmp_path: Path) -> None:
     runner = _runner(tmp_path, environment=HANG)
 
@@ -266,7 +266,7 @@ def test_a_cancelled_episode_kills_its_worker(tmp_path: Path) -> None:
     assert _gone(int((root / "child.pid").read_text()))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_concurrent_episodes_get_separate_directories(tmp_path: Path) -> None:
     runner = _runner(tmp_path, concurrency=2)
 
@@ -276,7 +276,7 @@ def test_concurrent_episodes_get_separate_directories(tmp_path: Path) -> None:
     assert len({o.workspace_location for o in asyncio.run(three())}) == 3
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_probe_counts_a_file_only_when_the_worker_reports_its_content(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path))
     probe = OpenHandsDeliveryProbe()
@@ -355,7 +355,7 @@ class _PlainServers:
         return PolicyEndpoint("http://127.0.0.1:30000/v1", "/tok/qwen", "qwen", runtime="sglang")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_declared_sglang_server_with_a_key_passes_it_to_the_worker(tmp_path: Path) -> None:
     server = StaticEndpoint(
         base_url="http://127.0.0.1:30000/v1",
@@ -376,7 +376,7 @@ def test_a_declared_sglang_server_with_a_key_passes_it_to_the_worker(tmp_path: P
     assert [p for p in root.rglob("*") if p.is_file() and "secret-value-123" in p.read_text(errors="ignore")] == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_endpoints_without_a_key_method_give_the_worker_no_key(tmp_path: Path) -> None:
     outcome = _run(_runner(tmp_path, endpoints=_PlainServers()))
 
@@ -412,7 +412,7 @@ def test_the_real_worker_passes_the_runner_checks_against_the_stand_in_policy(tm
 # ---------------------------------------------------------------- task workspaces, containers, and infrastructure
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_crashed_worker_raises_instead_of_being_graded(tmp_path: Path) -> None:
     with pytest.raises(EpisodeInfrastructureError, match="could not run task 'q1'"):
         _run(_runner(tmp_path, environment={"FAKE_WORKER_EXIT": "1"}))
@@ -484,7 +484,7 @@ def _stub_worker(tmp_path: Path, **environment: str) -> OpenHandsEpisodeRunner:
     return _runner(tmp_path, worker=REPO / "integrations/openhands/worker.py", environment=environment)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_harness_openhands_cannot_load_is_graded_instead_of_raised(tmp_path: Path) -> None:
     outcome = _run(_stub_worker(tmp_path, STUB_SKILL_ERROR="1"))
 
@@ -493,7 +493,7 @@ def test_a_harness_openhands_cannot_load_is_graded_instead_of_raised(tmp_path: P
     assert "cannot parse the frontmatter of SKILL.md" in outcome.final_output
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_full_context_window_is_graded_and_another_run_error_raises(tmp_path: Path) -> None:
     outcome = _run(_stub_worker(tmp_path, STUB_RUN_ERROR="context"))
 
@@ -503,7 +503,7 @@ def test_a_full_context_window_is_graded_and_another_run_error_raises(tmp_path: 
         _run(_stub_worker(tmp_path, STUB_RUN_ERROR="connection reset"))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_worker_removes_the_api_key_before_the_agent_runs(tmp_path: Path) -> None:
     outcome = _run(_stub_worker(tmp_path, STUB_RUN_ERROR="context"))
 
@@ -564,7 +564,7 @@ def test_the_real_worker_refuses_a_skill_whose_frontmatter_does_not_parse(tmp_pa
     assert "could not load the harness: skill 'skills/search/SKILL.md'" in outcome.final_output
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_task_starts_from_its_own_workspace(tmp_path: Path) -> None:
     seed = tmp_path / "seed"
     (seed / "Documents").mkdir(parents=True)
@@ -608,7 +608,7 @@ def _runs(record: Path) -> list[dict[str, object]]:
 CONTAINER = Container(image="honing-openhands:test", run_args=("--network", "none"))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_container_mounts_only_the_episode_and_the_worker(
     tmp_path: Path, docker: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -639,7 +639,7 @@ def test_a_container_mounts_only_the_episode_and_the_worker(
     assert policy["api_key_env"] is None and policy["base_url"].startswith("http://host.docker.internal:")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_container_calls_the_model_through_a_proxy_that_adds_the_key(tmp_path: Path, docker: Path) -> None:
     with OpenAIStub() as stub:
         # /401 echoes the Authorization header it got.
@@ -665,7 +665,7 @@ def test_a_container_calls_the_model_through_a_proxy_that_adds_the_key(tmp_path:
     assert call["status"] == 200 and "SUMMARY" in json.loads(call["reply"])["choices"][0]["message"]["content"]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_container_that_does_not_start_is_retried_then_raises(tmp_path: Path, docker: Path) -> None:
     (docker / "failures").write_text("2")
     outcome = _run(_runner(tmp_path, container=CONTAINER))
@@ -676,7 +676,7 @@ def test_a_container_that_does_not_start_is_retried_then_raises(tmp_path: Path, 
         _run(_runner(tmp_path, container=Container(image="i", start_attempts=2)))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_timed_out_container_is_killed_by_name(tmp_path: Path, docker: Path) -> None:
     outcome = _run(_runner(tmp_path, container=CONTAINER, timeout_seconds=2, environment=HANG))
 

@@ -70,6 +70,7 @@ def _ok(stdout: str, exit_code: int = 0, stderr: str = "") -> CommandResult:
     return CommandResult(exit_code=exit_code, stdout=stdout, stderr=stderr)
 
 
+@pytest.mark.unit
 def test_the_command_grader_and_the_local_workspace_satisfy_their_protocols(tmp_path: Path) -> None:
     assert isinstance(CommandGrader(_suite(tmp_path)), TaskGrader)
     assert isinstance(LocalWorkspace(tmp_path), CommandSandbox)
@@ -78,6 +79,7 @@ def test_the_command_grader_and_the_local_workspace_satisfy_their_protocols(tmp_
 # ---------------------------------------------------------------- acceptance: with a fake sandbox
 
 
+@pytest.mark.unit
 def test_valid_output_becomes_the_grade(tmp_path: Path) -> None:
     stdout = 'collected 4 items\n{"score": 0.5}\n{"score": 0.75, "feedback": "3 of 4 pass"}\n\n'
     grade, sandbox = _fake_grade(tmp_path, _ok(stdout), metadata={"k": 1})
@@ -94,11 +96,13 @@ def test_valid_output_becomes_the_grade(tmp_path: Path) -> None:
     assert sandbox.files == {"final_output.txt": b"done", "metadata.json": b'{"k": 1}'}
 
 
+@pytest.mark.unit
 def test_an_integer_score_is_accepted(tmp_path: Path) -> None:
     grade, _ = _fake_grade(tmp_path, _ok('{"score": 1, "feedback": ""}'))
     assert grade == Grade(score=1.0, feedback="")
 
 
+@pytest.mark.unit
 def test_a_nonzero_exit_scores_zero_with_the_exit_code_and_stderr(tmp_path: Path) -> None:
     result = _ok('{"score": 1.0, "feedback": "fine"}', exit_code=2, stderr="Traceback ...\nImportError: no foo\n")
     grade, _ = _fake_grade(tmp_path, result)
@@ -120,12 +124,14 @@ def test_a_nonzero_exit_scores_zero_with_the_exit_code_and_stderr(tmp_path: Path
         ('{"score": 1.0, "feedback": 3}', "the grader's feedback must be a string, got 3"),
     ],
 )
+@pytest.mark.unit
 def test_malformed_output_scores_zero_with_the_reason(tmp_path: Path, stdout: str, reason: str) -> None:
     grade, _ = _fake_grade(tmp_path, _ok(stdout))
     assert grade.score == 0.0
     assert grade.feedback is not None and reason in grade.feedback
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("score", ["1.5", "-0.1", "NaN", "Infinity", "-Infinity", "1" + "0" * 400, "-1" + "0" * 400])
 def test_a_score_outside_zero_to_one_scores_zero_instead_of_raising(tmp_path: Path, score: str) -> None:
     grade, _ = _fake_grade(tmp_path, _ok(f'{{"score": {score}, "feedback": "x"}}'))
@@ -133,11 +139,13 @@ def test_a_score_outside_zero_to_one_scores_zero_instead_of_raising(tmp_path: Pa
     assert grade.feedback is not None and "the grader's score must be in [0, 1]" in grade.feedback
 
 
+@pytest.mark.unit
 def test_a_timeout_reported_by_the_sandbox_scores_zero(tmp_path: Path) -> None:
     grade, _ = _fake_grade(tmp_path, CommandResult(exit_code=-9, stdout="", stderr="", timed_out=True))
     assert grade == Grade(score=0.0, feedback="the grader timed out after 30 s")
 
 
+@pytest.mark.unit
 def test_the_command_runs_in_the_grader_files_directory(tmp_path: Path) -> None:
     (tmp_path / "hidden").mkdir()
     _, sandbox = _fake_grade(tmp_path, _ok('{"score": 1, "feedback": ""}'), grader_files="hidden")
@@ -146,6 +154,7 @@ def test_the_command_runs_in_the_grader_files_directory(tmp_path: Path) -> None:
     assert cwd == "/sandbox/grader"
 
 
+@pytest.mark.unit
 def test_long_feedback_is_cut(tmp_path: Path) -> None:
     sandbox = FakeCommandSandbox(_ok(json.dumps({"score": 0.5, "feedback": "x" * 100})))
     grader = CommandGrader(_suite(tmp_path), open_sandbox=sandbox.opener(), max_feedback_chars=10)
@@ -156,12 +165,14 @@ def test_long_feedback_is_cut(tmp_path: Path) -> None:
 # ---------------------------------------------------------------- infrastructure faults raise
 
 
+@pytest.mark.unit
 def test_an_outcome_without_a_workspace_raises(tmp_path: Path) -> None:
     grader = CommandGrader(_suite(tmp_path))
     with pytest.raises(ContractError, match="names no workspace"):
         asyncio.run(grader.grade(Task("t1", "Fix t1."), _outcome(None)))
 
 
+@pytest.mark.unit
 def test_a_sandbox_that_cannot_open_raises(tmp_path: Path) -> None:
     @asynccontextmanager
     async def broken(workspace: Path) -> AsyncGenerator[CommandSandbox, None]:
@@ -173,12 +184,14 @@ def test_a_sandbox_that_cannot_open_raises(tmp_path: Path) -> None:
         asyncio.run(grader.grade(Task("t1", "Fix t1."), _outcome(tmp_path)))
 
 
+@pytest.mark.unit
 def test_a_workspace_location_that_does_not_exist_raises(tmp_path: Path) -> None:
     grader = CommandGrader(_suite(tmp_path))
     with pytest.raises(FileNotFoundError):
         asyncio.run(grader.grade(Task("t1", "Fix t1."), _outcome(tmp_path / "gone")))
 
 
+@pytest.mark.unit
 def test_a_sandbox_that_refuses_the_agents_workspace_scores_zero(tmp_path: Path) -> None:
     @asynccontextmanager
     async def refusing(workspace: Path) -> AsyncGenerator[CommandSandbox, None]:
@@ -190,6 +203,7 @@ def test_a_sandbox_that_refuses_the_agents_workspace_scores_zero(tmp_path: Path)
     assert grade == Grade(score=0.0, feedback="the agent left a socket")
 
 
+@pytest.mark.unit
 def test_a_task_not_in_the_suite_raises(tmp_path: Path) -> None:
     grader = CommandGrader(_suite(tmp_path))
     with pytest.raises(ContractError, match="not in the task suite"):
@@ -234,6 +248,7 @@ REPORT_CWD = (
 )
 
 
+@pytest.mark.functional
 def test_the_command_runs_on_a_copy_and_never_changes_the_agent_workspace(tmp_path: Path, agent: Path) -> None:
     grade = _local_grade(tmp_path, agent, _python(REPORT_CWD))
     assert grade.score == 1.0
@@ -250,6 +265,7 @@ READ_INPUTS = (
 )
 
 
+@pytest.mark.functional
 def test_the_command_reads_the_final_output_and_the_metadata_from_files(tmp_path: Path, agent: Path) -> None:
     grade = _local_grade(
         tmp_path, agent, _python(READ_INPUTS), final_output="the answer\nis 42", line={"metadata": {"limit": [3]}}
@@ -261,6 +277,7 @@ def test_the_command_reads_the_final_output_and_the_metadata_from_files(tmp_path
 LIST_ENV = "import json, os; print(json.dumps({'score': 1.0, 'feedback': json.dumps(sorted(os.environ))}))"
 
 
+@pytest.mark.functional
 def test_the_command_sees_no_host_environment_beyond_path(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -279,6 +296,7 @@ SHOW_PLACES = (
 ).replace("WORKSPACE_ENV", WORKSPACE_ENV)
 
 
+@pytest.mark.functional
 def test_grader_files_stay_out_of_the_workspace(tmp_path: Path, agent: Path) -> None:
     hidden = tmp_path / "suite" / "hidden"
     (hidden / "cases").mkdir(parents=True)
@@ -295,6 +313,7 @@ def test_grader_files_stay_out_of_the_workspace(tmp_path: Path, agent: Path) -> 
     assert (grader_answer, agent_answer, same) == ("expected\n", "42\n", False)
 
 
+@pytest.mark.functional
 def test_grader_files_are_not_a_sibling_of_the_workspace(tmp_path: Path, agent: Path) -> None:
     # Agent code runs from the workspace, so whatever ``..`` holds is in its reach.
     (tmp_path / "suite" / "hidden").mkdir()
@@ -308,6 +327,7 @@ def test_grader_files_are_not_a_sibling_of_the_workspace(tmp_path: Path, agent: 
     assert not cwd.resolve().is_relative_to(Path(parent).resolve())
 
 
+@pytest.mark.functional
 def test_the_grader_files_directory_is_removed_after_grading(tmp_path: Path, agent: Path) -> None:
     (tmp_path / "suite" / "hidden").mkdir()
     places: list[Path] = []
@@ -329,6 +349,7 @@ def test_the_grader_files_directory_is_removed_after_grading(tmp_path: Path, age
 CANNOT_RUN = "the grader exited 127; stderr ends: cannot run"
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("line", [{}, {"grader_files": "hidden"}], ids=["in-workspace", "in-grader-files"])
 def test_a_grader_whose_interpreter_is_missing_raises_and_leaves_nothing_behind(
     tmp_path: Path, agent: Path, line: dict[str, object], monkeypatch: pytest.MonkeyPatch
@@ -360,6 +381,7 @@ def _broken_script(path: Path, how: str) -> None:
 BREAKAGES = ["not-executable", "bad-shebang", "not-a-program"]
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("how", BREAKAGES)
 def test_a_grader_script_the_suite_ships_broken_raises(tmp_path: Path, agent: Path, how: str) -> None:
     (tmp_path / "suite" / "hidden").mkdir()
@@ -368,6 +390,7 @@ def test_a_grader_script_the_suite_ships_broken_raises(tmp_path: Path, agent: Pa
         _local_grade(tmp_path, agent, ["./grade.sh"], line={"grader_files": "hidden"})
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("how", ["deleted", *BREAKAGES])
 def test_a_grader_script_in_the_workspace_the_agent_broke_scores_zero(tmp_path: Path, agent: Path, how: str) -> None:
     if how != "deleted":
@@ -384,6 +407,7 @@ def _failing_start(code: int) -> Any:
     return create_subprocess_exec
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("code", [errno.EMFILE, errno.EAGAIN], ids=["EMFILE", "EAGAIN"])
 def test_a_machine_fault_starting_a_grader_in_the_workspace_raises(
     tmp_path: Path, agent: Path, code: int, monkeypatch: pytest.MonkeyPatch
@@ -397,6 +421,7 @@ def test_a_machine_fault_starting_a_grader_in_the_workspace_raises(
     assert isinstance(raised.value.__cause__, OSError) and raised.value.__cause__.errno == code
 
 
+@pytest.mark.unit
 def test_an_exec_error_injected_for_a_workspace_grader_scores_zero(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -408,6 +433,7 @@ def test_an_exec_error_injected_for_a_workspace_grader_scores_zero(
     assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
 
 
+@pytest.mark.functional
 def test_a_grader_script_the_agent_made_a_dangling_link_out_of_the_workspace_scores_zero(
     tmp_path: Path, agent: Path
 ) -> None:
@@ -417,6 +443,7 @@ def test_a_grader_script_the_agent_made_a_dangling_link_out_of_the_workspace_sco
     assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
 
 
+@pytest.mark.functional
 def test_a_grader_script_under_a_directory_the_agent_linked_out_of_the_workspace_scores_zero(
     tmp_path: Path, agent: Path
 ) -> None:
@@ -426,6 +453,7 @@ def test_a_grader_script_under_a_directory_the_agent_linked_out_of_the_workspace
     assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
 
 
+@pytest.mark.functional
 def test_a_bare_command_the_agent_planted_on_a_relative_path_entry_scores_zero(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -439,6 +467,7 @@ def test_a_bare_command_the_agent_planted_on_a_relative_path_entry_scores_zero(
     assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("how", ["file", "loop", "dangling"])
 def test_a_broken_workspace_path_parent_scores_zero(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch, how: str
@@ -454,6 +483,7 @@ def test_a_broken_workspace_path_parent_scores_zero(
     assert grade.feedback is not None and grade.feedback.startswith(CANNOT_RUN)
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("how", ["file", "loop"])
 def test_a_broken_path_parent_outside_the_workspace_still_raises(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch, how: str
@@ -468,6 +498,7 @@ def test_a_broken_path_parent_outside_the_workspace_still_raises(
         _local_grade(tmp_path, agent, ["honing-grader"])
 
 
+@pytest.mark.unit
 def test_the_workspace_matches_whichever_way_its_own_location_is_spelled(tmp_path: Path) -> None:
     # On macOS the sandbox's workspace is under /var, which is a link to /private/var.
     (tmp_path / "real" / "workspace").mkdir(parents=True)
@@ -478,6 +509,7 @@ def test_the_workspace_matches_whichever_way_its_own_location_is_spelled(tmp_pat
     assert not _passes_through(str(tmp_path / "real" / "elsewhere" / "run.sh"), spelled_through_alias)
 
 
+@pytest.mark.functional
 def test_a_command_that_runs_too_long_is_killed_and_scores_zero(tmp_path: Path, agent: Path) -> None:
     # The child sleeps too, so the kill has to reach the whole process group for the pipes to close.
     sleeper = (
@@ -490,6 +522,7 @@ def test_a_command_that_runs_too_long_is_killed_and_scores_zero(tmp_path: Path, 
     assert time.monotonic() - started < 15
 
 
+@pytest.mark.functional
 def test_only_the_tail_of_a_long_output_is_kept_and_its_last_line_still_grades(tmp_path: Path, agent: Path) -> None:
     noisy = (
         "import json, sys; sys.stdout.write('x' * 1_000_000 + '\\n'); "
@@ -499,11 +532,13 @@ def test_only_the_tail_of_a_long_output_is_kept_and_its_last_line_still_grades(t
     assert grade == Grade(score=0.25, feedback="ok")
 
 
+@pytest.mark.functional
 def test_a_crashing_command_scores_zero_with_its_stderr(tmp_path: Path, agent: Path) -> None:
     grade = _local_grade(tmp_path, agent, _python("raise SystemExit('broken grader')"))
     assert grade == Grade(score=0.0, feedback="the grader exited 1; stderr ends: broken grader")
 
 
+@pytest.mark.functional
 def test_the_temporary_copy_is_removed_after_grading(tmp_path: Path, agent: Path) -> None:
     roots: list[Path] = []
 
@@ -521,6 +556,7 @@ def test_the_temporary_copy_is_removed_after_grading(tmp_path: Path, agent: Path
 PASS = 'print(\'{"score": 1, "feedback": ""}\')'
 
 
+@pytest.mark.unit
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
 def test_a_fifo_in_the_workspace_scores_zero_without_being_opened(tmp_path: Path, agent: Path) -> None:
     fifo = agent / "logs" / "pipe"
@@ -557,6 +593,7 @@ NOT_ROOT = pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, r
 UNREADABLE_FILES = ("zeta", "b10", "b2", "x_y", "secret.txt", "aa", "alpha", "Q")
 
 
+@pytest.mark.unit
 @NOT_ROOT
 def test_files_the_grader_may_not_read_score_zero_and_are_named_in_order(tmp_path: Path, agent: Path) -> None:
     # Enough names that the directory order is unsorted on APFS and on ext4 alike.
@@ -585,6 +622,7 @@ def test_files_the_grader_may_not_read_score_zero_and_are_named_in_order(tmp_pat
         f"[Errno {errno.EACCES}] Permission denied",
     ],
 )
+@pytest.mark.unit
 def test_any_other_copy_failure_still_raises(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch, reason: str
 ) -> None:
@@ -607,6 +645,7 @@ def _gone(pid: int, seconds: float) -> bool:
     return False
 
 
+@pytest.mark.functional
 def test_a_background_process_the_grader_started_is_killed_when_it_exits(tmp_path: Path, agent: Path) -> None:
     detach = (
         "import json, subprocess, sys; "
@@ -626,6 +665,7 @@ def test_a_background_process_the_grader_started_is_killed_when_it_exits(tmp_pat
             os.kill(child, signal.SIGKILL)
 
 
+@pytest.mark.unit
 @NOT_ROOT
 def test_a_workspace_root_the_grader_may_not_read_scores_zero_and_is_named(tmp_path: Path, agent: Path) -> None:
     agent.chmod(0)
@@ -636,6 +676,7 @@ def test_a_workspace_root_the_grader_may_not_read_scores_zero_and_is_named(tmp_p
     assert grade == Grade(score=0.0, feedback=f"the grader may not read the workspace itself, {str(agent)!r}")
 
 
+@pytest.mark.unit
 def test_a_permission_error_on_a_readable_root_still_raises(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -647,6 +688,7 @@ def test_a_permission_error_on_a_readable_root_still_raises(
         _local_grade(tmp_path, agent, _python(PASS))
 
 
+@pytest.mark.functional
 def test_a_cancelled_grade_leaves_no_process_behind(tmp_path: Path, agent: Path) -> None:
     pids = tmp_path / "pids.txt"
     script = (
@@ -681,6 +723,7 @@ def test_a_cancelled_grade_leaves_no_process_behind(tmp_path: Path, agent: Path)
                 os.kill(pid, signal.SIGKILL)
 
 
+@pytest.mark.functional
 def test_a_background_process_holding_the_pipes_does_not_turn_a_grade_into_a_timeout(
     tmp_path: Path, agent: Path
 ) -> None:
@@ -698,12 +741,14 @@ def test_a_background_process_holding_the_pipes_does_not_turn_a_grade_into_a_tim
 SEPARATORS = "next line\u0085and\u2028paragraph"
 
 
+@pytest.mark.unit
 def test_unicode_line_separators_inside_the_json_line_do_not_split_it(tmp_path: Path) -> None:
     stdout = "log\r\n" + json.dumps({"score": 1, "feedback": SEPARATORS}, ensure_ascii=False) + "\r\n"
     grade, _ = _fake_grade(tmp_path, _ok(stdout))
     assert grade == Grade(score=1.0, feedback=SEPARATORS)
 
 
+@pytest.mark.functional
 def test_a_grader_can_echo_text_holding_unicode_line_separators(tmp_path: Path, agent: Path) -> None:
     echo = (
         "import json, os, pathlib; "
@@ -714,12 +759,14 @@ def test_a_grader_can_echo_text_holding_unicode_line_separators(tmp_path: Path, 
     assert grade == Grade(score=1.0, feedback=SEPARATORS)
 
 
+@pytest.mark.unit
 def test_a_score_with_more_digits_than_python_converts_scores_zero(tmp_path: Path) -> None:
     grade, _ = _fake_grade(tmp_path, _ok('{"score": 1' + "0" * 5000 + ', "feedback": "x"}'))
     assert grade.score == 0.0
     assert grade.feedback is not None and grade.feedback.startswith("the grader's last stdout line is not JSON")
 
 
+@pytest.mark.functional
 def test_a_cancelled_grade_closes_its_subprocess_on_its_own_loop(
     tmp_path: Path, agent: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -769,6 +816,7 @@ class _SuiteBlindRunner:
         )
 
 
+@pytest.mark.functional
 def test_a_command_grader_passes_the_runner_conformance_checks(tmp_path: Path) -> None:
     # The concurrent check once renamed tasks (t1-0, t1-1, ...), which no suite holds.
     (tmp_path / "suite").mkdir()

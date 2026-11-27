@@ -98,6 +98,7 @@ def model(
     return LetteredDecisionModel(scorer, tokenizer, LetteredSettings(**settings), {"family": "lettered"}), scorer
 
 
+@pytest.mark.unit
 def test_options_are_listed_in_order_with_yes_no_and_levels_lowest_first() -> None:
     assert options_of(CHOICE["build"]) == [
         ("p", "p: build power"),
@@ -112,6 +113,7 @@ def test_options_are_listed_in_order_with_yes_no_and_levels_lowest_first() -> No
     assert options_of(levels) == [("0", "low"), ("1", "mid"), ("2", "high")]
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("template", [False, True])
 def test_a_choice_is_the_softmax_of_its_letters_at_the_type_s_temperature(template: bool) -> None:
     lettered, scorer = model(
@@ -126,6 +128,7 @@ def test_a_choice_is_the_softmax_of_its_letters_at_the_type_s_temperature(templa
     assert scorer.calls == [1]
 
 
+@pytest.mark.unit
 def test_every_question_of_a_request_goes_to_the_scorer_in_one_call() -> None:
     lettered, scorer = model()
     questions = {
@@ -140,6 +143,7 @@ def test_every_question_of_a_request_goes_to_the_scorer_in_one_call() -> None:
     assert answers["threat"]["score"] == pytest.approx(sum(i * w for i, w in enumerate(weights)) / sum(weights))
 
 
+@pytest.mark.unit
 def test_a_choice_with_one_option_is_refused_before_the_model() -> None:
     lettered, scorer = model()
     with pytest.raises(ValueError, match="at least two choices"):
@@ -147,6 +151,7 @@ def test_a_choice_with_one_option_is_refused_before_the_model() -> None:
     assert scorer.calls == []
 
 
+@pytest.mark.unit
 def test_a_choice_over_26_options_runs_a_final_round_on_each_group_s_three_likeliest() -> None:
     lettered, scorer = model()
     criteria = {f"o{i}": "power " * (i % 7) + f"cell {i}" for i in range(30)}
@@ -159,6 +164,7 @@ def test_a_choice_over_26_options_runs_a_final_round_on_each_group_s_three_likel
     assert answer["answers"]["wide"]["choice"] in {"o6", "o13", "o20", "o27"}
 
 
+@pytest.mark.unit
 def test_the_state_is_trimmed_by_whole_entries_until_every_prompt_fits() -> None:
     fitted, _ = model(max_length=10_000)
     long_parts = {**PARTS, "logs": [f"log entry {i}" for i in range(60)]}
@@ -174,6 +180,7 @@ def test_the_state_is_trimmed_by_whole_entries_until_every_prompt_fits() -> None
         tiny.predict(long_parts, CHOICE)
 
 
+@pytest.mark.unit
 def test_letters_are_found_after_a_space_when_the_tokenizer_joins_them_to_it() -> None:
     plain = LetteredPrompts(CharTokenizer())
     assert plain.letters[:2] == [ord("A"), ord("B")]
@@ -181,6 +188,7 @@ def test_letters_are_found_after_a_space_when_the_tokenizer_joins_them_to_it() -
     assert spaced.letters[:2] == [1000 + ord("A"), 1000 + ord("B")]
 
 
+@pytest.mark.unit
 def test_a_tokenizer_that_splits_the_letters_is_refused() -> None:
     class Splitting(CharTokenizer):
         def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
@@ -209,6 +217,7 @@ def write_checkpoint(directory: Path, fill: bytes = b"\0") -> Path:
     return directory
 
 
+@pytest.mark.unit
 def test_a_checkpoint_is_named_by_its_shards_names_and_hashes(tmp_path: Path) -> None:
     checkpoint = write_checkpoint(tmp_path / "m")
     shard = hashlib.sha256((checkpoint / "model.safetensors").read_bytes()).hexdigest()
@@ -269,6 +278,7 @@ class FakeClock:
         return self.now
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("runtime", ["sglang", "jev_decision"])
 def test_endpoints_start_a_checkpoint_once_and_stop_the_least_recently_used_when_gpus_run_out(
     tmp_path: Path, runtime: str
@@ -293,6 +303,7 @@ def test_endpoints_start_a_checkpoint_once_and_stop_the_least_recently_used_when
     assert sorted(starts.stopped) == ["a", "b", "c"]
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("runtime", ["sglang", "jev_decision"])
 def test_an_endpoint_reports_the_gpus_its_server_was_started_on(tmp_path: Path, runtime: str) -> None:
     a, b = (policy(write_checkpoint(tmp_path / name, bytes([i]))) for i, name in enumerate("ab"))
@@ -302,6 +313,7 @@ def test_an_endpoint_reports_the_gpus_its_server_was_started_on(tmp_path: Path, 
         assert endpoints.resolve(b).gpus == 1
 
 
+@pytest.mark.unit
 def test_endpoints_refuse_weights_other_than_the_policy_names_and_non_hf_checkpoints(tmp_path: Path) -> None:
     good = policy(write_checkpoint(tmp_path / "m"))
     starts = FakeStarts()
@@ -315,6 +327,7 @@ def test_endpoints_refuse_weights_other_than_the_policy_names_and_non_hf_checkpo
     assert starts.started == []
 
 
+@pytest.mark.unit
 def test_a_server_that_fails_to_start_leaves_its_gpu_free(tmp_path: Path) -> None:
     def failing(checkpoint: Path, key: str, gpu: str, stack: ExitStack) -> str:
         raise RuntimeError("no engine")
@@ -339,16 +352,19 @@ def watched(
     return endpoints, probe, clock, policy(write_checkpoint(tmp_path / "m"))
 
 
+@pytest.mark.unit
 def test_the_default_health_timeout_leaves_slow_answers_to_sglang_s_own_20_s_limit() -> None:
     settings = ServingSettings(python=Path("python"), gpus=("0",))
     assert settings.health_timeout_seconds > 20
 
 
+@pytest.mark.unit
 def test_a_running_server_is_probed_at_most_once_every_five_minutes_by_default() -> None:
     # The episodes that resolve while a probe runs wait for it, at least 1 s.
     assert ServingSettings(python=Path("python"), gpus=("0",)).health_ttl_seconds == 300.0
 
 
+@pytest.mark.unit
 def test_a_server_that_passed_within_the_ttl_is_not_probed(tmp_path: Path) -> None:
     endpoints, probe, clock, p = watched(tmp_path, FakeStarts())
     first = endpoints.resolve(p)
@@ -357,6 +373,7 @@ def test_a_server_that_passed_within_the_ttl_is_not_probed(tmp_path: Path) -> No
     assert probe.calls == []
 
 
+@pytest.mark.unit
 def test_a_server_is_probed_once_the_ttl_has_passed_and_trusted_again_after(tmp_path: Path) -> None:
     starts = FakeStarts()
     endpoints, probe, clock, p = watched(tmp_path, starts)
@@ -369,6 +386,7 @@ def test_a_server_is_probed_once_the_ttl_has_passed_and_trusted_again_after(tmp_
     assert len(probe.calls) == 1 and starts.started == [("m", "0")]
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("runtime", ["sglang", "jev_decision"])
 def test_a_server_that_is_down_is_stopped_and_started_again_on_its_gpu(tmp_path: Path, runtime: str) -> None:
     starts = FakeStarts()
@@ -385,6 +403,7 @@ def test_a_server_that_is_down_is_stopped_and_started_again_on_its_gpu(tmp_path:
     assert endpoints.serving[p.checkpoint.checksum] == "1"
 
 
+@pytest.mark.unit
 def test_a_probe_that_fails_once_is_repeated_at_once_and_the_server_kept(tmp_path: Path) -> None:
     starts = FakeStarts()
     endpoints, probe, clock, p = watched(tmp_path, starts)
@@ -398,6 +417,7 @@ def test_a_probe_that_fails_once_is_repeated_at_once_and_the_server_kept(tmp_pat
     assert endpoints.resolve(p) == first and len(probe.calls) == 2
 
 
+@pytest.mark.unit
 def test_two_probes_failing_in_a_row_restart_the_server(tmp_path: Path) -> None:
     starts = FakeStarts()
     endpoints, probe, clock, p = watched(tmp_path, starts)
@@ -408,6 +428,7 @@ def test_two_probes_failing_in_a_row_restart_the_server(tmp_path: Path) -> None:
     assert probe.calls == [("http://m.0/health", 30.0)] * 2 and starts.stopped == ["m"]
 
 
+@pytest.mark.functional
 def test_a_503_from_the_real_probe_is_repeated_and_a_200_keeps_the_server(tmp_path: Path) -> None:
     statuses = [503, 200]
 
@@ -440,6 +461,7 @@ def test_a_503_from_the_real_probe_is_repeated_and_a_200_keeps_the_server(tmp_pa
         server.server_close()
 
 
+@pytest.mark.unit
 def test_a_server_whose_process_exited_is_restarted_without_a_probe(tmp_path: Path) -> None:
     starts = FakeStarts()
     endpoints, probe, clock, p = watched(tmp_path, starts)
@@ -450,6 +472,7 @@ def test_a_server_whose_process_exited_is_restarted_without_a_probe(tmp_path: Pa
     assert probe.calls == [] and starts.stopped == ["m"]
 
 
+@pytest.mark.unit
 def test_a_server_that_is_down_and_does_not_restart_fails_naming_its_checkpoint(tmp_path: Path) -> None:
     starts = FakeStarts(fail_after=1)
     endpoints, probe, clock, p = watched(tmp_path, starts)
@@ -466,6 +489,7 @@ def test_a_server_that_is_down_and_does_not_restart_fails_naming_its_checkpoint(
     assert len(starts.started) == 1 and len(probe.calls) == calls
 
 
+@pytest.mark.unit
 def test_a_server_that_goes_down_again_after_its_one_restart_fails_naming_its_checkpoint(tmp_path: Path) -> None:
     starts = FakeStarts()
     endpoints, probe, _clock, p = watched(tmp_path, starts)
@@ -482,6 +506,7 @@ def test_a_server_that_goes_down_again_after_its_one_restart_fails_naming_its_ch
     assert len(starts.started) == 2 and probe.calls == []
 
 
+@pytest.mark.unit
 def test_a_checkpoint_is_named_by_its_hub_repository_or_its_directory(tmp_path: Path) -> None:
     from honing.backends.sglang.checkpoint import checkpoint_identity
 
@@ -491,6 +516,7 @@ def test_a_checkpoint_is_named_by_its_hub_repository_or_its_directory(tmp_path: 
     assert checkpoint_identity(tmp_path / "iter4", "abc" * 22) == ("iter4", ("abc" * 22)[:12])
 
 
+@pytest.mark.unit
 def test_the_stand_in_trainer_writes_a_new_servable_checkpoint_with_its_norm_scaled(tmp_path: Path) -> None:
     from honing.core import TrainJobSpec
     from tests.fakes.serving import NormScaleTrainer
@@ -526,6 +552,7 @@ def test_the_stand_in_trainer_writes_a_new_servable_checkpoint_with_its_norm_sca
     assert data[start + 4 :] == other
 
 
+@pytest.mark.unit
 def test_a_checkpoint_s_context_length_comes_from_its_config(tmp_path: Path) -> None:
     from honing.backends.sglang.checkpoint import context_length
 
@@ -538,6 +565,7 @@ def test_a_checkpoint_s_context_length_comes_from_its_config(tmp_path: Path) -> 
     assert context_length(checkpoint) == 262144
 
 
+@pytest.mark.unit
 def test_a_longrope_checkpoint_is_served_no_further_than_its_original_length(tmp_path: Path) -> None:
     from honing.backends.sglang.checkpoint import context_length
 
@@ -552,6 +580,7 @@ def test_a_longrope_checkpoint_is_served_no_further_than_its_original_length(tmp
     assert context_length(checkpoint) == 4096
 
 
+@pytest.mark.unit
 def test_a_template_without_a_system_turn_gets_the_line_in_the_user_turn() -> None:
     class NoSystem(CharTokenizer):
         def apply_chat_template(self, messages: list[dict[str, str]], **kwargs: Any) -> str:

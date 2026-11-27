@@ -470,6 +470,7 @@ class _Engine:
         return self.up
 
 
+@pytest.mark.unit
 def test_a_startlux_model_reports_its_sglang_engine_s_health() -> None:
     engine = _Engine()
     model = StartLuxDecisionModel(FakeEngine({}), PROMPTS, {}, 100, concurrent=True, sglang=engine)
@@ -479,6 +480,7 @@ def test_a_startlux_model_reports_its_sglang_engine_s_health() -> None:
     assert StartLuxDecisionModel(FakeEngine({}), PROMPTS, {}, 100).healthy()  # native: no engine to lose
 
 
+@pytest.mark.unit
 def test_the_sglang_loader_hands_its_engine_to_the_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from honing.backends.sglang import engine as sglang_engine
     from honing.backends.sglang import startlux as sglang_startlux

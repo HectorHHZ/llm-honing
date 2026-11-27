@@ -457,18 +457,29 @@ want the result to sound like you rather than like no one.
 
 ## Tests
 
-Every behavior change needs a test, and every public protocol needs a fake in
-`tests/fakes/` and an entry in `tests/contracts/test_core_protocols.py`. A new
-plane feature should keep `tests/test_walking_skeleton.py` passing; replacing a
-fake with a real implementation is how a plane becomes real. Tests carry one of
-the markers declared in `pyproject.toml`:
+Every behavior change needs a test. A new feature needs unit tests for its
+pieces and a functional test that drives it through its entry point. Every
+public protocol needs a fake in `tests/fakes/` and an entry in
+`tests/contracts/test_core_protocols.py`. A new plane feature should keep
+`tests/test_walking_skeleton.py` passing; replacing a fake with a real
+implementation is how a plane becomes real.
 
-| Marker | Meaning |
-| --- | --- |
-| `unit` | No I/O beyond a temporary directory; runs everywhere; the default |
-| `integration` | Multiple components together; may start subprocesses |
-| `gpu` | Requires an accelerator; skipped in CI |
-| `slow` | Takes more than roughly ten seconds |
+Every test declares exactly one kind with a marker, and pytest refuses to
+collect a test that declares none or two:
 
-CI runs `pytest -m "not gpu"`. Keep the unit suite fast enough that running it
-before every commit stays habitual.
+| Kind | What it tests | Where it runs |
+| --- | --- | --- |
+| `unit` | One piece of code. It starts no process and opens no socket: the unit guard in `tests/conftest.py` fails one that does | CI, and `pytest -m unit` in about 30 seconds |
+| `functional` | One feature through its entry point (a command, a server, a runner), with fakes for what lies outside it | CI |
+| `integration` | Several planes or components together | CI |
+| `gpu` | Needs an accelerator | The GPU check on every pull request (`/gpu`, `scripts/gpu/check.sh` on Orchard) |
+
+`slow` (more than roughly ten seconds) and `live` (calls a real model API) go
+on top of the kind. A test that needs a GPU, a game build or a real model is a
+`gpu` test, so the GPU check runs it on every pull request.
+
+CI fails a pull request when total coverage falls below 75 percent (about two
+points under `main`'s 77 percent on 2026-11-27; `fail_under` in
+`pyproject.toml`), or when tests cover less than 80 percent of the Python lines
+it changes (`diff-cover` in the `test (3.12)` job). Run `pytest -m unit` before
+every commit and `pytest -m "not gpu"` before every push.

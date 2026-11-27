@@ -60,7 +60,7 @@ def _config(**changes: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------- the pipeline
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_pipeline_crosses_every_plane_and_restores_a_release(tmp_path: Path) -> None:
     code = main(["--config", str(ALL_PLANES), "--root", str(REPO), "--work-dir", str(tmp_path / "out")])
 
@@ -97,7 +97,7 @@ def test_the_pipeline_crosses_every_plane_and_restores_a_release(tmp_path: Path)
     assert request["messages"][0]["role"] == "system" and request["model"] == "fake-policy"
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_meta_harness_searches_on_harness_tasks_and_is_gated_on_held_out_ones(tmp_path: Path) -> None:
     config = REPO / "configs/e2e/meta_harness_dry_run.json"
 
@@ -112,7 +112,7 @@ def test_meta_harness_searches_on_harness_tasks_and_is_gated_on_held_out_ones(tm
     assert traces and all(name.startswith("train-") for name in traces) and not traces & held_out
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_unexpected_result_fails_the_run(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(_config(expect=["rolled back", *EXPECTED[1:], "restored"])))
@@ -128,7 +128,7 @@ def in_process_runner(context: PipelineContext) -> FakeEpisodeRunner:
     return FakeEpisodeRunner(context.shared.setdefault("world", FakeWorld()))  # type: ignore[arg-type]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_runner_is_swapped_by_changing_one_config_entry(tmp_path: Path) -> None:
     config = _config()
     config["components"] = {**config["components"], "runner": {"factory": "tests.test_e2e_pipeline:in_process_runner"}}
@@ -148,7 +148,7 @@ def _with_scheduler(kinds: list[str]) -> dict[str, Any]:
     return {"components": components}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_their_place(tmp_path: Path) -> None:
     config = _config(
         **_with_scheduler(["train", "harness", "train"]),
@@ -181,7 +181,7 @@ def test_a_scheduler_in_the_config_chooses_every_move_and_the_rollbacks_keep_the
     ]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_scheduler_without_move_entries_in_the_schedule_warns_nothing(tmp_path: Path) -> None:
     config = _config(**_with_scheduler(["train"]), schedule=[{"kind": "rollback", "to": "r0000"}], expect=[])
 
@@ -192,7 +192,7 @@ def test_a_scheduler_without_move_entries_in_the_schedule_warns_nothing(tmp_path
     assert isinstance(pipeline.scheduler, HistoryScheduler)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.filterwarnings("ignore:the 'history' scheduler chooses every move:UserWarning")
 def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -> None:
     config = _config(
@@ -208,7 +208,7 @@ def test_a_rollback_the_scheduler_stopped_before_fails_the_run(tmp_path: Path) -
     assert summary["failures"] == ["the run ended before schedule step 3 (rollback to r0000) ran"]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.filterwarnings("ignore:the 'history' scheduler chooses every move:UserWarning")
 def test_a_run_that_ran_another_number_of_steps_than_expected_fails(tmp_path: Path) -> None:
     config = _config(**_with_scheduler(["train", "train"]), schedule=[{"kind": "train"}], expect=["published"])
@@ -218,7 +218,7 @@ def test_a_run_that_ran_another_number_of_steps_than_expected_fails(tmp_path: Pa
     assert summary["failures"] == ["2 steps ran, but expect lists 1"]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -262,7 +262,7 @@ def no_tasks(context: PipelineContext) -> tuple[Task, ...]:
     return ()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_harness_move_gets_its_own_tasks_and_budget_while_the_gate_keeps_tasks(tmp_path: Path) -> None:
     config = _config(
         harness_tasks={"factory": "tests.test_e2e_pipeline:first_task"},
@@ -281,7 +281,7 @@ def test_a_harness_move_gets_its_own_tasks_and_budget_while_the_gate_keeps_tasks
     assert summary["steps"][0]["episodes"] == 2 * len(TASKS)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_without_harness_entries_a_harness_move_gets_the_gates_tasks_and_no_budget(tmp_path: Path) -> None:
     config = _config(schedule=[{"kind": "harness", "label": "verify"}], expect=["published"])
     config["components"] = {**config["components"], "method": {"factory": "tests.test_e2e_pipeline:recording_method"}}
@@ -375,7 +375,7 @@ def test_only_an_unexercised_rejection_or_rollback_is_a_rerun(checks: list[dict[
     assert only_not_exercised(checks) is skip
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_required_plane_must_be_named(tmp_path: Path) -> None:
     config = _config()
     config["components"] = {k: v for k, v in config["components"].items() if k != "quantizer"}
@@ -398,7 +398,7 @@ def _results(checks: list[Any]) -> dict[str, bool]:
     return {check.name: check.passed for check in checks}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_reference_runner_passes_every_check(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
 
@@ -457,7 +457,7 @@ def _subclassed(kind: type, context: PipelineContext) -> WorkspaceEpisodeRunner:
     return runner  # type: ignore[no-any-return]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("make", "failing"),
     [
@@ -480,7 +480,7 @@ def test_a_runner_that_breaks_the_contract_fails_the_check_it_breaks(
     assert {name for name, passed in _results(checks).items() if not passed} == failing
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_runner_without_the_seed_agent_stops_at_support(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     checks = check_runner(
@@ -491,7 +491,7 @@ def test_a_runner_without_the_seed_agent_stops_at_support(tmp_path: Path) -> Non
     assert "no agent 'claude_code'" in checks[0].detail
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_delivery_needs_a_probe_and_says_so(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     checks = check_runner(
@@ -501,7 +501,7 @@ def test_delivery_needs_a_probe_and_says_so(tmp_path: Path) -> None:
     assert not delivery.passed and "no delivery probe" in delivery.detail
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_agent_that_outlives_its_timeout_is_killed_and_reported(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     slow = WorkspaceEpisodeRunner(
@@ -544,7 +544,7 @@ def _alive(pid: int) -> bool:
     return True
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_cancelled_episode_kills_its_agent(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     pid_file = tmp_path / "agent.pid"
@@ -570,7 +570,7 @@ def test_a_cancelled_episode_kills_its_agent(tmp_path: Path) -> None:
             os.kill(pid, signal.SIGKILL)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_tasks_starting_files_are_copied_in_under_the_harness(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     start = tmp_path / "start"
@@ -591,7 +591,7 @@ def test_a_tasks_starting_files_are_copied_in_under_the_harness(tmp_path: Path) 
     assert not (bare / "buggy.py").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_link_inside_the_starting_files_is_copied_as_a_link(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     start = tmp_path / "start"
@@ -609,7 +609,7 @@ def test_a_link_inside_the_starting_files_is_copied_as_a_link(tmp_path: Path) ->
     assert (seeded / "pkg" / "up.py").resolve() == (seeded / "buggy.py").resolve()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("kind", ["absolute", "climbs_out"])
 def test_a_link_that_is_absolute_or_leaves_the_starting_files_is_refused(tmp_path: Path, kind: str) -> None:
     context, snapshot = _setup(tmp_path)
@@ -626,7 +626,7 @@ def test_a_link_that_is_absolute_or_leaves_the_starting_files_is_refused(tmp_pat
         asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_dangling_link_that_clashes_with_a_runner_file_is_refused(tmp_path: Path) -> None:
     context, snapshot = _setup(tmp_path)
     start = tmp_path / "start"
@@ -639,7 +639,7 @@ def test_a_dangling_link_that_clashes_with_a_runner_file_is_refused(tmp_path: Pa
         asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("clash", ["task.json", "result.json", "harness"])
 def test_starting_files_that_clash_with_runner_or_harness_files_are_refused(tmp_path: Path, clash: str) -> None:
     context, snapshot = _setup(tmp_path)
@@ -653,7 +653,7 @@ def test_starting_files_that_clash_with_runner_or_harness_files_are_refused(tmp_
         asyncio.run(runner.run(SEED_HARNESS, TASKS[0], _policy(snapshot)))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_agent_gets_only_the_base_and_forwarded_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -674,7 +674,7 @@ def test_the_agent_gets_only_the_base_and_forwarded_environment(
     assert {"HONING_POLICY_URL", "HONING_POLICY_MODEL", "HONING_POLICY_CHECKSUM", "HONING_WORKSPACE"} <= set(seen)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_check_command_runs_on_a_config(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     code = check_main(["--config", str(ALL_PLANES), "--root", str(REPO), "--work-dir", str(tmp_path / "check")])
     assert code == 0
@@ -698,7 +698,7 @@ def _levers(**changes: Any) -> dict[str, Any]:
     return {**config, **changes}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_pipeline_step_names_one_of_several_trainers_or_methods(tmp_path: Path) -> None:
     pipeline = build(_levers(), REPO, tmp_path / "out")
 
@@ -722,7 +722,7 @@ def test_a_pipeline_step_names_one_of_several_trainers_or_methods(tmp_path: Path
     assert quality[trained] == pytest.approx(quality[before] + 0.2)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("schedule", "message"),
     [
@@ -738,7 +738,7 @@ def test_a_step_for_a_trainer_or_method_the_config_does_not_build_is_refused_bef
         build(_levers(schedule=schedule, expect=[]), REPO, tmp_path / "out")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_two_entries_for_one_method_are_refused(tmp_path: Path) -> None:
     config = _levers()
     config["components"]["methods"] = [{"factory": "tests.fakes.pipeline:method"}] * 2

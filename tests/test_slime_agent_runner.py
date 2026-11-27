@@ -274,7 +274,7 @@ def assert_nothing_started(tmp_path: Path) -> None:
     assert leaked == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("environ", [{**ENVIRON, "SGLANG_KEY": KEY_VALUE}, ENVIRON], ids=["set", "unset"])
 def test_a_server_that_needs_a_key_is_refused_before_the_episode(tmp_path: Path, environ: Mapping[str, str]) -> None:
     runner = make_runner(tmp_path, environ=environ, endpoints=KeyedEndpoints("SGLANG_KEY"))
@@ -283,7 +283,7 @@ def test_a_server_that_needs_a_key_is_refused_before_the_episode(tmp_path: Path,
     assert_nothing_started(tmp_path)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_keyed_static_endpoint_is_refused(tmp_path: Path) -> None:
     keyed = harness_endpoints.StaticPolicyEndpoints(
         {
@@ -302,13 +302,13 @@ def test_a_keyed_static_endpoint_is_refused(tmp_path: Path) -> None:
     assert_nothing_started(tmp_path)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_map_that_names_no_key_runs_the_episode(tmp_path: Path) -> None:
     outcome = run(make_runner(tmp_path, endpoints=KeyedEndpoints(None)))
     assert (outcome.exit_code, outcome.final_output) == (0, "done")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_map_without_api_key_env_runs_the_episode(tmp_path: Path) -> None:
     endpoints = StaticPolicyEndpoints({POLICY.checkpoint.checksum: ENDPOINT})
     assert not hasattr(endpoints, "api_key_env")
@@ -316,7 +316,7 @@ def test_a_map_without_api_key_env_runs_the_episode(tmp_path: Path) -> None:
     assert (outcome.exit_code, outcome.final_output) == (0, "done")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("files", "where"),
     [
@@ -334,7 +334,7 @@ def test_a_workspace_that_already_has_a_placed_path_is_refused(
     assert not (tmp_path / "episodes").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_workspace_with_other_files_under_dot_claude_is_accepted(tmp_path: Path) -> None:
     runner = make_runner(tmp_path, task_suite=suite(tmp_path, {".claude/agents/x.md": "x\n", "main.py": "x\n"}))
     assert run(runner).exit_code == 0
@@ -343,7 +343,7 @@ def test_a_workspace_with_other_files_under_dot_claude_is_accepted(tmp_path: Pat
 # --- one episode -------------------------------------------------------------------------------------------------
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_episode_writes_the_files_the_worker_reads_and_returns_its_outcome(tmp_path: Path) -> None:
     outcome = run(make_runner(tmp_path))
     directory = episode_dir(tmp_path)
@@ -376,7 +376,7 @@ def test_an_episode_writes_the_files_the_worker_reads_and_returns_its_outcome(tm
     assert SlimeAgentDeliveryProbe().delivered(outcome, EVERY_KIND) == {path: True for path, _ in EVERY_KIND.files}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_relative_episodes_directory_is_taken_from_where_the_runner_was_made(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -412,7 +412,7 @@ def test_the_image_is_checked_once_per_runner(tmp_path: Path, docker_log: Path) 
     assert _docker_calls(docker_log, "image") == [["image", "inspect", "honing-agent:test"]]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_optional_cli_and_token_settings_reach_the_worker(tmp_path: Path) -> None:
     settings = AgentEpisodeSettings(
         image="i", max_new_tokens=8192, cli_extra_args="--disallowedTools WebSearch", install_cli=False
@@ -426,7 +426,7 @@ def test_the_optional_cli_and_token_settings_reach_the_worker(tmp_path: Path) ->
     )
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_worker_sees_only_the_allowed_environment(tmp_path: Path) -> None:
     run(make_runner(tmp_path))
     seen = json.loads((episode_dir(tmp_path) / "fake_env.json").read_text())
@@ -441,7 +441,7 @@ def test_the_worker_sees_only_the_allowed_environment(tmp_path: Path) -> None:
     assert seen["argv"][1:] == [str(episode_dir(tmp_path))]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("knobs", "expected"),
     [
@@ -455,7 +455,7 @@ def test_what_the_agent_did_is_the_outcome(tmp_path: Path, knobs: Mapping[str, o
     assert outcome.workspace_location is not None
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("knobs", "message"),
     [
@@ -479,7 +479,7 @@ def test_a_worker_that_could_not_run_the_episode_raises(
     assert str(episode_dir(tmp_path) / "worker.log") in str(raised.value)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_workspace_the_agent_could_not_hand_back_is_an_outcome_that_grades_zero(tmp_path: Path) -> None:
     runner = make_runner(tmp_path, knobs={"failure": "the workspace is too big", "workspace": None})
     grader = CommandGrader(suite(tmp_path / "grading"))
@@ -489,7 +489,7 @@ def test_a_workspace_the_agent_could_not_hand_back_is_an_outcome_that_grades_zer
     assert (record.score, record.feedback) == (0.0, "the workspace is too big")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_ordinary_outcome_names_no_failure(tmp_path: Path) -> None:
     assert run(make_runner(tmp_path)).failure is None
 
@@ -899,7 +899,7 @@ def test_the_copy_in_overlays_the_harness_on_the_workspace(tmp_path: Path) -> No
     assert names == [".claude/commands/fix.md", "src/a.py"]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_episode_file_with_a_wrong_field_is_refused(tmp_path: Path) -> None:
     runner = make_runner(tmp_path)
     run(runner)

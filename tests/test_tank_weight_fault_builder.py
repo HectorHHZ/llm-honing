@@ -53,6 +53,7 @@ def freeze(clean: Path, prior: Path, reverse: Path) -> dict:
     }
 
 
+@pytest.mark.unit
 def test_builds_real_scalar_edit_and_rejects_other_tensor_change(tmp_path: Path) -> None:
     clean = make_checkpoint(tmp_path / "clean", 0.0)
     prior = make_checkpoint(tmp_path / "prior", 1 / math.sqrt(1024))
@@ -74,6 +75,7 @@ def test_builds_real_scalar_edit_and_rejects_other_tensor_change(tmp_path: Path)
         builder.build(prior, dirty, tmp_path / "rejected", (-3.0,), freeze(clean, prior, dirty), clean)
 
 
+@pytest.mark.unit
 def test_symlinked_source_weight_is_not_modified(tmp_path: Path) -> None:
     clean = make_checkpoint(tmp_path / "clean", 0.0)
     prior = make_checkpoint(tmp_path / "prior", 1 / math.sqrt(1024))
@@ -87,6 +89,7 @@ def test_symlinked_source_weight_is_not_modified(tmp_path: Path) -> None:
     assert not (tmp_path / "faults/reverse_strength_3p0/checkpoint/best.safetensors").is_symlink()
 
 
+@pytest.mark.unit
 def test_rejects_changed_non_weight_file(tmp_path: Path) -> None:
     clean = make_checkpoint(tmp_path / "clean", 0.0)
     prior = make_checkpoint(tmp_path / "prior", 1 / math.sqrt(1024))

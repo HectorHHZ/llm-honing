@@ -97,6 +97,7 @@ def test_only_the_reef_backend_imports_reef_client(repo_root: Path) -> None:
     assert offenders == {}, f"Reef imports outside honing/backends/reef/, or of reef itself: {offenders}"
 
 
+@pytest.mark.unit
 def test_the_checkpoint_identity_imports_no_backend(repo_root: Path) -> None:
     """Backends name a Hugging Face checkpoint through hf_checkpoint, so it must not import any of them."""
     path = repo_root / "honing" / "backends" / "hf_checkpoint.py"

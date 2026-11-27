@@ -92,7 +92,11 @@ jobs:
         env:
           # The tank dry run takes minutes, and the e2e job plays its config on 3.12, so only 3.11 plays it here.
           HONING_SKIP_TANK_DRY_RUN: ${{ matrix.python-version != '3.11' && '1' || '' }}
-        run: python -m pytest -m "not gpu" --cov --cov-report=term-missing
+        run: python -m pytest -m "not gpu" --cov --cov-report=term-missing --cov-report=xml
+      - name: Changed lines are tested
+        # Tests must cover 80 percent of the Python lines a pull request changes (CONTRIBUTING.md, Tests).
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.12'
+        run: diff-cover coverage.xml --compare-branch=origin/main --fail-under=80
 
   game-install:
     runs-on: ubuntu-latest

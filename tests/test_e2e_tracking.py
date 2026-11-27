@@ -85,7 +85,7 @@ def test_a_run_without_a_logging_block_logs_nothing_and_imports_no_wandb(tmp_pat
 # ---------------------------------------------------------------- the pipeline, logged
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_pipeline_logs_one_step_per_schedule_step_and_uploads_its_files(
     tmp_path: Path, fake_wandb: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -156,7 +156,7 @@ def test_the_pipeline_logs_one_step_per_schedule_step_and_uploads_its_files(
     assert capsys.readouterr().out.count("wandb: https://wandb.invalid/") == 2
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_failed_run_is_finished_as_failed(tmp_path: Path, fake_wandb: Path) -> None:
     config = {**json.loads(logged_config(tmp_path).read_text()), "expect": ["skipped"] * 9}
     path = tmp_path / "failing.json"
@@ -166,7 +166,7 @@ def test_a_failed_run_is_finished_as_failed(tmp_path: Path, fake_wandb: Path) ->
     assert read_calls(fake_wandb)[-1] == {"call": "finish", "exit_code": 1}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_key_written_before_the_end_uploads_nothing(
     tmp_path: Path, fake_wandb: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -182,7 +182,7 @@ def test_a_key_written_before_the_end_uploads_nothing(
     assert KEY not in err
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_key_written_as_the_run_ends_fails_the_run(
     tmp_path: Path, fake_wandb: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -192,7 +192,7 @@ def test_a_key_written_as_the_run_ends_fails_the_run(
     assert "logging: wandb/leak-finish.txt holds a key after the run ended" in capsys.readouterr().err
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_logging_start_that_fails_stops_the_run(
     tmp_path: Path, fake_wandb: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -232,7 +232,7 @@ def test_a_bad_logging_block_is_refused_before_anything_runs(
     assert not (tmp_path / "run").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_online_logging_needs_the_key_and_offline_does_not(
     tmp_path: Path, fake_wandb: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -311,7 +311,7 @@ def test_chain_records_are_read_once_and_only_when_complete(tmp_path: Path) -> N
     assert records.new() == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_without_an_entity_the_run_goes_to_the_keys_default(tmp_path: Path, fake_wandb: Path) -> None:
     config = {**json.loads(ALL_PLANES.read_text()), "logging": {"wandb": {"project": "llm-honing-e2e"}}}
     path = tmp_path / "config.json"

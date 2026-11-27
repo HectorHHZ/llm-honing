@@ -35,7 +35,7 @@ def pair(candidate_spec=SPEC, incumbent_spec=SPEC):  # type: ignore[no-untyped-d
     return candidate, incumbent
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_stronger_candidate_wins_every_game_in_both_seats(tmp_path: Path) -> None:
     candidate, incumbent = pair()
     result = evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1").evaluate(candidate, incumbent)
@@ -52,7 +52,7 @@ def test_every_game_is_charged_as_one_gate_episode(tmp_path: Path) -> None:
     assert meter.close().episodes["gate"] == 2 * len(TASKS)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_seats_really_swap_between_the_two_games(tmp_path: Path) -> None:
     candidate, incumbent = pair()
     evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1").evaluate(candidate, incumbent)
@@ -66,14 +66,14 @@ def test_seats_really_swap_between_the_two_games(tmp_path: Path) -> None:
     assert servers == ["http://strong:1"] * 2 + ["http://weak:1"] * 2
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_evenly_matched_models_draw(tmp_path: Path) -> None:
     candidate, incumbent = pair()
     result = evaluator(tmp_path, cand="http://even:1", inc="http://even:2").evaluate(candidate, incumbent)
     assert result.candidate_scores == (0.5,) * 4 == result.incumbent_scores
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_gate_selects_on_a_duel(tmp_path: Path) -> None:
     candidate, incumbent = pair()
     gate = Gate(evaluator(tmp_path, cand="http://strong:1", inc="http://weak:1"), default_selector=WinLossSelector())
@@ -107,7 +107,7 @@ def test_a_win_the_engine_did_not_end_scores_as_a_draw() -> None:
     assert result_score({"outcome": {"red": -1}, "ended": True, "truncated": False}, "red") == 0.0
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_failed_duel_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAKE_DUEL_EXIT", "2")
     candidate, incumbent = pair()

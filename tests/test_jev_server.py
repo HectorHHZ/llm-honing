@@ -81,7 +81,7 @@ def call(url: str, path: str, body: object | None = None, timeout: float = 10) -
 QUESTION = {"root": {"type": "choice", "instructions": "Next?", "criteria": {"power": "Power plant", "wait": "Wait"}}}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_health_reports_what_is_loaded(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     assert call(url, "/v1/health") == (
@@ -104,7 +104,7 @@ class CheckedModel(FakeDecisionModel):
         return self.state
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_healthy_model_answers_health_as_before(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(CheckedModel())
     assert call(url, "/v1/health") == (
@@ -113,7 +113,7 @@ def test_a_healthy_model_answers_health_as_before(serve) -> None:  # type: ignor
     )
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("state", "error"),
     [
@@ -129,14 +129,14 @@ def test_a_model_that_is_down_or_whose_check_fails_is_a_503(serve, state, error)
     )
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_healthy_attribute_that_is_not_callable_is_ignored(serve) -> None:  # type: ignore[no-untyped-def]
     model = FakeDecisionModel()
     model.healthy = True  # type: ignore[attr-defined]  # a flag, not a check
     assert call(serve(model), "/v1/health")[0] == 200
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("concurrent", [False, True])
 def test_health_answers_while_a_long_decision_runs(serve, concurrent: bool) -> None:  # type: ignore[no-untyped-def]
     # Model calls run one at a time on the serving thread; the check must not wait its turn behind them.
@@ -153,7 +153,7 @@ def test_health_answers_while_a_long_decision_runs(serve, concurrent: bool) -> N
     deciding.join()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_decision_is_answered_and_its_id_echoed(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     status, body = call(url, "/v1/decide", {"id": 7, "parts": {"essential": ["tick 30"]}, "questions": QUESTION})
@@ -161,7 +161,7 @@ def test_a_decision_is_answered_and_its_id_echoed(serve) -> None:  # type: ignor
     assert body == {"answers": {"root": {"choice": "power"}}, "stateText": "tick 30", "id": 7}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_decision_after_an_idle_spell_is_still_answered(serve) -> None:  # type: ignore[no-untyped-def]
     """The serving loop wakes once a second while idle and must keep going, not stop, when nothing arrived."""
     url = serve(FakeDecisionModel())
@@ -172,7 +172,7 @@ def test_a_decision_after_an_idle_spell_is_still_answered(serve) -> None:  # typ
     assert status == 200 and body["id"] == 8
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("body", "message"),
     [
@@ -204,20 +204,20 @@ def test_a_malformed_request_is_refused_without_calling_the_model(serve, body, m
     assert model.peak == 0
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_model_failure_is_a_500_that_names_it(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel(fail=True))
     status, reply = call(url, "/v1/decide", {"parts": {}, "questions": QUESTION})
     assert status == 500 and reply["error"] == "RuntimeError: model fell over"
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_unknown_route_is_a_404(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     assert call(url, "/v1/other")[0] == 404
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_concurrent_games_share_one_model_one_request_at_a_time(serve) -> None:  # type: ignore[no-untyped-def]
     model = FakeDecisionModel(delay=0.05)
     url = serve(model)
@@ -275,7 +275,7 @@ class ThreadRecordingModel:
         return {"answers": {}}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_model_call_runs_on_the_serving_thread() -> None:
     # A CUDA kernel can be chosen per thread, so the server never runs the model on a request's thread.
     model = ThreadRecordingModel()
@@ -312,7 +312,7 @@ BRANCHED = {
 }
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_branches_are_answered_in_one_call_each_as_if_alone(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     status, body = call(url, "/v1/decide", BRANCHED)
@@ -353,7 +353,7 @@ class SplitModel(FakeDecisionModel):
         return self.predict_many(prepared)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("split", [False, True])
 def test_a_model_s_own_batch_and_split_calls_are_used(split: bool) -> None:
     model = SplitModel(split)
@@ -406,7 +406,7 @@ def post_raw(
 
 # Found by tests/test_jev_server_fuzz.py: each of these used to escape parse_decide or _send, so the server
 # dropped the connection instead of answering, the last one after running the model.
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("body", "length", "message"),
     [
@@ -427,7 +427,7 @@ def test_a_body_the_parser_cannot_carry_is_a_400(serve, body, length, message) -
 
 
 # Found by mutation testing with ``mutmut``: each test below kills mutants that the tests above let survive.
-@pytest.mark.unit
+@pytest.mark.functional
 def test_exactly_the_branch_limit_is_answered_and_one_more_refused(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     request = {"parts": {}, "questions": QUESTION}
@@ -437,7 +437,7 @@ def test_exactly_the_branch_limit_is_answered_and_one_more_refused(serve) -> Non
     assert status == 400 and "at most 16" in str(body["error"])
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_body_at_the_size_limit_is_read_and_one_byte_more_refused(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     request = json.dumps({"parts": {}, "questions": QUESTION}).encode()
@@ -447,7 +447,7 @@ def test_a_body_at_the_size_limit_is_read_and_one_byte_more_refused(serve) -> No
     assert status == 400 and "body must be 1 to" in str(body["error"])
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_body_that_is_not_an_object_and_an_unknown_field_are_named(serve) -> None:  # type: ignore[no-untyped-def]
     url = serve(FakeDecisionModel())
     assert call(url, "/v1/decide", [1])[1]["error"] == "body must be a JSON object"
@@ -462,7 +462,7 @@ class NaNModel(FakeDecisionModel):
         return {"answers": {key: {"choice": "power", "probabilities": {"power": math.nan}} for key in questions}}
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_answer_strict_json_cannot_write_is_a_500(serve) -> None:  # type: ignore[no-untyped-def]
     status, body = post_raw(serve(NaNModel()), json.dumps({"parts": {}, "questions": QUESTION}).encode())
     assert status == 500 and "the model's answer is not JSON" in str(body["error"])
@@ -484,7 +484,7 @@ class ConcurrentModel(FakeDecisionModel):
         return super().predict(parts, questions)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_concurrent_model_is_called_on_the_request_threads_at_once(serve) -> None:  # type: ignore[no-untyped-def]
     model = ConcurrentModel()
     url = serve(model)
@@ -496,7 +496,7 @@ def test_a_concurrent_model_is_called_on_the_request_threads_at_once(serve) -> N
     assert model.seen == [(request["parts"], request["questions"])] * 4
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_one_branch_is_answered_through_predict_many(serve) -> None:  # type: ignore[no-untyped-def]
     model = SplitModel(split=False)
     url = serve(model)
