@@ -173,6 +173,9 @@ class ReefReporter:
         self._queued: deque[tuple[Task, EpisodeOutcome, Grade]] = deque()
         #: Reports made and not yet stored or refused. Only the reporter's thread changes it.
         self._pending: deque[_Pending] = deque()
+        #: Episodes accepted and not yet skipped or settled: queued, being made into a report, or pending. Changed
+        #: only under the lock, since a report being made is in neither deque.
+        self._waiting = 0
         self._counts = _Counts()
         self._closing = False
         self._deadline = float("inf")
@@ -187,7 +190,7 @@ class ReefReporter:
         """Queue one graded episode. Never blocks on Reef or raises."""
         with self._lock:
             self._counts.episodes += 1
-            if self._closing or len(self._queued) + len(self._pending) >= self._max_pending_reports:
+            if self._closing or self._waiting >= self._max_pending_reports:
                 self._counts.dropped += 1
                 now = time.monotonic()
                 if now - self._last_drop_log >= _LOG_SECONDS:
@@ -203,6 +206,7 @@ class ReefReporter:
                         task.task_id,
                     )
                 return
+            self._waiting += 1
             self._queued.append((task, outcome, grade))
             self._lock.notify()
 
@@ -210,7 +214,7 @@ class ReefReporter:
         """What the reporter has done so far."""
         with self._lock:
             counts = dict(vars(self._counts))
-            counts["pending"] = len(self._queued) + len(self._pending)
+            counts["pending"] = self._waiting
             return counts
 
     def close(self) -> None:
@@ -221,7 +225,7 @@ class ReefReporter:
             self._lock.notify()
         self._thread.join(self._flush_seconds + self._timeout_seconds + 1.0)
         with self._lock:
-            self._counts.unsent = unsent = len(self._pending) + len(self._queued)
+            self._counts.unsent = unsent = self._waiting
         if unsent:
             logger.warning("Reef reporter: closed with %d episode reports not sent to Reef", unsent)
 
@@ -288,6 +292,7 @@ class ReefReporter:
             with self._lock:
                 name = "invalid" if made.reason == "invalid" else f"skipped_{made.reason}"
                 setattr(self._counts, name, getattr(self._counts, name) + 1)
+                self._waiting -= 1
             log = logger.warning if made.reason == "invalid" else logger.info
             log("Reef reporter: no report for %s: %s", task.task_id, made.detail)
             return
@@ -349,6 +354,7 @@ class ReefReporter:
     def _settle(self, pending: _Pending, outcome: str, detail: str) -> None:
         with self._lock:
             setattr(self._counts, outcome, getattr(self._counts, outcome) + 1)
+            self._waiting -= 1
         if outcome != "sent":
             report = pending.report
             logger.error(

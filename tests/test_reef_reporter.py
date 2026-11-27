@@ -604,8 +604,22 @@ def test_closing_while_reef_is_down_stops_in_time_and_counts_what_is_unsent(
 
 @pytest.mark.unit
 def test_past_the_pending_limit_an_episode_is_graded_and_its_report_dropped_loudly(
-    tmp_path: Path, fake_reef: FakeReef, scenario: str, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    fake_reef: FakeReef,
+    scenario: str,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from honing.backends.reef import reporter as module
+
+    made = module.episode_report
+
+    def slowly(*args: Any) -> Any:
+        # A report being made is in neither queue: the limit must still count it.
+        time.sleep(0.1)
+        return made(*args)
+
+    monkeypatch.setattr(module, "episode_report", slowly)
     fake_reef.down = True
     sender = reporter(fake_reef.url, scenario, max_pending_reports=2, flush_seconds=0.0)
     graded = ReefReportingGrader(Graded(GRADE), sender)
