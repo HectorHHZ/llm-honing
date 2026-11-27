@@ -54,9 +54,23 @@ BUCKET_TOKENS = 128
 # These fit, and read the tree mask faster; they read out of bounds on strided q/k/v, so the forward hands
 # FlexAttention contiguous tensors.
 FLEX_KERNEL = {"BLOCK_M": 128, "BLOCK_N": 32, "num_stages": 2, "num_warps": 4}
+# Tiles for the GPUs where others measured faster, by compute capability. On an H100 (sm90), with 240 recorded
+# tank requests, these take a tree-compiled call's median GPU time from 7.48 to 6.62 ms and attention's share of
+# it from 39% to 31%, and keep the tree as close to fp32 as the A6000 tiles do.
+FLEX_KERNELS = {(9, 0): {"BLOCK_M": 64, "BLOCK_N": 64, "num_stages": 3, "num_warps": 4}}
 # The compiled graph scores up to HEAD_ROWS questions of up to HEAD_SLOTS options each; a call with more runs
 # the compiled forward without a graph and the heads per question.
 HEAD_ROWS, HEAD_SLOTS = 16, 16
+
+
+def flex_kernel(device: Any) -> dict[str, int]:
+    """FlexAttention's tiles for ``device``: measured ones for its compute capability, else :data:`FLEX_KERNEL`."""
+    import torch
+
+    device = torch.device(device)
+    if device.type != "cuda":
+        return FLEX_KERNEL
+    return FLEX_KERNELS.get(torch.cuda.get_device_capability(device), FLEX_KERNEL)
 
 
 def common_prefix_length(a: list[int], b: list[int]) -> int:
@@ -231,9 +245,10 @@ class FusedQwen3:
     run as one matmul of the same bf16 operands.
     """
 
-    def __init__(self, backbone: Any) -> None:
+    def __init__(self, backbone: Any, kernel: Mapping[str, int] = FLEX_KERNEL) -> None:
         import torch
 
+        self.kernel = dict(kernel)
         config = backbone.config
         if config.model_type != "qwen3" or getattr(backbone, "has_sliding_layers", False):
             raise ValueError("tree-compiled needs a Qwen3 backbone with full attention in every layer; use tree")
@@ -289,7 +304,7 @@ class FusedQwen3:
                 block_mask=blocks,
                 scale=self.head_dim**-0.5,
                 enable_gqa=True,
-                kernel_options=FLEX_KERNEL,
+                kernel_options=self.kernel,
             )
             hidden = hidden + functional.linear(attended.transpose(1, 2).reshape(1, n, q_size), w["o"])
             x = _rms_norm(hidden, w["post_norm"], self.eps)
@@ -500,7 +515,8 @@ class TreeScorer:
         elif mode == "tree-compiled":
             if predictor.precision != "bf16":
                 raise ValueError("tree-compiled runs under bf16 autocast; use precision bf16, or inference tree")
-            self._forward = torch.compile(FusedQwen3(predictor.model.backbone), dynamic=True)
+            fused = FusedQwen3(predictor.model.backbone, flex_kernel(predictor.device))
+            self._forward = torch.compile(fused, dynamic=True)
             heads = functools.partial(graph_heads, predictor.model)
             # Most calls fit the sizes captured here, a path limit plus room for the other paths' tails; a larger
             # tree runs the compiled forward without a graph.

@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import queue
 import signal
 import sys
@@ -92,11 +93,30 @@ def _request(request: object, fields: set[str], branch: str | None = None) -> De
     return DecideRequest(request.get("id"), parts, questions)
 
 
+def _finite(text: str) -> float:
+    """A JSON number the response can carry back: ``1e999`` parses to infinity, which strict JSON cannot write."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise RequestError(f"body has the number {text}, which is out of range")
+    return value
+
+
+def _no_constant(name: str) -> float:
+    raise RequestError(f"body has {name}, which is not JSON")
+
+
 def parse_decide(body: bytes) -> tuple[DecideRequest, dict[str, DecideRequest]]:
-    """Validate a decide request and return it with its named branches (empty without ``branches``)."""
+    """Validate a decide request and return it with its named branches (empty without ``branches``).
+
+    Any body is either a request or a ``RequestError``: bytes that are not
+    UTF-8, nesting deeper than the parser's stack and numbers strict JSON
+    cannot write back are refused like malformed JSON.
+    """
     try:
-        request = json.loads(body)
-    except json.JSONDecodeError as error:
+        request = json.loads(body, parse_float=_finite, parse_constant=_no_constant)
+    except RequestError:
+        raise
+    except (ValueError, RecursionError) as error:  # JSONDecodeError, UnicodeDecodeError, or too deep
         raise RequestError(f"body is not JSON: {error}") from None
     first = _request(request, {"id", "parts", "questions", "branches"})
     branches = request.get("branches", {})
@@ -240,7 +260,10 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path != "/v1/decide":
             self._send(HTTPStatus.NOT_FOUND, {"error": f"no route {self.path}"})
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
         if length <= 0 or length > MAX_BODY_BYTES:
             self._send(HTTPStatus.BAD_REQUEST, {"error": f"body must be 1 to {MAX_BODY_BYTES} bytes"})
             return
@@ -261,7 +284,10 @@ class _Handler(BaseHTTPRequestHandler):
         response = responses[0]
         if branches:
             response["branches"] = dict(zip(branches, responses[1:], strict=True))
-        self._send(HTTPStatus.OK, response)
+        try:
+            self._send(HTTPStatus.OK, response)
+        except ValueError as error:  # a NaN or an infinity from the model, which strict JSON cannot write
+            self._send(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"the model's answer is not JSON: {error}"})
 
 
 def main(argv: Sequence[str] | None = None) -> None:
