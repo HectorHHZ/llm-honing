@@ -29,11 +29,18 @@ from tests.test_campaign_rules import head_release
 
 FIXTURES = sorted((Path(__file__).parent / "fixtures" / "decision_traces").glob("*/decisions.jsonl"))
 HARNESS = SEED_HARNESS.spec_id
+POLICY = head_release().policy().checkpoint.checksum
 DECISIONS = DataContract("typed_decisions")
 
 
 def tags(log: Path) -> dict[str, str]:
-    return {"episode": log.parent.name, "task": f"task-{log.parent.name}", "release": "r0000", "harness": HARNESS}
+    return {
+        "episode": log.parent.name,
+        "task": f"task-{log.parent.name}",
+        "release": "r0000",
+        "harness": HARNESS,
+        "policy": POLICY,
+    }
 
 
 def score(log: Path) -> float:
@@ -94,6 +101,7 @@ def expected(logs: list[Path], *, behavior: bool) -> list[Any]:
             release_id="r0000",
             harness_id=HARNESS,
             behavior=behavior,
+            policy_checksum=POLICY,
         )
     ]
 
@@ -164,6 +172,24 @@ def test_a_batch_meets_the_campaign_rules_as_they_are(tmp_path: Path) -> None:
     assert foreign is not None
     with pytest.raises(CampaignRuleError, match=r"^batch_from_one_release:"):
         rules.batch_from_one_release(foreign, head_release())
+
+
+def test_a_batch_from_other_weights_is_refused_without_a_release_tag(tmp_path: Path) -> None:
+    # A runner knows the weights it served, not their release (#241), so the policy tag keeps a batch to the head.
+    for job_id, policy in (("a", POLICY), ("b", "other-weights")):
+        spool_job(tmp_path, job_id, FIXTURES[:1], f"2026-11-25T00:00:0{job_id == 'b':d}+00:00")
+        job = json.loads((tmp_path / f"{job_id}.json").read_text())
+        episode_tags = job["samples"][0]["trajectory"]["extra"]["honing"]["tags"]
+        del episode_tags["release"]
+        episode_tags["policy"] = policy
+        (tmp_path / f"{job_id}.json").write_text(json.dumps(job))
+    same = ReefDataProvider(tmp_path).next_batch(DECISIONS)
+    assert same is not None and same.source_releases == frozenset() and same.source_policies == {POLICY}
+    rules.batch_from_one_release(same, head_release())
+    other = ReefDataProvider(tmp_path).next_batch(DECISIONS)
+    assert other is not None and other.source_policies == {"other-weights"}
+    with pytest.raises(CampaignRuleError, match=r"^batch_from_one_release:.*other-weights"):
+        rules.batch_from_one_release(other, head_release())
 
 
 def test_the_gpu_config_builds_a_provider_over_the_spool_it_names(tmp_path: Path, monkeypatch: Any) -> None:

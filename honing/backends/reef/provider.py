@@ -32,9 +32,11 @@ def decisions_from_job(job: Mapping[str, Any], *, behavior: bool) -> tuple[Decis
     """The decisions of one spooled job, episode by episode in the job's order, each in play order.
 
     A decision is the sample ``decision_from_row`` builds from its row: the
-    episode's score is its reward, its task the group, and its ``release``
-    and ``harness`` tags its sources. ``behavior`` keeps the answers'
-    probabilities as behavior probabilities.
+    episode's score is its reward, its task the group, and its ``release``,
+    ``harness`` and ``policy`` tags its sources. A runner knows the checksum of
+    the weights it served but not their release, so ``policy`` is what keeps a
+    batch to the head's weights. ``behavior`` keeps the answers' probabilities
+    as behavior probabilities.
     """
     if job.get("format") != JOB_FORMAT or job.get("version") != JOB_VERSION:
         raise ContractError(f"job data must be {JOB_FORMAT} version {JOB_VERSION}")
@@ -58,6 +60,7 @@ def decisions_from_job(job: Mapping[str, Any], *, behavior: bool) -> tuple[Decis
                     release_id=tags.get("release"),
                     harness_id=tags.get("harness"),
                     behavior=behavior,
+                    policy_checksum=tags.get("policy"),
                 )
             )
     return tuple(decisions)

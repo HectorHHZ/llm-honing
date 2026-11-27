@@ -31,6 +31,7 @@ def decision_from_row(
     release_id: str | None,
     harness_id: str | None,
     behavior: bool,
+    policy_checksum: str | None = None,
 ) -> DecisionSample:
     """One row of ``decisions.jsonl``. ``behavior`` keeps the answers' probabilities as behavior probabilities."""
     questions = row["questions"]
@@ -59,6 +60,7 @@ def decision_from_row(
         group=group,
         source_release=release_id,
         source_harness=harness_id,
+        source_policy=policy_checksum,
     )
 
 
@@ -70,6 +72,7 @@ def decisions_from_log(
     release_id: str | None,
     harness_id: str | None,
     behavior: bool,
+    policy_checksum: str | None = None,
 ) -> list[DecisionSample]:
     """Every row of one run's decision log. ``behavior`` keeps the answers' probabilities as behavior probabilities."""
     log = run / "decisions.jsonl"
@@ -88,6 +91,7 @@ def decisions_from_log(
                     release_id=release_id,
                     harness_id=harness_id,
                     behavior=behavior,
+                    policy_checksum=policy_checksum,
                 )
             )
     return decisions

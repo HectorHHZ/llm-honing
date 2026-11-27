@@ -157,16 +157,20 @@ def batch_meets_contract(job: TrainJobSpec, batch: TrainingBatch | None) -> None
 def batch_from_one_release(batch: TrainingBatch, head: HoneRelease) -> None:
     """Samples earned under different weights or different harnesses are not comparable.
 
-    Offline samples name no release or harness and are always accepted.
+    A decision may name its weights by checksum rather than by release, so those must be the head's served
+    weights. Offline samples name no release, weights or harness and are always accepted.
     """
     foreign_releases = batch.source_releases - {head.release_id}
     head_harness = frozenset() if head.harness is None else frozenset({head.harness.spec_id})
     foreign_harnesses = batch.source_harnesses - head_harness
-    if foreign_releases or foreign_harnesses:
+    head_policy = head.policy().checkpoint.checksum
+    foreign_policies = batch.source_policies - {head_policy}
+    if foreign_releases or foreign_harnesses or foreign_policies:
         raise CampaignRuleError(
             "batch_from_one_release",
-            f"batch {batch.batch_id} mixes releases {sorted(batch.source_releases)} and harnesses "
-            f"{sorted(batch.source_harnesses)}; the head is {head.release_id}",
+            f"batch {batch.batch_id} mixes releases {sorted(batch.source_releases)}, weights "
+            f"{sorted(batch.source_policies)} and harnesses {sorted(batch.source_harnesses)}; "
+            f"the head is {head.release_id} serving {head_policy}",
         )
 
 

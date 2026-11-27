@@ -45,7 +45,8 @@ class DecisionEpisodeSamples(ReportSamples):
     """
 
     #: Reef's staleness rule compares a sample's Reef artifact with the one served. Decision records name no Reef
-    #: artifact, and Honing keeps a batch to one release itself (``batch_from_one_release``, by the release tag).
+    #: artifact, and Honing keeps a batch to one release itself (``batch_from_one_release``, by the release tag
+    #: or, from runners that know only the weights they served, by the policy checksum tag).
     goes_stale = False
 
     def make_sample(self, context: ReportContext) -> Sample | SkippedReport:

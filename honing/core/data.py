@@ -132,7 +132,10 @@ class DecisionSample:
     answered in ``chosen``. ``behavior_probs``, when present, is the probability
     the acting model gave every option of every question; policy-gradient
     training needs it, supervised training does not. ``reward`` is what the
-    decision earned, for example the game's outcome.
+    decision earned, for example the game's outcome. An online decision names
+    its sources: ``source_release`` and ``source_harness``, and
+    ``source_policy``, the checksum of the weights that made it, for a source
+    that knows the weights it served but not their release.
     """
 
     parts: tuple[tuple[str, tuple[str, ...]], ...]
@@ -143,8 +146,10 @@ class DecisionSample:
     group: str | None = None
     source_release: str | None = None
     source_harness: str | None = None
+    source_policy: str | None = None
 
     def __post_init__(self) -> None:
+        require(self.source_policy is None or bool(self.source_policy), "a decision's policy checksum must be set")
         sections = [name for name, _ in self.parts]
         require(len(set(sections)) == len(sections), "a decision's state names each section once")
         keys = [key for key, _ in self.questions]
@@ -238,3 +243,8 @@ class TrainingBatch:
         """The harness specs the samples name. Unattributed samples contribute nothing."""
         items: tuple[PolicySample | DecisionSample, ...] = (*self.samples, *self.decisions)
         return frozenset(item.source_harness for item in items if item.source_harness is not None)
+
+    @property
+    def source_policies(self) -> frozenset[str]:
+        """The checksums of the weights the decisions name. Unattributed decisions contribute nothing."""
+        return frozenset(item.source_policy for item in self.decisions if item.source_policy is not None)
