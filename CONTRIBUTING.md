@@ -234,6 +234,10 @@ When an AI tool makes a non-trivial contribution:
 Generated prose carries its own tells. [Writing style](#writing-style) lists
 the ones to remove before you submit.
 
+[AGENTS.md](AGENTS.md) gives coding agents the rules they most often break:
+check for duplicate work first, test kinds, per-commit subjects, and rebasing
+instead of merging `main`.
+
 AI assistance does not lower the bar for tests, documentation, security, or
 long-term maintenance.
 
