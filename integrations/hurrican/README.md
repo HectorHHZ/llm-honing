@@ -15,7 +15,7 @@ grader, training or a completion result.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: platform movement, combat selection, timing.
+Primary category: **Shooters**. Capability tags: platform movement, combat selection, timing.
 
 Move, jump and shoot through the first jungle level.
 

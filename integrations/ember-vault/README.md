@@ -30,7 +30,7 @@ node integrations/ember-vault/scripts/bundle.cjs /tmp/ember-vault.html
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: combat, resource use, upgrade choice.
+Primary category: **Roguelikes**. Capability tags: combat, resource use, upgrade choice.
 
 Clear the vaults, choose upgrades, defeat the Furnace and reach the final gate.
 

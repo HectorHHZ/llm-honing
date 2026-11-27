@@ -17,7 +17,7 @@ of full-game victory or general roguelike competence.
 
 ## Research scope
 
-Primary category: **Exploration and resource planning**. Capability tags: exploration, resource use, dependent goals.
+Primary category: **Survival and puzzle**. Capability tags: exploration, resource use, dependent goals.
 
 Collect resources, craft items and survive in the full native game.
 
