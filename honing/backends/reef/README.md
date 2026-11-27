@@ -58,13 +58,14 @@ report, not in the record. A request whose answer the game did not use is
 recorded but not referenced, and never trains.
 
 **Ids.** A decision record's id is the first 32 hex digits of a SHA-256 over
-the format, its version, the `episode` tag, the request's `id` and, for a
-request in a branch, the branch's name, since a game may reuse a request id
-across branches. A report's
+the format, its version, the `episode` tag and the request's `id`. A report's
 id hashes the episode alone. A resend is then a retry that Reef stores once,
 and a report names its records without asking Reef for receipts. The
 `episode` tag must be unique to one attempt of one episode, because Reef
-refuses the same id with other content. A request needs a string `id`.
+refuses the same id with other content. A request needs a string `id`, unique
+within its episode, branches included: the id leaves the branch out because a
+`decisions.jsonl` row does not name its branch, and the report finds a row's
+record by the row's id alone.
 
 **Tags.** `episode`, `task`, `release`, `harness` and `policy` (the policy
 checksum) for a campaign's episodes. A game outside a campaign tags `game`,

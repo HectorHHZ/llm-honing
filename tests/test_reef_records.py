@@ -68,10 +68,6 @@ def test_a_record_reads_back_whole() -> None:
         tags=TAGS,
     )
     assert back.record_id == decision.record_id == decision_record_id("s3114-a", row["request_id"])
-    payload = decision.payload()
-    payload["honing"] = {**payload["honing"], "branch": "left"}
-    branched = RecordedDecision.from_payload(through_json(payload))
-    assert branched.record_id == decision_record_id("s3114-a", row["request_id"], "left") != decision.record_id
     assert decision.to_record()["request_type"] == "inference"
     assert decision.payload()["metadata"] == {"tags": TAGS}
 
@@ -81,9 +77,6 @@ def test_ids_are_stable_and_name_the_episode() -> None:
     assert decision_record_id("ep", "blue-3114-1:motion") == "482791861431155914b0c6f20fc3c8fb"
     assert decision_record_id("ep", "blue-3114-1:motion") != decision_record_id("ep2", "blue-3114-1:motion")
     assert episode_report_id("ep") != decision_record_id("ep", "ep")
-    # Tank's weapon branches all reuse "<id>:weapon": each branch's record needs its own id.
-    assert decision_record_id("ep", "blue-3114-1:motion", None) == "482791861431155914b0c6f20fc3c8fb"
-    assert len({decision_record_id("ep", "7:weapon", branch) for branch in (None, "left", "right")}) == 3
     assert len(episode_report_id("ep")) == 32
 
 
