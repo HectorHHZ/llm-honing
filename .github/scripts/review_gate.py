@@ -1,7 +1,7 @@
 """Set each open pull request's commit status ``review``, the merge rule CONTRIBUTING.md states.
 
-The lead reviewer's own pull request passes: the lead decides it is ready. Anyone else's passes when the lead
-reviewer approves it. Either way nobody's latest review may request changes on the current diff. A review
+A lead reviewer's own pull request passes: a lead decides it is ready. Anyone else's passes when a lead reviewer
+approves it. Either way nobody's latest review may request changes on the current diff. A review
 counts while the pull request's diff is the one reviewed: rebasing onto main keeps it, a push that changes the
 diff drops it. The ``review`` workflow runs this on every review, comment and push, and every 15 minutes.
 Usage: ``review_gate.py [--dry-run]`` with GH_TOKEN and GITHUB_REPOSITORY set.
@@ -17,8 +17,9 @@ import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-#: The maintainers' lead reviewer: their own pull requests need no other review, and everyone else's need theirs.
-LEAD = "Xuan-1998"
+#: The maintainers' lead reviewers, by GitHub login: Xuan, Hector, Lucas and Jay (Xinkai). Their own pull requests
+#: need no other review, and everyone else's need one of theirs.
+LEADS = ("Xuan-1998", "HectorHHZ", "Brocoliman", "jayzou3773")
 
 
 @dataclass(frozen=True)
@@ -50,12 +51,14 @@ def decide(
     blockers = sorted(who for who, e in latest.items() if e.state == "changes_requested" and current(e.commit))
     if blockers:
         return "pending", f"Changes requested by {names(blockers)}"
-    if author == LEAD:
-        return "success", "The lead reviewer's own pull request"
-    lead = latest.get(LEAD)
-    if lead is not None and lead.state == "approved" and current(lead.commit):
-        return "success", f"Approved by {LEAD}"
-    return "pending", f"Needs @{LEAD}'s approval of the current diff"
+    if author in LEADS:
+        return "success", "A lead reviewer's own pull request"
+    approvals = sorted(
+        who for who, e in latest.items() if who in LEADS and e.state == "approved" and current(e.commit)
+    )
+    if approvals:
+        return "success", f"Approved by {names(approvals)}"
+    return "pending", "Needs a lead reviewer's approval of the current diff"
 
 
 def gh(*args: str) -> object:

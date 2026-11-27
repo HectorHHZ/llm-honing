@@ -11,7 +11,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from review_gate import LEAD, Event, changes, decide
+from review_gate import LEADS, Event, changes, decide
+
+LEAD, OTHER_LEAD = LEADS[0], LEADS[1]
 
 T0 = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc)
 
@@ -21,9 +23,15 @@ def review(who: str, state: str, days: float, commit: str = "") -> Event:
 
 
 @pytest.mark.unit
-def test_the_lead_reviewers_own_pull_request_passes_without_a_review() -> None:
-    assert decide(LEAD, []) == ("success", "The lead reviewer's own pull request")
-    assert decide(LEAD, [review(LEAD, "approved", 1)])[0] == "success"
+def test_a_lead_reviewers_own_pull_request_passes_without_a_review() -> None:
+    for lead in LEADS:
+        assert decide(lead, []) == ("success", "A lead reviewer's own pull request")
+    assert decide(LEAD, [review(OTHER_LEAD, "approved", 1)])[0] == "success"
+
+
+@pytest.mark.unit
+def test_the_lead_reviewers_are_xuan_hector_lucas_and_jay() -> None:
+    assert set(LEADS) == {"Xuan-1998", "HectorHHZ", "Brocoliman", "jayzou3773"}
 
 
 @pytest.mark.unit
@@ -31,31 +39,37 @@ def test_the_lead_reviewers_own_pull_request_passes_without_a_review() -> None:
     "events",
     [
         [],
-        [review("a", "approved", 1)],  # anyone but the lead reviewer
+        [review("a", "approved", 1)],  # anyone but a lead reviewer
         [review("ci[bot]", "approved", 1)],
         [review(LEAD, "approved", 1), review(LEAD, "changes_requested", 2)],  # the lead's latest verdict counts
         [review(LEAD, "approved", 1), review(LEAD, "dismissed", 2)],  # an admin dismissed it
         [review(LEAD, "approved", 1), review("a", "changes_requested", 2)],
     ],
 )
-def test_anyone_elses_pull_request_needs_the_lead_reviewers_approval(events: list[Event]) -> None:
-    assert decide("lucas", events)[0] == "pending"
+def test_anyone_elses_pull_request_needs_a_lead_reviewers_approval(events: list[Event]) -> None:
+    assert decide("leo", events)[0] == "pending"
 
 
 @pytest.mark.unit
-def test_the_lead_reviewers_approval_passes_anyone_elses_pull_request() -> None:
-    assert decide("lucas", [review(LEAD, "approved", 1)]) == ("success", f"Approved by {LEAD}")
+def test_any_lead_reviewers_approval_passes_anyone_elses_pull_request() -> None:
+    for lead in LEADS:
+        assert decide("leo", [review(lead, "approved", 1)]) == ("success", f"Approved by {lead}")
+    both = [review(LEAD, "approved", 1), review(OTHER_LEAD, "approved", 2)]
+    assert decide("leo", both)[1] == f"Approved by {min(LEAD, OTHER_LEAD)} and 1 more"
+    # One lead's approval does not outweigh another lead's request for changes.
+    split = [review(LEAD, "approved", 1), review(OTHER_LEAD, "changes_requested", 2)]
+    assert decide("leo", split) == ("pending", f"Changes requested by {OTHER_LEAD}")
     later = [review(LEAD, "changes_requested", 1), review(LEAD, "approved", 2)]
-    assert decide("lucas", later)[0] == "success"
+    assert decide("leo", later)[0] == "success"
     kept = [review(LEAD, "approved", 1), review(LEAD, "commented", 2)]  # a comment keeps the verdict
-    assert decide("lucas", kept)[0] == "success"
+    assert decide("leo", kept)[0] == "success"
 
 
 @pytest.mark.unit
 def test_a_review_counts_while_the_diff_is_the_one_reviewed() -> None:
     approved = [review(LEAD, "approved", 1, "old")]
-    assert decide("lucas", approved, current=lambda commit: True)[0] == "success"  # rebased onto main
-    assert decide("lucas", approved, current=lambda commit: commit == "head")[0] == "pending"  # the diff changed
+    assert decide("leo", approved, current=lambda commit: True)[0] == "success"  # rebased onto main
+    assert decide("leo", approved, current=lambda commit: commit == "head")[0] == "pending"  # the diff changed
     blocked = [review("a", "changes_requested", 1, "old")]
     assert decide(LEAD, blocked, current=lambda commit: True) == ("pending", "Changes requested by a")
     assert decide(LEAD, blocked, current=lambda commit: commit == "head")[0] == "success"  # answered by a push
@@ -90,7 +104,7 @@ def ci_jobs(workflow: str) -> set[str]:
 def test_the_ruleset_requires_the_review_status_and_every_ci_job(repo_root: Path) -> None:
     ruleset = json.loads((repo_root / ".github" / "rulesets" / "main.json").read_text())
     rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
-    # The review status knows the lead reviewer. A native approval count would block the lead's own pull requests.
+    # The review status knows the lead reviewers. A native approval count would block a lead's own pull requests.
     assert rules["pull_request"]["required_approving_review_count"] == 0
     # The review status drops an approval when the diff changes. A native dismissal would drop it on every
     # rebase onto main, which the strict up-to-date rule makes before each merge.
