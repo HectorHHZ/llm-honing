@@ -158,7 +158,8 @@ with `main` and every review thread is resolved. One of those checks, the
   reviewers' last word) and five days passed with no review or comment from
   anyone else.
 
-A push dismisses earlier approvals, so approvals cover the commit that merges.
+An approval counts while the pull request's diff is the one approved: updating
+the branch from `main` keeps it, and a push that changes the diff drops it.
 Merges use squash, so the pull request title becomes the commit subject.
 `.github/rulesets/main.json` is the ruleset that enforces this on `main`, so a
 change to these rules is a pull request too. An admin applies it with
@@ -171,7 +172,9 @@ until a reviewer comments `/gpu` and the GPU runner passes
 `scripts/gpu/check.sh` on its head commit: the tests marked `gpu`, and the tank
 direction edit on a real NanoJev, whose train move must publish. No pull
 request merges without it, whatever it changes. A push sets it back to pending. `scripts/gpu/README.md` describes the
-runner, and how to run the check by hand.
+runner, and how to run the check by hand. When the runner is down, an admin who
+ran the check by hand on the head commit may set `gpu` to success with a link to
+the log.
 
 ## AI-assisted contributions
 

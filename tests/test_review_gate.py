@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from review_gate import Event, decide
+from review_gate import Event, changes, decide
 
 T0 = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc)
 
@@ -48,6 +48,27 @@ def test_two_approvals_pass() -> None:
 )
 def test_fewer_than_two_approvals_or_a_change_request_do_not(events: list[Event]) -> None:
     assert decide("author", events, at(3))[0] == "pending"
+
+
+@pytest.mark.unit
+def test_an_approval_counts_while_the_diff_is_the_one_approved() -> None:
+    def approve(who: str, days: float, commit: str) -> Event:
+        return Event("reviewed", who, at(days), "approved", commit)
+
+    events = [approve("a", 1, "old"), approve("b", 2, "head")]
+    assert decide("author", events, at(2), current=lambda commit: True)[0] == "success"  # main merged in
+    state, description = decide("author", events, at(2), current=lambda commit: commit == "head")
+    assert state == "pending" and description.startswith("1/2 approvals")  # a push changed the diff
+
+
+@pytest.mark.unit
+def test_a_merge_from_main_leaves_the_diff_the_same() -> None:
+    before = [{"filename": "a.py", "status": "modified", "patch": "@@ -10,3 +10,3 @@ def f\n x = 1\n-y = 2\n+y = 3"}]
+    after = [{"filename": "a.py", "status": "modified", "patch": "@@ -40,3 +40,3 @@ def f\n x = 0\n-y = 2\n+y = 3"}]
+    pushed = [{"filename": "a.py", "status": "modified", "patch": "@@ -40,3 +40,3 @@ def f\n x = 0\n-y = 2\n+y = 4"}]
+    binary = [{"filename": "w.bin", "status": "modified", "sha": "abc"}]
+    assert changes(before) == changes(after) != changes(pushed)
+    assert changes(binary) != changes([{**binary[0], "sha": "abd"}])
 
 
 @pytest.mark.unit
@@ -119,7 +140,9 @@ def test_the_ruleset_requires_the_review_status_and_every_ci_job(repo_root: Path
     rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
     # Approvals are counted by the review status, which also knows the five-day rule. A native count would block it.
     assert rules["pull_request"]["required_approving_review_count"] == 0
-    assert rules["pull_request"]["dismiss_stale_reviews_on_push"] and ruleset["bypass_actors"] == []
+    # The review status drops an approval when the diff changes. A native dismissal would drop it on every
+    # update from main, which the strict up-to-date rule makes before each merge.
+    assert not rules["pull_request"]["dismiss_stale_reviews_on_push"] and ruleset["bypass_actors"] == []
     assert rules["required_status_checks"]["strict_required_status_checks_policy"]
     required = {check["context"] for check in rules["required_status_checks"]["required_status_checks"]}
     assert {"review", "gpu"} <= required

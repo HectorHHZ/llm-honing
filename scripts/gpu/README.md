@@ -30,3 +30,11 @@ scripts/gpu/setup.sh ~/honing-gpu
 source ~/honing-gpu/env.sh
 scripts/gpu/check.sh runs/gpu-check 0 1 2
 ```
+
+When the runner is down, an admin who ran this on the pull request's head commit
+can set the status by hand, linking the log:
+
+```bash
+gh api repos/HectorHHZ/llm-honing/statuses/<head sha> -f context=gpu -f state=success \
+  -f description="check.sh by hand on <host>" -f target_url=<log link>
+```
