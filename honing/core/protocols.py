@@ -194,7 +194,12 @@ class TraceSource(Protocol):
 
 @runtime_checkable
 class PolicyEndpoints(Protocol):
-    """Finds the engine serving a policy. Raises ``ContractError`` for a policy no engine serves."""
+    """Finds the engine serving a policy. Raises ``ContractError`` for a policy no engine serves.
+
+    ``resolve`` must be thread-safe. Runners call it on threads (``honing.harness.endpoints.resolve_endpoint``),
+    so the calls for different policies overlap, and so can two for the same policy: a cancelled gate's resolve
+    runs on while the next gate, on a new event loop, resolves that policy again.
+    """
 
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint: ...
 

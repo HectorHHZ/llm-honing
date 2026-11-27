@@ -26,6 +26,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from honing.core import ContractError, EpisodeOutcome, HarnessSpec, PolicyEndpoints, PolicyRef, RunnerSupport, Task
+from honing.harness.endpoints import resolve_endpoint
 
 TIMED_OUT = -9
 # What every agent process gets from the runner's own environment; anything
@@ -111,7 +112,7 @@ class WorkspaceEpisodeRunner:
         return workspace
 
     async def run(self, spec: HarnessSpec, task: Task, policy: PolicyRef) -> EpisodeOutcome:
-        endpoint = self._endpoints.resolve(policy)
+        endpoint = await resolve_endpoint(self._endpoints, policy)
         workspace = self._prepare(spec, task)
         env = {
             **{name: os.environ[name] for name in self._forward if name in os.environ},

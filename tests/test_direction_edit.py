@@ -27,8 +27,10 @@ from honing.core import (  # noqa: E402
     DataContract,
     DecisionQuestion,
     DecisionSample,
+    DirectionEditSpec,
     TrainingBatch,
     TrainJobSpec,
+    TrainResult,
 )
 from honing.core.training import requirements_for  # noqa: E402
 
@@ -235,3 +237,35 @@ def test_general_nanojev_factory_edits_other_parameters_and_keeps_serving_identi
     assert nanojev_snapshot(output) == result.snapshot
     manifest = trained_manifest(output)
     assert manifest is not None and json.loads(manifest.read_text())["algorithm"] == "weight_edit"
+
+
+@pytest.mark.unit
+def test_a_job_with_its_own_spec_edits_along_that_direction_and_the_next_job_uses_the_settings(tmp_path: Path) -> None:
+    checkpoint = _base_checkpoint(tmp_path)
+    base = nanojev_snapshot(checkpoint)
+    trainer = _trainer(tmp_path)  # settings: question weapon, target fire, strength 1.0
+    before = safetensors.load_file(str(checkpoint / "best.safetensors"))[HEAD_WEIGHT]
+    toward_hold = DirectionEditSpec(question="weapon", target="hold", strength=0.5)
+
+    own = trainer.train(
+        TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=toward_hold), base, _batch()
+    )
+    default = trainer.train(TrainJobSpec("direction_edit", contract="typed_decisions"), base, _batch())
+
+    def head(result: TrainResult) -> np.ndarray:
+        return safetensors.load_file(str(Path(result.snapshot.checkpoint.location) / "best.safetensors"))[HEAD_WEIGHT]
+
+    def edit(result: TrainResult) -> dict[str, object]:
+        manifest = trained_manifest(Path(result.snapshot.checkpoint.location))
+        assert manifest is not None
+        return json.loads(manifest.read_text())["edit"]  # type: ignore[no-any-return]
+
+    hold, _ = direction(_inputs(), "weapon", "hold")
+    fire, _ = direction(_inputs(), "weapon", "fire")
+    assert np.allclose(head(own), before + 0.5 * hold, atol=1e-6)
+    assert np.allclose(head(default), before + fire, atol=1e-6)
+    assert (edit(own)["target"], edit(own)["strength"]) == ("hold", 0.5)
+    assert (edit(default)["target"], edit(default)["strength"]) == ("fire", 1.0)
+    with pytest.raises(ContractError, match="no question in the batch offers a direction toward 'fire' on question"):
+        other = DirectionEditSpec(question="motion", target="fire", strength=1.0)
+        trainer.train(TrainJobSpec("direction_edit", contract="typed_decisions", direction_edit=other), base, _batch())

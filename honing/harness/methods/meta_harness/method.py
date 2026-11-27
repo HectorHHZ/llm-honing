@@ -56,7 +56,13 @@ from honing.harness.methods.meta_harness.archive import (
     valid_name,
     write_archive,
 )
-from honing.harness.traces import DEFAULT_MAX_TOKENS, render_traces
+from honing.harness.traces import (
+    DEFAULT_AFTER_SECONDS,
+    DEFAULT_BEFORE_SECONDS,
+    DEFAULT_MAX_TOKENS,
+    check_window,
+    render_traces,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,6 +135,8 @@ class MetaHarnessMethod:
     With ``traces``, every search episode the source can read is rendered
     within ``trace_max_tokens`` into ``work_dir / "decisions"``, and copied
     from there as ``decisions.txt`` into its trace folder.
+    ``trace_before_seconds`` and ``trace_after_seconds`` size the windows
+    around its key events. The defaults suit a tank round.
     """
 
     name = "meta_harness"
@@ -140,7 +148,10 @@ class MetaHarnessMethod:
         work_dir: Path,
         traces: TraceSource | None = None,
         trace_max_tokens: int = DEFAULT_MAX_TOKENS,
+        trace_before_seconds: float = DEFAULT_BEFORE_SECONDS,
+        trace_after_seconds: float = DEFAULT_AFTER_SECONDS,
     ) -> None:
+        check_window(trace_before_seconds, trace_after_seconds)
         self.requires = MethodRequirements()
         self.selector = MetaHarnessSelector()
         self.proposer = proposer
@@ -148,6 +159,8 @@ class MetaHarnessMethod:
         self.skill = load_skill()
         self.traces = traces
         self.trace_max_tokens = trace_max_tokens
+        self.trace_before_seconds = trace_before_seconds
+        self.trace_after_seconds = trace_after_seconds
 
     def initial_state(self, seed: HarnessSpec) -> Mapping[str, object]:
         return Archive.seed(seed).to_state()
@@ -250,7 +263,12 @@ class MetaHarnessMethod:
         traces = self.traces.traces(record) if self.traces is not None else ()
         if not traces:
             return None
-        text = render_traces(traces, max_tokens=self.trace_max_tokens)
+        text = render_traces(
+            traces,
+            max_tokens=self.trace_max_tokens,
+            before_seconds=self.trace_before_seconds,
+            after_seconds=self.trace_after_seconds,
+        )
         path = self.work_dir / DECISIONS_DIR / f"{hashlib.sha256(text.encode()).hexdigest()}.txt"
         if not path.is_file():
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -47,7 +47,13 @@ from honing.core import (
 )
 from honing.harness.methods.gepa.archive import ARCHIVE_SCHEMA_VERSION, Archive, ArchiveCandidate
 from honing.harness.models import ChatModelError
-from honing.harness.traces import DEFAULT_MAX_TOKENS, render_traces
+from honing.harness.traces import (
+    DEFAULT_AFTER_SECONDS,
+    DEFAULT_BEFORE_SECONDS,
+    DEFAULT_MAX_TOKENS,
+    check_window,
+    render_traces,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +70,10 @@ class GEPAConfig:
     template per component path; a component with none uses upstream's default.
     A template must contain ``<curr_param>`` and ``<side_info>``.
     ``trace_max_tokens`` caps each example's rendered decision traces, when the
-    method reads them. It has no upstream counterpart.
+    method reads them, and ``trace_before_seconds`` and ``trace_after_seconds``
+    size the windows around their key events. The defaults suit a tank round,
+    and a game with another clock sets its own. None has an upstream
+    counterpart.
     """
 
     max_metric_calls: int
@@ -76,6 +85,8 @@ class GEPAConfig:
     reflection_temperature: float = 1.0
     rng_seed: int = 0
     trace_max_tokens: int = DEFAULT_MAX_TOKENS
+    trace_before_seconds: float = DEFAULT_BEFORE_SECONDS
+    trace_after_seconds: float = DEFAULT_AFTER_SECONDS
 
     def __post_init__(self) -> None:
         require(self.max_metric_calls >= 0, f"max_metric_calls must be >= 0, got {self.max_metric_calls}")
@@ -88,6 +99,7 @@ class GEPAConfig:
             f"reflection_temperature must be >= 0, got {self.reflection_temperature}",
         )
         require(self.trace_max_tokens >= 100, f"trace_max_tokens must be >= 100, got {self.trace_max_tokens}")
+        check_window(self.trace_before_seconds, self.trace_after_seconds)
 
     def template_for(self, path: str) -> str | None:
         """The template for one component, resolved as upstream's ``StatelessReflectionLM`` does."""
@@ -185,13 +197,16 @@ class GEPAMethod:
     def initial_state(self, seed: HarnessSpec) -> Mapping[str, object]:
         components = {path: file.content for path, file in seed.files if file.kind in REWRITABLE_KINDS}
         require(len(components) > 0, "GEPA needs at least one instructions or skill file in the seed harness")
-        return Archive.seed(components, self.validation_task_ids, self.config.rng_seed).to_state()
+        archive = Archive.seed(components, self.validation_task_ids, self.config.rng_seed)
+        return archive.adopt_head(components, seed.spec_id).to_state()
 
     def propose(self, context: EvolveContext) -> ProposeResult:
         """One reflective mutation. ``asyncio.run`` drives the episodes, so call it outside a running loop."""
         config = self.config
         archive = Archive.from_state(context.state)
         self._check_components(archive, context)
+        # Another method may have published the head since GEPA last ran, in any of its files.
+        archive = archive.adopt_head(_head_components(archive, context.current), context.current.spec_id)
         # A train, prune or quantize move changed the weights since the archive was
         # scored. Scores under other weights are not comparable, so the search starts
         # over from the served harness before a parent is drawn from them; the next
@@ -276,7 +291,9 @@ class GEPAMethod:
             raise ContractError(
                 "the proposal is not GEPA's newest candidate; record the state propose returned with it"
             )
-        return settle(archive, evaluation, decision.selected).to_state()
+        settled = settle(archive, evaluation, decision.selected)
+        # A published proposal is the new head, and the scores now belong to it.
+        return (settled.published_as(proposal.spec.spec_id) if decision.selected else settled).to_state()
 
     def _check_components(self, archive: Archive, context: EvolveContext) -> None:
         """Every component must still be a rewritable file the runner declares it can run."""
@@ -352,7 +369,12 @@ class GEPAMethod:
         traces = self.traces.traces(record) if self.traces is not None else ()
         if not traces:
             return record.outcome.final_output
-        return render_traces(traces, max_tokens=self.config.trace_max_tokens)
+        return render_traces(
+            traces,
+            max_tokens=self.config.trace_max_tokens,
+            before_seconds=self.config.trace_before_seconds,
+            after_seconds=self.config.trace_after_seconds,
+        )
 
 
 def settle(archive: Archive, evaluation: EvaluationResult, selected: bool) -> Archive:
@@ -414,6 +436,16 @@ def _require_gepa() -> None:
         import gepa  # noqa: F401
     except ImportError as error:
         raise ImportError("GEPA reflection needs the 'gepa' extra: pip install 'llm-honing[gepa]'") from error
+
+
+def _head_components(archive: Archive, head: HarnessSpec) -> dict[str, str]:
+    """The head's text for each of the archive's component paths. :meth:`_check_components` runs first."""
+    components = {}
+    for path in archive.candidates[0].paths:
+        file = head.get(path)
+        assert file is not None
+        components[path] = file.content
+    return components
 
 
 def _spec_of(current: HarnessSpec, candidate: ArchiveCandidate) -> HarnessSpec:
