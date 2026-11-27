@@ -69,11 +69,18 @@ def _digest(*fields: str) -> str:
     return hashlib.sha256("\x00".join(fields).encode("utf-8")).hexdigest()[:32]
 
 
-def decision_record_id(episode: str, request_id: str) -> str:
-    """The id of the record of request ``request_id`` in ``episode``."""
+def decision_record_id(episode: str, request_id: str, branch: str | None = None) -> str:
+    """The id of the record of request ``request_id`` in ``episode``, in ``branch`` when it is one.
+
+    The branch is part of the id because a game may reuse a request id across branches. A request outside
+    any branch hashes as before, so the ids already stored stay valid.
+    """
     _require_text(episode, "the episode tag")
     _require_text(request_id, "a decision request's id")
-    return _digest(DECISION_FORMAT, str(FORMAT_VERSION), episode, request_id)
+    if branch is None:
+        return _digest(DECISION_FORMAT, str(FORMAT_VERSION), episode, request_id)
+    _require_text(branch, "a branch name")
+    return _digest(DECISION_FORMAT, str(FORMAT_VERSION), episode, request_id, branch)
 
 
 def episode_report_id(episode: str) -> str:
@@ -134,7 +141,7 @@ class RecordedDecision:
 
     @property
     def record_id(self) -> str:
-        return decision_record_id(self.episode, self.request_id)
+        return decision_record_id(self.episode, self.request_id, self.branch)
 
     def payload(self) -> dict[str, Any]:
         """The record's payload, JSON-native."""
