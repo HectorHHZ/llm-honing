@@ -2,8 +2,8 @@ name: gpu
 
 # The GPU check (scripts/gpu/check.sh) runs on a GPU machine when a reviewer asks, not on GitHub's runners.
 #
-# - Every push to a pull request sets its commit status `gpu`: success when no path in scripts/gpu/paths.txt
-#   changed, otherwise pending until the check passes.
+# - Every push to a pull request sets its commit status `gpu` to pending. Every pull request needs the check to
+#   pass before it merges, whatever it changes.
 # - A comment whose first line is `/gpu`, by someone with write access, on a pull request from a branch of this
 #   repository, labels it `gpu-queued` and marks the status queued. The GPU runner (scripts/gpu/README.md) picks
 #   the label up, runs the check on the head commit, and sets the status to its result.
@@ -26,23 +26,13 @@ jobs:
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7 # the base branch, for scripts/gpu/needs_gpu.py and paths.txt
-        with:
-          persist-credentials: false
       - name: Set the gpu status
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          path=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | python3 scripts/gpu/needs_gpu.py)
-          if [ -z "$path" ]; then
-            state=success description="No model or engine code changed"
-          else
-            state=pending description="Changes $path. A reviewer comments /gpu to run the GPU check"
-          fi
-          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state="$state" -f context=gpu \
-            -f description="${description:0:140}" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=pending -f context=gpu \
+            -f description="A reviewer comments /gpu to run the GPU check" > /dev/null
 
   queue:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request

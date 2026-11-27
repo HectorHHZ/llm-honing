@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The GPU check a model or engine change needs (scripts/gpu/paths.txt), from the repository root:
+# The GPU check every pull request needs before it merges, from the repository root:
 #   check.sh <out-dir> <gpu> <gpu> <gpu>
 # with three free GPUs of one machine, by nvidia-smi index, after sourcing the env.sh scripts/gpu/setup.sh wrote.
 #

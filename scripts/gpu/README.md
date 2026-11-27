@@ -1,7 +1,7 @@
 # The GPU check
 
-CI on GitHub's runners has no GPU. A change to model or engine code (the paths in `paths.txt`) also needs
-`check.sh` to pass on a GPU machine before it merges: the tests marked `gpu`, and the tank direction edit
+CI on GitHub's runners has no GPU. Every pull request also needs `check.sh` to pass on a GPU machine before
+it merges, whatever it changes: the tests marked `gpu`, and the tank direction edit
 (`configs/e2e/tank_direction_edit.json`) on a real NanoJev, whose train move must publish.
 
 ## Asking for it
