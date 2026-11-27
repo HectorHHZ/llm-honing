@@ -244,7 +244,8 @@ test("replay stops at the first decision that does not reproduce", async () => {
             /state\.tanks\.0\.x is/.test(e.message) &&
             !/Recorded on|floating point/.test(e.message),
     );
-    // A changed choice: another admissible motion at decision j changes what the weapon question is about.
+    // A changed choice: another admissible motion at decision j changes what the weapon question is about,
+    // and the weapon request's id names its motion (#223).
     run = await recorded();
     const rows = await lines(join(run, "decisions.jsonl")),
         motion = rows.find(
@@ -264,7 +265,9 @@ test("replay stops at the first decision that does not reproduce", async () => {
         replay(run),
         (e) =>
             e.decision === motion.decision &&
-            /the context of blue-2002-\d+:weapon differs/.test(e.message),
+            /request blue-2002-\d+:weapon:\w+ is logged as blue-2002-\d+:weapon:\w+/.test(
+                e.message,
+            ),
     );
 });
 

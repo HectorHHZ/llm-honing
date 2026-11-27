@@ -289,7 +289,7 @@ export function decisionRequests(
                 body,
                 weaponContext(body, motion).state,
                 weaponQuestions(text),
-                "weapon",
+                "weapon:" + motion,
                 notes,
             ),
         );
