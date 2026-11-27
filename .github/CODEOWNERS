@@ -1,0 +1,4 @@
+# GitHub requests a review from the code owners of the paths a pull request changes.
+# The lead reviewers (CONTRIBUTING.md, Pull requests) own every path: a pull request by anyone else needs one of
+# their approvals to merge. LEADS in .github/scripts/review_gate.py lists the same four.
+* @Xuan-1998 @HectorHHZ @Brocoliman @jayzou3773
