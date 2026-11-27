@@ -1,0 +1,38 @@
+{
+ "windows": 1166,
+ "frames": 4877,
+ "x_start": -6.559999942779541,
+ "x_max": 126.41539001464844,
+ "x_final": 126.39826202392578,
+ "y_final": 4.164999008178711,
+ "hp_min": 4,
+ "hp_final": 5,
+ "deaths": 0,
+ "scenes": [
+  "Level1",
+  "Level2"
+ ],
+ "scene_changes": 1,
+ "scene_final": "Level2",
+ "by_scene": {
+  "Level1": {
+   "windows": 707,
+   "x_max": 113.03326416015625,
+   "hp_min": 4,
+   "deaths": 0
+  },
+  "Level2": {
+   "windows": 459,
+   "x_max": 126.41539001464844,
+   "hp_min": 5,
+   "deaths": 0
+  }
+ },
+ "status": "goal reached: Level2 x >= 124",
+ "close": {
+  "game_exit": 0,
+  "display_exit": 0,
+  "windows": 1166,
+  "frames": 4877
+ }
+}

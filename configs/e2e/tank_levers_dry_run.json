@@ -1,0 +1,54 @@
+{
+  "description": "Two harness methods and two trainers in one tank campaign, with no GPU or model: real rounds (the Node match process against the planner opponent, Honing's DecisionServer) with a stand-in decision model. Step 1 is GEPA, reflecting on the rounds' rendered decision traces through a scripted chat model that checks it was shown them. Step 2 is sft on the planner teacher's rounds, through the default trainer. Step 3 is a direction edit through the trainer named direction_edit, with the step's own question, target and strength. Step 4 is Meta-Harness, whose archive holds the same rendered traces and whose scripted proposer sets the dodge assist to standard in tank/controller.json. Step 5 is sft again, on a fresh batch of teacher rounds. Every step is gated on 8 fresh rounds from the val seed pool, and a harness step must first pass its method's own selector on the fixed val tasks.",
+  "integration_dir": "integrations/tank-war",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-e2e-levers",
+  "validation_tasks": {"split": "val", "limit": 4},
+  "gate": {"rounds": 8, "looks": 1, "min_effect": 0.0, "confidence": 0.3},
+  "harness_tasks": {"split": "train", "limit": 4},
+  "episode_budget": 6,
+  "samples_per_task": 2,
+  "schedule": [
+    {"kind": "harness", "label": "gepa", "method": "gepa"},
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"},
+    {
+      "kind": "train",
+      "algorithm": "direction_edit",
+      "contract": "typed_decisions",
+      "trainer": "direction_edit",
+      "direction_edit": {"question": "weapon", "target": "fire", "strength": 1.0}
+    },
+    {"kind": "harness", "label": "meta_harness", "method": "meta_harness", "episode_budget": 9},
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"}
+  ],
+  "requires": {"env": [], "commands": ["node"], "paths": []},
+  "components": {
+    "model_source": {"factory": "tests.fakes.tank:model_source"},
+    "endpoints": {"factory": "tests.fakes.tank:endpoints"},
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner"},
+    "grader": {"factory": "honing.backends.tank.e2e:grader"},
+    "trainer": {"factory": "tests.fakes.tank:trainer"},
+    "trainers": {
+      "direction_edit": {"factory": "tests.fakes.tank:direction_edit_trainer"}
+    },
+    "data": {"factory": "honing.backends.tank.e2e:demonstrations", "args": {"limit": 2}},
+    "method": {
+      "factory": "honing.backends.tank.e2e:gepa_method",
+      "args": {
+        "chat": {"factory": "tests.fakes.tank:chat", "args": {"expect_decisions": true}},
+        "traces": {"factory": "honing.backends.tank.e2e:trace_source"},
+        "max_metric_calls": 100,
+        "minibatch_size": 3
+      }
+    },
+    "methods": [
+      {
+        "factory": "honing.e2e.meta_harness:method",
+        "args": {
+          "proposer": {"factory": "tests.fakes.tank:proposer"},
+          "traces": {"factory": "honing.backends.tank.e2e:trace_source"}
+        }
+      }
+    ]
+  }
+}

@@ -42,6 +42,7 @@ out, and the rollout provider scores each sample under that context.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -214,8 +215,48 @@ class TeacherRef:
 
 
 @dataclass(frozen=True)
+class DirectionEditSpec:
+    """Which direction one ``direction_edit`` job reads from its batch, and how far the head moves along it.
+
+    ``question`` selects the questions by id; ``None`` takes every question.
+    ``target`` is ``"label"`` (the direction toward the batch's own labels) or
+    an option id (the direction toward that option, whatever the label).
+    ``strength`` multiplies the unit direction. A job that carries a spec
+    replaces all three of the trainer's own settings for that job only, so a
+    scheduler can ask for a different edit on every move. None of the three
+    has a default: a spec that left one out would change that setting without
+    saying so.
+    """
+
+    question: str | None
+    target: str
+    strength: float
+
+    def __post_init__(self) -> None:
+        require(
+            self.question is None or (isinstance(self.question, str) and bool(self.question)),
+            "DirectionEditSpec.question must name a question or be None",
+        )
+        require(
+            isinstance(self.target, str) and bool(self.target),
+            "DirectionEditSpec.target must be 'label' or an option id",
+        )
+        require(
+            isinstance(self.strength, (int, float))
+            and not isinstance(self.strength, bool)
+            and math.isfinite(self.strength)
+            and self.strength != 0,
+            f"DirectionEditSpec.strength must be a finite, nonzero number, got {self.strength}",
+        )
+
+
+@dataclass(frozen=True)
 class TrainJobSpec:
-    """One training job. Construction checks shape; campaign rules check the combination."""
+    """One training job. Construction checks shape; campaign rules check the combination.
+
+    ``direction_edit`` belongs to a ``direction_edit`` job and says which edit
+    it makes; without one, the trainer's own settings apply.
+    """
 
     algorithm: AlgorithmName
     update_policy: UpdatePolicy = field(default_factory=UpdatePolicy)
@@ -224,11 +265,16 @@ class TrainJobSpec:
     teacher: TeacherRef | None = None
     steps: int = 1
     contract: ContractKind | None = None
+    direction_edit: DirectionEditSpec | None = None
 
     def __post_init__(self) -> None:
         require_choice(self.algorithm, get_args(AlgorithmName), "TrainJobSpec.algorithm")
         require_choice(self.rollout, get_args(RolloutKind), "TrainJobSpec.rollout")
         require(self.steps > 0, f"steps must be > 0, got {self.steps}")
+        require(
+            self.direction_edit is None or self.algorithm == "direction_edit",
+            "a direction edit spec belongs to a direction_edit job",
+        )
         if not ALGORITHM_REQUIREMENTS[self.algorithm].requires_batch:
             require(self.contract is None, f"{self.algorithm} takes no data contract")
         if self.contract is not None:

@@ -105,6 +105,9 @@ class WeightEditTrainer:
     ``weight_edit`` takes no batch and runs once (steps=1). ``direction_edit``
     takes typed decisions; its modifier derives the operations from that batch.
     No operation can add parameters, change shapes, or bypass param_subset.
+    A job's own ``direction_edit`` spec is refused here, because the modifier
+    is fixed when the trainer is built; a subclass that plans from the job
+    overrides :meth:`modifier_for`.
     """
 
     def __init__(
@@ -146,7 +149,7 @@ class WeightEditTrainer:
             raise ContractError("the edit output directory must be outside the base checkpoint")
         if self.layout.checksum(parent) != base.checkpoint.checksum:
             raise ContractError("the base checkpoint's weights differ from its checksum")
-        plan = self.modifier(base, batch)
+        plan = self.modifier_for(job)(base, batch)
         if not plan.edits or len({e.parameter for e in plan.edits}) != len(plan.edits):
             raise ContractError("an edit plan needs unique, nonempty parameter operations")
         if not all(math.isfinite(v) for v in plan.metrics.values()):
@@ -196,6 +199,12 @@ class WeightEditTrainer:
             checkpoint=CheckpointRef(str(checkpoint.resolve()), "hf_safetensors", checksum),
         )
         return TrainResult(snapshot=snapshot, metrics=metrics)
+
+    def modifier_for(self, job: TrainJobSpec) -> Modifier:
+        """The modifier that plans ``job``'s edit."""
+        if job.direction_edit is not None:
+            raise ContractError("this trainer's edit is fixed when it is built; the job cannot choose the direction")
+        return self.modifier
 
     def _write(self, parent: Path, checkpoint: Path, plan: EditPlan) -> tuple[dict[str, float], list[dict[str, Any]]]:
         import torch
