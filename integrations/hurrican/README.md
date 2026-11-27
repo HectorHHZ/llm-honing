@@ -15,7 +15,7 @@ grader, training or a completion result.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: platform movement, combat selection, timing.
+Genre: **Shooters**. Capability tags: platform movement, combat selection, timing.
 
 Move, jump and shoot through the first jungle level.
 
@@ -32,8 +32,8 @@ Suggested evaluation: Define a fixed route and endpoint. Measure route
 progress, damage and deaths. Report successful input execution separately from
 task success.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## External game and build
 

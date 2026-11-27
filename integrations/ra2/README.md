@@ -26,7 +26,7 @@ gate, trainers, and harness methods run on top of it.
 
 ## Research scope
 
-Primary category: **Competitive decision-making**. Capability tags: opponent response, resources, longer planning.
+Genre: **Strategy**. Capability tags: opponent response, resources, longer planning.
 
 Build a base, produce units and attack an opponent.
 
@@ -44,8 +44,8 @@ Suggested evaluation: Measure wins under fixed maps and opponents, then test
 unseen conditions. Use economy, production, unit losses and rejected commands
 as diagnostic measures.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## Contents
 

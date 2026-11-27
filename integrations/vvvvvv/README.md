@@ -14,7 +14,7 @@ with no EpisodeRunner, TaskGrader, training or completion claim.
 
 ## Research scope
 
-Primary category: **Precision control**. Capability tags: spatial control, timing.
+Genre: **Platformers**. Capability tags: spatial control, timing.
 
 Move through obstacles and reverse gravity when the native rules permit it.
 
@@ -30,8 +30,8 @@ EpisodeRunner, TaskGrader or completion result.
 Suggested evaluation: Fix a checkpoint and target exit. Measure exit success,
 deaths and retries. Report input duration and inference pauses.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## Resources and build
 

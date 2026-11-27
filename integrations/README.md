@@ -4,30 +4,34 @@ The game runtime owns game state, rules, native engine calls, actions, rendering
 and standalone controls. The Honing adapter owns task splits, harness files,
 model requests, episode execution, grading and training data conversion.
 
-## Research categories
+## Game genres
 
-This index covers 15 games and the Tank War public-site variant in this
-checkout. Each game has one primary category for navigation and several
-capability tags. A category applies to the game, task, observation and control
-configuration together. A change to visibility, action abstraction or assistance
-can change the decision demands.
+This index covers the 15 games in this checkout that have a research scope, the
+Tank War public-site variant and Space Invaders. Space Invaders has an
+environment and replay here but no research scope yet, so its link opens the
+environment document. Each game has one genre, for navigation, and several
+capability tags.
+The genre names the kind of game. The capability tags and the game's research
+scope say what the model decides in a given configuration: a change to
+visibility, action abstraction or assistance can change those decisions
+without changing the genre.
 
-The descriptions summarize the integration documents. This documentation change
-adds no game run or measured model result. Some integrations provide a control
-API and rule demo; their entries identify model use as future work.
+The descriptions summarize the integration documents. Some integrations provide
+a control API and rule demo; their entries identify model use as future work.
 
-| Category | Main decision demand | Games |
+| Genre | What it asks for | Games |
 | --- | --- | --- |
-| Precision control | Select movement actions in the required sequence and at the required time. | [Celeste Classic](celeste-classic/README.md#research-scope), [VVVVVV](vvvvvv/README.md#research-scope) |
-| Reactive combat | Select movement and combat actions as threats change. | [Taisei](taisei/README.md#research-scope), [Hurrican](hurrican/README.md#research-scope), [Hollow Knight imitation](hollow-knight/README.md#research-scope), [Soul Knight student project](soul-knight/README.md#research-scope), [REA-Issac](rea_issac/README.md#research-scope), [Ember Vault](ember-vault/README.md#research-scope) |
-| Spatial and tactical planning | Select routes and account for later action effects. | [Griddly Spiders](griddly/README.md#research-scope), [Frost Circuit](frost-circuit/README.md#research-scope) |
-| Exploration and resource planning | Use information and resources to complete dependent goals. | [Craftax](craftax/README.md#research-scope), [Brogue CE](brogue_ce/README.md#research-scope) |
-| Competitive decision-making | Select tactics or strategy against an opponent. | [Tank War](tank-war/README.md#research-scope), [Red Alert 2](ra2/README.md#research-scope) |
-| Cooperative coordination | Select actions that support a shared task with a teammate. | [Overcooked-AI](overcooked/README.md#research-scope) |
+| Strategy | Long horizon, economy | [Red Alert 2](ra2/README.md#research-scope) (real-time strategy) |
+| Shooters | Aim, dodge, timing | [Tank War](tank-war/README.md#research-scope) (maze tank duel), [Space Invaders](../docs/space-invaders-environment.md) (Atari arcade), [Taisei](taisei/README.md#research-scope) (bullet hell), [Hurrican](hurrican/README.md#research-scope) (run-and-gun) |
+| Platformers | Precise movement | [Celeste Classic](celeste-classic/README.md#research-scope) (precision jumps), [VVVVVV](vvvvvv/README.md#research-scope) (gravity flips), [Hollow Knight imitation](hollow-knight/README.md#research-scope) (action, Unity) |
+| Roguelikes | Explore, partial view | [Brogue CE](brogue_ce/README.md#research-scope) (turn-based dungeon), [Frost Circuit](frost-circuit/README.md#research-scope) (turn-based tactics), [REA-Issac](rea_issac/README.md#research-scope) (real-time rooms), [Ember Vault](ember-vault/README.md#research-scope) (real-time action), [Soul Knight student project](soul-knight/README.md#research-scope) (real-time, Unity) |
+| Survival and puzzle | Crafting, planning | [Craftax](craftax/README.md#research-scope) (2D Minecraft-like), [Griddly Spiders](griddly/README.md#research-scope) (grid puzzle) |
+| Co-op | Work with a teammate | [Overcooked-AI](overcooked/README.md#research-scope) (2-chef cooking) |
 
 The [Tank War public challenge](tank-war-challenge/README.md#research-scope)
 uses separate question text and supports player modifiers. Keep it as a named
-Tank War configuration when comparing results. Integrations outside this game
+Tank War configuration when comparing results. The hallowdale input demo has no
+research scope yet, so it is not in the index. Integrations outside this game
 inventory include coding-agent adapters and shared tooling.
 
 ## Capability and responsibility matrix
@@ -69,7 +73,7 @@ combinations on matched tasks:
 | Original model M0 | Baseline | Harness change |
 | Changed model M1 | Model change | Joint change |
 
-Report the effect of each change and their interaction. These categories apply
+Report the effect of each change and their interaction. The genres apply
 across model families; they do not rank NanoJev, Laya or other models.
 
 Record the following information so that readers can compare results:
@@ -89,7 +93,7 @@ primitive-input and auto-explore conditions in Brogue. A control that is not
 implemented remains proposed work.
 
 Treat related seats, repeated resets and decisions from one episode as grouped
-observations. Report each game's results before any category aggregate. Raw
+observations. Report each game's results before any genre aggregate. Raw
 scores from different games do not have a common unit.
 
 ## Runtime and adapter locations

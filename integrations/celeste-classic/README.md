@@ -17,7 +17,7 @@ Griddly have campaign/task/grader surfaces; this standalone demo does not.
 
 ## Research scope
 
-Primary category: **Precision control**. Capability tags: spatial control, action sequence, timing.
+Genre: **Platformers**. Capability tags: spatial control, action sequence, timing.
 
 Climb rooms with movement, jumps and dashes. Spikes cause death and restart the
 room.
@@ -34,8 +34,8 @@ campaign runner or task grader.
 Suggested evaluation: Define a room start and exit first. Measure exit success,
 deaths and decisions. Compare input-window lengths under the same task.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## Resources and build
 

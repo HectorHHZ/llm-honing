@@ -17,7 +17,7 @@ condition must be named when reporting results.
 
 ## Research scope
 
-Primary category: **Spatial and tactical planning**. Capability tags: route planning, hazard avoidance.
+Genre: **Survival and puzzle**. Capability tags: route planning, hazard avoidance.
 
 Reach the gem while avoiding moving spiders.
 
@@ -35,8 +35,8 @@ Suggested evaluation: Measure success, steps and WAIT frequency on fixed and
 unseen levels. Keep the observation condition fixed when comparing model
 versions.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## Setup
 

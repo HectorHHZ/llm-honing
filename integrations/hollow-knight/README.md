@@ -14,7 +14,7 @@ visibility, command rejection and response-validation behavior.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: navigation, platform movement, combat.
+Genre: **Platformers**. Capability tags: navigation, platform movement, combat.
 
 Move between platforms and fight enemies in the supplied Unity imitation build.
 
@@ -31,8 +31,8 @@ Suggested evaluation: Define a scene exit or combat goal first. Report
 observation visibility and action duration. A visible-only profile would need a
 separate comparison.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## Build the isolated demo
 

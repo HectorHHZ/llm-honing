@@ -17,7 +17,7 @@ of full-game victory or general roguelike competence.
 
 ## Research scope
 
-Primary category: **Exploration and resource planning**. Capability tags: exploration, resource use, dependent goals.
+Genre: **Survival and puzzle**. Capability tags: exploration, resource use, dependent goals.
 
 Collect resources, craft items and survive in the full native game.
 
@@ -35,8 +35,8 @@ Suggested evaluation: Report success and steps for each achievement, together
 with survival. Use new task suites before making claims about longer goal
 chains.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## Setup
 

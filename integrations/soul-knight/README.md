@@ -14,7 +14,7 @@ completed model-controlled Boss route have not been established.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: movement, target selection, combat.
+Genre: **Roguelikes**. Capability tags: movement, target selection, combat.
 
 Move and fight through ordinary, elite and Boss encounters in the student game.
 
@@ -31,8 +31,8 @@ Suggested evaluation: First define and verify complete episodes and native end
 conditions. Then measure room success, Boss success and damage under fixed
 tasks.
 
-See the [game research index](../README.md#research-categories) for the
-classification method and the shared model/harness responsibility matrix.
+See the [game research index](../README.md#game-genres) for the genres
+and the shared model/harness responsibility matrix.
 
 ## External resources
 
