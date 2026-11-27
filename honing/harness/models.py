@@ -74,6 +74,8 @@ class LiteLLMChatModel:
     four times that.
     ``cost_usd`` is ``None`` when ``api_base`` is set, when litellm has no price
     for ``model``, or when its price is zero.
+    ``extra_headers`` go with every request, such as the tags of a call that
+    Reef records (``honing.backends.reef.chat``). None sends no extra header.
     """
 
     model: str
@@ -85,6 +87,7 @@ class LiteLLMChatModel:
     top_p: float | None = None
     seed: int | None = None
     sleep: Callable[[float], None] = field(default=time.sleep, repr=False, compare=False)
+    extra_headers: Mapping[str, str] | None = None
 
     def __post_init__(self) -> None:
         require(bool(self.model), "model must be a litellm model string")
@@ -98,6 +101,14 @@ class LiteLLMChatModel:
             f"retry_backoff_seconds must be >= 0, got {self.retry_backoff_seconds}",
         )
         require(self.top_p is None or 0.0 < self.top_p <= 1.0, f"top_p must be in (0, 1], got {self.top_p}")
+        require(
+            self.extra_headers is None
+            or (
+                isinstance(self.extra_headers, Mapping)
+                and all(isinstance(name, str) and isinstance(value, str) for name, value in self.extra_headers.items())
+            ),
+            "extra_headers must map header names to strings",
+        )
         if importlib.util.find_spec("litellm") is None:
             raise ImportError("LiteLLMChatModel needs the 'litellm' extra: pip install 'llm-honing[litellm]'")
         # Fail at construction, not on the first reflection: a method may treat
@@ -143,6 +154,7 @@ class LiteLLMChatModel:
                     # One attempt per litellm call; this loop owns retries.
                     num_retries=0,
                     max_retries=0,
+                    extra_headers=None if self.extra_headers is None else dict(self.extra_headers),
                 )
             except Exception as error:
                 status = _status_code(error)

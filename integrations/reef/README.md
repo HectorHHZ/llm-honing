@@ -24,7 +24,7 @@ Reef stores artifacts with Git LFS, so `git lfs` must be on `PATH` or `reef serv
 python3.12 -m venv .reef-venv
 .reef-venv/bin/pip install "reef-infra @ git+https://github.com/Human-Agent-Society/reef@bc8c15081bfdbd2ea0a4ceacc045545f020da668"
 REEF_TOKEN=reef-local PYTHONPATH=. .reef-venv/bin/reef serve -c integrations/reef/deployment.yaml
-HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py tests/test_reef_reporter.py   # what the CI reef job runs
+HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py tests/test_reef_reporter.py tests/test_reef_chat.py   # what the CI reef job runs
 ```
 
 ## The path of an episode
