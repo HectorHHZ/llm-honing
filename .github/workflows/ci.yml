@@ -195,6 +195,33 @@ jobs:
       - name: Test
         run: python -m pytest -m "not gpu" tests/test_chat_client.py tests/test_gepa_live_offline.py tests/contracts
 
+  reef:
+    # Honing's Reef recipe (#137) against a real Reef, which runs in its own environment as in production.
+    # The recipe tests skip in the test job above, which installs no Reef.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # setuptools-scm derives the version from tags; a shallow clone has none.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          # Reef at the commit #137 pins, in a venv of its own.
+          python -m venv "$RUNNER_TEMP/reef"
+          "$RUNNER_TEMP/reef/bin/pip" install \
+            "reef-infra @ git+https://github.com/Human-Agent-Society/reef@bc8c15081bfdbd2ea0a4ceacc045545f020da668"
+      - name: Test
+        env:
+          HONING_REEF_BIN: ${{ runner.temp }}/reef/bin/reef
+        run: python -m pytest tests/test_reef_records.py tests/test_reef_recipe.py
+
   test-sandbox:
     # The test job above runs the sandbox's Docker tests (the runners have Docker) but has no slime, so the tests of
     # slime's own helpers skip there. This job puts slime's agent package (pure Python at the pin) on PYTHONPATH, and
