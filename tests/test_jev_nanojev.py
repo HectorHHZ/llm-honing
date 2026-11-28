@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
 import types
 from pathlib import Path
 from typing import Any
@@ -26,7 +28,7 @@ from honing.backends.jev.nanojev import (
     verify_published,
     weights_checksum,
 )
-from honing.backends.jev.nanojev_trainer import NanoJevTrainer, NanoJevTrainerSettings
+from honing.backends.jev.nanojev_trainer import NanoJevTrainer, NanoJevTrainerSettings, deterministic
 from honing.backends.jev.server import main as server_main
 from honing.backends.ra2 import NanoJevQuestionCheck, seed_harness
 from honing.backends.ra2.grader import OVER_BUDGET
@@ -248,6 +250,29 @@ def test_a_checkpoint_becomes_a_snapshot_with_the_backbone_s_shape(tmp_path: Pat
     snapshot = nanojev_snapshot(_checkpoint(tmp_path / "ck"))
     assert snapshot.architecture.hidden_size == 1024 and len(snapshot.architecture.layers) == 28
     assert snapshot.parameters == 32 and snapshot.checkpoint.checksum == weights_checksum(tmp_path / "ck")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("workspace", [None, ":16:8"])
+def test_deterministic_mode_lasts_one_job_and_gives_the_process_its_setting_back(
+    monkeypatch: pytest.MonkeyPatch, workspace: str | None
+) -> None:
+    state = {"on": False}
+    torch = types.SimpleNamespace(
+        are_deterministic_algorithms_enabled=lambda: state["on"],
+        use_deterministic_algorithms=lambda on: state.update(on=on),
+    )
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    if workspace is None:
+        monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    else:
+        monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", workspace)
+    with pytest.raises(RuntimeError, match="the job failed"), deterministic(True):
+        assert state["on"] and os.environ["CUBLAS_WORKSPACE_CONFIG"] == (workspace or ":4096:8")
+        raise RuntimeError("the job failed")
+    assert not state["on"] and os.environ.get("CUBLAS_WORKSPACE_CONFIG") == workspace
+    with deterministic(False):
+        assert not state["on"]
 
 
 @pytest.mark.unit
