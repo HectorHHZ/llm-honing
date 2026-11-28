@@ -232,7 +232,7 @@ jobs:
       - name: Test
         env:
           HONING_REEF_BIN: ${{ runner.temp }}/reef/bin/reef
-        run: python -m pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py
+        run: python -m pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py tests/test_reef_reporter.py
 
   test-sandbox:
     # The test job above runs the sandbox's Docker tests (the runners have Docker) but has no slime, so the tests of

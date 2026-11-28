@@ -8,7 +8,8 @@ Honing, and Reef loads it by import path in its own Python 3.12 environment.
 | File | What it is |
 | --- | --- |
 | `processor.py` | `DecisionEpisodeSamples`: one trajectory sample per reported episode. `DecisionJobData`: job data unchanged |
-| `recipe.py` | `HoningDecisionRecipe`, which names the two stages |
+| `recipe.py` | `HoningDecisionRecipe`, which names the two stages and the report type |
+| `report.py` | `HoningEpisodeReport`: the report Honing's grader posts for every graded episode (#225), with a required `task` |
 | `backend.py` | A training backend that spools each job's data for Honing and saves no checkpoint |
 | `deployment.yaml` | A Reef deployment of the three |
 
@@ -23,7 +24,7 @@ Reef stores artifacts with Git LFS, so `git lfs` must be on `PATH` or `reef serv
 python3.12 -m venv .reef-venv
 .reef-venv/bin/pip install "reef-infra @ git+https://github.com/Human-Agent-Society/reef@bc8c15081bfdbd2ea0a4ceacc045545f020da668"
 REEF_TOKEN=reef-local PYTHONPATH=. .reef-venv/bin/reef serve -c integrations/reef/deployment.yaml
-HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_recipe.py   # what the CI reef job runs
+HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py tests/test_reef_reporter.py   # what the CI reef job runs
 ```
 
 ## The path of an episode
@@ -74,4 +75,5 @@ A pull request that pins a later Reef updates these links.
 | `processor.py`, `DecisionEpisodeSamples` | [`ReportSamples.make_sample`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/samples/reports.py#L293) | Builds the trajectory from decision records, not chat payloads, and never goes stale |
 | `processor.py`, `DecisionJobData` | [`OpenClawRLJobData.make_job_data`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/recipes/openclawrl/processor.py#L140) | No record file and no source rewrite |
 | `recipe.py`, `HoningDecisionRecipe` | [`OpenClawRLRecipe`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/recipes/openclawrl/recipe.py) | Its jobs go to the spool backend |
+| `report.py`, `HoningEpisodeReport` | [`ScoredRolloutReport`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/reports/scored_rollout.py#L11), [`ReportBase`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/reports/base.py#L61) | Requires `metadata.task` |
 | `backend.py`, `SpoolComponent`, `SpoolFacts`, `Deployment` | [`TrainingComponent`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/component.py#L506), [`tests/support/training_deployment.py`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/tests/support/training_deployment.py) | A job finishes when Honing marks it consumed, and saves no checkpoint |
