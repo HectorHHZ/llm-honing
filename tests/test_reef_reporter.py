@@ -299,7 +299,7 @@ def test_a_run_tagged_with_another_task_is_invalid(tmp_path: Path) -> None:
 # The grader wrapper.
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_wrapper_returns_the_grade_unchanged_and_its_errors_propagate_unreported(
     tmp_path: Path, fake_reef: FakeReef, scenario: str
 ) -> None:
@@ -404,7 +404,7 @@ def test_the_tank_campaign_closes_its_grader_when_the_campaign_ends(
     assert closing.closed == 1
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_tank_grader_imports_no_reef_client_unless_asked_to_report() -> None:
     code = "import sys, honing.backends.tank.e2e; print('reef_client' in sys.modules)"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO)
@@ -602,7 +602,7 @@ def test_closing_while_reef_is_down_stops_in_time_and_counts_what_is_unsent(
     assert sender.counts()["dropped"] == 1
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_past_the_pending_limit_an_episode_is_graded_and_its_report_dropped_loudly(
     tmp_path: Path,
     fake_reef: FakeReef,
