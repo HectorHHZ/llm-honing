@@ -23,6 +23,7 @@ checkpoint has NanoJev's layout (``best.safetensors``, ``config.json``,
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import json
@@ -114,6 +115,33 @@ def _identity(example: dict[str, Any]) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+@contextlib.contextmanager
+def deterministic(enabled: bool) -> Iterator[None]:
+    """Deterministic torch kernels for one job, and the process's own setting back after it.
+
+    torch's flag and ``CUBLAS_WORKSPACE_CONFIG`` are process-wide. Left on
+    after a job, they change the kernels of later GPU work in the same
+    process, so a direction edit run after an sft job wrote other weights
+    than the same edit run before it (#171).
+    """
+    if not enabled:
+        yield
+        return
+    import torch
+
+    flag, workspace = torch.are_deterministic_algorithms_enabled(), os.environ.get("CUBLAS_WORKSPACE_CONFIG")
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    torch.use_deterministic_algorithms(True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(flag)
+        if workspace is None:
+            os.environ.pop("CUBLAS_WORKSPACE_CONFIG", None)
+        else:
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = workspace
+
+
 class NanoJevTrainer:
     """Satisfies :class:`~honing.core.Trainer` for NanoJev decision models on ``typed_decisions`` data.
 
@@ -137,7 +165,7 @@ class NanoJevTrainer:
         run = self._settings.work_dir / f"train-{uuid.uuid4().hex[:12]}"
         run.mkdir(parents=True)
         try:
-            with gpu_lock(self._settings.gpu, self._settings.lock_dir):
+            with gpu_lock(self._settings.gpu, self._settings.lock_dir), deterministic(self._settings.deterministic):
                 # Timed while the one GPU is held, so waiting for the lock is not charged as GPU time.
                 held = time.monotonic()
                 loaded = self._load(base)
@@ -155,14 +183,10 @@ class NanoJevTrainer:
     def _load(self, base: ModelSnapshot) -> _Loaded:
         settings = self._settings
         os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", TOKENIZERS_PARALLELISM="false")
-        if settings.deterministic:
-            os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
         pins = json.loads(settings.pins_path.read_text())
         upstream, revision = import_nanojev(settings.source_dir, pins)
         import torch
 
-        if settings.deterministic:
-            torch.use_deterministic_algorithms(True)
         torch.manual_seed(settings.seed)
         random.seed(settings.seed)
         parent = Path(base.checkpoint.location)

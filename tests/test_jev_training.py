@@ -205,3 +205,27 @@ def test_the_gpu_lock_restores_the_visible_devices(tmp_path: Path, monkeypatch: 
     with laya.gpu_lock("0", tmp_path):
         pass
     assert "CUDA_VISIBLE_DEVICES" not in os.environ
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("owner", "refused"), [("self", False), ("other", True)])
+def test_the_gpu_lock_refuses_only_another_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: str, refused: bool
+) -> None:
+    """A process that held the GPU before keeps its CUDA context there and may hold it again; another may not."""
+    from honing.backends.jev import laya
+
+    pid = os.getpid() if owner == "self" else os.getpid() + 1
+
+    def nvidia_smi(command: list[str], text: bool) -> str:
+        if "--query-gpu=index,uuid" in command:
+            return "0, GPU-aaa\n1, GPU-bbb\n"
+        return f"{pid}, GPU-bbb\n{os.getpid() + 2}, GPU-aaa\n"
+
+    monkeypatch.setattr(laya.subprocess, "check_output", nvidia_smi)
+    if refused:
+        with pytest.raises(RuntimeError, match="GPU 1 already has a compute process"), laya.gpu_lock("1", tmp_path):
+            pass
+    else:
+        with laya.gpu_lock("1", tmp_path) as uuid:
+            assert uuid == "GPU-bbb"

@@ -2,7 +2,7 @@
 //
 // node scripts/match.mjs --seed=2001 --seat=blue --decision-server=http://127.0.0.1:8080 --out=runs/m1 \
 //     [--harness-dir=DIR] [--seconds=30] [--interval-ms=200] [--opponent=planner] [--opponent-interval-ms=300] \
-//     [--sample-seed=N] [--teacher] [--reef-tags=JSON]
+//     [--sample-seed=N] [--teacher] [--reef-tags=JSON] [--controller-fault-file=FILE]
 //
 // The game clock stops while a seat waits for its decision, so the result depends on the model's answers and
 // never on inference latency: the same seed, harness, and answers replay the same round. The agent's seat is
@@ -18,6 +18,9 @@
 // manifest keeps them under "reef_tags". Its "episode" tag must be new for every attempt of every episode, since
 // the record ids are derived from it. Follows Reef's x-reef-tag-* headers (with_request_tags, reef/api/wire.py,
 // Reef bc8c150).
+// --controller-fault-file is a test-only switch (scripts/controller-faults.mjs) that breaks how the agent's
+// selected action is executed; the fault library (#171) uses it. The manifest records only the file's SHA-256,
+// and private_fault_events.jsonl records each decision it changed.
 //
 // states.jsonl holds what a decision was rendered from: a header line with the harness files' text and the
 // platform that recorded the round, then one line per agent decision with the raw game state
@@ -40,6 +43,11 @@ import { rng, blocked } from "../web/game/engine.js";
 import { strategyFrom } from "../web/game/strategies.js";
 import { plannerTeacher, TEACHER_MODEL } from "../web/game/teacher.js";
 import { snapshotGame, canonicalJSON } from "../web/game/snapshot.js";
+import {
+    parseControllerFault,
+    beforeControllerApply,
+    afterControllerApply,
+} from "./controller-faults.mjs";
 import {
     decide,
     healthFor,
@@ -268,6 +276,7 @@ async function sources() {
         "web/game/snapshot.js",
         "model-bridge.mjs",
         "scripts/match.mjs",
+        "scripts/controller-faults.mjs",
     ];
     return Object.fromEntries(
         await Promise.all(
@@ -293,6 +302,7 @@ export async function playMatch({
     teacher = false,
     token,
     reefTags,
+    controllerFaultFile,
 }) {
     if (!Number.isInteger(seed) || seed < 0)
         throw Error("--seed must be a non-negative integer");
@@ -315,6 +325,10 @@ export async function playMatch({
         error.harness = true;
         throw error;
     });
+    const faultText = controllerFaultFile
+        ? await readFile(controllerFaultFile, "utf8")
+        : null;
+    const controllerFault = faultText ? parseControllerFault(faultText) : null;
     let model, ask;
     if (teacher) {
         if (harness.seat.controllerMode !== "plans")
@@ -367,6 +381,7 @@ export async function playMatch({
         harness: harness.files,
         agent_seat: { ...harness.seat },
         opponent_seat: OPPONENT_SEAT,
+        controller_fault_sha256: faultText && sha256(faultText),
         sources: await sources(),
         node: process.version,
         created_at: new Date().toISOString(),
@@ -474,7 +489,7 @@ export async function playMatch({
             }) + "\n",
         );
     }
-    const { game, decisions } = await playRound({
+    const { game, decisions, faultEvents } = await playRound({
         seed,
         seat,
         harness,
@@ -483,7 +498,13 @@ export async function playMatch({
         opponentIntervalMs,
         agent,
         record,
+        controllerFault,
     });
+    if (faultEvents.length)
+        await writeFile(
+            join(out, "private_fault_events.jsonl"),
+            faultEvents.map((e) => JSON.stringify(e) + "\n").join(""),
+        );
     const result = roundResult(game, { seed, seat, opponent, decisions });
     await writeFile(
         join(out, "events.jsonl"),
@@ -507,6 +528,8 @@ export async function playMatch({
 // observed, state, decision })` returns decide()'s response, and `record` sees
 // it once it is applied. `state` is the raw state behind the decision
 // (snapshotGame), read before the observation, which leaves the game unchanged.
+// `controllerFault` (scripts/controller-faults.mjs) changes how the agent's
+// selected action is executed; `faultEvents` lists each decision it changed.
 export async function playRound({
     seed,
     seat,
@@ -516,6 +539,7 @@ export async function playRound({
     opponentIntervalMs,
     agent,
     record,
+    controllerFault = null,
 }) {
     const me = SEATS.indexOf(seat),
         them = 1 - me;
@@ -534,7 +558,8 @@ export async function playRound({
     );
     game.start();
     const next = [0, 0],
-        decisions = [0, 0];
+        decisions = [0, 0],
+        faultEvents = [];
     let serial = 0;
 
     async function turn(player) {
@@ -569,7 +594,28 @@ export async function playRound({
                   );
         if (!adapter.validControls(response, observed))
             throw Error("The decision has invalid controls");
-        const applied = adapter.apply(game, player, response, s);
+        const projected =
+            player === me
+                ? beforeControllerApply(response, observed, controllerFault)
+                : null;
+        const applied = adapter.apply(
+            game,
+            player,
+            projected?.response ?? response,
+            s,
+        );
+        const executed =
+            player === me
+                ? afterControllerApply(game, player, applied, controllerFault)
+                : null;
+        if (projected || executed)
+            faultEvents.push({
+                decision: decisions[player],
+                kind: controllerFault.kind,
+                instance: controllerFault.instance,
+                before: (projected ?? executed).before,
+                after: (projected ?? executed).after,
+            });
         decisions[player]++;
         if (player === me)
             await record({
@@ -596,7 +642,7 @@ export async function playRound({
     }
     if (game.phase === "running")
         throw Error("The round did not end within its time limit");
-    return { game, decisions };
+    return { game, decisions, faultEvents };
 }
 
 // What result.json records about a finished round.
@@ -654,6 +700,7 @@ function parse(argv) {
         "sample-seed",
         "teacher",
         "reef-tags",
+        "controller-fault-file",
     ];
     const unknown = Object.keys(args).filter((k) => !known.includes(k));
     if (unknown.length) throw Error(`Unknown option --${unknown[0]}`);
@@ -675,6 +722,9 @@ function parse(argv) {
             args["reef-tags"] === undefined
                 ? undefined
                 : parseTags(args["reef-tags"]),
+        controllerFaultFile:
+            args["controller-fault-file"] &&
+            resolve(args["controller-fault-file"]),
     };
 }
 

@@ -1,0 +1,21 @@
+{
+  "description": "The Tank War fault library (#171) with no GPU, model or game: a stand-in clean release (the stand-in model source and a stand-in fire edit), stand-in trainers, and a recorded round as the teacher batch. It checks that every fault builds from the clean release through Honing's trainers and the Exp 0 v0 builders, and changes only its own cause's part. tests/test_tank_faults.py builds it twice and compares the checksums. The runner, grader and endpoints are built but unused, since there is no gate block. Run: python scripts/e2e/tank_faults.py --config configs/e2e/tank_faults_dry_run.json",
+  "integration_dir": "integrations/tank-war",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-faults-dry-run",
+  "clean_fire_edit": 1.0,
+  "sft_steps": 1,
+  "requires": {"env": [], "commands": [], "paths": []},
+  "components": {
+    "model_source": {"factory": "tests.fakes.tank:model_source"},
+    "endpoints": {"factory": "tests.fakes.tank:endpoints"},
+    "runner": {
+      "factory": "honing.backends.tank.e2e:episode_runner",
+      "args": {"command": ["{python}", "{root}/tests/fakes/tank_match.py"]}
+    },
+    "grader": {"factory": "honing.backends.tank.e2e:grader"},
+    "trainer": {"factory": "tests.fakes.tank:trainer"},
+    "trainers": {"direction_edit": {"factory": "tests.fakes.tank:direction_edit_trainer"}},
+    "data": {"factory": "tests.fakes.tank:recorded_decisions"}
+  }
+}

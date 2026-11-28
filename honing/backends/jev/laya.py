@@ -68,18 +68,22 @@ def _gpu_uuid(gpu: str) -> str:
 def gpu_lock(gpu: str, lock_dir: Path | None = None) -> Iterator[str]:
     """Hold one GPU for this process: an exclusive per-user lock, and no other compute process on it.
 
-    Sets ``CUDA_VISIBLE_DEVICES`` to the GPU's UUID for the duration, so the
-    caller sees it as device 0, and restores it afterwards. Yields the UUID.
+    This process's own CUDA context, left by an earlier hold (torch keeps it
+    until the process exits), does not count, so one process can hold the
+    same GPU again. Sets ``CUDA_VISIBLE_DEVICES`` to the GPU's UUID for the
+    duration, so the caller sees it as device 0, and restores it afterwards.
+    Yields the UUID.
     """
     uuid = _gpu_uuid(gpu)
     directory = lock_dir or Path(tempfile.gettempdir()) / f"laya-{os.getuid()}"
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / f"{uuid}.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        used = subprocess.check_output(
-            ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"], text=True
+        apps = subprocess.check_output(
+            ["nvidia-smi", "--query-compute-apps=pid,gpu_uuid", "--format=csv,noheader"], text=True
         )
-        if uuid in used:
+        others = [row.split(",")[0].strip() for row in apps.splitlines() if row.split(",")[-1].strip() == uuid]
+        if any(pid != str(os.getpid()) for pid in others):
             raise RuntimeError(f"GPU {gpu} already has a compute process")
         previous = os.environ.get("CUDA_VISIBLE_DEVICES")
         os.environ["CUDA_VISIBLE_DEVICES"] = uuid

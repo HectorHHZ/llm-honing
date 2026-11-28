@@ -172,7 +172,8 @@ def test_grpo_keeps_the_final_weights_and_moves_toward_the_rewarded_choices(
     assert sum(advantage * math.log(after / before) for advantage, before, after in moves) > 0.3
     punished = [(before, after) for advantage, before, after in moves if advantage < 0]
     assert sum(after for _, after in punished) < sum(before for before, _ in punished)
-    assert machine.deterministic == [True] and os.environ["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
+    # Deterministic kernels for this job only: the process gets its own setting back after it (#171).
+    assert machine.deterministic == [True, False] and "CUBLAS_WORKSPACE_CONFIG" not in os.environ
 
 
 # ---------------------------------------------------------------- refusals

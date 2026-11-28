@@ -1,5 +1,6 @@
-"""Fake components for the tank end-to-end dry runs (``configs/e2e/tank_dry_run.json`` and
-``configs/e2e/tank_levers_dry_run.json``), and System 2's scripted diagnoses for the corrected-decision one.
+"""Fake components for the tank end-to-end dry runs (``configs/e2e/tank_dry_run.json``,
+``configs/e2e/tank_levers_dry_run.json`` and ``configs/e2e/tank_faults_dry_run.json``), and System 2's
+scripted diagnoses for the corrected-decision one.
 
 The runner, grader, rollouts, demonstrations, match process, decision server,
 GEPA and Meta-Harness are the real ones; only the decision model, the
@@ -37,6 +38,7 @@ from typing import Any
 from honing.backends.jev.server import DecisionRecorder, DecisionServer
 from honing.backends.jev.token_budget import SECTIONS
 from honing.backends.tank.corrected import CorrectedDecisionProvider
+from honing.backends.tank.decisions import decisions_from_log
 from honing.backends.tank.e2e import E2EContext
 from honing.backends.tank.harness import CONTROLLER_PATH, seed_harness
 from honing.core import (
@@ -45,6 +47,7 @@ from honing.core import (
     ChatMessage,
     ChatReply,
     ContractError,
+    DataContract,
     ModelSnapshot,
     PolicyEndpoint,
     PolicyRef,
@@ -53,10 +56,13 @@ from honing.core import (
     TrainResult,
 )
 from honing.harness.diagnosis import Diagnosis
+from tests.fakes.data import ListDatasetProvider
 from tests.fakes.harness import FakeChatModel, FakeProposerAgent
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld
 
 INTEGRATION = Path(__file__).resolve().parents[2] / "integrations/tank-war"
+# A recorded round with motion and weapon decisions: seed 3114, blue, which fires 8 times and holds 21.
+RECORDED_ROUND = Path(__file__).resolve().parents[1] / "fixtures/decision_traces/s3114-blue-destroyed"
 START_QUALITY = 0.5
 # Below this quality the stand-in hesitates: it takes no permitted shot unless told to.
 FIRING_QUALITY = 0.7
@@ -222,6 +228,27 @@ def endpoints(context: Any, reef_url: str | None = None, reef_scenario: str | No
     return QualityServers(_world(context), lambda: ReefRecorder(reef_url, reef_scenario, token=token))
 
 
+class RankedEndpoints:
+    """Satisfies PolicyEndpoints with no server, for ``tests/fakes/tank_match.py``.
+
+    A policy of at least ``strong_from`` quality gets a URL with "strong" in
+    it, and the stand-in match wins with it; any other gets "weak" and loses.
+    """
+
+    def __init__(self, world: FakeWorld, strong_from: float) -> None:
+        self._world = world
+        self._strong_from = strong_from
+
+    def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
+        quality = self._world.quality[policy.checkpoint.checksum]
+        rank = "strong" if quality >= self._strong_from else "weak"
+        return PolicyEndpoint(f"http://127.0.0.1:9/{rank}", "fake-tokenizer", rank, runtime="jev_decision")
+
+
+def ranked_endpoints(context: Any, strong_from: float = 0.6) -> RankedEndpoints:
+    return RankedEndpoints(_world(context), strong_from)
+
+
 def trainer(context: E2EContext, gain: float = 0.2) -> FakeTrainer:
     return FakeTrainer(_world(context), support=DECISION_TRAINER, gain=gain)
 
@@ -293,6 +320,15 @@ def scripted_corrections(
 
 def direction_edit_trainer(context: Any, gain: float = 0.1) -> FakeDirectionEditTrainer:
     return FakeDirectionEditTrainer(_world(context), support=DIRECTION_EDITOR, gain=gain)
+
+
+def recorded_decisions(context: object) -> ListDatasetProvider:
+    """The recorded round's decisions as one typed_decisions batch, with no match to play."""
+    decisions = decisions_from_log(
+        RECORDED_ROUND, reward=None, group="tank:3114:blue", release_id=None, harness_id=None, behavior=False
+    )
+    batch = TrainingBatch("tank-recorded-s3114-blue", DataContract("typed_decisions"), decisions=tuple(decisions))
+    return ListDatasetProvider([batch])
 
 
 def proposer(
