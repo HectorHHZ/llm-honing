@@ -1,5 +1,5 @@
 """Fake components for the tank end-to-end dry runs (``configs/e2e/tank_dry_run.json`` and
-``configs/e2e/tank_levers_dry_run.json``).
+``configs/e2e/tank_levers_dry_run.json``), and System 2's scripted diagnoses for the corrected-decision one.
 
 The runner, grader, rollouts, demonstrations, match process, decision server,
 GEPA and Meta-Harness are the real ones; only the decision model, the
@@ -35,8 +35,9 @@ from typing import Any
 
 from honing.backends.jev.server import DecisionServer
 from honing.backends.jev.token_budget import SECTIONS
+from honing.backends.tank.corrected import CorrectedDecisionProvider
 from honing.backends.tank.e2e import E2EContext
-from honing.backends.tank.harness import CONTROLLER_PATH
+from honing.backends.tank.harness import CONTROLLER_PATH, seed_harness
 from honing.core import (
     ArchitectureSpec,
     BackendSupport,
@@ -50,6 +51,7 @@ from honing.core import (
     TrainJobSpec,
     TrainResult,
 )
+from honing.harness.diagnosis import Diagnosis
 from tests.fakes.harness import FakeChatModel, FakeProposerAgent
 from tests.fakes.model import FakeModelSource, FakeTrainer, FakeWorld
 
@@ -244,6 +246,23 @@ class FakeDirectionEditTrainer(FakeTrainer):
         quality = self.world.quality[base.checkpoint.checksum] + self.gain * spec.strength
         snapshot = self.world.snapshot(base.architecture, quality)
         return TrainResult(snapshot=snapshot, metrics={"strength": spec.strength})
+
+
+def scripted_corrections(
+    context: E2EContext, runs: Mapping[str, str], causes: Mapping[str, str]
+) -> CorrectedDecisionProvider:
+    """Corrected decisions from a scripted System 2: ``causes`` gives each episode's diagnosis.
+
+    Every episode is diagnosed under release 0 and the seed harness, the head
+    a campaign's first move trains. ``runs`` maps episodes to their run
+    directories.
+    """
+    harness = seed_harness(context.integration_dir).spec_id
+    diagnoses = [
+        Diagnosis(episode, cause, 1.0, f"scripted: {cause}", release_id="r0000", harness_id=harness)  # type: ignore[arg-type]
+        for episode, cause in causes.items()
+    ]
+    return CorrectedDecisionProvider(diagnoses, {episode: Path(path) for episode, path in runs.items()})
 
 
 def direction_edit_trainer(context: Any, gain: float = 0.1) -> FakeDirectionEditTrainer:

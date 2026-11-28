@@ -8,7 +8,9 @@ turns its result into a grade. :class:`FreshSeedEvaluator` gives every gate
 validation seeds no earlier gate played. :class:`TankRolloutProvider` plays sampled
 rounds for policy gradient, and :class:`TankDemonstrationProvider` labels the
 model's questions with the planner teacher's answers for supervised training.
-:class:`TankTraceSource` reads a played round back as decision traces.
+:class:`TankTraceSource` reads a played round back as decision traces, and
+:class:`CorrectedDecisionProvider` relabels the decisions of rounds System 2
+blamed on the weights.
 Nothing here imports the game; it runs as a separate Node process.
 
 Each name below is imported from its module the first time it is read, so
@@ -22,6 +24,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from honing.backends.tank.corrected import CorrectedDecisionProvider
     from honing.backends.tank.decisions import decisions_from_log
     from honing.backends.tank.demonstrations import TankDemonstrationProvider
     from honing.backends.tank.gate import FreshSeedEvaluator, fresh_seed_gate
@@ -45,6 +48,7 @@ _MODULES = {
     "CONTROLLER_PATH": "harness",
     "QUESTIONS_PATH": "harness",
     "SEED_POOLS": "scenarios",
+    "CorrectedDecisionProvider": "corrected",
     "FreshSeedEvaluator": "gate",
     "TankDemonstrationProvider": "demonstrations",
     "TankEpisodeRunner": "runner",
@@ -82,6 +86,7 @@ __all__ = [
     "CONTROLLER_PATH",
     "QUESTIONS_PATH",
     "SEED_POOLS",
+    "CorrectedDecisionProvider",
     "FreshSeedEvaluator",
     "TankDemonstrationProvider",
     "TankEpisodeRunner",
