@@ -186,6 +186,8 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+# A block only a GPU reaches ends its first line with "# pragma: gpu". A gpu test covers it, in the GPU check.
+exclude_also = ["# pragma: gpu"]
 # About two points under main's 77 percent (CI, Python 3.12, 2026-11-27). Raise it as coverage grows.
 fail_under = 75
 

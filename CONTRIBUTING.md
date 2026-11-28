@@ -483,3 +483,8 @@ points under `main`'s 77 percent on 2026-11-27; `fail_under` in
 `pyproject.toml`), or when tests cover less than 80 percent of the Python lines
 it changes (`diff-cover` in the `test (3.12)` job). Run `pytest -m unit` before
 every commit and `pytest -m "not gpu"` before every push.
+
+CI has no GPU, so it cannot cover a block only a GPU reaches, such as a CUDA
+path. End the first line of that block with `# pragma: gpu`: coverage leaves
+it out of both numbers. It still needs a `gpu` test, which the GPU check runs
+on every pull request, and a reviewer asks for one.
