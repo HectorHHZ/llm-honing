@@ -65,6 +65,7 @@ def run(args: list[str], env: dict[str, str] | None = None, check: bool = True) 
     return process
 
 
+@pytest.mark.unit
 class GuardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.request = sg.render("option", {"hp": 3, "enemies_dx": [1], "pits_dx": [], "exit_dx": None}, "d1-t2")
@@ -100,6 +101,7 @@ class GuardTests(unittest.TestCase):
             guard_response(unknown, json.dumps(answer(unknown, "clean")))
 
 
+@pytest.mark.functional
 class OrderTests(unittest.TestCase):
     """The order of a request's options is data: rows keep it, comparisons see it, the validator checks it."""
 
@@ -131,6 +133,7 @@ class OrderTests(unittest.TestCase):
         self.assertIn("never write them with sort_keys", " ".join(report["errors"]))
 
 
+@pytest.mark.functional
 class SelectionAndWindowsTests(unittest.TestCase):
     """Contract 0.1.2: per-group policy seeds for sampled selection; option rows that send no native input."""
 
@@ -167,6 +170,7 @@ class SelectionAndWindowsTests(unittest.TestCase):
         self.assertEqual(report["status"], "invalid")
 
 
+@pytest.mark.functional
 class TwoQuestionTests(unittest.TestCase):
     """Contract 0.2.0: a decision asks several questions in one request (Tank War v0; full HK raw keys)."""
 
@@ -282,6 +286,7 @@ class TwoQuestionTests(unittest.TestCase):
                 self.assertEqual(tampered(run, change)["status"], "invalid")
 
 
+@pytest.mark.unit
 class SchemaLiteTests(unittest.TestCase):
     def test_refuses_unsupported_keywords(self) -> None:
         path = OUT / "bad.schema.json"
@@ -308,6 +313,7 @@ class SchemaLiteTests(unittest.TestCase):
             load_schema(path)
 
 
+@pytest.mark.unit
 class ScoreTests(unittest.TestCase):
     def test_abstention_and_invalid_are_incorrect(self) -> None:
         index = []
