@@ -2,8 +2,9 @@
 
 Reef loads it by import path (``tests.fakes.reef_recipe:EpisodeReportRecipe``) in
 its own environment, with the repository root on ``PYTHONPATH``, so it imports
-Reef and never Honing. Honing's own recipe, ``HoningDecisionRecipe`` (#226),
-declares the same report type once both land.
+Reef and never Honing. Honing's own recipe, ``HoningDecisionRecipe``
+(``integrations/reef/recipe.py``), declares the same report type and also
+spools job data, which these tests do not need.
 
 Follows Reef's ``Recipe.report_type`` (reef/recipe/base.py, Reef bc8c150): a
 recipe names the report type that Reef parses at admission. Differs: it records

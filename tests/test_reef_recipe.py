@@ -201,7 +201,7 @@ def test_a_report_of_another_format_trains_nothing(reef: Reef) -> None:
     log = FIXTURES[0]
     episode_tags = {**tags(log), "episode": "plain"}
     rows = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
-    plain = EpisodeReport.from_rows(rows, episode="plain", score=1.0).to_record()
+    plain = EpisodeReport.from_rows(rows, episode="plain", score=1.0, task=episode_tags["task"]).to_record()
     plain["payload"]["metadata"].pop("honing")
     push_episode(reef, log, episode_tags, report=plain)
     push_episode(reef, FIXTURES[1], tags(FIXTURES[1]))
@@ -210,6 +210,17 @@ def test_a_report_of_another_format_trains_nothing(reef: Reef) -> None:
     time.sleep(5)
     (job,) = reef.spooled()
     assert job["samples"][0]["trajectory"]["extra"]["honing"]["episode"] == FIXTURES[1].parent.name
+
+
+def test_the_recipe_refuses_a_report_with_no_task_at_admission(reef: Reef) -> None:
+    """``HoningDecisionRecipe.report_type`` is ``HoningEpisodeReport`` (#225), which requires ``metadata.task``."""
+    reef.call("POST", "/reef/scenarios", {"name": SCENARIO}, scenario=False)
+    log = FIXTURES[0]
+    rows = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+    no_task = EpisodeReport.from_rows(rows, episode=tags(log)["episode"], score=score(log)).to_record()
+    with pytest.raises(urllib.error.HTTPError) as refused:
+        push_episode(reef, log, tags(log), report=no_task)
+    assert refused.value.code == 400
 
 
 def test_runs_imported_with_reef_client_train_as_decisions_from_log(reef: Reef, tmp_path: Path) -> None:
