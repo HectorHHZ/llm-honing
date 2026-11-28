@@ -481,7 +481,8 @@ on top of the kind. A test that needs a GPU, a game build or a real model is a
 CI fails a pull request when total coverage falls below 75 percent (about two
 points under `main`'s 77 percent on 2026-11-27; `fail_under` in
 `pyproject.toml`), or when tests cover less than 80 percent of the Python lines
-it changes (`diff-cover` in the `test (3.12)` job). Run `pytest -m unit` before
+it changes (`diff-cover` in the `test (3.12)` job, which also installs CPU torch
+so the trainers' tests count). Run `pytest -m unit` before
 every commit and `pytest -m "not gpu"` before every push.
 
 CI has no GPU, so it cannot cover a block only a GPU reaches, such as a CUDA

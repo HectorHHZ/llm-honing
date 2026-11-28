@@ -415,6 +415,8 @@ class LocalJevTrainer:
         self._save(checkpoint, torch, model, tok, cfg)
         fields, metrics = policy_gradient_record(batch, advantages, examples, history, behavior_gap)
         weight_hash = _sha256(checkpoint / "model.safetensors")
+        if weight_hash == base.checkpoint.checksum:
+            raise ContractError("training did not change the weights")
         manifest = {
             "kind": "trained-laya",
             "repo": "local:honing-jev/" + run.name,
