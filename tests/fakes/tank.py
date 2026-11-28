@@ -26,14 +26,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from honing.backends.jev.server import DecisionServer
+from honing.backends.jev.server import DecisionRecorder, DecisionServer
 from honing.backends.jev.token_budget import SECTIONS
 from honing.backends.tank.corrected import CorrectedDecisionProvider
 from honing.backends.tank.e2e import E2EContext
@@ -174,26 +175,51 @@ def model_source(context: Any) -> FakeModelSource:
 
 
 class QualityServers:
-    """Satisfies PolicyEndpoints: one in-process decision server per model quality, started on first use."""
+    """Satisfies PolicyEndpoints: one in-process decision server per model quality, started on first use.
 
-    def __init__(self, world: FakeWorld) -> None:
+    With ``recorder``, which makes a recorder for each server, every server records its answered decisions.
+    """
+
+    def __init__(self, world: FakeWorld, recorder: Callable[[], DecisionRecorder] | None = None) -> None:
         self._world = world
-        self._servers: dict[float, DecisionServer] = {}
+        self._recorder = recorder
+        self._servers: dict[float, tuple[DecisionServer, threading.Thread]] = {}
         self._lock = threading.Lock()
 
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
         quality = self._world.quality[policy.checkpoint.checksum]
         with self._lock:
             if quality not in self._servers:
-                server = DecisionServer(("127.0.0.1", 0), ForecastModel(quality))
-                threading.Thread(target=server.serve, daemon=True).start()
-                self._servers[quality] = server
-            url = self._servers[quality].url
+                recorder = self._recorder() if self._recorder is not None else None
+                server = DecisionServer(("127.0.0.1", 0), ForecastModel(quality), recorder)
+                thread = threading.Thread(target=server.serve, daemon=True)
+                thread.start()
+                self._servers[quality] = (server, thread)
+            url = self._servers[quality][0].url
         return PolicyEndpoint(url, "fake-tokenizer", f"forecast-q{quality:.3f}", runtime="jev_decision", gpus=1)
 
+    def close(self) -> None:
+        """Stop every server. A server that records sends what is still waiting first, as at its exit."""
+        with self._lock:
+            servers, self._servers = list(self._servers.values()), {}
+        for server, thread in servers:
+            server.stop()
+            thread.join(timeout=60)
+            server.server_close()
 
-def endpoints(context: Any) -> QualityServers:
-    return QualityServers(_world(context))
+
+def endpoints(context: Any, reef_url: str | None = None, reef_scenario: str | None = None) -> QualityServers:
+    """The stand-in decision servers. With ``reef_url`` and ``reef_scenario``, each one records in that Reef scenario,
+    as the decision server's ``--reef-url`` and ``--reef-scenario`` make it do. The token is ``REEF_TOKEN``."""
+    if (reef_url is None) != (reef_scenario is None):
+        raise ContractError("the endpoints' reef_url and reef_scenario go together")
+    if reef_url is None:
+        return QualityServers(_world(context))
+    # Imported only here: reef_client is the optional `reef` extra.
+    from honing.backends.reef.recorder import ReefRecorder
+
+    token = os.environ.get("REEF_TOKEN")
+    return QualityServers(_world(context), lambda: ReefRecorder(reef_url, reef_scenario, token=token))
 
 
 def trainer(context: E2EContext, gain: float = 0.2) -> FakeTrainer:
