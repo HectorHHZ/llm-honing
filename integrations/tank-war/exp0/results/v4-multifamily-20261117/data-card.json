@@ -1,0 +1,85 @@
+{
+  "dataset_version": "v4-multifamily-20261117",
+  "private_store": "/data/xinkaiz/system0/exp0/tank-war/v4-multifamily-progress-20261117/",
+  "unit": "one complete Tank War game; technical reference is the first verified same-state local effect",
+  "fault_attempt_records": 1330,
+  "paired_fault_games": 1186,
+  "no_injection_control_games": 160,
+  "complete_fault_loss_records": 1202,
+  "paired_fault_losses": 1120,
+  "paired_loss_utilization": 0.9317803661,
+  "verified_local_effect_fault_losses": 1058,
+  "uncertain_paired_fault_losses": 62,
+  "complete_unpaired_fault_losses_preserved": 82,
+  "control_losses": 126,
+  "blind_test": {
+    "sample_sha256": "3c7a50d15531c21b8c9937122b9c33a9b998498b189dfa832abf1238c9b746f4",
+    "source_audit_sha256": "17378eb03088e0c43eae84c884abb07c4d6d930319674d40a2e0ea712632e344",
+    "fault_games": 30,
+    "no_injection_losses": 10,
+    "independent_seed_blocks": 19,
+    "deterministic_replays_valid": 40,
+    "probe_decisions": 2151,
+    "probe_cases_valid": 40,
+    "diagnostic_calls_valid": 320,
+    "primary_sol_read_correct": 14,
+    "primary_sol_probe_correct": 25,
+    "primary_paired_gain": 0.3666666667,
+    "primary_grouped_bootstrap_95pct": [0.1919191919, 0.5151515152]
+  },
+  "new_fault_instances": {
+    "extreme_standoff-v1": {
+      "layer": "harness",
+      "extension_attempts": 100,
+      "extension_successes": 100,
+      "extension_losses": 92,
+      "extension_verified_local_effect_losses": 84,
+      "extension_uncertain_losses": 8,
+      "screen_mean_fault_minus_clean": -0.24609375,
+      "screen_paired_95pct": [-0.306640625, -0.185546875]
+    },
+    "wrong_legal_projection-v1": {
+      "layer": "controller",
+      "collection_attempts": 160,
+      "collection_successes": 160,
+      "collection_losses": 152,
+      "collection_verified_local_effect_losses": 126,
+      "collection_uncertain_losses": 26,
+      "screen_mean_fault_minus_clean": -0.2421875,
+      "screen_paired_95pct": [-0.306640625, -0.177734375],
+      "included_in_frozen_blind_test": false
+    }
+  },
+  "gpu_budget": {
+    "unit": "recorded temporary GPU model-service hours, not measured utilization",
+    "recorded_service_hours": 11.617,
+    "ceiling_service_hours": 18,
+    "maximum_simultaneous_cards": 2,
+    "services_exited": true
+  },
+  "diagnosis_usage": {
+    "input_tokens": 23596241,
+    "output_tokens": 96605,
+    "summed_call_seconds": 3883.9,
+    "actual_api_bill": null
+  },
+  "annotation_status": "machine evidence complete; independent human decision-relevance review pending",
+  "source": "Private hash-recorded original game files, raw states, model requests and replies, execution logs, attempts, probes, and frozen splits",
+  "limitations": [
+    "The final combined index contains complete unpaired losses without a three-class technical label.",
+    "Only the 40 blind-test games passed full deterministic replay in this follow-up; the complete 1186-game index was not replayed end to end.",
+    "The harness strategy also participates in post-choice plan revalidation, so its functional boundary is mixed.",
+    "The blind test has one harness instance, one controller instance, and two strengths of the same edited-weight family; the later controller instance was not added after sample freeze.",
+    "A local action change does not prove the intervention caused the final loss.",
+    "The ChatGPT-login Codex CLI does not expose an independently verifiable model revision or temperature."
+  ],
+  "hashes": {
+    "combined_audit_spec": "3b07b33c71435be936bcfc07800854c778558251820835c91c09871670284c8d",
+    "combined_audit_summary": "11149d1c5da9f34bae91276f97585b2c786ef967ce0cb553003fe37a1980f729",
+    "combined_labels_private": "0546bc6343ce1f1e6f09192a61bdf6459144d4672d552ef1c116ea602bd2fad6",
+    "combined_attempts_private": "d33dace1b519ed43cda93614d3d37396770a02c5feeaf3a8623505b2d3003e15",
+    "diagnosis_pre_registration": "3c1486824c67b43ad5ee31a38e2080cc0f2707cd92f70254886553802e77f11b",
+    "diagnosis_aggregate": "b4d3900edc720cd0d581daeac78d7830b19260a3c03421c4f5920eccae1de0c8",
+    "weight_probe_aggregate": "70b6dd95b794a944db6dfb2d52be2fbbba13185b28053eafb3768fac73a3c236"
+  }
+}
