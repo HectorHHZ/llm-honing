@@ -1,0 +1,650 @@
+{
+ "schema": "hk-forestdango-exp0-v12-plan-v0",
+ "status": "FROZEN 2026-11-26 (Exp 0 v0 HK collection subagent of Honing_CC_Deli), before the first formal attempt: v12_standing on the deterministic build; task kp-waypoint (rule G); the reset groups below (initial ones first, then reserves); one persistent fault instance per component",
+ "dataset_working_name": "hollow-knight-forestdango",
+ "release": {
+  "harness": {
+   "dir": "harness/v12_standing",
+   "package": "harness.v12_standing",
+   "knobs": {},
+   "source_record": "harness/v12_standing.SOURCE.json",
+   "note": "the Demo session's frozen v12_standing (2026-11-25 19:55 PST), pinned copy with ONE constant changed for privacy (text._TOKENIZER_FILE is a placeholder; runtime.harness_agent sets Laya's tokenizer at run time from $HONING_LAYA_TOKENIZER or the public checkpoint, sha256-checked; harness/v12_standing.SOURCE.json local_change); default knobs; strict replay of the Demo's three recorded v12 runs with this copy: 511/511 requests byte-identical"
+  },
+  "game": {
+   "player": "code/hk-devmode/build/linux64_devmode_c/hk_fast.sh",
+   "player_drawn": "code/hk-devmode/build/linux64_devmode_c/hk_det.sh",
+   "bridge_source": "code/hk-devmode/bridge",
+   "bridge_options": {
+    "protocol": "native",
+    "view": "window",
+    "units": "game",
+    "kinds": "raw",
+    "jump": "window",
+    "flow": "auto",
+    "text": "auto",
+    "size": "480x270",
+    "step": "0.5",
+    "hz": "30",
+    "threads": "8",
+    "camfix": "on",
+    "frames": "jpg"
+   },
+   "bridge_env": {
+    "HONING_FRAME_LOG": "1",
+    "HONING_FRAME_LOG_BOOT": "1"
+   },
+   "note": "the deterministic devmode build without drawing (HONING_FAST=1, -batchmode -nographics; hk_fast.sh); every HONING_DEV_* knob is off (none is set); no lookahead; HONING_FRAME_LOG=1 and HONING_FRAME_LOG_BOOT=1 = the bridge's read-only per-frame state log (frames.jsonl, hashes only), for the per-frame native replay check (measured inert: the route trace with and without it gives 213/213 identical debug and visible observations); paths are relative to the workspace (the directory that holds code/exp0/), resolved at run time"
+  },
+  "policy": "Laya argmax per question (move, attack); every option offered in the harness's fixed order",
+  "tokenizer": {
+   "repo": "convaiinnovations/laya-typed-decisions",
+   "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+   "file": "tokenizer/tokenizer.json",
+   "sha256": "6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30",
+   "resolved_by": "runtime.py (, else huggingface_hub); every tool refuses to run without it"
+  }
+ },
+ "bridge_seed": 42,
+ "endpoints": {
+  "clean": "http://127.0.0.1:8811",
+  "clean_2": "http://127.0.0.1:8820",
+  "alternate": "http://127.0.0.1:8812"
+ },
+ "clean_weights_sha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+ "alternate_weights_sha256": "2ed46ac94c366db2dc68751d0eabfe945ceaeaf430e9fea1ec9e6c60c0207925",
+ "weight_difference_tolerance": 0.01,
+ "question_keys": [
+  "move",
+  "attack"
+ ],
+ "starts": {
+  "new_game": {
+   "prefix": null,
+   "steps": 0,
+   "note": "a new game: handover in King's Pass at (34.5, 10.0) facing left"
+  },
+  "route008": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 8,
+   "prefix_frames": 9,
+   "prefix_sha256": "0cdc42ed65d6ca5970c4234f6e1f49100c7b0d09563a973ac82f3092b2091220",
+   "note": "the first 8 steps of the reference route; route trace on the deterministic build: standing at (50.10, 10.02), health 5"
+  },
+  "route022": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 22,
+   "prefix_frames": 9,
+   "prefix_sha256": "adf5d743869725a2b8488f21f0e30e415e808f1e8ea783edb9e63ef346191242",
+   "note": "the first 22 steps of the reference route; route trace on the deterministic build: standing at (72.82, 10.02), health 5"
+  },
+  "route029": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 29,
+   "prefix_frames": 9,
+   "prefix_sha256": "4d684d08cd6f419a1d7bc3319e287c79dd519e9b0ccb67597591696340dee6c2",
+   "note": "the first 29 steps of the reference route; route trace on the deterministic build: standing at (84.52, 10.02), health 5"
+  },
+  "route040": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 40,
+   "prefix_frames": 9,
+   "prefix_sha256": "94d0dc70a10443d68027a798be9bb2a93c5343f792306c395e51b96685232f60",
+   "note": "the first 40 steps of the reference route; route trace on the deterministic build: standing at (93.45, 10.02), health 4"
+  },
+  "route046": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 46,
+   "prefix_frames": 9,
+   "prefix_sha256": "75ac2f85723fb43cd637f86782674e5e8c0ece077555df209e9df56080165625",
+   "note": "the first 46 steps of the reference route; route trace on the deterministic build: standing at (103.20, 10.02), health 4"
+  },
+  "route060": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 60,
+   "prefix_frames": 9,
+   "prefix_sha256": "1fb8f0ea6f249875d48b7cd6a47234ee08f9775362c5d04636339c1768c5dac1",
+   "note": "the first 60 steps of the reference route; route trace on the deterministic build: standing at (128.55, 10.02), health 4"
+  },
+  "route063": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 63,
+   "prefix_frames": 9,
+   "prefix_sha256": "24dbfd77ba757dd156e1df99e69c3a0c998f384caf4d05d54f4ec8a7b2cc2d09",
+   "note": "the first 63 steps of the reference route; route trace on the deterministic build: standing at (134.40, 10.02), health 4"
+  },
+  "route071": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 71,
+   "prefix_frames": 9,
+   "prefix_sha256": "b935b4807d5c2ee9ce32e74a22f4c67e05de5cbb07b9da3ea68f9ca80b5e1425",
+   "note": "the first 71 steps of the reference route; route trace on the deterministic build: standing at (138.30, 6.02), health 4"
+  },
+  "route073": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 73,
+   "prefix_frames": 9,
+   "prefix_sha256": "44aa8aa06f7a94d6f02e6036afa83aa646500cafcba554c5df4a8926fac4dfca",
+   "note": "the first 73 steps of the reference route; route trace on the deterministic build: standing at (134.40, 10.02), health 4"
+  },
+  "route076": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 76,
+   "prefix_frames": 9,
+   "prefix_sha256": "237003b22670da6fb32b4ec536a86b68771c2570f821cb2ebd35ce4d0b360198",
+   "note": "the first 76 steps of the reference route; route trace on the deterministic build: standing at (140.25, 10.80), health 4"
+  },
+  "route081": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 81,
+   "prefix_frames": 9,
+   "prefix_sha256": "7af1d66570d81499c82201cc651b3a33952b410bc691590b9d9628fe2bf91ebd",
+   "note": "the first 81 steps of the reference route; route trace on the deterministic build: standing at (146.10, 12.99), health 4"
+  },
+  "route089": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 89,
+   "prefix_frames": 9,
+   "prefix_sha256": "3b388800cc2a29cd1cadb28ab65bd4d582a044c869a25cd24bf1cd01954a0716",
+   "note": "the first 89 steps of the reference route; route trace on the deterministic build: standing at (146.10, 21.48), health 4"
+  },
+  "route093": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 93,
+   "prefix_frames": 9,
+   "prefix_sha256": "e551d0558b1ee9d68f2cb7a4342d31fca5ad713d09c5dca9bfac22d330c82268",
+   "note": "the first 93 steps of the reference route; route trace on the deterministic build: standing at (138.30, 18.13), health 4"
+  },
+  "route097": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 97,
+   "prefix_frames": 9,
+   "prefix_sha256": "461497a600922f152ed3246a81595c84b5e7295431849e3ea915d63d2a5a4183",
+   "note": "the first 97 steps of the reference route; route trace on the deterministic build: standing at (132.45, 22.02), health 4"
+  },
+  "route101": {
+   "prefix": "starts/route_to_upper_left_ledge.txt",
+   "steps": 101,
+   "prefix_frames": 9,
+   "prefix_sha256": "2dcca10563eacb474d5683788e52bbfd9916ebcd16b8c35c9131e4e19c8e4200",
+   "note": "the first 101 steps of the reference route; route trace on the deterministic build: standing at (126.27, 26.02), health 4"
+  }
+ },
+ "groups": [
+  {
+   "id": "g01-newgame",
+   "start": "new_game",
+   "seed": 42,
+   "split": "train",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 4,
+    "place": [
+     42.3,
+     10.018
+    ],
+    "x": [
+     41.3,
+     43.3
+    ],
+    "y": [
+     9.717,
+     10.318
+    ],
+    "distance_from_start": 7.8,
+    "height_change": 0.0
+   }
+  },
+  {
+   "id": "g02-r022",
+   "start": "route022",
+   "seed": 42,
+   "split": "train",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 26,
+    "place": [
+     80.615,
+     10.018
+    ],
+    "x": [
+     79.615,
+     81.615
+    ],
+    "y": [
+     9.717,
+     10.318
+    ],
+    "distance_from_start": 7.8,
+    "height_change": 0.0
+   }
+  },
+  {
+   "id": "g03-r046",
+   "start": "route046",
+   "seed": 42,
+   "split": "val",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 51,
+    "place": [
+     112.949,
+     8.018
+    ],
+    "x": [
+     111.949,
+     113.949
+    ],
+    "y": [
+     7.718,
+     8.318
+    ],
+    "distance_from_start": 9.95,
+    "height_change": -2.0
+   }
+  },
+  {
+   "id": "g04-r060",
+   "start": "route060",
+   "seed": 42,
+   "split": "val",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 68,
+    "place": [
+     144.149,
+     4.018
+    ],
+    "x": [
+     143.149,
+     145.149
+    ],
+    "y": [
+     3.718,
+     4.317
+    ],
+    "distance_from_start": 16.71,
+    "height_change": -6.0
+   }
+  },
+  {
+   "id": "g05-r071",
+   "start": "route071",
+   "seed": 42,
+   "split": "train",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 73,
+    "place": [
+     134.399,
+     10.018
+    ],
+    "x": [
+     133.399,
+     135.399
+    ],
+    "y": [
+     9.717,
+     10.318
+    ],
+    "distance_from_start": 5.59,
+    "height_change": 4.0
+   }
+  },
+  {
+   "id": "g06-r073",
+   "start": "route073",
+   "seed": 42,
+   "split": "train",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 76,
+    "place": [
+     140.249,
+     10.803
+    ],
+    "x": [
+     139.249,
+     141.249
+    ],
+    "y": [
+     10.503,
+     11.103
+    ],
+    "distance_from_start": 5.9,
+    "height_change": 0.79
+   }
+  },
+  {
+   "id": "g07-r081",
+   "start": "route081",
+   "seed": 42,
+   "split": "val",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 85,
+    "place": [
+     149.999,
+     16.973
+    ],
+    "x": [
+     148.999,
+     150.999
+    ],
+    "y": [
+     16.673,
+     17.273
+    ],
+    "distance_from_start": 5.58,
+    "height_change": 3.99
+   }
+  },
+  {
+   "id": "g08-r093",
+   "start": "route093",
+   "seed": 42,
+   "split": "val",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 97,
+    "place": [
+     132.448,
+     22.017
+    ],
+    "x": [
+     131.448,
+     133.448
+    ],
+    "y": [
+     21.717,
+     22.317
+    ],
+    "distance_from_start": 7.02,
+    "height_change": 3.88
+   }
+  },
+  {
+   "id": "g09-r097",
+   "start": "route097",
+   "seed": 42,
+   "split": "train",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 101,
+    "place": [
+     126.267,
+     26.017
+    ],
+    "x": [
+     125.267,
+     127.267
+    ],
+    "y": [
+     25.717,
+     26.317
+    ],
+    "distance_from_start": 7.36,
+    "height_change": 4.0
+   }
+  },
+  {
+   "id": "g10-r101",
+   "start": "route101",
+   "seed": 42,
+   "split": "train",
+   "reserve": false,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 106,
+    "place": [
+     118.758,
+     30.017
+    ],
+    "x": [
+     117.758,
+     119.758
+    ],
+    "y": [
+     29.717,
+     30.317
+    ],
+    "distance_from_start": 8.51,
+    "height_change": 4.0
+   }
+  },
+  {
+   "id": "g11-r008",
+   "start": "route008",
+   "seed": 42,
+   "split": "val",
+   "reserve": true,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 12,
+    "place": [
+     57.9,
+     10.018
+    ],
+    "x": [
+     56.9,
+     58.9
+    ],
+    "y": [
+     9.717,
+     10.318
+    ],
+    "distance_from_start": 7.8,
+    "height_change": 0.0
+   }
+  },
+  {
+   "id": "g12-r029",
+   "start": "route029",
+   "seed": 42,
+   "split": "val",
+   "reserve": true,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 40,
+    "place": [
+     93.449,
+     10.018
+    ],
+    "x": [
+     92.449,
+     94.449
+    ],
+    "y": [
+     9.717,
+     10.318
+    ],
+    "distance_from_start": 8.93,
+    "height_change": 0.0
+   }
+  },
+  {
+   "id": "g13-r040",
+   "start": "route040",
+   "seed": 42,
+   "split": "train",
+   "reserve": true,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 44,
+    "place": [
+     101.249,
+     10.018
+    ],
+    "x": [
+     100.249,
+     102.249
+    ],
+    "y": [
+     9.717,
+     10.318
+    ],
+    "distance_from_start": 7.8,
+    "height_change": 0.0
+   }
+  },
+  {
+   "id": "g14-r063",
+   "start": "route063",
+   "seed": 42,
+   "split": "train",
+   "reserve": true,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 68,
+    "place": [
+     144.149,
+     4.018
+    ],
+    "x": [
+     143.149,
+     145.149
+    ],
+    "y": [
+     3.718,
+     4.317
+    ],
+    "distance_from_start": 11.45,
+    "height_change": -6.0
+   }
+  },
+  {
+   "id": "g15-r076",
+   "start": "route076",
+   "seed": 42,
+   "split": "val",
+   "reserve": true,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 81,
+    "place": [
+     146.099,
+     12.986
+    ],
+    "x": [
+     145.099,
+     147.099
+    ],
+    "y": [
+     12.686,
+     13.287
+    ],
+    "distance_from_start": 6.24,
+    "height_change": 2.18
+   }
+  },
+  {
+   "id": "g16-r089",
+   "start": "route089",
+   "seed": 42,
+   "split": "val",
+   "reserve": true,
+   "waypoint": {
+    "scene": "Tutorial_01",
+    "route_step": 93,
+    "place": [
+     138.299,
+     18.133
+    ],
+    "x": [
+     137.299,
+     139.299
+    ],
+    "y": [
+     17.833,
+     18.433
+    ],
+    "distance_from_start": 8.49,
+    "height_change": -3.35
+   }
+  }
+ ],
+ "tasks": {
+  "kp-waypoint": {
+   "name": "King's Pass: from the reset group's start, stand on its waypoint (the next place of the reference route at least 7 units away or at another height) within 40 decisions",
+   "status": "FROZEN",
+   "scene": "new",
+   "start": "a new game of the deterministic build, then the reset group's scripted start prefix (the first k steps of the reference route, 9 frames per step) played through the harness; the episode starts at the first model decision after it",
+   "win": {
+    "kind": "reach_box",
+    "box": "group"
+   },
+   "loss": "the knight's first death",
+   "caps": {
+    "decisions": 40,
+    "frames": 1600,
+    "wall_seconds": 1500
+   },
+   "leaving_the_scene_ends": true,
+   "rule": {
+    "waypoint": "the first place after the start where the reference route stands (debug grounded and the harness agrees; route trace on the deterministic build: smoke/route_trace_a/route.json of the collection experiment) whose straight-line distance from the start place is at least 7 units, or whose feet height differs from the start's by at least 0.5 units (the route gets there over a jump or a drop); no waypoint can be reached by one or two plain walking decisions (measured on the 23 clean pilots: at most 3.32 units in one and 5.72 in two plain walking decisions; with the box a flat waypoint is entered only after 6 units)",
+    "box": "x within 1 and feet height within 0.3 of the waypoint, in King's Pass (Tutorial_01)",
+    "win_test": "at the end of any bridge window of a model decision the knight stands (debug grounded) with its feet inside the box",
+    "loss": "the first death (debug: death counter up, health 0 or hero dead)",
+    "timeout": "40 model decisions (or 1600 bridge frames after the first decision; the 23 pilots used at most 748 for 40 decisions)",
+    "other_terminal": "the knight leaves King's Pass"
+   }
+  }
+ },
+ "faults": {
+  "omit-ground-v1": {
+   "family": "observation-omission",
+   "instance": "omit-ground-v1",
+   "changed_artifact": "state text of the model request (the ground and ledge sentences)",
+   "trigger_rule": "the first model decision whose clean request describes the ground or ledges"
+  },
+  "laya-ra2-v33-v1": {
+   "family": "alternate-checkpoint",
+   "instance": "laya-ra2-v33-v1",
+   "changed_artifact": "decision checkpoint weights (Laya 8812, jayzou3773/laya-ra2-v33), both questions",
+   "trigger_rule": "every decision of the episode"
+  },
+  "swap-left-right-v1": {
+   "family": "post-selection-input-remap",
+   "instance": "swap-left-right-v1",
+   "changed_artifact": "native direction keys sent to the game (LEFT and RIGHT exchanged)",
+   "trigger_rule": "the first model decision whose chosen move holds a direction key"
+  }
+ },
+ "default_instances": {
+  "harness": "omit-ground-v1",
+  "weights": "laya-ra2-v33-v1",
+  "controller": "swap-left-right-v1"
+ },
+ "fault_forms": {
+  "persistent": "every fault is persistent for the whole episode (brief, decided)"
+ },
+ "collection": {
+  "task": "kp-waypoint",
+  "per_condition": 10,
+  "attempt_cap_per_slot": 3,
+  "frames_per_decision": 13,
+  "faults": {
+   "harness": "omit-ground-v1",
+   "weights": "laya-ra2-v33-v1",
+   "controller": "swap-left-right-v1"
+  },
+  "fault_form": "persistent (the whole episode, from the trigger decision on)",
+  "selection_rule": "Griddly's rule (its PROTOCOL.md line 9): per condition the first ten listed reset groups; a reserve group only when a listed group fails validation or a needed outcome mix requires it, in listed order; every attempt is kept; an incomplete attempt is never counted; intervention conditions take non-wins first, controls the first ten in plan order (code/exp0/common/audit_set.py choose)",
+  "group_choice": "the 10 scored groups = every start whose clean pilot reaches its waypoint within 40 decisions (route071 d19, route073 d3, route097 d2, route101 d9) + 6 of the 18 other starts with a waypoint, evenly spaced in route order (indices round(k*17/5), k=0..5); the 6 reserves = of the remaining 12, evenly spaced (round(k*11/5)); listed in route order, scored groups first; PROGRESS.md of the collection experiment, entry 2026-11-26 03:32 PST",
+  "budgets": {
+   "decision_services": "clean 8811 + 8820 (identical: max |dp| 0.0 on 12 re-asked requests), alternate 8812; one game per service at a time; at most 4 game instances",
+   "wall_time": "collection under about 3 h",
+   "diagnosis": "Codex gpt-6.2-sol, read + probe once each (80 calls) and the pre-registered probe variant (40), max 2 attempts per episode and mode (diagnose.py); pending: the account's usage limit"
+  },
+  "notes": "The 23 clean pilots (pilots/ of the collection experiment) are exact replicas of the clean controls on the deterministic build and were inspected before the freeze: they set the waypoint rule, the cap and the group choice (history of inspected data, #185)."
+ },
+ "frozen_at": "2026-11-26 03:34 PST (San Diego), before the first formal attempt"
+}

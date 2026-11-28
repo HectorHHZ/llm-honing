@@ -1,0 +1,13 @@
+{"bridge_id": 1, "bridge_tick": 0, "why": "Laya: left + up", "action": "keys", "frames": 11, "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"]}
+{"bridge_id": 2, "bridge_tick": 11, "why": "Laya: left + up", "action": "keys", "frames": 2, "hold": ["LEFT"], "press": []}
+{"bridge_id": 3, "bridge_tick": 13, "why": "Laya: left + up", "action": "keys", "frames": 11, "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"]}
+{"bridge_id": 4, "bridge_tick": 24, "why": "Laya: left + up", "action": "keys", "frames": 2, "hold": ["LEFT"], "press": []}
+{"bridge_id": 5, "bridge_tick": 26, "why": "Laya: left + up", "action": "keys", "frames": 11, "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"]}
+{"bridge_id": 6, "bridge_tick": 37, "why": "Laya: left + up", "action": "keys", "frames": 2, "hold": ["LEFT"], "press": []}
+{"bridge_id": 7, "bridge_tick": 39, "why": "Laya: left_short_jump + up", "action": "keys", "frames": 3, "hold": ["LEFT"], "press": ["JUMP", "NAIL"], "first": ["UP", "LEFT"]}
+{"bridge_id": 8, "bridge_tick": 42, "why": "Laya: left_short_jump + up", "action": "keys", "frames": 8, "hold": ["LEFT"], "press": []}
+{"bridge_id": 9, "bridge_tick": 50, "why": "Laya: left_short_jump + up", "action": "keys", "frames": 2, "hold": ["LEFT"], "press": []}
+{"bridge_id": 10, "bridge_tick": 52, "why": "Laya: left + up", "action": "keys", "frames": 11, "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"]}
+{"bridge_id": 11, "bridge_tick": 63, "why": "Laya: left + up", "action": "keys", "frames": 2, "hold": ["LEFT"], "press": []}
+{"bridge_id": 12, "bridge_tick": 65, "why": "Laya: left + up", "action": "keys", "frames": 11, "hold": ["LEFT"], "press": ["NAIL"], "first": ["UP", "LEFT"]}
+{"bridge_id": 13, "bridge_tick": 76, "why": "Laya: left + up", "action": "keys", "frames": 2, "hold": ["LEFT"], "press": []}

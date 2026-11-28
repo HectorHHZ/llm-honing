@@ -1,0 +1,179 @@
+{
+ "written": "2026-11-26 11:34:43 +0000",
+ "game": {
+  "build_dir": "code/hk-devmode/build/linux64_devmode_c",
+  "files": {
+   "HollowKnightDemo.x86_64": {
+    "sha256": "95aa60b3bead39f7f6e86d1189664d420d8323243c63a45766601cd8fadeba88",
+    "resolved": "code/hk-devmode/build/linux64_devmode_c/HollowKnightDemo.x86_64",
+    "bytes": 14744
+   },
+   "UnityPlayer.so": {
+    "sha256": "ff8f99c07d570ecb2eb6dc4e587ba378908f09b2976b16dcd211dcce35f1810c",
+    "resolved": "code/forestdango-hk-demo-work/Builds/linux64/UnityPlayer.so",
+    "bytes": 33275088
+   },
+   "HollowKnightDemo_Data/Managed/Assembly-CSharp.dll": {
+    "sha256": "791ab9d27f71f866326ec616a2658c79d57188790120649c5be46f5bac81c8dc",
+    "resolved": "code/hk-devmode/build/linux64_devmode_c/HollowKnightDemo_Data/Managed/Assembly-CSharp.dll",
+    "bytes": 1961984
+   },
+   "HollowKnightDemo_Data/Managed/Assembly-CSharp-firstpass.dll": {
+    "sha256": "454393ce5e0e9cc37b882771c118cbbaac0b7affd2ff0ece4d6ae31cab2332a2",
+    "resolved": "code/forestdango-hk-demo-work/Builds/linux64/HollowKnightDemo_Data/Managed/Assembly-CSharp-firstpass.dll",
+    "bytes": 139264
+   },
+   "hk_fast.sh": {
+    "sha256": "88e9d9412a8d0869cee5b7dc8f5c3d43582d546dd67def262c6e9122d487e2a7",
+    "resolved": "code/hk-devmode/build/linux64_devmode_c/hk_fast.sh",
+    "bytes": 750
+   },
+   "hk_det.sh": {
+    "sha256": "b2117544c2bc5d897450e22f0273f203c93aa2050f3892c61336bd8140ede2b1",
+    "resolved": "code/hk-devmode/build/linux64_devmode_c/hk_det.sh",
+    "bytes": 274
+   }
+  },
+  "bridge_source_dir": "code/hk-devmode/bridge",
+  "bridge_source": {
+   "HoningBridge.cs": "2dce7520d2a2413e317d1bd1022246db1c6cbeaf83d9c7f06ecf0ad3dac9178a",
+   "HoningClock.cs": "44046ce177c03afc2b7854d58c21b66f9d45be707665f007cd7d5d374b170115",
+   "HoningDebug.cs": "1af344cf9be71e8c996e9101bb43d175f82903feaab61938846231426d4ad4ae",
+   "HoningDev.cs": "2de688015f46710a80e662807cf0b645c7f1d58d7dbe4af138f1b58db4c73f1d",
+   "HoningLookahead.cs": "8023633e0495db9797e04499c817d12d79cdd70850976be35311de50cc1e10f9",
+   "HoningProbe.cs": "066a9846f4fa8a99d2f0ab1cd4ff93288c4e411ea47e629fedd9ae8f8659fb4f",
+   "HoningVisible.cs": "de3345aba080dae5db9e5cec32d932489252c8da0b7e60b0e02621a8855532d6"
+  },
+  "overlay_record": {
+   "path": "code/hk-devmode/overlay/OVERLAY.txt",
+   "sha256": "a6e1809fef3abb0651f8be9f74d89b57f96e2dccc472247d867ea9f45dc017b1"
+  },
+  "player_script": "#!/bin/bash\n# The deterministic game without drawing (the fast mode): the devmode player with HONING_FAST=1, -batchmode -nographics.\n# A drop-in \"player\" for code/hk-hitl (run_keys.py / run_agent.py: --game-opt player=<this file>); the Xvfb the\n# adapter starts is simply not used. No pictures can be taken in this mode (use hk_det.sh for recordings).\nexport HONING_FAST=${HONING_FAST:-1}\nexport HONING_POLL=${HONING_POLL:-fast}\n# without a window a \"picture\" is an empty 640x480 image and writing it costs 20 ms per frame (measured 2026-11-25,\n# runs/a14_fast_capture): pictures are switched off here whatever the launcher asked for\nexport HONING_CAPTURE=0\nexec \"$(dirname \"$(readlink -f \"$0\")\")/HollowKnightDemo.x86_64\" \"$@\" -batchmode -nographics\n",
+  "bridge_version": "forestdango-bridge-devmode-2026-11-25c"
+ },
+ "code": {
+  "harness": {
+   "dir": "harness/v12_standing",
+   "fingerprint": "162948741065d84210bc27a861f56919a5799adb58a643ecf24d86ab4ac93a9c"
+  },
+  "controller": {
+   "env_forestdango.py": "00f4f0f6b63f2ce8b19ae819ef467d0aa0485952aef192fe7d87dc9734b3131e",
+   "env_keys.py": "189a3efd4ef81ef671a9bb0a54cfed710d145dba7dd02a6b499189ca2ba8c28b",
+   "env.py": "eb1b7997f1e7f0d4d09ef60f96d453b4f7726ad94ac98f15a041e2ab72efee6d",
+   "laya.py": "07f6cfe08e39da2ae8a4ee4cd50f08cd0820b3ea2484454f75f790863574ecaa",
+   "laya_multi.py": "7f61e8d68ef0354d5683ad321d2d7163f6e38c6ec4ff3818aba4662b958f5579"
+  },
+  "faults_sha256": "7ee686fa33fd01c12de4486274fc3c10fec70cadfa43e1c0accb859ca7315980",
+  "state_codec_sha256": "e75dd9ff034be69cd323987b53f3cce796b4cb439635f98973f5b97ba2db363e",
+  "starts_sha256": "e6bed16fab9d3446b8fa7d165b6de535aba26a85d99d887c3d227693609f1919",
+  "runtime_sha256": "9c236fc953da16c3bc2d11b78ee0036b7280c0d52190bf7b981da15c9d250dad",
+  "collector_sha256": "f82d81dcc00021dcadf352b4a28d9f143659e47f8b18429c030e26c9deb867e2",
+  "evalwatch_sha256": "8dff62ffab8a5816c25cb2b859fc4069399978c36676bce3c0f5684265858dd8"
+ },
+ "harness_source_record": {
+  "what": "pinned snapshot copy of the Demo session's frozen no-autopilot harness v12_standing (the Exp 0 v0 release harness)",
+  "source": "code/hk-hitl/harness/v12_standing",
+  "copied_at": "2026-11-26 00:50 PST (2026-11-26 08:50 UTC)",
+  "copied_by": "Exp 0 v0 HK collection subagent of Honing_CC_Deli (experiments/exp0/20261126_0045_hk_v0_collection)",
+  "frozen_by_demo_session": "2026-11-25 19:55 PST (code/hk-hitl/harness/CHANGELOG.md, v12_standing entry; REPORT.md of experiments/hk-forestdango-demo/20261125_1642_harness_boundary)",
+  "check_at_copy": "diff -r -x __pycache__ against the source and against the harness_snapshot/v12_standing of runs f1_v12_laya_new, f1_v12_laya_pocket, f1_v12_laya_corridor, f2_v12_reader3_pocket: identical",
+  "fingerprint": "162948741065d84210bc27a861f56919a5799adb58a643ecf24d86ab4ac93a9c",
+  "files": {
+   "__init__.py": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "agent.py": {
+    "sha256": "676b2ad893e7ad377238cab4504785a4b77dac3b8afb22fbb5e8c985d790fc0c",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "keys.py": {
+    "sha256": "6f05d42dc0e3031549ca95e19d57a9f0d0a01e9db6d33bf398dd5a62d0e4c2a2",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "look.py": {
+    "sha256": "8788bb900f3e6adf592d8a6832b29bcf29f9639bc3e6aa572eb7cd79542621cf",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "mem.py": {
+    "sha256": "6a911e0386998ef0c394739c5eac2d197622d140c31e6d0d1180e62827595fd9",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "see.py": {
+    "sha256": "06672a150cc97d9a3a56b36e1df55ecf6b166f9f0938ba9f024870eb76460a0a",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "sim.py": {
+    "sha256": "ab90d7b73a2fd7ea7a8987c06c43a27394fba7c42bcd130aa2ba293ec807d8fc",
+    "source_mtime_utc": "2026-11-26 03:52:18"
+   },
+   "text.py": {
+    "sha256": "18850a62d20d4336a00d092e699900652a7726eb585fd9dd5bac599a4090d5f6",
+    "source_mtime_utc": "2026-11-26 03:52:18",
+    "sha256_demo_original": "49047c90208c408daafce7af88c967b3577198d76c4070db642068462d0caf9a"
+   }
+  },
+  "fingerprint_of_the_demo_original": "adfbdd6bf390bfc18d1ab2963b6a235ef50109ee7ef4f1d45c363cb879e3c38d",
+  "local_change": {
+   "when": "2026-11-26 03:25 PST, before the plan was frozen and before any release attempt",
+   "why": "privacy: the upstream repository is public; the Demo original hard-codes the local absolute path of Laya's tokenizer file (it contains the local account name)",
+   "file": "text.py",
+   "constant": "_TOKENIZER_FILE",
+   "replaced_text_python_repr": "'_TOKENIZER_FILE = (\"<redacted-local-root>/Honing_codex/soul-knight-hy/honing/cache/hub/models--convaiinnovations--\"\\n                   \"laya-typed-decisions/snapshots/1a793eb568e6718f15941d08f85432581df534e3/tokenizer/tokenizer.json\")'",
+   "replaced_text_note": "the original value is the absolute path of tokenizer/tokenizer.json inside a local Hugging Face cache snapshot of convaiinnovations/laya-typed-decisions@1a793eb568e6718f15941d08f85432581df534e3; its local root is redacted here",
+   "new_text": "_TOKENIZER_FILE = \"<set by the Exp 0 adapter>\"",
+   "set_at_run_time_by": "runtime.harness_agent (code/exp0/hk_v9/runtime.py): $HONING_LAYA_TOKENIZER, else huggingface_hub from the public checkpoint, file tokenizer/tokenizer.json, sha256 6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30; tools refuse to run without it",
+   "text_py_sha256_demo_original": "49047c90208c408daafce7af88c967b3577198d76c4070db642068462d0caf9a",
+   "text_py_sha256_this_copy": "18850a62d20d4336a00d092e699900652a7726eb585fd9dd5bac599a4090d5f6",
+   "check": "every other byte of every file equals the Demo original (verified when the change was made)"
+  }
+ },
+ "services": {
+  "clean": {
+   "url": "http://127.0.0.1:8811",
+   "role": "clean",
+   "repo": "convaiinnovations/laya-typed-decisions",
+   "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+   "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+   "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+   "layaVersion": "0.3.20",
+   "device": "cpu",
+   "dtype": "torch.float32",
+   "threads": 8,
+   "maxLen": 2048,
+   "launcher": "exp0_isolated_cpu",
+   "training_performed": false
+  },
+  "clean_2": {
+   "url": "http://127.0.0.1:8820",
+   "role": "clean",
+   "repo": "convaiinnovations/laya-typed-decisions",
+   "revision": "1a793eb568e6718f15941d08f85432581df534e3",
+   "weightsSha256": "4fa56de72383a9d3efa9cfa78955733c81b9fc8067a587ca4beb82c78107a24e",
+   "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+   "layaVersion": "0.3.20",
+   "device": "cpu",
+   "dtype": "torch.float32",
+   "threads": 8,
+   "maxLen": 2048,
+   "launcher": "exp0_isolated_cpu",
+   "training_performed": false
+  },
+  "alternate": {
+   "url": "http://127.0.0.1:8812",
+   "role": "alternate",
+   "repo": "jayzou3773/laya-ra2-v33",
+   "revision": "51d2f5a0b36c0a9921a450f14a5afb7cb6d30685",
+   "weightsSha256": "2ed46ac94c366db2dc68751d0eabfe945ceaeaf430e9fea1ec9e6c60c0207925",
+   "sourceCommit": "970dc8c5f63d7b886a68409493f37d569424f933",
+   "layaVersion": "0.3.20",
+   "device": "cpu",
+   "dtype": "torch.float32",
+   "threads": 8,
+   "maxLen": 2048,
+   "launcher": "exp0_isolated_cpu",
+   "training_performed": false
+  }
+ },
+ "upstream_main_sha": "9d5327f1c5a53b8b134db847952ff6281267c0a6"
+}

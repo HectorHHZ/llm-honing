@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:honing:exp0:v0:episode-result:1",
+  "title": "Exp 0 v0 native outcome of one attempt (result.json, written when the episode reaches a terminal or a cap)",
+  "type": "object",
+  "required": [
+    "status",
+    "reason",
+    "terminal_tick",
+    "rows",
+    "model_decisions",
+    "forced_decisions",
+    "auto_rows",
+    "windows",
+    "native_ticks",
+    "sim_seconds",
+    "wall_seconds",
+    "event_counts",
+    "trigger_index",
+    "fault_changed_rows",
+    "checkpoint_end"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "win",
+        "loss",
+        "timeout",
+        "other_terminal"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "terminal_tick": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rows": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "model_decisions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "forced_decisions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "auto_rows": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "windows": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "native_ticks": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "native_frames": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "sim_seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "wall_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "event_counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "trigger_index": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "fault_changed_rows": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "uniqueItems": true
+    },
+    "checkpoint_end": {
+      "type": "object",
+      "required": [
+        "weightsSha256",
+        "role"
+      ],
+      "properties": {
+        "weightsSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "role": {
+          "enum": [
+            "clean",
+            "alternate"
+          ]
+        }
+      }
+    },
+    "extra": {
+      "type": "object"
+    }
+  }
+}
