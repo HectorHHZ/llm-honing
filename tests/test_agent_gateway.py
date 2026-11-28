@@ -7,16 +7,25 @@ fail without it when HONING_REQUIRE_GATEWAY=1, as in CI's agent-gateway job.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import signal
 import socket
 import stat
+import subprocess
+import sys
+import time
+import types
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from honing.backends import agent_gateway
 from honing.backends.agent_gateway import PUBLIC_MODEL, AgentGateway, Upstream, default_python, proxy_config
 from honing.core import ContractError, PolicyEndpoint
 from tests.conftest import require
@@ -294,3 +303,249 @@ def test_leaving_the_block_stops_the_proxy(proxy_root: Path, tmp_path: Path, mon
     assert gateway.exited()
     with pytest.raises(OSError):
         urllib.request.urlopen(f"{gateway.url}/health/liveliness", timeout=5)
+
+
+# ---------------------------------------------------------------- starting and stopping, with a stand-in proxy
+
+# Answers the liveness route the gateway waits for, as LiteLLM's proxy does once it is up.
+LIVE_SERVER = """
+import http.server, json, os, sys
+host, port = sys.argv[sys.argv.index("--host") + 1], int(sys.argv[sys.argv.index("--port") + 1])
+with open(os.path.join(os.path.dirname(__file__), "started.json"), "w") as out:
+    json.dump({"argv": sys.argv, "pid": os.getpid()}, out)
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200 if self.path == "/health/liveliness" else 404)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+http.server.HTTPServer((host, port), Handler).serve_forever()
+"""
+
+# Starts but never listens, as a proxy that hangs while loading.
+SILENT_SERVER = """
+import json, os, sys, time
+with open(os.path.join(os.path.dirname(__file__), "started.json"), "w") as out:
+    json.dump({"argv": sys.argv, "pid": os.getpid()}, out)
+time.sleep(60)
+"""
+
+
+def _with_server(tmp_path: Path, server: str) -> Path:
+    """A root whose gateway "interpreter" runs this Python and whose ``serve.py`` is ``server``."""
+    root = _installed(tmp_path / "root", f'exec "{sys.executable}" "$@"\n')
+    (root / "integrations" / "agent_gateway" / "serve.py").write_text(server)
+    return root
+
+
+def _started(root: Path) -> dict[str, Any]:
+    started: dict[str, Any] = json.loads((root / "integrations" / "agent_gateway" / "started.json").read_text())
+    return started
+
+
+@pytest.fixture
+def quick_polls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gateway polls the proxy every 0.1 s instead of every second."""
+    sleep = time.sleep
+    monkeypatch.setattr(
+        agent_gateway, "time", types.SimpleNamespace(monotonic=time.monotonic, sleep=lambda _: sleep(0.1))
+    )
+
+
+def _gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("base_url", "model", "message"),
+    [
+        ("gpu:30000/v1", "m", "base_url must be an HTTP URL, got gpu:30000/v1"),
+        ("ftp://gpu/v1", "m", "base_url must be an HTTP URL"),
+        ("http://gpu:30000/v1", "", "model must be set"),
+    ],
+)
+def test_an_upstream_that_is_not_an_http_chat_api_is_refused(base_url: str, model: str, message: str) -> None:
+    with pytest.raises(ContractError, match=message):
+        Upstream(base_url, model)
+
+
+@pytest.mark.functional
+def test_the_gateway_waits_until_the_proxy_answers_and_stops_it_on_leaving_the_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, quick_polls: None
+) -> None:
+    monkeypatch.setenv("HONING_GATEWAY_KEY", "gateway-key")
+    root = _with_server(tmp_path, LIVE_SERVER)
+    port = _free_port()
+
+    with AgentGateway.launch(
+        Upstream("http://gpu:30000/v1", "honed-7b"), root=root, work_dir=tmp_path / "run", port=port
+    ) as gateway:
+        assert gateway.url == f"http://127.0.0.1:{port}"
+        assert not gateway.exited()
+        with urllib.request.urlopen(f"{gateway.url}/health/liveliness", timeout=5) as response:
+            assert response.status == 200
+
+    assert gateway.exited()
+    started = _started(root)
+    assert started["argv"] == [
+        str(root / "integrations/agent_gateway/serve.py"),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+    ]
+    assert _gone(started["pid"])
+    config = json.loads((tmp_path / "run" / "litellm.yaml").read_text())
+    assert config == proxy_config(Upstream("http://gpu:30000/v1", "honed-7b"))
+    assert (tmp_path / "run" / "gateway.log").exists()
+
+
+@pytest.mark.functional
+def test_a_proxy_that_never_answers_is_stopped_and_refused_with_its_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, quick_polls: None
+) -> None:
+    monkeypatch.setenv("HONING_GATEWAY_KEY", "gateway-key")
+    root = _with_server(tmp_path, SILENT_SERVER)
+    log = tmp_path / "run" / "gateway.log"
+
+    with (
+        pytest.raises(ContractError, match=f"did not answer within 2 s; see {log}"),
+        AgentGateway.launch(
+            Upstream("http://gpu:30000/v1", "m"),
+            root=root,
+            work_dir=tmp_path / "run",
+            port=_free_port(),
+            start_timeout=2.0,
+        ),
+    ):
+        pass
+
+    assert _gone(_started(root)["pid"])
+
+
+class _Process:
+    """A process whose group ignores ``ignored`` and is already gone with ``gone``."""
+
+    def __init__(self, ignored: tuple[int, ...] = (), gone: type[OSError] | None = None) -> None:
+        self.pid = 4242
+        self.ignored, self.gone = ignored, gone
+        self.sent: list[int] = []
+        self.waits: list[float] = []
+
+    def wait(self, timeout: float) -> int:
+        self.waits.append(timeout)
+        if self.sent[-1] in self.ignored:
+            raise subprocess.TimeoutExpired("proxy", timeout)
+        return 0
+
+
+def _record_signals(monkeypatch: pytest.MonkeyPatch, process: _Process) -> None:
+    def killpg(pid: int, sig: int) -> None:
+        assert pid == process.pid
+        process.sent.append(sig)
+        if process.gone is not None:
+            raise process.gone
+
+    monkeypatch.setattr(agent_gateway.os, "killpg", killpg)
+
+
+@pytest.mark.unit
+def test_stopping_sends_sigterm_to_the_proxy_s_group_and_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    process = _Process()
+    _record_signals(monkeypatch, process)
+
+    agent_gateway._stop(process)  # type: ignore[arg-type]
+
+    assert (process.sent, process.waits) == ([signal.SIGTERM], [15])
+
+
+@pytest.mark.unit
+def test_a_group_that_ignores_sigterm_is_killed(monkeypatch: pytest.MonkeyPatch) -> None:
+    process = _Process(ignored=(signal.SIGTERM,))
+    _record_signals(monkeypatch, process)
+
+    agent_gateway._stop(process)  # type: ignore[arg-type]
+
+    assert (process.sent, process.waits) == ([signal.SIGTERM, signal.SIGKILL], [15, 15])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("gone", [ProcessLookupError, PermissionError])
+def test_a_group_that_has_already_exited_is_not_an_error(monkeypatch: pytest.MonkeyPatch, gone: type[OSError]) -> None:
+    # macOS answers EPERM, not ESRCH, once the whole group has exited.
+    process = _Process(gone=gone)
+    _record_signals(monkeypatch, process)
+
+    agent_gateway._stop(process)  # type: ignore[arg-type]
+
+    assert process.sent == [signal.SIGTERM]
+
+
+class _Gateway:
+    url = "http://127.0.0.1:4100"
+
+    def __init__(self, polls: list[bool]) -> None:
+        self.polls = polls
+
+    def exited(self) -> bool:
+        return self.polls.pop(0)
+
+
+@pytest.fixture
+def launched(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Replaces the launch with a stand-in gateway; returns what ``main`` launched, and the signal it handled."""
+    seen: dict[str, Any] = {"polls": [False, True]}
+
+    @contextlib.contextmanager
+    def launch(upstream: Upstream, **options: Any) -> Iterator[_Gateway]:
+        seen.update(upstream=upstream, **options)
+        yield _Gateway(seen["polls"])
+
+    monkeypatch.setattr(AgentGateway, "launch", launch)
+    monkeypatch.setattr(agent_gateway.signal, "signal", lambda sig, handler: seen.update(signal=(sig, handler)))
+    monkeypatch.setattr(agent_gateway, "time", types.SimpleNamespace(sleep=lambda _: None))
+    return seen
+
+
+@pytest.mark.functional
+def test_the_command_serves_the_upstream_and_says_how_agents_reach_it(
+    tmp_path: Path, launched: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["--base-url", "http://gpu:30000/v1", "--model", "honed-7b", "--api-key-env", "UPSTREAM_KEY"]
+    argv += ["--host", "0.0.0.0", "--port", "4100", "--key-env", "MY_KEY", "--work-dir", str(tmp_path)]
+
+    with pytest.raises(SystemExit, match=f"the gateway exited; see {tmp_path / 'gateway.log'}"):
+        agent_gateway.main(argv)
+
+    assert launched["upstream"] == Upstream("http://gpu:30000/v1", "honed-7b", "UPSTREAM_KEY")
+    assert (launched["root"], launched["work_dir"]) == (REPO, tmp_path)
+    assert (launched["host"], launched["port"], launched["key_env"]) == ("0.0.0.0", 4100, "MY_KEY")
+    printed = capsys.readouterr().out
+    assert "Serving honed-7b from http://gpu:30000/v1 at http://127.0.0.1:4100; agents present $MY_KEY." in printed
+    assert "ANTHROPIC_BASE_URL=http://127.0.0.1:4100 ANTHROPIC_AUTH_TOKEN=$MY_KEY claude" in printed
+    assert 'base_url="http://127.0.0.1:4100/v1", env_key="MY_KEY", wire_api="responses"' in printed
+    assert f"-m {PUBLIC_MODEL} " in printed
+
+
+@pytest.mark.functional
+def test_sigterm_stops_the_command_as_ctrl_c_does(tmp_path: Path, launched: dict[str, Any]) -> None:
+    launched["polls"][:] = [False, False, False]
+
+    def interrupted(_: float) -> None:
+        launched["signal"][1](signal.SIGTERM, None)
+
+    agent_gateway.time.sleep = interrupted  # the fixture's stand-in module
+
+    agent_gateway.main(["--base-url", "http://gpu:30000/v1", "--model", "m", "--work-dir", str(tmp_path)])
+
+    assert launched["signal"][0] == signal.SIGTERM
+    with pytest.raises(KeyboardInterrupt):
+        launched["signal"][1](signal.SIGTERM, None)
