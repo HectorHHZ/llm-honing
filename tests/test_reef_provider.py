@@ -106,6 +106,7 @@ def expected(logs: list[Path], *, behavior: bool) -> list[Any]:
     ]
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("behavior", [False, True])
 def test_a_job_gives_the_samples_decisions_from_log_builds(tmp_path: Path, behavior: bool) -> None:
     job = spool_job(tmp_path, "a", FIXTURES, "2026-11-25T00:00:00+00:00")
@@ -117,6 +118,7 @@ def test_a_job_gives_the_samples_decisions_from_log_builds(tmp_path: Path, behav
     assert list(batch.decisions) == expected(FIXTURES, behavior=behavior)
 
 
+@pytest.mark.unit
 def test_jobs_are_drawn_oldest_first_and_each_once_across_restarts(tmp_path: Path) -> None:
     spool_job(tmp_path, "late", FIXTURES[:1], "2026-11-25T00:00:02+00:00")
     spool_job(tmp_path, "early", FIXTURES[1:], "2026-11-25T00:00:01+00:00")
@@ -135,6 +137,7 @@ def test_jobs_are_drawn_oldest_first_and_each_once_across_restarts(tmp_path: Pat
     assert ReefDataProvider(tmp_path).pending() == []
 
 
+@pytest.mark.unit
 def test_other_contracts_and_broken_jobs_consume_nothing(tmp_path: Path) -> None:
     job = spool_job(tmp_path, "a", FIXTURES[:1], "2026-11-25T00:00:00+00:00")
     provider = ReefDataProvider(tmp_path)
@@ -146,6 +149,7 @@ def test_other_contracts_and_broken_jobs_consume_nothing(tmp_path: Path) -> None
     assert not (tmp_path / "a.consumed").exists()
 
 
+@pytest.mark.unit
 def test_a_move_waits_for_reef_to_spool_its_job(tmp_path: Path) -> None:
     assert ReefDataProvider(tmp_path, wait_s=0.2, poll_s=0.05).next_batch(DECISIONS) is None
 
@@ -157,6 +161,7 @@ def test_a_move_waits_for_reef_to_spool_its_job(tmp_path: Path) -> None:
     assert batch is not None and time.monotonic() - started < 5
 
 
+@pytest.mark.unit
 def test_a_batch_meets_the_campaign_rules_as_they_are(tmp_path: Path) -> None:
     spool_job(tmp_path, "a", FIXTURES, "2026-11-25T00:00:00+00:00")
     batch = ReefDataProvider(tmp_path).next_batch(DECISIONS)
@@ -174,6 +179,7 @@ def test_a_batch_meets_the_campaign_rules_as_they_are(tmp_path: Path) -> None:
         rules.batch_from_one_release(foreign, head_release())
 
 
+@pytest.mark.unit
 def test_a_batch_from_other_weights_is_refused_without_a_release_tag(tmp_path: Path) -> None:
     # A runner knows the weights it served, not their release (#241), so the policy tag keeps a batch to the head.
     for job_id, policy in (("a", POLICY), ("b", "other-weights")):
@@ -192,6 +198,7 @@ def test_a_batch_from_other_weights_is_refused_without_a_release_tag(tmp_path: P
         rules.batch_from_one_release(other, head_release())
 
 
+@pytest.mark.unit
 def test_the_gpu_config_builds_a_provider_over_the_spool_it_names(tmp_path: Path, monkeypatch: Any) -> None:
     from types import SimpleNamespace
 

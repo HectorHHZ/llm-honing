@@ -1,21 +1,26 @@
 import copy
 import unittest
 
+import pytest
+
 from integrations.rea_issac.engine import SOURCE, VERSION, Action, Engine, replay
 from integrations.rea_issac.policy import Baseline
 
 
 class EngineContracts(unittest.TestCase):
+    @pytest.mark.unit
     def test_seed_reproducibility_and_variation(self):
         self.assertEqual(Engine(7).digest(), Engine(7).digest())
         self.assertNotEqual(Engine(7).digest(), Engine(8).digest())
 
+    @pytest.mark.unit
     def test_recovered_defaults_are_used(self):
         e = Engine(7)
         self.assertEqual(e.player["health"], SOURCE["player"]["health"])
         self.assertEqual(e.player["bombs"], SOURCE["player"]["bombs"])
         self.assertEqual(e.player["radius"], SOURCE["player"]["radius"])
 
+    @pytest.mark.unit
     def test_invalid_inputs_do_not_advance_the_simulation(self):
         engine = Engine(7)
         before = engine.digest()
@@ -37,6 +42,7 @@ class EngineContracts(unittest.TestCase):
             engine.step(Action(move_x=100))
         self.assertEqual(engine.digest(), before)
 
+    @pytest.mark.unit
     def test_diagonal_input_is_normalized(self):
         straight, diagonal = Engine(7), Engine(7)
         x, y = straight.player["x"], straight.player["y"]
@@ -49,6 +55,7 @@ class EngineContracts(unittest.TestCase):
             hypot(diagonal.player["x"] - x, diagonal.player["y"] - y),
         )
 
+    @pytest.mark.unit
     def test_walls_block_movement_away_from_doorways(self):
         e = Engine(7)
         e.player.update(x=65, y=70)
@@ -57,6 +64,7 @@ class EngineContracts(unittest.TestCase):
         self.assertGreaterEqual(e.player["x"], 42)
         self.assertGreaterEqual(e.player["y"], 50)
 
+    @pytest.mark.unit
     def test_locked_door_then_clear_and_transition(self):
         e = Engine(7)
         combat = next(room for room in e.rooms.values() if room["kind"] == "combat")
@@ -74,6 +82,7 @@ class EngineContracts(unittest.TestCase):
         e.step(action, 1)
         self.assertEqual(e.current, door["destination"])
 
+    @pytest.mark.unit
     def test_shots_hit_and_kill(self):
         e = Engine(7)
         enemy = e._enemy("spitter", 400, 208)
@@ -86,6 +95,7 @@ class EngineContracts(unittest.TestCase):
         self.assertGreaterEqual(e.metrics["hits"], 3)
         self.assertTrue(e.room["cleared"])
 
+    @pytest.mark.unit
     def test_contact_damage_has_an_invulnerability_window(self):
         e = Engine(7)
         enemy = e._enemy("chaser", 320, 208)
@@ -98,6 +108,7 @@ class EngineContracts(unittest.TestCase):
         e.step({}, 20)
         self.assertEqual(e.player["health"], health - 2)
 
+    @pytest.mark.unit
     def test_bomb_fuse_and_environment_damage(self):
         e = Engine(7)
         enemy = e._enemy("spitter", 390, 208)
@@ -113,6 +124,7 @@ class EngineContracts(unittest.TestCase):
         self.assertEqual(e.metrics["kills"], 1)
         self.assertEqual(e.player["health"], SOURCE["player"]["health"])
 
+    @pytest.mark.unit
     def test_public_observation_is_detached_and_hides_unvisited_room_contents(self):
         e = Engine(7)
         obs = e.observe()
@@ -123,6 +135,7 @@ class EngineContracts(unittest.TestCase):
         self.assertTrue(all("enemies" not in room and "pickups" not in room for room in obs["map"]))
         self.assertTrue(all(room["kind"] == "unknown" for room in obs["map"] if not room["visited"]))
 
+    @pytest.mark.unit
     def test_replay_reconstructs_exact_state_and_rejects_tampering(self):
         e = Engine(29, 90)
         actions = [{"action": {"move_x": 1, "shoot_y": -1}, "frames": 3} for _ in range(30)]
@@ -139,6 +152,7 @@ class EngineContracts(unittest.TestCase):
         with self.assertRaises(ValueError):
             replay(altered)
 
+    @pytest.mark.unit
     def test_terminal_state_is_absorbing(self):
         e = Engine(7, 10)
         e.step({}, 30)
@@ -147,6 +161,7 @@ class EngineContracts(unittest.TestCase):
         e.step({"move_x": 1}, 30)
         self.assertEqual(e.digest(), before)
 
+    @pytest.mark.unit
     def test_rule_baseline_can_finish_a_complete_run(self):
         e, baseline = Engine(11, 6000), Baseline()
         while e.status == "running":

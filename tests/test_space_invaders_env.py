@@ -42,6 +42,7 @@ class FakeALE:
         pass
 
 
+@pytest.mark.unit
 def test_last_two_frames_pool_and_reward() -> None:
     env = game.MaxPoolRepeat(FakeALE())
     env.reset(seed=19)
@@ -53,6 +54,7 @@ def test_last_two_frames_pool_and_reward() -> None:
     assert terminated and not truncated and info["lives"] == 0
 
 
+@pytest.mark.unit
 def test_repeat_stops_on_first_terminal_frame() -> None:
     env = game.MaxPoolRepeat(FakeALE(end_after=1))
     env.reset()
@@ -60,6 +62,7 @@ def test_repeat_stops_on_first_terminal_frame() -> None:
     assert reward == 1 and terminated and not truncated and env.underlying_frames == 1
 
 
+@pytest.mark.unit
 def test_complete_episode_replays_and_detects_tampering(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setattr(game, "make_space_invaders", lambda **_: game.MaxPoolRepeat(FakeALE()))
     monkeypatch.setattr(game.importlib.metadata, "version", lambda name: f"fake-{name}")
@@ -74,6 +77,7 @@ def test_complete_episode_replays_and_detects_tampering(tmp_path: Path, monkeypa
         game.verify_replay(trace)
 
 
+@pytest.mark.unit
 def test_incomplete_episode_is_not_verifiable(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setattr(game, "make_space_invaders", lambda **_: game.MaxPoolRepeat(FakeALE(end_after=100)))
     monkeypatch.setattr(game.importlib.metadata, "version", lambda name: f"fake-{name}")
@@ -83,6 +87,7 @@ def test_incomplete_episode_is_not_verifiable(tmp_path: Path, monkeypatch: Any) 
         game.verify_replay(trace)
 
 
+@pytest.mark.functional
 def test_installed_module_has_cli() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "honing.harness.space_invaders", "--help"], check=True, capture_output=True, text=True

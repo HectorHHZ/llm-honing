@@ -14,6 +14,8 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from integrations._shared.decision import DecisionClient, checked_action, strict_json_loads
 
 ACTIONS = {"left": "Move left.", "right": "Move right.", "wait": "Stay still."}
@@ -47,6 +49,7 @@ def request_and_response():
 
 
 class SharedChoiceContractTests(unittest.TestCase):
+    @pytest.mark.unit
     def test_argmax_and_ties_keep_the_original_values(self):
         request, response = request_and_response()
         before = copy.deepcopy(response)
@@ -55,6 +58,7 @@ class SharedChoiceContractTests(unittest.TestCase):
         response["answers"]["action"].update(choice="left", probabilities=dict.fromkeys(ACTIONS, 0.3333))
         self.assertEqual(checked_action(response, request, ACTIONS), ("left", 0.3333))
 
+    @pytest.mark.unit
     def test_missing_token_counts_reject_but_explicit_null_is_accepted(self):
         for field in ("stateTokens", "stateRoom", "inputTokens"):
             with self.subTest(field=field):
@@ -66,6 +70,7 @@ class SharedChoiceContractTests(unittest.TestCase):
         response["tokenAudit"]["action"].update(stateTokens=None, stateRoom=None, inputTokens=None)
         self.assertEqual(checked_action(response, request, ACTIONS), ("right", 1))
 
+    @pytest.mark.unit
     def test_audited_counts_and_clipping_are_checked(self):
         damages = [
             {"stateTruncated": True},
@@ -89,6 +94,7 @@ class SharedChoiceContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "tokenAudit"):
                     checked_action(response, request, ACTIONS)
 
+    @pytest.mark.unit
     def test_required_context_never_disappears(self):
         for field, value in (
             ("trimmed", None),
@@ -104,6 +110,7 @@ class SharedChoiceContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     checked_action(response, request, ACTIONS)
 
+    @pytest.mark.unit
     def test_whole_optional_removals_follow_the_existing_server_order(self):
         request, response = request_and_response()
         request["parts"].update(logs=["old log", "new log"], memory=["old memory", "new memory"], details=["detail"])
@@ -132,6 +139,7 @@ class SharedChoiceContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             checked_action(response, request, ACTIONS, optional_sections=("essential",))
 
+    @pytest.mark.unit
     def test_exact_questions_ids_and_answer_type_are_required(self):
         for problem in (
             "id",
@@ -170,6 +178,7 @@ class SharedChoiceContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     checked_action(response, request, ACTIONS)
 
+    @pytest.mark.unit
     def test_every_submitted_choice_is_validated(self):
         request, response = request_and_response()
         request["questions"]["second"] = copy.deepcopy(request["questions"]["action"])
@@ -180,6 +189,7 @@ class SharedChoiceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "argmax"):
             checked_action(response, request, ACTIONS)
 
+    @pytest.mark.unit
     def test_invalid_distributions_are_never_normalized(self):
         for problem in (
             "zero",
@@ -229,6 +239,7 @@ class SharedChoiceContractTests(unittest.TestCase):
 
 
 class SharedHttpAndJsonTests(unittest.TestCase):
+    @pytest.mark.unit
     def test_strict_json_rejects_ambiguous_or_nonfinite_responses(self):
         for raw in (
             b"broken",
@@ -243,6 +254,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 strict_json_loads(raw)
 
+    @pytest.mark.unit
     def test_raw_response_precedes_json_and_object_validation(self):
         class Reply:
             def __enter__(self):
@@ -262,6 +274,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
                         DecisionClient("http://127.0.0.1:1").decide({"id": 7}, raw_path=output)
                     self.assertEqual(output.read_bytes(), raw)
 
+    @pytest.mark.unit
     def test_http_error_bytes_are_retained_before_the_error_is_raised(self):
         raw = b"\xffupstream failed"
         error = urllib.error.HTTPError("http://localhost/v1/decide", 503, "unavailable", {}, io.BytesIO(raw))
@@ -271,6 +284,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
                 DecisionClient("http://localhost").decide({"id": 7}, raw_path=output)
             self.assertEqual(output.read_bytes(), raw)
 
+    @pytest.mark.unit
     def test_routes_body_and_readiness(self):
         requests = []
 
@@ -301,6 +315,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
         with patch.object(client, "_call", return_value={"ready": 1}), self.assertRaises(ValueError):
             client.health()
 
+    @pytest.mark.unit
     def test_scripts_share_the_receiver_and_preserve_their_context_policy(self):
         paths = {
             "hollow-knight/run.py": (),
@@ -336,6 +351,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
                         module.checked_action(response, request)
         self.assertGreater(imported, 0)
 
+    @pytest.mark.functional
     def test_standalone_entrypoints_need_only_the_standard_library(self):
         paths = (
             "hollow-knight/run.py",
@@ -361,6 +377,7 @@ class SharedHttpAndJsonTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn("usage:", result.stdout)
 
+    @pytest.mark.functional
     def test_repeated_wrapper_imports_preserve_runtime_discovery_and_the_import_path(self):
         paths = (
             "hollow-knight/run.py",

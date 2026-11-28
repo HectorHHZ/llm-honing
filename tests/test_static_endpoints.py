@@ -418,7 +418,7 @@ def stub() -> Iterator[str]:
         thread.join()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_probe_against_a_loopback_stub_that_is_up_sick_hung_or_gone(stub: str) -> None:
     assert server_answers(f"{stub}/up", 5.0) is True
     assert server_answers(f"{stub}/sick", 5.0) is False

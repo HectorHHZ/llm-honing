@@ -275,7 +275,7 @@ def test_failed_model_does_not_turn_into_random_play(
     )
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("module", "flag"),
     [("honing.backends.craftax.match", "--decision-server"), ("integrations.craftax.agent", "--max-steps")],

@@ -85,7 +85,7 @@ def test_a_run_without_a_decision_log_is_refused(tmp_path: Path) -> None:
         decisions_from_log(tmp_path / "run", reward=1.0, group="g", release_id=None, harness_id=None)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_rollouts_play_each_task_and_label_decisions_with_score_group_and_release(tmp_path: Path) -> None:
     provider = RA2RolloutProvider(_runner(tmp_path, _endpoints(a="http://strong:1")), _grader())
     tasks = load_suite(SUITE_PATH).tasks("train", limit=2)

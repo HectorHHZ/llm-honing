@@ -113,6 +113,7 @@ def stand_in_python(tmp_path: Path) -> SGLangSettings:
     )  # fmt: skip
 
 
+@pytest.mark.functional
 def test_the_engine_starts_records_its_versions_and_answers_logprobs(stand_in_python: SGLangSettings) -> None:
     with SGLangEngine.launch(Path("/models/startlux"), stand_in_python) as engine:
         assert engine.versions["sglang"] == "0.0.test"
@@ -128,12 +129,14 @@ def test_the_engine_starts_records_its_versions_and_answers_logprobs(stand_in_py
     assert process is not None and process.poll() is not None  # stopped on exit
 
 
+@pytest.mark.functional
 def test_turning_the_prefix_cache_off_reaches_the_server(stand_in_python: SGLangSettings) -> None:
     settings = SGLangSettings(**{**stand_in_python.__dict__, "prefix_cache": False})
     with SGLangEngine.launch(Path("/models/startlux"), settings) as engine:
         assert engine.versions["server"]["disable_radix_cache"] is True
 
 
+@pytest.mark.functional
 def test_several_devices_shard_the_model_over_them(stand_in_python: SGLangSettings) -> None:
     settings = SGLangSettings(**{**stand_in_python.__dict__, "gpu": "GPU-a,GPU-b,GPU-c,GPU-d"})
     assert settings.tp == 4
@@ -146,6 +149,7 @@ def test_several_devices_shard_the_model_over_them(stand_in_python: SGLangSettin
     assert explicit.tp == 1
 
 
+@pytest.mark.functional
 def test_a_server_that_exits_is_reported_with_its_log(tmp_path: Path) -> None:
     settings = SGLangSettings(
         python=Path(sys.executable), env={"PYTHONPATH": str(tmp_path)}, log_path=tmp_path / "x", check_versions=False
@@ -162,6 +166,7 @@ def _health(url: str) -> int:
         return error.code
 
 
+@pytest.mark.functional
 def test_a_killed_engine_turns_the_lettered_server_s_health_to_503(stand_in_python: SGLangSettings) -> None:
     with SGLangEngine.launch(Path("/models/any"), stand_in_python) as engine:
         assert engine.healthy()
@@ -190,6 +195,7 @@ def _alive(pid: int) -> bool:
     return True
 
 
+@pytest.mark.functional
 def test_a_decision_server_whose_engine_died_is_restarted_by_the_endpoints(
     stand_in_python: SGLangSettings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -274,12 +280,14 @@ def _url(server: Any) -> str:
     return f"http://127.0.0.1:{server.server_address[1]}"
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize(("status", "healthy"), [(200, True), (204, False), (404, False), (503, False)])
 def test_the_engine_is_healthy_only_when_its_health_route_answers_200(health: Any, status: int, healthy: bool) -> None:
     health.status = status
     assert SGLangEngine(_url(health), None, {}).healthy() is healthy
 
 
+@pytest.mark.functional
 def test_an_engine_whose_health_route_is_slower_than_the_timeout_is_down(health: Any) -> None:
     health.delay = 2.0
     started = time.monotonic()
@@ -287,6 +295,7 @@ def test_an_engine_whose_health_route_is_slower_than_the_timeout_is_down(health:
     assert time.monotonic() - started < 1.5
 
 
+@pytest.mark.functional
 def test_an_engine_that_does_not_answer_is_down() -> None:
     with socket.socket() as closed:
         closed.bind(("127.0.0.1", 0))
@@ -294,6 +303,7 @@ def test_an_engine_that_does_not_answer_is_down() -> None:
     assert not SGLangEngine(f"http://127.0.0.1:{port}", None, {}).healthy(timeout_seconds=1)
 
 
+@pytest.mark.functional
 def test_an_engine_that_answers_something_other_than_http_is_down() -> None:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -311,6 +321,7 @@ def test_an_engine_that_answers_something_other_than_http_is_down() -> None:
         answering.join(timeout=5)
 
 
+@pytest.mark.functional
 def test_an_engine_whose_process_exited_is_down_even_if_its_port_still_answers(health: Any) -> None:
     exited = subprocess.Popen([sys.executable, "-c", "pass"])
     exited.wait()
@@ -343,6 +354,7 @@ def generate() -> Iterator[Any]:
     server.shutdown()
 
 
+@pytest.mark.functional
 def test_the_request_prefills_and_asks_for_one_token_s_distribution(generate: Any) -> None:
     generate.answer = [{"meta_info": {"output_token_ids_logprobs": [[[-0.5, 7, None], [-1.5, 8, None]]]}}]
     engine = SGLangEngine(f"http://127.0.0.1:{generate.server_address[1]}", None, {})
@@ -364,6 +376,7 @@ def test_the_request_prefills_and_asks_for_one_token_s_distribution(generate: An
         [{"meta_info": {"output_token_ids_logprobs": [[[-0.5, 7, None], [-0.1, 9, None]]]}}],  # another token
     ],
 )
+@pytest.mark.functional
 def test_an_answer_of_another_shape_is_refused(generate: Any, answer: Any) -> None:
     generate.answer = answer
     engine = SGLangEngine(f"http://127.0.0.1:{generate.server_address[1]}", None, {})
@@ -390,6 +403,7 @@ class _SlowModel:
         return {"answers": {}}
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize(("concurrent", "peak"), [(False, 1), (True, 2)])
 def test_a_model_that_batches_itself_is_called_concurrently(concurrent: bool, peak: int) -> None:
     model = _SlowModel(concurrent)
@@ -419,6 +433,7 @@ def test_a_model_that_batches_itself_is_called_concurrently(concurrent: bool, pe
         (["--family", "startlux", "--pins", "p.json", "--engine", "sglang"], "--sglang-python"),
     ],
 )
+@pytest.mark.unit
 def test_the_server_names_what_the_sglang_engine_needs(
     argv: list[str], message: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -427,6 +442,7 @@ def test_the_server_names_what_the_sglang_engine_needs(
     assert message in capsys.readouterr().err
 
 
+@pytest.mark.functional
 def test_an_environment_other_than_the_pin_is_refused_before_the_server_starts(
     stand_in_python: SGLangSettings, tmp_path: Path
 ) -> None:
@@ -438,6 +454,7 @@ def test_an_environment_other_than_the_pin_is_refused_before_the_server_starts(
     assert not (tmp_path / "engine.log").exists() or (tmp_path / "engine.log").read_bytes() == b""
 
 
+@pytest.mark.unit
 def test_the_pinned_versions_are_those_of_the_lock_file() -> None:
     locked = dict(
         line.split("==", 1)

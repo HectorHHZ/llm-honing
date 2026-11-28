@@ -115,6 +115,7 @@ def in_thread(call: Callable[[], Any]) -> tuple[threading.Thread, list[Any]]:
 # The loop keeps running (acceptance 1).
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("blocked", ["start", "probe", "restart", "static probe"])
 def test_episodes_on_the_loop_keep_running_while_a_resolve_waits(tmp_path: Path, blocked: str) -> None:
     ticks = [0]
@@ -175,6 +176,7 @@ def test_episodes_on_the_loop_keep_running_while_a_resolve_waits(tmp_path: Path,
 # One start for concurrent resolves (acceptance 4).
 
 
+@pytest.mark.unit
 def test_two_threads_resolving_one_checkpoint_at_once_start_one_server(tmp_path: Path) -> None:
     starts = Starts(block=frozenset({0}))
     endpoints, _ = serving(starts)
@@ -191,6 +193,7 @@ def test_two_threads_resolving_one_checkpoint_at_once_start_one_server(tmp_path:
     endpoints.close()
 
 
+@pytest.mark.unit
 def test_a_call_that_arrives_during_a_start_takes_its_answer_without_a_probe(tmp_path: Path) -> None:
     # With a TTL of 0 every check of a running server probes it, so a second job for the checkpoint, run after the
     # start, would probe the server the start just registered; joining the pending call does not.
@@ -215,6 +218,7 @@ def test_a_call_that_arrives_during_a_start_takes_its_answer_without_a_probe(tmp
     endpoints.close()
 
 
+@pytest.mark.unit
 def test_resolves_gathered_on_the_loop_start_one_server(tmp_path: Path) -> None:
     starts = Starts(block=frozenset({0}))
     endpoints, _ = serving(starts)
@@ -256,6 +260,7 @@ def policy_named(checksum: str, tmp_path: Path) -> PolicyRef:
     return PolicyRef(checkpoint, snapshot.architecture, "master")
 
 
+@pytest.mark.unit
 def test_episodes_resolving_one_policy_share_one_call_and_a_warm_one_is_not_held_up(tmp_path: Path) -> None:
     endpoints = CountingEndpoints(slow="cold")
     cold, warm = policy_named("cold", tmp_path), policy_named("warm", tmp_path)
@@ -272,6 +277,7 @@ def test_episodes_resolving_one_policy_share_one_call_and_a_warm_one_is_not_held
     assert threading.get_ident() not in endpoints.threads
 
 
+@pytest.mark.unit
 def test_two_checkpoints_on_one_health_url_probe_it_once_at_a_time(tmp_path: Path) -> None:
     gate = Gate()
     calls: list[str] = []
@@ -296,6 +302,7 @@ def test_two_checkpoints_on_one_health_url_probe_it_once_at_a_time(tmp_path: Pat
 # The fast path: running and fresh only.
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("state", ["fresh", "exited", "past the ttl"])
 def test_only_a_running_server_checked_within_the_ttl_is_returned_without_the_owner_thread(
     tmp_path: Path, state: str
@@ -449,6 +456,7 @@ RUNNERS = {
 }
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("name", sorted(RUNNERS))
 def test_every_runner_resolves_off_its_event_loop(tmp_path: Path, name: str) -> None:
     endpoints = RecordingEndpoints()
@@ -468,6 +476,7 @@ def test_every_runner_resolves_off_its_event_loop(tmp_path: Path, name: str) -> 
 # Cancellation and close.
 
 
+@pytest.mark.unit
 def test_a_cancelled_resolve_leaves_its_server_with_the_map_and_other_callers_get_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -510,6 +519,7 @@ def test_a_cancelled_resolve_leaves_its_server_with_the_map_and_other_callers_ge
     assert starts.stopped == [0, 1] and errors == []
 
 
+@pytest.mark.unit
 def test_close_does_not_wait_for_a_start_and_stops_its_server_when_the_start_returns(tmp_path: Path) -> None:
     starts = Starts(block=frozenset({0}))
     endpoints, _ = serving(starts)
@@ -533,6 +543,7 @@ def test_close_does_not_wait_for_a_start_and_stops_its_server_when_the_start_ret
         endpoints.resolve(a)
 
 
+@pytest.mark.unit
 def test_close_from_the_owner_thread_stops_the_servers_and_returns(tmp_path: Path) -> None:
     starts = Starts()
     endpoints, _ = serving(starts)
@@ -575,6 +586,7 @@ with SGLangPolicyEndpoints(ServingSettings(python=Path("python"), gpus=("0",)), 
 """
 
 
+@pytest.mark.functional
 def test_a_ctrl_c_during_a_cold_start_exits_without_waiting_for_it(tmp_path: Path) -> None:
     try:
         done = subprocess.run(
@@ -625,6 +637,7 @@ def _real_start(
     return start
 
 
+@pytest.mark.functional
 @linux
 def test_a_server_outlives_the_loop_and_the_thread_that_resolved_it_and_stops_on_close(
     tmp_path: Path, children: list[subprocess.Popen[bytes]]
@@ -664,6 +677,7 @@ asyncio.run(resolve_endpoint(endpoints, policy(write_checkpoint(Path(sys.argv[1]
 """  # exits without close()
 
 
+@pytest.mark.functional
 @linux
 def test_a_server_dies_with_the_process_that_started_it(tmp_path: Path) -> None:
     done = subprocess.run(

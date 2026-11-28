@@ -268,7 +268,7 @@ def fake_trainer(tmp_path: Path) -> SlimeTrainer:
 GRPO = TrainJobSpec(algorithm="grpo", rollout="harness", steps=1)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_grpo_job_returns_new_hf_weights_with_a_manifest(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     result = fake_trainer(tmp_path).train(GRPO, base, grpo_batch())
@@ -285,7 +285,7 @@ def test_a_grpo_job_returns_new_hf_weights_with_a_manifest(tmp_path: Path) -> No
     assert "slime_opd_reverse_kl" not in result.metrics
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_job_charges_its_time_with_the_gpus_held_for_every_gpu(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -307,7 +307,7 @@ def test_a_job_charges_its_time_with_the_gpus_held_for_every_gpu(
     assert result.gpu_seconds == 6.0
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_each_job_trains_into_a_fresh_directory(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     trainer = fake_trainer(tmp_path)
@@ -318,7 +318,7 @@ def test_each_job_trains_into_a_fresh_directory(tmp_path: Path) -> None:
     assert Path(first.snapshot.checkpoint.location).is_dir()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_failed_slime_run_names_its_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAKE_SLIME_FAIL", "train")
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
@@ -326,7 +326,7 @@ def test_a_failed_slime_run_names_its_log(tmp_path: Path, monkeypatch: pytest.Mo
         fake_trainer(tmp_path).train(GRPO, base, grpo_batch())
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_unchanged_weights_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAKE_SLIME_UNCHANGED", "1")
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
@@ -461,7 +461,7 @@ def test_teacher_scores_round_trip_through_the_slime_layout(tmp_path: Path) -> N
     assert read_samples(write_samples(tmp_path / "0.json", rows)) == privileged_batch().samples
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_self_distillation_trains_on_the_teacher_scores_the_samples_carry(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     result = fake_trainer(tmp_path).train(SELF_DISTILLATION, base, privileged_batch())
@@ -482,7 +482,7 @@ def test_self_distillation_without_teacher_scores_is_refused_before_any_run(tmp_
     assert not (tmp_path / "runs").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_sft_job_trains_on_demonstrations(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     result = fake_trainer(tmp_path).train(SFT, base, token_batch())
@@ -516,7 +516,7 @@ def test_a_teacher_equal_to_the_base_is_refused_before_any_run(tmp_path: Path) -
     assert not (tmp_path / "runs").exists()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_named_teacher_comes_from_the_settings(tmp_path: Path) -> None:
     base = hf_snapshot(write_checkpoint(tmp_path / "base"))
     teacher = write_checkpoint(tmp_path / "teacher")

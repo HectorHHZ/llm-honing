@@ -115,7 +115,7 @@ def test_a_missing_environment_is_refused_with_where_to_install_it(tmp_path: Pat
         pass
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_port_already_in_use_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HONING_GATEWAY_KEY", "g")
     with socket.socket() as taken:
@@ -132,7 +132,7 @@ def test_a_port_already_in_use_is_refused(tmp_path: Path, monkeypatch: pytest.Mo
             pass
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_proxy_sees_only_the_two_keys_under_names_of_their_own(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

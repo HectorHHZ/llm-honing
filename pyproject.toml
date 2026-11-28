@@ -35,6 +35,8 @@ dev = [
     "pre-commit>=3.7",
     "pytest>=8.0",
     "pytest-cov",
+    # Fails a pull request whose changed Python lines are less than 80 percent covered (CONTRIBUTING.md, Tests).
+    "diff-cover>=9",
     "ruff==0.17.3",
 ]
 # Diagram sources under system-design/ render with matplotlib alone.
@@ -168,10 +170,12 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
+# Every test declares exactly one kind: unit, functional, integration or gpu (CONTRIBUTING.md, Tests).
 markers = [
-    "unit: no I/O beyond a temporary directory; runs everywhere",
-    "integration: several components together; may start subprocesses",
-    "gpu: requires an accelerator; skipped in CI",
+    "unit: one piece of code, no process and no socket (the unit guard in tests/conftest.py fails one that does)",
+    "functional: one feature through its entry point (a command, a server, a runner), with fakes for what lies outside",
+    "integration: several planes or components together; may start processes and servers",
+    "gpu: requires an accelerator; skipped in CI, run on a GPU machine by the /gpu check (scripts/gpu)",
     "slow: takes more than roughly ten seconds",
     "live: calls real model APIs and costs money; skipped unless its key variables are set",
 ]
@@ -182,6 +186,10 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+# A block only a GPU reaches ends its first line with "# pragma: gpu". A gpu test covers it, in the GPU check.
+exclude_also = ["# pragma: gpu"]
+# About two points under main's 77 percent (CI, Python 3.12, 2026-11-27). Raise it as coverage grows.
+fail_under = 75
 
 [tool.mutmut]
 # Mutation testing (weekly CI job `mutation`): each module listed here must have its mutants killed by the tests

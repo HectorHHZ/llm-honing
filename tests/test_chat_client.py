@@ -104,12 +104,12 @@ def complete(chat: LiteLLMChatModel) -> ChatReply:
     return chat.complete(MESSAGES, max_tokens=64, temperature=0.5)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_client_implements_the_chat_model_protocol(stub: str) -> None:
     assert isinstance(client(stub)[0], protocols.ChatModel)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_reply_carries_the_text_and_the_token_counts(stub: str) -> None:
     chat, sleeps = client(stub, top_p=0.9, seed=7)
 
@@ -129,7 +129,7 @@ def test_a_reply_carries_the_text_and_the_token_counts(stub: str) -> None:
     assert sleeps == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_unset_sampling_settings_are_not_sent(stub: str) -> None:
     complete(client(stub)[0])
 
@@ -137,7 +137,7 @@ def test_unset_sampling_settings_are_not_sent(stub: str) -> None:
     assert "top_p" not in body and "seed" not in body
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_server_error_is_retried_then_succeeds(stub: str) -> None:
     Stub.statuses[:] = [503, 200]
     chat, sleeps = client(stub, retry_backoff_seconds=0.25)
@@ -149,7 +149,7 @@ def test_a_server_error_is_retried_then_succeeds(stub: str) -> None:
     assert sleeps == [0.25]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("status", [429, 500, 502, 503])
 def test_rate_limits_and_server_errors_are_retried(stub: str, status: int) -> None:
     Stub.statuses[:] = [status, 200]
@@ -160,7 +160,7 @@ def test_rate_limits_and_server_errors_are_retried(stub: str, status: int) -> No
     assert len(Stub.requests) == 2
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_timeout_is_retried(stub: str) -> None:
     Stub.delays_seconds[:] = [1.0]
     chat, sleeps = client(stub, timeout_seconds=0.2)
@@ -171,7 +171,7 @@ def test_a_timeout_is_retried(stub: str) -> None:
     assert len(sleeps) == 1
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_retries_stop_after_max_attempts(stub: str) -> None:
     Stub.statuses[:] = [503]
     chat, sleeps = client(stub, max_attempts=3, retry_backoff_seconds=1.0)
@@ -184,7 +184,7 @@ def test_retries_stop_after_max_attempts(stub: str) -> None:
     assert sleeps == [1.0, 2.0]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("status", "reported_status"),
     # 413 is the stub's code for a 400 that says the context window is exceeded.
@@ -204,7 +204,7 @@ def test_a_client_error_is_raised_without_a_retry(stub: str, status: int, report
     assert sleeps == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_missing_key_variable_fails_at_construction(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(KEY_ENV)
 
@@ -214,7 +214,7 @@ def test_a_missing_key_variable_fails_at_construction(stub: str, monkeypatch: py
     assert Stub.requests == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_key_variable_removed_after_construction_fails_before_any_request(
     stub: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -227,7 +227,7 @@ def test_a_key_variable_removed_after_construction_fails_before_any_request(
     assert Stub.requests == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_key_is_read_on_each_call_and_never_set_globally(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
     chat, _ = client(stub)
     complete(chat)
@@ -240,7 +240,7 @@ def test_the_key_is_read_on_each_call_and_never_set_globally(stub: str, monkeypa
     assert litellm.num_retries is None
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_cost_comes_from_the_bundled_price_map_without_a_remote_connection(
     stub: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -269,7 +269,7 @@ def test_cost_comes_from_the_bundled_price_map_without_a_remote_connection(
     assert (source["source"], source["is_env_forced"]) == ("local", True)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_server_named_by_api_base_has_no_known_cost(stub: str) -> None:
     # A local server under a hosted model's name is not billed at the hosted price.
     reply = complete(client(stub, PRICED_MODEL)[0])
@@ -278,7 +278,7 @@ def test_a_server_named_by_api_base_has_no_known_cost(stub: str) -> None:
     assert reply.cost_usd is None
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_model_priced_at_zero_has_no_known_cost(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
     # litellm prices ollama/ models at zero. The stub speaks OpenAI's format, not
     # Ollama's, so the zero price is substituted on an OpenAI-shaped call.
@@ -293,7 +293,7 @@ def test_a_model_priced_at_zero_has_no_known_cost(stub: str, monkeypatch: pytest
     assert reply.cost_usd is None
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_missing_provider_key_fails_on_the_first_attempt(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
     for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_BASE"):
         monkeypatch.delenv(name, raising=False)
@@ -310,7 +310,7 @@ def test_a_missing_provider_key_fails_on_the_first_attempt(stub: str, monkeypatc
     assert Stub.requests == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_keyless_local_server_is_reached_as_hosted_vllm(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
     for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_BASE", "HOSTED_VLLM_API_KEY"):
         monkeypatch.delenv(name, raising=False)
@@ -324,7 +324,7 @@ def test_a_keyless_local_server_is_reached_as_hosted_vllm(stub: str, monkeypatch
     assert sleeps == []
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_server_error_is_still_retried_when_the_key_is_set(stub: str, monkeypatch: pytest.MonkeyPatch) -> None:
     # With api_key_env set, litellm's default OPENAI_API_KEY is not needed, so a
     # 500 is an ordinary server error.
@@ -421,7 +421,7 @@ def test_the_client_uses_the_bundled_price_map_when_the_variable_is_unset(stub: 
     assert len(Stub.requests) == 1
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("status", [200, 400, 401, 503])
 def test_no_body_or_key_reaches_an_error_or_what_litellm_logs(
     stub: str, status: int, caplog: pytest.LogCaptureFixture, capfd: pytest.CaptureFixture[str]
@@ -444,7 +444,7 @@ def test_no_body_or_key_reaches_an_error_or_what_litellm_logs(
             assert secret not in text
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_settings_are_json_native_and_hold_no_key(stub: str) -> None:
     chat, _ = client(stub, top_p=0.9, seed=3)
 
@@ -456,7 +456,7 @@ def test_settings_are_json_native_and_hold_no_key(stub: str) -> None:
     assert settings["model"] == PRICED_MODEL and settings["api_key_env"] == KEY_ENV
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     "settings",
     [

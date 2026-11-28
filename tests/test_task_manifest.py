@@ -21,18 +21,21 @@ def _refusal(tmp_path: Path, lines: list[dict[str, object] | str]) -> str:
 # ---------------------------------------------------------------- acceptance: refused with the line number
 
 
+@pytest.mark.unit
 def test_a_duplicate_task_id_is_refused_with_both_line_numbers(tmp_path: Path) -> None:
     message = _refusal(tmp_path, [task_line("a"), "", task_line("b"), task_line("a")])
     assert message.startswith(f"{tmp_path / 'manifest.jsonl'}:4: ")
     assert "duplicate task_id 'a', first on line 1" in message
 
 
+@pytest.mark.unit
 def test_an_unknown_split_is_refused_with_the_line_number(tmp_path: Path) -> None:
     message = _refusal(tmp_path, [task_line("a"), task_line("b", split="test")])
     assert message.startswith(f"{tmp_path / 'manifest.jsonl'}:2: ")
     assert "split must be one of ['heldout', 'train', 'val'], got 'test'" in message
 
 
+@pytest.mark.unit
 def test_a_line_without_a_workspace_key_is_refused_with_the_line_number(tmp_path: Path) -> None:
     line = task_line("b")
     del line["workspace"]
@@ -41,6 +44,7 @@ def test_a_line_without_a_workspace_key_is_refused_with_the_line_number(tmp_path
     assert "missing keys ['workspace']" in message
 
 
+@pytest.mark.unit
 def test_a_workspace_that_does_not_exist_is_refused_with_the_line_number(tmp_path: Path) -> None:
     message = _refusal(tmp_path, [task_line("a"), task_line("b", workspace="nowhere")])
     assert message.startswith(f"{tmp_path / 'manifest.jsonl'}:2: ")
@@ -68,12 +72,14 @@ def test_a_workspace_that_does_not_exist_is_refused_with_the_line_number(tmp_pat
         (task_line(metadata=[1]), "metadata must be a JSON object"),
     ],
 )
+@pytest.mark.unit
 def test_a_malformed_line_is_refused_with_the_line_number(tmp_path: Path, line: object, reason: str) -> None:
     message = _refusal(tmp_path, [task_line("a"), line])
     assert message.startswith(f"{tmp_path / 'manifest.jsonl'}:2: ")
     assert reason in message
 
 
+@pytest.mark.unit
 def test_a_manifest_with_no_tasks_is_refused(tmp_path: Path) -> None:
     assert "the manifest has no tasks" in _refusal(tmp_path, ["", "  "])
 
@@ -81,6 +87,7 @@ def test_a_manifest_with_no_tasks_is_refused(tmp_path: Path) -> None:
 # ---------------------------------------------------------------- reading and selecting
 
 
+@pytest.mark.unit
 def test_a_suite_reads_every_field_and_selects_by_split_in_file_order(tmp_path: Path) -> None:
     (tmp_path / "hidden").mkdir()
     path = write_manifest(
@@ -108,6 +115,7 @@ def test_a_suite_reads_every_field_and_selects_by_split_in_file_order(tmp_path: 
         suite.entry("nope")
 
 
+@pytest.mark.unit
 def test_the_content_hash_changes_with_a_workspace_file_and_so_does_the_suite_checksum(tmp_path: Path) -> None:
     path = write_manifest(tmp_path, [task_line("a"), task_line("b")])
     (tmp_path / "workspaces" / "a" / "main.py").write_text("x = 1\n")
@@ -120,6 +128,7 @@ def test_the_content_hash_changes_with_a_workspace_file_and_so_does_the_suite_ch
     assert after.checksum != before.checksum
 
 
+@pytest.mark.unit
 def test_the_content_hash_covers_grader_files(tmp_path: Path) -> None:
     (tmp_path / "hidden").mkdir()
     path = write_manifest(tmp_path, [task_line("a", grader_files="hidden")])
@@ -131,6 +140,7 @@ def test_the_content_hash_covers_grader_files(tmp_path: Path) -> None:
 # ---------------------------------------------------------------- disjoint selections
 
 
+@pytest.mark.unit
 def test_selections_that_share_a_task_are_refused(tmp_path: Path) -> None:
     suite = load_task_suite(write_manifest(tmp_path, [task_line(f"v{n}", split="val") for n in range(4)]))
     val = suite.tasks("val")
@@ -140,12 +150,14 @@ def test_selections_that_share_a_task_are_refused(tmp_path: Path) -> None:
         suite.assert_disjoint(val, val)
 
 
+@pytest.mark.unit
 def test_a_held_out_task_may_not_be_selected(tmp_path: Path) -> None:
     suite = load_task_suite(write_manifest(tmp_path, [task_line("t"), task_line("h", split="heldout")]))
     with pytest.raises(ContractError, match="'h' is held out"):
         suite.assert_disjoint(suite.tasks("train"), suite.tasks("heldout"))
 
 
+@pytest.mark.unit
 def test_a_selected_task_must_be_in_the_suite(tmp_path: Path) -> None:
     suite = load_task_suite(write_manifest(tmp_path, [task_line("t")]))
     with pytest.raises(ContractError, match="not in the task suite"):
@@ -155,6 +167,7 @@ def test_a_selected_task_must_be_in_the_suite(tmp_path: Path) -> None:
 SEPARATORS = "next line\u0085and\u2028paragraph"
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("ending", ["\n", "\r\n"])
 def test_unicode_line_separators_inside_a_line_do_not_split_it(tmp_path: Path, ending: str) -> None:
     write_manifest(tmp_path, [task_line("a"), task_line("b")])  # creates the workspaces
@@ -167,6 +180,7 @@ def test_unicode_line_separators_inside_a_line_do_not_split_it(tmp_path: Path, e
     assert [entry.task_id for entry in suite.entries] == ["a", "b"]
 
 
+@pytest.mark.unit
 def test_a_bad_line_after_unicode_line_separators_is_reported_on_its_own_line(tmp_path: Path) -> None:
     write_manifest(tmp_path, [task_line("a")])
     path = tmp_path / "manifest.jsonl"
@@ -177,6 +191,7 @@ def test_a_bad_line_after_unicode_line_separators_is_reported_on_its_own_line(tm
     assert str(refused.value).startswith(f"{path}:2: not valid JSON")
 
 
+@pytest.mark.unit
 def test_an_integer_longer_than_python_converts_is_refused_with_the_line_number(tmp_path: Path) -> None:
     path = write_manifest(tmp_path, [task_line("a")])
     path.write_text(path.read_text() + '{"task_id": 1' + "0" * 5000 + "}\n")

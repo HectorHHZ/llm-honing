@@ -16,7 +16,6 @@ from unittest.mock import patch
 import pytest
 
 HERE = Path(__file__).parents[1] / "integrations/celeste-classic"
-pytestmark = pytest.mark.unit
 
 
 def compile_harness(tmp_path: Path, engine: bool = False) -> Path:
@@ -191,6 +190,7 @@ int main(int argc, char **argv) {
 
 
 @pytest.mark.parametrize("engine", [False, True], ids=["portable-production-loop", "original-engine"])
+@pytest.mark.functional
 def test_compiled_control_loop(tmp_path: Path, engine: bool) -> None:
     binary = compile_harness(tmp_path, engine)
     session = tmp_path / "session"
@@ -199,6 +199,7 @@ def test_compiled_control_loop(tmp_path: Path, engine: bool) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.unit
 def test_request_describes_release_budget_and_spike_directions() -> None:
     spec = importlib.util.spec_from_file_location("classic_controls_run", HERE / "run.py")
     assert spec and spec.loader
@@ -218,6 +219,7 @@ def load_run():
     return module
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("timeout", ["4000", "nan", "inf", "0", "-1"])
 def test_cli_invalid_timeout_rejects_before_side_effects(tmp_path: Path, timeout: str) -> None:
     run = load_run()
@@ -234,6 +236,7 @@ def test_cli_invalid_timeout_rejects_before_side_effects(tmp_path: Path, timeout
     assert not client.called and not native.called and not output.exists()
 
 
+@pytest.mark.unit
 def test_cli_timeout_boundary_propagates_full_native_margin(tmp_path: Path) -> None:
     run = load_run()
     argv = ["run.py", "--game", "unused-game", "--output", str(tmp_path / "run"), "--timeout", "3570"]

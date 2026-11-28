@@ -8,6 +8,8 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+import pytest
+
 from integrations.rea_issac import ui as server
 
 
@@ -42,6 +44,7 @@ class HTTPContracts(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, json.load(error)
 
+    @pytest.mark.functional
     def test_get_does_not_tick_and_invalid_step_is_atomic(self):
         before = self.session.engine.digest()
         for _ in range(3):
@@ -50,6 +53,7 @@ class HTTPContracts(unittest.TestCase):
             self.assertEqual(self.call("/api/step", body)[0], 400)
             self.assertEqual(self.session.engine.digest(), before)
 
+    @pytest.mark.functional
     def test_replay_export_import_and_playback(self):
         for _ in range(10):
             self.call("/api/step", {"action": {"move_x": 1, "shoot_y": -1}, "frames": 3})
@@ -62,6 +66,7 @@ class HTTPContracts(unittest.TestCase):
         self.assertTrue(meta["playback_complete"])
         self.assertEqual(self.call("/api/export")[1]["final_hash"], record["final_hash"])
 
+    @pytest.mark.functional
     def test_invalid_replay_preserves_current_run(self):
         self.call("/api/step", {"action": {"move_x": 1}, "frames": 3})
         record = self.call("/api/export")[1]
@@ -73,6 +78,7 @@ class HTTPContracts(unittest.TestCase):
         self.assertEqual(self.session.run, run)
         self.assertEqual(self.session.engine.digest(), before)
 
+    @pytest.mark.functional
     def test_reset_preserves_previous_artifacts(self):
         self.call("/api/step", {"action": {"move_x": 1}, "frames": 3})
         before = self.session.run

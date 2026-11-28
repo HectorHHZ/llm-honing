@@ -397,6 +397,7 @@ def _without_wall_clock(record: dict[str, object]) -> dict[str, object]:
     return record
 
 
+@pytest.mark.unit
 def test_the_same_seed_writes_the_same_commit_record(run: Run, tmp_path: Path) -> None:
     again = _campaign(tmp_path)
     assert [_without_wall_clock(r) for r in again.records] == [_without_wall_clock(r) for r in run.records]

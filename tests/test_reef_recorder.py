@@ -510,7 +510,7 @@ def test_the_model_runs_on_the_serving_thread_and_recording_never_does(serve: An
     assert len(fake_reef.payloads("s")) == 4
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_server_imports_no_reef_client_unless_asked_to_record() -> None:
     code = "import sys, honing.backends.jev.server as s; s.main(['--help'])"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=REPO)

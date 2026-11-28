@@ -184,7 +184,7 @@ def test_a_harness_the_match_cannot_read_is_refused_before_it_runs(spec: Harness
 # ------------------------------------------------------------------ the runner and the grader
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_round_is_played_with_the_scenario_the_harness_and_the_policys_server(tmp_path: Path) -> None:
     runner = _runner(tmp_path)
     spec = SEED.with_file("notes/aim.md", HarnessFile("instructions", "Aim first."))
@@ -217,7 +217,7 @@ def test_a_round_is_played_with_the_scenario_the_harness_and_the_policys_server(
     assert "won by a hit after 12.5 s" in (record.feedback or "")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(("server", "score"), [("strong", 1.0), ("weak", 0.0), ("even", 0.5)])
 def test_a_win_scores_1_a_loss_0_and_running_out_the_clock_half(tmp_path: Path, server: str, score: float) -> None:
     task = load_suite(SUITE_PATH).tasks("val")[0]
@@ -225,7 +225,7 @@ def test_a_win_scores_1_a_loss_0_and_running_out_the_clock_half(tmp_path: Path, 
     assert record.score == score
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_sampling_runner_draws_a_fresh_seed_for_every_round(tmp_path: Path) -> None:
     runner = _runner(tmp_path).sampling()
     task = load_suite(SUITE_PATH).tasks("train")[0]
@@ -241,7 +241,7 @@ def test_a_sampling_runner_draws_a_fresh_seed_for_every_round(tmp_path: Path) ->
     assert all(isinstance(s, int) for s in seeds) and seeds[0] != seeds[1]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_harness_the_match_refuses_is_a_campaign_rule_error(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FAKE_TANK_ERROR", "harness")
     task = load_suite(SUITE_PATH).tasks("val")[0]
@@ -249,7 +249,7 @@ def test_a_harness_the_match_refuses_is_a_campaign_rule_error(tmp_path: Path, mo
         asyncio.run(_runner(tmp_path).run(SEED, task, _policy("even")))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_an_over_long_state_scores_0_with_feedback_and_a_crash_is_an_error(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     task = load_suite(SUITE_PATH).tasks("val")[0]
     monkeypatch.setenv("FAKE_TANK_ERROR", "budget")
@@ -260,7 +260,7 @@ def test_an_over_long_state_scores_0_with_feedback_and_a_crash_is_an_error(tmp_p
         asyncio.run(run_graded(_runner(tmp_path), _grader(), SEED, task, _policy("even")))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_grader_refuses_a_round_of_another_scenario_or_a_teacher_round(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     task = load_suite(SUITE_PATH).tasks("val")[0]
     monkeypatch.setenv("FAKE_TANK_SEED", "9")
@@ -284,7 +284,7 @@ def test_a_jev_server_is_required(tmp_path: Path) -> None:
         asyncio.run(runner.run(SEED, load_suite(SUITE_PATH).tasks("val")[0], _policy("x")))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_gate_compares_candidate_and_incumbent_on_the_same_rounds(tmp_path: Path) -> None:
     tasks = load_suite(SUITE_PATH).tasks("val", limit=4)
     evaluation = EpisodeEvaluator(_runner(tmp_path), _grader(), tasks).evaluate(
@@ -325,7 +325,7 @@ class _SeatsAgree:
         return Grade(self.score(outcome.policy_checksum, seed - SEED_POOLS["val"].start))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_two_consecutive_gates_draw_disjoint_validation_seeds(tmp_path: Path) -> None:
     suite = load_suite(SUITE_PATH)
     gate = fresh_seed_gate(_runner(tmp_path), _grader(), suite, rounds=4)
@@ -341,7 +341,7 @@ def test_two_consecutive_gates_draw_disjoint_validation_seeds(tmp_path: Path) ->
     assert not set(SPLIT_SEEDS["val"]) & (played[0] | played[1])
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_gate_starts_at_the_configured_first_seed(tmp_path: Path) -> None:
     suite = load_suite(SUITE_PATH)
     incumbent = HoneRelease("r0000", _init("even"), None)
@@ -481,7 +481,7 @@ def test_a_gate_refuses_a_suite_line_it_could_play(tmp_path: Path, index: int, t
 # ------------------------------------------------------------------ training data
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_rollouts_are_the_policys_sampled_choices_rewarded_by_the_round(tmp_path: Path) -> None:
     runner = _runner(tmp_path)
     tasks = load_suite(SUITE_PATH).tasks("train", limit=2)
@@ -505,7 +505,7 @@ def test_rollouts_are_the_policys_sampled_choices_rewarded_by_the_round(tmp_path
         TankRolloutProvider(runner, _grader()).collect(tasks, _policy("strong"), None, None, 1)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_demonstrations_label_the_models_questions_with_the_teachers_answers(tmp_path: Path) -> None:
     runner = _runner(tmp_path)
     suite = load_suite(SUITE_PATH)
@@ -567,7 +567,7 @@ def _teacher_rounds(tmp_path: Path) -> list[tuple[int, str]]:
     return [(m["seed"], m["seat"]) for m in (json.loads(path.read_text()) for path in manifests)]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_demonstration_batch_after_the_first_plays_seeds_no_task_uses(tmp_path: Path) -> None:
     runner = _runner(tmp_path, concurrency=1)
     suite = load_suite(SUITE_PATH)
@@ -589,7 +589,7 @@ def test_every_demonstration_batch_after_the_first_plays_seeds_no_task_uses(tmp_
     assert not suite_seeds & set(DEMONSTRATION_SEEDS[:1000])
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_demonstrations_stop_when_the_fresh_seeds_run_out_and_refuse_a_seed_the_suite_plays(tmp_path: Path) -> None:
     runner = _runner(tmp_path)
     tasks = load_suite(SUITE_PATH).tasks("train", limit=2)
@@ -603,7 +603,7 @@ def test_demonstrations_stop_when_the_fresh_seeds_run_out_and_refuse_a_seed_the_
         TankDemonstrationProvider(runner, tasks, SEED, fresh_seeds=(900_001, 2001))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_every_attempt_tags_its_decisions_with_a_new_episode_and_its_task_harness_and_policy(tmp_path: Path) -> None:
     # The decision server records in Reef under ids derived from the episode tag (#223), so a retried task
     # must not reuse one. The runner is given no release, so it sets no release tag.

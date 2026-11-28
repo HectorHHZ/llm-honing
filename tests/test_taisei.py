@@ -69,6 +69,7 @@ def answer(request: dict) -> dict:
         "malformed_json",
     ],
 )
+@pytest.mark.unit
 def test_rejection_preserves_bytes_without_native_input(demo, tmp_path: Path, problem: str) -> None:
     observation = {"id": 1, "frame": 42}
     request = demo.request_for(observation, 60)
@@ -121,6 +122,7 @@ def test_rejection_preserves_bytes_without_native_input(demo, tmp_path: Path, pr
     assert "rejected" in json.loads((tmp_path / "decisions.jsonl").read_text())
 
 
+@pytest.mark.unit
 def test_rounded_distribution_and_tied_argmax(demo) -> None:
     request = demo.request_for({"id": 1, "frame": 42}, 60)
     response = answer(request)
@@ -128,6 +130,7 @@ def test_rounded_distribution_and_tied_argmax(demo) -> None:
     assert demo.checked_action(response, request) == ("right", 0.1111)
 
 
+@pytest.mark.unit
 def test_all_submitted_context_is_required(demo) -> None:
     request = demo.request_for({"id": 1, "frame": 42}, 60)
     assert set(request["parts"]) == {"essential"}
@@ -174,6 +177,7 @@ def native_parser(tmp_path_factory, repo_root: Path):
         '{"id":1,"action":"stop","frames":1}',
     ],
 )
+@pytest.mark.unit
 def test_native_accepts_canonical_commands(native_parser, text: str) -> None:
     assert native_parser(text.encode()) == 1
 
@@ -192,5 +196,6 @@ def test_native_accepts_canonical_commands(native_parser, text: str) -> None:
         '{"id":1,"action":"left","frames":60}garbage',
     ],
 )
+@pytest.mark.unit
 def test_native_rejects_stale_out_of_range_and_noncanonical_commands(native_parser, text: str) -> None:
     assert native_parser(text.encode()) == 0

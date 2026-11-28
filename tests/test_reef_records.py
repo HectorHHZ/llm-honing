@@ -33,6 +33,7 @@ def through_json(value: Any) -> Any:
     return json.loads(json.dumps(value, sort_keys=True))
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("log", FIXTURES, ids=lambda log: log.parent.name)
 @pytest.mark.parametrize("behavior", [True, False])
 def test_records_and_report_give_the_decision_logs_samples(log: Path, behavior: bool) -> None:
@@ -56,6 +57,7 @@ def test_records_and_report_give_the_decision_logs_samples(log: Path, behavior: 
     assert samples == decisions_from_log(log.parent, behavior=behavior, **kwargs)
 
 
+@pytest.mark.unit
 def test_a_record_reads_back_whole() -> None:
     row = rows(FIXTURES[0])[0]
     decision = RecordedDecision.from_row(row, TAGS)
@@ -72,6 +74,7 @@ def test_a_record_reads_back_whole() -> None:
     assert decision.payload()["metadata"] == {"tags": TAGS}
 
 
+@pytest.mark.unit
 def test_ids_are_stable_and_name_the_episode() -> None:
     # A changed derivation would orphan every stored record, so the value is pinned.
     assert decision_record_id("ep", "blue-3114-1:motion") == "482791861431155914b0c6f20fc3c8fb"
@@ -80,6 +83,7 @@ def test_ids_are_stable_and_name_the_episode() -> None:
     assert len(episode_report_id("ep")) == 32
 
 
+@pytest.mark.unit
 def test_a_report_reads_back_whole() -> None:
     logged = rows(FIXTURES[0])
     report = EpisodeReport.from_rows(logged, episode="ep", score=-0.5, feedback="lost", task="t")
@@ -98,15 +102,18 @@ def test_a_report_reads_back_whole() -> None:
         ({"episode": "ep", "task": " t"}, "task tag"),
     ],
 )
+@pytest.mark.unit
 def test_tags_are_refused(tags: dict[str, str], message: str) -> None:
     with pytest.raises(ContractError, match=message):
         RecordedDecision.from_row(rows(FIXTURES[0])[0], tags)
 
 
+@pytest.mark.unit
 def test_tag_headers() -> None:
     assert tag_headers({"policy": "c", "episode": "e"}) == {"x-reef-tag-episode": "e", "x-reef-tag-policy": "c"}
 
 
+@pytest.mark.unit
 def test_a_choice_outside_the_options_is_refused() -> None:
     row = rows(FIXTURES[0])[0]
     decision = RecordedDecision.from_row(row, TAGS)
@@ -116,6 +123,7 @@ def test_a_choice_outside_the_options_is_refused() -> None:
             decision.sample(chosen, reward=None, group=None, release_id=None, harness_id=None, behavior=False)
 
 
+@pytest.mark.unit
 def test_a_record_without_a_probability_per_option_is_refused() -> None:
     row = rows(FIXTURES[0])[0]
     key = next(iter(row["questions"]))
@@ -133,6 +141,7 @@ def test_a_record_without_a_probability_per_option_is_refused() -> None:
         (lambda p: p.pop("metadata"), "metadata.tags"),
     ],
 )
+@pytest.mark.unit
 def test_another_format_is_refused(change: Any, message: str) -> None:
     payload = through_json(RecordedDecision.from_row(rows(FIXTURES[0])[0], TAGS).payload())
     change(payload)
@@ -140,6 +149,7 @@ def test_another_format_is_refused(change: Any, message: str) -> None:
         RecordedDecision.from_payload(payload)
 
 
+@pytest.mark.unit
 def test_a_report_is_refused() -> None:
     with pytest.raises(ContractError, match="each record once"):
         EpisodeReport(episode="ep", score=1.0, decisions=(("a", {"q": "x"}), ("a", {"q": "y"})))
@@ -151,6 +161,7 @@ def test_a_report_is_refused() -> None:
         EpisodeReport.from_payload(payload)
 
 
+@pytest.mark.unit
 def test_batches_keep_order_under_both_limits() -> None:
     records = [
         {"agent_record_id": str(i), "request_type": "inference", "payload": {"x": "y" * 100}} for i in range(25)

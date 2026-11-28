@@ -137,6 +137,7 @@ def damage(response: dict, problem: str) -> None:
         raise AssertionError(problem)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("problem", PROBLEMS)
 def test_rejection_does_not_step(adapter, tmp_path, problem):
     state = {"id": 7, "tick": 30}
@@ -166,6 +167,7 @@ def test_rejection_does_not_step(adapter, tmp_path, problem):
     assert (tmp_path / artifact["responseRawFile"]).read_bytes()
 
 
+@pytest.mark.unit
 def test_rounding_ties_optional_removal(adapter):
     request = adapter.request_for({"id": 7}, 15)
     request["parts"]["memory"] = ["optional old history"]
@@ -176,6 +178,7 @@ def test_rounding_ties_optional_removal(adapter):
     assert adapter.checked_action(response, request) == ("right", 0.1667)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("raw", [b"not json", b"[]", b'{"id":NaN}', b'{"id":1e999}'])
 def test_raw_invalid_json_preserved(adapter, tmp_path, monkeypatch, raw):
     from decision import DecisionClient

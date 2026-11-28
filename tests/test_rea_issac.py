@@ -216,7 +216,7 @@ def test_actual_game_with_http_model_and_verified_ui_replay(tmp_path: Path, deci
         match.run_match(ReaIssacScenario(), out, SEED)
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("field", ["state", "result", "action", "request", "harness", "replay"])
 def test_real_replay_rejects_tampering(tmp_path: Path, decision_server: Any, field: str) -> None:
     out = tmp_path / "tampered"
@@ -317,7 +317,7 @@ def test_real_subprocess_runner_and_grader(tmp_path: Path, decision_server: Any)
         asyncio.run(grader.grade(suite.tasks("val")[0], record.outcome))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_base_import_and_cli_help_need_no_model_packages() -> None:
     code = (
         "import sys; sys.modules['torch']=None; sys.modules['numpy']=None; "

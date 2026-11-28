@@ -23,7 +23,6 @@ from tests.conftest import load_script
 HERE = Path(__file__).parents[1] / "integrations/hallowdale"
 run = load_script("integrations/hallowdale/run.py")
 encode = load_script("integrations/hallowdale/encode.py")
-pytestmark = pytest.mark.unit
 
 
 def observation(identity: int = 1, tick: int = 0) -> dict[str, Any]:
@@ -129,6 +128,7 @@ def damage(response: dict[str, Any], request: dict[str, Any], kind: str) -> None
         raise AssertionError(kind)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "kind",
     [
@@ -162,6 +162,7 @@ def test_rejected_response_keeps_its_bytes_and_plays_nothing(tmp_path: Path, kin
     assert record["responseRawFile"] == "responses/000001.raw" and "ValueError" in record["error"]
 
 
+@pytest.mark.unit
 def test_model_argmax_is_the_native_command(tmp_path: Path) -> None:
     game = PausedGame(tmp_path)
     before = observation()
@@ -172,6 +173,7 @@ def test_model_argmax_is_the_native_command(tmp_path: Path) -> None:
     assert after["frame"] == {"id": 2, "tick": 12, "simulation_time": 21.8}
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("choice", "action"),
     [("short_jump", "jump"), ("short_jump_left", "jump_left"), ("short_jump_right", "jump_right")],
@@ -181,15 +183,18 @@ def test_low_hop_choices_set_the_jump_hold(choice: str, action: str) -> None:
     assert run.native_command(choice, 2)["jump_frames"] == 2
 
 
+@pytest.mark.unit
 def test_full_jump_choices_carry_no_jump_hold() -> None:
     assert run.native_command("jump_left", 12) == {"action": "jump_left", "frames": 12}
 
 
+@pytest.mark.unit
 def test_unoffered_choice_has_no_native_command() -> None:
     with pytest.raises(ValueError, match="Not an offered action"):
         run.native_command("pause", 12)
 
 
+@pytest.mark.unit
 def test_request_carries_only_the_visible_state() -> None:
     request = run.request_for(observation(), 12)
     prompt, state_text = request["parts"]["essential"]
@@ -202,6 +207,7 @@ def test_request_carries_only_the_visible_state() -> None:
     assert "world_from_screen" not in state_text and "forgotten_deans-pass" not in state_text
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "change",
     [
@@ -218,17 +224,20 @@ def test_only_the_visible_profile_can_reach_a_model(change: dict[str, Any]) -> N
         run.require_visible({**observation(), **change})
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(("timeout", "seconds"), [(180, 210), (0.1, 31), (299.5, 330), (3570, 3600)])
 def test_native_idle_deadline_is_the_model_timeout_plus_a_margin(timeout: float, seconds: int) -> None:
     assert run.native_idle_seconds(timeout) == seconds
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("timeout", [True, 0, -1, float("inf"), float("nan"), 3570.1, "300"])
 def test_invalid_model_timeout_is_refused(timeout: Any) -> None:
     with pytest.raises(ValueError, match="timeout"):
         run.native_idle_seconds(timeout)
 
 
+@pytest.mark.unit
 def test_inherited_bridge_settings_cannot_change_what_the_model_sees(tmp_path: Path) -> None:
     game = run.Game(tmp_path / "game", tmp_path / "session", idle_seconds=210, cell_pixels=40)
     inherited = {
@@ -255,6 +264,7 @@ ACK = {
 }
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "change",
     [
@@ -274,6 +284,7 @@ def test_acknowledgement_of_another_window_stops_the_run(change: dict[str, Any])
         run.check_transition(observation(1, 0), observation(2, 12), command, {**ACK, **change})
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("after", [observation(3, 12), observation(2, 13)])
 def test_observation_that_did_not_advance_exactly_stops_the_run(after: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="advance"):
@@ -582,6 +593,7 @@ def test_rejected_http_response_leaves_no_result_and_no_command(stubs: Path, tmp
     assert not (output / "result.json").exists() and not (output / "action.json").exists()
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "arguments", [["--timeout", "0"], ["--timeout", "3571"], ["--frames", "121"], ["--decisions", "0"]]
 )
@@ -601,10 +613,12 @@ def capture_session(tmp_path: Path, frames: int, names: list[str]) -> Path:
     return tmp_path
 
 
+@pytest.mark.unit
 def test_capture_with_every_frame_can_be_encoded(tmp_path: Path) -> None:
     assert encode.validate_capture(capture_session(tmp_path, 2, ["000000.png", "000001.png"])) == 2
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("names", [["000000.png"], ["000000.png", "000002.png"], []])
 def test_capture_with_missing_frames_is_refused(tmp_path: Path, names: list[str]) -> None:
     with pytest.raises(ValueError, match="contiguous"):
@@ -619,6 +633,7 @@ def test_review_sample_passes_its_offline_check() -> None:
     assert json.loads(result.stdout)["checks"] == "passed"
 
 
+@pytest.mark.unit
 def test_request_builder_does_not_modify_the_observation() -> None:
     before = observation()
     snapshot = copy.deepcopy(before)

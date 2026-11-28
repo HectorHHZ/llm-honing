@@ -97,6 +97,7 @@ def test_the_diagram_source_writes_beside_itself(repo_root: Path, name: str) -> 
     assert "/tmp/" not in source and "/home/" not in source
 
 
+@pytest.mark.functional
 @pytest.mark.slow
 @pytest.mark.parametrize("name", DIAGRAMS)
 def test_the_diagram_regenerates(repo_root: Path, tmp_path: Path, name: str) -> None:

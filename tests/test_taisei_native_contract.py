@@ -54,6 +54,7 @@ def command_probe(tmp_path_factory):
         ("stop", 0),
     ],
 )
+@pytest.mark.functional
 def test_actual_native_masks(command_probe, action, direction):
     command = json.dumps({"id": 7, "action": action, "frames": 120}, separators=(",", ":"))
     result = subprocess.check_output([command_probe, "command", command], text=True)
@@ -72,26 +73,31 @@ def test_actual_native_masks(command_probe, action, direction):
         '{"id":7,"action":"right","frames":30}garbage',
     ],
 )
+@pytest.mark.functional
 def test_actual_native_command_rejection(command_probe, command):
     assert subprocess.run([command_probe, "command", command]).returncode == 1
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("value", ["", "-1", "+1", "nan", "inf", "1.5", "0", " 1", "18446744073709551616"])
 def test_native_watchdog_rejects_bad_environment(command_probe, value):
     assert subprocess.run([command_probe, "timeout", value]).returncode == 1
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("value", ["1", "330000", "18446744073709551615"])
 def test_native_watchdog_accepts_uint64_milliseconds(command_probe, value):
     assert subprocess.check_output([command_probe, "timeout", value], text=True) == value
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf"), 1e308, 2**64])
 def test_http_watchdog_validation(timeout):
     with pytest.raises(ValueError):
         demo.idle_timeout_milliseconds(timeout)
 
 
+@pytest.mark.unit
 def test_http_watchdog_margin():
     assert demo.idle_timeout_milliseconds(300) == 330000
     assert demo.idle_timeout_milliseconds(0.0001) == 30001
@@ -129,6 +135,7 @@ def assert_reaped(pid_path):
         os.kill(pid, 0)
 
 
+@pytest.mark.functional
 def test_display_waits_for_slow_complete_readiness(fake_display):
     with open(os.devnull, "wb") as log:
         started = time.monotonic()
@@ -142,6 +149,7 @@ def test_display_waits_for_slow_complete_readiness(fake_display):
     assert_reaped(fake_display)
 
 
+@pytest.mark.functional
 @pytest.mark.parametrize("mode,error", [("exit", RuntimeError), ("bad", RuntimeError), ("hang", TimeoutError)])
 def test_display_failure_reaps_owned_child(fake_display, monkeypatch, mode, error):
     monkeypatch.setenv("DISPLAY_TEST_MODE", mode)
@@ -150,6 +158,7 @@ def test_display_failure_reaps_owned_child(fake_display, monkeypatch, mode, erro
     assert_reaped(fake_display)
 
 
+@pytest.mark.functional
 def test_start_failure_cleans_display_and_propagates_timeout(fake_display, monkeypatch, tmp_path):
     monkeypatch.setattr(demo.DecisionClient, "health", lambda _: {"ready": True})
     seen = {}
@@ -179,6 +188,7 @@ def test_start_failure_cleans_display_and_propagates_timeout(fake_display, monke
     assert_reaped(fake_display)
 
 
+@pytest.mark.unit
 def test_request_text_describes_actual_movement_window():
     state = {"id": 7, "frame": 60, "player": {"x": 10, "y": 20}}
     request = demo.request_for(state, 30)

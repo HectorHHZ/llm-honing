@@ -101,7 +101,7 @@ def test_an_unknown_task_or_a_bad_suite_line_is_refused(tmp_path: Path) -> None:
 # ------------------------------------------------------------------ the runner
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_runner_plays_the_scenario_against_the_policy_s_server(tmp_path: Path) -> None:
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"))
     task = load_suite(SUITE_PATH).tasks("val")[1]
@@ -125,7 +125,7 @@ def test_the_runner_plays_the_scenario_against_the_policy_s_server(tmp_path: Pat
     assert outcome.transcript_location.endswith("decisions.jsonl")  # type: ignore[union-attr]
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_harness_files_reach_the_match_as_controller_and_questions(tmp_path: Path) -> None:
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"))
     spec = HarnessSpec(
@@ -158,7 +158,7 @@ def test_the_runner_refuses_another_agent_or_a_language_model_endpoint(tmp_path:
         asyncio.run(runner.run(SPEC, task, _policy("a")))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_runner_caps_how_many_matches_run_at_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAKE_MATCH_SECONDS", "0.3")
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"), concurrency=2)
@@ -173,7 +173,7 @@ def test_the_runner_caps_how_many_matches_run_at_once(tmp_path: Path, monkeypatc
     assert peak <= 2
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_one_runner_serves_one_gate_after_another(tmp_path: Path) -> None:
     # A campaign calls asyncio.run once per gate; the second must not wait on the first loop's slots.
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"), concurrency=1)
@@ -190,7 +190,7 @@ def test_one_runner_serves_one_gate_after_another(tmp_path: Path) -> None:
 # ------------------------------------------------------------------ the grader
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(
     ("url", "score"),
     [("http://strong:1", 1.0), ("http://weak:1", 0.0), ("http://even:1", 0.5), ("http://strong-unended:1", 0.5)],
@@ -203,7 +203,7 @@ def test_the_grade_is_the_match_result(tmp_path: Path, url: str, score: float) -
     assert "Credits gained 5200" in (record.feedback or "") and "Commands submitted 40" in (record.feedback or "")
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_a_failed_match_is_not_graded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAKE_MATCH_EXIT", "3")
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"))
@@ -211,7 +211,7 @@ def test_a_failed_match_is_not_graded(tmp_path: Path, monkeypatch: pytest.Monkey
         asyncio.run(run_graded(runner, _grader(), SPEC, load_suite(SUITE_PATH).tasks("val")[0], _policy("a")))
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize(("marker", "message"), [("audit-fails", "audit failed"), ("replay-fails", "did not verify")])
 def test_a_match_that_fails_its_checks_is_not_graded(tmp_path: Path, marker: str, message: str) -> None:
     runner = _runner(tmp_path, _endpoints(a="http://strong:1"))
@@ -225,7 +225,7 @@ def test_a_match_that_fails_its_checks_is_not_graded(tmp_path: Path, marker: str
 # ------------------------------------------------------------------ through the gate's evaluator
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 def test_the_gate_s_evaluator_scores_candidate_and_incumbent_on_the_same_matches(tmp_path: Path) -> None:
     runner = _runner(tmp_path, _endpoints(cand="http://strong:1", inc="http://weak:1"))
     tasks = load_suite(SUITE_PATH).tasks("val", limit=4)

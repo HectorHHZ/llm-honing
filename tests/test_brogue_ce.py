@@ -11,6 +11,7 @@ import pytest
 from integrations.brogue_ce.engine import BrogueSession, Observation, _Display
 
 
+@pytest.mark.unit
 def test_ai_observation_uses_map_coordinates() -> None:
     rows = [""] * 34
     rows[0] = "@: You (lit)         You hear a sound."

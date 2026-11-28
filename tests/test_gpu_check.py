@@ -19,7 +19,7 @@ def test_every_pull_request_waits_for_the_gpu_check() -> None:
     assert "success" not in status
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @pytest.mark.parametrize("script", ["setup.sh", "check.sh"])
 def test_the_scripts_parse(script: str) -> None:
     subprocess.run(["bash", "-n", str(ROOT / "scripts" / "gpu" / script)], check=True)
