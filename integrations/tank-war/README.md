@@ -326,6 +326,8 @@ The output includes `manifest.json` (scenario, model and source/harness hashes),
 the round ends, the manifest records the SHA-256 of those three files and of
 `states.jsonl` under `outputs`. Honing's trace loader
 (`honing/backends/tank/traces.py`) refuses a run whose files do not match it.
+Each trace it loads has a `state_ref`, `states.jsonl:<line>`, the line of its
+decision's raw state, which `state_at` in `raw_states.py` reads back.
 
 | Harness file           | Kind         | Purpose                                                             |
 | ---------------------- | ------------ | ------------------------------------------------------------------- |
@@ -396,6 +398,7 @@ From this integration directory:
 node scripts/raw-states.mjs roundtrip runs/r1       # re-render every row's context and compare it byte for byte
 node scripts/raw-states.mjs replay runs/r1 --to=40  # play again from the seed, checking each state hash up to decision 40
 node scripts/raw-states.mjs label runs/r1           # write labels.jsonl, the planner teacher's answer to every question
+node scripts/raw-states.mjs label runs/r1 --out=labels  # write labels/r1/labels.jsonl instead, leaving the run as it is
 node scripts/raw-states.mjs render < items.jsonl    # re-render a batch of states under any harness, in one process
 ```
 
