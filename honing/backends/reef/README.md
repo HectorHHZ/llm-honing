@@ -1,9 +1,11 @@
 # Reef backend
 
 Honing records its decisions and episode grades in Reef and trains on Reef's
-job data (#137). Reef runs as its own service in its own Python 3.12
-environment. Honing reaches it only from this package, through
-`reef-client` (`pip install -e ".[reef]"`), and never imports `reef`.
+job data (#137). Its chat calls can go through Reef, which records them too.
+Reef runs as its own service in its own Python 3.12 environment. Honing
+reaches it only from this package, through `reef-client`
+(`pip install -e ".[reef]"`) or Reef's OpenAI-compatible routes, and never
+imports `reef`.
 
 ## Records
 
@@ -181,6 +183,66 @@ consumed. Reef then ends the job with nothing published.
   a move the gate rejects never trains again, even after a restart.
 - How many episodes a batch holds is Reef's `pipeline.sample2job.job_samples`.
 
+## Chat calls through Reef
+
+`chat.py` (#224) sends chat calls through Reef, which records each one
+itself. A `ReefChatRoute` names Reef's root URL, a scenario and Honing's tags.
+Its `base_url`, `<url>/reef/scenarios/<scenario>/v1`, is Reef's
+OpenAI-compatible route for that scenario, and the key a client sends there is
+Reef's token, read from `REEF_TOKEN`. Reef forwards the call to the model its
+deployment names, with the provider key that only Reef holds, stores the
+exchange as an inference record of the scenario, and answers with the
+provider's reply and the record's id in `x-reef-agent-record-id`. A call's
+`x-reef-tag-*` headers become the record's `metadata.tags`.
+
+Nothing goes through Reef unless a config names a route:
+
+- **Harness methods' `ChatModel`.** The factory
+  `honing.backends.reef.chat:chat_model` builds a `LiteLLMChatModel` from its
+  fields. With `reef`, the client calls the route with Reef's token and sends
+  the route's tags as headers (`extra_headers`), so it names no `api_base` or
+  `api_key_env` of its own. `model` only picks litellm's provider
+  (`hosted_vllm/<name>`): Reef asks its upstream for
+  `inference.upstream-model`, whatever name the client sends.
+- **Policies behind `llm_gateway`.** `honing.backends.llm_gateway:endpoints`
+  takes the same `reef`. A policy's endpoint is then the route's URL and its
+  key is Reef's token, while its snapshot and checksum stay the model's. A
+  Reef deployment forwards to one model, so the endpoints hold one. The agents
+  that call a policy (OpenHands, pi) add no headers, so these records carry no
+  tags, the route takes none, and the scenario names the calls.
+- **SGLang.** A model on an SGLang server goes through Reef as a gateway model
+  whose `base_url` is the server's `/v1`, or as a `ChatModel` with the server as
+  Reef's upstream. `SGLangPolicyEndpoints` starts a server for each checkpoint
+  on a port of its own, which one Reef upstream cannot follow, so it has no
+  route.
+
+```bash
+# Reef in front of an OpenAI-compatible server, then the scenario the calls go to.
+REEF_TOKEN=reef-local reef serve --inference.upstream-url http://gpu-node:30000 --inference.upstream-model honed
+curl -X POST http://127.0.0.1:8900/reef/scenarios -H "Authorization: Bearer reef-local" \
+  -H "Content-Type: application/json" -d '{"name": "reflection"}'
+```
+
+A pipeline config's `chat` component that sends its calls to that scenario:
+
+```json
+{
+  "factory": "honing.backends.reef.chat:chat_model",
+  "args": {
+    "model": "hosted_vllm/honed",
+    "reef": {"url": "http://127.0.0.1:8900", "scenario": "reflection", "tags": {"game": "tank"}}
+  }
+}
+```
+
+The scenario must exist first: Reef answers 404 for an unknown one, which the
+client does not retry. A provider key goes in Reef's
+`inference.upstream-api-key` (or `REEF_UPSTREAM_API_KEY`), never in Honing's
+config. `tests/test_reef_chat.py` sends a `ChatModel` call and a gateway
+policy's call through a real Reef to the stand-in server in
+`tests/fakes/chat_upstream.py`, and reads each record back, the
+`ChatModel`'s with its tags.
+
 ## The Reef code each module follows
 
 Reef [`bc8c150`](https://github.com/Human-Agent-Society/reef/tree/bc8c15081bfdbd2ea0a4ceacc045545f020da668),
@@ -199,3 +261,5 @@ A pull request that pins a later Reef updates these links.
 | `reporter.py`, `ReefReporter`, `ReefReportingGrader` | reef-client's [`ReefClient.report`](https://github.com/Human-Agent-Society/reef-client/blob/91af039292daa7392142b20a693a8dbf3e31cad3/reef_client/client.py#L77), Reef's [`POST /reef/report`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/routes/records.py#L96) and [`validate_record`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/ingest.py#L82) | Retries without a limit, and waits for missing references before it counts them |
 | `tests/fakes/reef_recipe.py`, `EpisodeReportRecipe` | [`Recipe.report_type`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/recipe/base.py#L118) | Test only: records, trains nothing |
 | `tests/fakes/reef.py`, `FakeReef` | [`import_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/request_handling.py#L106), [`accept_records`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/dispatcher.py#L1022), [`RecordStore`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/storage/scenario/records.py#L54) | The import and report routes; no report type, recipe, storage or training |
+| `chat.py`, `ReefChatRoute` | [`scenario_inference`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/inference_service.py#L876), [`InferenceReplica.answer`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/inference_service.py#L640), [`parse_request_headers`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/api/wire.py#L47) | Sends only Honing's tags (`TAG_NAMES`), checked as a decision record's are |
+| `chat.py`, `chat_model`, and `GatewayEndpoints` with `reef` in `honing/backends/llm_gateway/models.py` | The scenario URL of an installed harness's model binding ([`scenario_url`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/control/operations/harness.py#L99)), which a client calls with its own token, and Reef's [`InferenceProxyRuntime`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/inference/http.py#L245), which forwards the call | The URL ends in `/v1`, as an OpenAI client expects, and the `ChatModel` also sends its tags |

@@ -6,15 +6,20 @@ stand-in snapshot whose checksum comes from the URL and model name. That is
 enough to run and gate harness moves against it; training, pruning, or
 quantizing it means nothing. Core has no weight format for such models, so the
 stand-in reuses the master format and marks its location ``gateway://``.
+
+With a Reef route, the endpoints send the policy's calls through Reef, which
+records each one and forwards it to the model (``honing/backends/reef/chat.py``,
+#224). The snapshot and its checksum stay the same, since the model does.
 """
 
 from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from honing.backends.reef.chat import ReefChatRoute
 from honing.core import (
     MASTER_WEIGHT_FORMAT,
     ArchitectureSpec,
@@ -104,16 +109,31 @@ class GatewayModelSource:
 class GatewayEndpoints:
     """Satisfies :class:`~honing.core.PolicyEndpoints` for gateway models.
 
+    With ``reef``, a policy's endpoint is the route's URL, and its key is Reef's
+    token: Reef forwards each call to the model its deployment names, with the
+    provider's key, and records it in the route's scenario. Reef's deployment
+    names one model, so the endpoints then hold one. The agents that call a
+    policy add no headers, so the route carries no tags, and its scenario
+    names the calls. This follows the model binding Reef gives an installed harness
+    (``scenario_url``, reef/control/operations/harness.py, Reef bc8c150): the
+    scenario's URL, called with the client's own token. Differs: the URL ends
+    in ``/v1``, as the agents' OpenAI clients expect.
+
     Args:
         *models: The gateway models a campaign may run against.
+        reef: The Reef route the calls go through, or None to call each model's URL.
 
     Raises:
-        ContractError: No model was given.
+        ContractError: No model was given, or a route holds tags or comes with more than one model.
     """
 
-    def __init__(self, *models: GatewayModel) -> None:
+    def __init__(self, *models: GatewayModel, reef: ReefChatRoute | None = None) -> None:
         require(len(models) > 0, "GatewayEndpoints needs at least one model")
+        if reef is not None:
+            require(len(models) == 1, "Reef forwards every call to the one model its deployment names")
+            require(not reef.tags, "an agent sends no Reef tags, so a gateway's Reef route takes none")
         self._models = {model.checksum: model for model in models}
+        self._reef = reef
 
     def resolve(self, policy: PolicyRef) -> PolicyEndpoint:
         """Returns the endpoint serving ``policy``.
@@ -124,7 +144,8 @@ class GatewayEndpoints:
         Raises:
             ContractError: No gateway model has that checksum.
         """
-        return self.model(policy).endpoint()
+        endpoint = self.model(policy).endpoint()
+        return endpoint if self._reef is None else replace(endpoint, base_url=self._reef.base_url)
 
     def model(self, policy: PolicyRef) -> GatewayModel:
         """Returns the gateway model behind ``policy``, for a runner that needs its key and prices.
@@ -151,7 +172,8 @@ class GatewayEndpoints:
         Raises:
             ContractError: No gateway model has that checksum.
         """
-        return self.model(policy).api_key_env
+        model = self.model(policy)
+        return model.api_key_env if self._reef is None else self._reef.token_env
 
 
 def model_source(context: object, **model: object) -> GatewayModelSource:
@@ -167,17 +189,19 @@ def model_source(context: object, **model: object) -> GatewayModelSource:
     return GatewayModelSource(_shared_model(context, model))
 
 
-def endpoints(context: object, **model: object) -> GatewayEndpoints:
+def endpoints(context: object, reef: Mapping[str, object] | None = None, **model: object) -> GatewayEndpoints:
     """Builds the endpoints for a pipeline config, from the same fields as :func:`model_source`.
 
     Args:
         context: The pipeline context.
+        reef: :class:`~honing.backends.reef.chat.ReefChatRoute` fields, to send the calls through Reef.
         **model: :class:`GatewayModel` fields.
 
     Returns:
         The endpoints.
     """
-    return GatewayEndpoints(_shared_model(context, model))
+    route = None if reef is None else ReefChatRoute(**reef)  # type: ignore[arg-type]
+    return GatewayEndpoints(_shared_model(context, model), reef=route)
 
 
 def _shared_model(context: object, fields: Mapping[str, object]) -> GatewayModel:

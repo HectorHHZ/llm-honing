@@ -59,6 +59,7 @@ def test_a_call_sends_one_attempt_with_the_settings_and_returns_the_text_and_tok
             "timeout": 9,
             "num_retries": 0,
             "max_retries": 0,
+            "extra_headers": None,
         }
     ]
     assert sleeps == []

@@ -28,6 +28,7 @@ from honing.backends.pi import (
     settings_file,
 )
 from honing.backends.pi.e2e import runner as runner_factory
+from honing.backends.reef import ReefChatRoute
 from honing.core import (
     ContractError,
     EpisodeOutcome,
@@ -193,6 +194,25 @@ def test_a_missing_api_key_is_refused_before_the_agent_starts(tmp_path: Path, mo
         _run(_runner(tmp_path))
 
     assert not (tmp_path / "workspaces").exists()
+
+
+@pytest.mark.integration  # starts the stand-in worker
+def test_through_reef_the_agent_calls_reefs_route_with_reefs_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("REEF_TOKEN", "reef-token-456")
+    route = ReefChatRoute("http://127.0.0.1:8977", "officeqa")
+
+    outcome = _run(_runner(tmp_path, endpoints=GatewayEndpoints(MODEL, reef=route)))
+
+    answer = json.loads(outcome.final_output)
+    provider = answer["models"]["providers"]["honing"]
+    assert (provider["baseUrl"], provider["apiKey"]) == (
+        "http://127.0.0.1:8977/reef/scenarios/officeqa/v1",
+        "$REEF_TOKEN",
+    )
+    assert answer["key_present"] is True
+    assert outcome.policy_checksum == MODEL.checksum
 
 
 class _Endpoints:

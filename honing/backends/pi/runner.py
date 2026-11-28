@@ -256,7 +256,7 @@ class PiEpisodeRunner:
         endpoints = unmetered(self._endpoints)
         if isinstance(endpoints, GatewayEndpoints):
             model = endpoints.model(policy)
-            key = model.api_key_env
+            key = endpoints.api_key_env(policy)  # Reef's token when the calls go through Reef
             if key is not None and not (self._environment.get(key) or os.environ.get(key)):
                 raise ContractError(f"{model.model} needs its API key in the environment variable {key}")
             access["api_key_env"] = key

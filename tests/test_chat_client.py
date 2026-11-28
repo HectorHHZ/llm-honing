@@ -12,6 +12,7 @@ import time
 import traceback
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -135,6 +136,31 @@ def test_unset_sampling_settings_are_not_sent(stub: str) -> None:
 
     [(_, _, body)] = Stub.requests
     assert "top_p" not in body and "seed" not in body
+
+
+@pytest.mark.unit
+def test_extra_headers_go_with_the_call_and_none_go_without_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def completion(**arguments: object) -> object:
+        calls.append(arguments)
+        usage = SimpleNamespace(prompt_tokens=1, completion_tokens=1)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="hello"))], usage=usage)
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    headers = {"x-reef-tag-task": "t1"}
+
+    complete(LiteLLMChatModel(LOCAL_MODEL, api_base="http://127.0.0.1:1/v1", extra_headers=headers))
+    complete(LiteLLMChatModel(LOCAL_MODEL, api_base="http://127.0.0.1:1/v1"))
+
+    assert [call["extra_headers"] for call in calls] == [headers, None]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("headers", [{"x-reef-tag-task": 1}, ["x-reef-tag-task"]])
+def test_extra_headers_must_map_names_to_strings(headers: object) -> None:
+    with pytest.raises(ContractError, match="extra_headers"):
+        LiteLLMChatModel(LOCAL_MODEL, extra_headers=headers)  # type: ignore[arg-type]
 
 
 @pytest.mark.functional
