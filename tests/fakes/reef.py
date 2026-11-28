@@ -1,4 +1,4 @@
-"""Stands in for Reef's record import route, ``POST /reef/records/batch``, with Reef's id rules.
+"""Stands in for Reef's record import route, ``POST /reef/records/batch``, and its report route, ``POST /reef/report``.
 
 Follows Reef's ``import_records`` (reef/api/request_handling.py), ``accept_records``
 (reef/control/dispatcher.py) and ``RecordStore`` (reef/storage/scenario/records.py),
@@ -10,17 +10,30 @@ Reef bc8c150:
 - a batch is stored whole or not at all;
 - an identical resend returns the stored receipt, and the same id with other content,
   stored or earlier in the batch, is a 409;
-- ``x-reef-tag-*`` headers are merged into an inference's ``payload.metadata.tags``.
+- ``x-reef-tag-*`` headers are merged into an inference's ``payload.metadata.tags``;
+- a report is checked as a record-only recipe checks it (no report type): a client
+  ``agent_record_id`` or a drawn one, a finite number or no ``score``, a string or
+  object ``feedback``, an object ``metadata``, and unique ``references`` that each
+  name a stored inference of the scenario, or a 400 with Reef's message. Its payload
+  is stored as Reef normalizes it (``ReportPayload.to_dict``), so an identical
+  resend returns the stored receipt and a changed one is a 409.
 
 ``down`` makes every request a 503, as an overloaded Reef answers, and ``answer`` makes it
 that status instead (401 for a wrong token, 404 for a wrong URL). Payloads are compared
 and returned as stored, with no key sorting.
+
+The report route follows Reef's ``accept_typed`` (reef/api/routes/records.py),
+``ReportPayload`` (reef/api/wire.py) and ``validate_record`` (reef/control/ingest.py),
+Reef bc8c150. Differs: no report type, and no trajectory rule, since decision
+records link into no trajectory.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import threading
+import uuid
 from collections.abc import Mapping
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +64,15 @@ class FakeReef(ThreadingHTTPServer):
     def payloads(self, scenario: str) -> dict[str, dict[str, Any]]:
         with self.lock:
             return {record_id: payload for (name, record_id), (_, payload) in self.records.items() if name == scenario}
+
+    def reports(self, scenario: str) -> dict[str, dict[str, Any]]:
+        """The scenario's stored reports by id, as Reef normalized them."""
+        with self.lock:
+            return {
+                record_id: payload
+                for (name, record_id), (kind, payload) in self.records.items()
+                if name == scenario and kind == "report"
+            }
 
     def close(self) -> None:
         self.shutdown()
@@ -91,11 +113,63 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Reef is down"})
                 return
             try:
+                if self.path == "/reef/report":
+                    self._send(HTTPStatus.OK, self._report(body))
+                    return
                 receipts = self._import(body)
             except _RefusedError as refused:
                 self._send(refused.status, {"error": str(refused)})
                 return
         self._send(HTTPStatus.OK, {"records": receipts})
+
+    def _report(self, body: bytes) -> dict[str, str]:
+        scenario = (self.headers.get("x-reef-scenario") or "").strip()
+        if not scenario:
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "missing or empty x-reef-scenario")
+        payload = json.loads(body)
+        if not isinstance(payload, dict):
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "a report is a JSON object")
+        record_id = payload.pop("agent_record_id", None) or uuid.uuid4().hex
+        if not isinstance(record_id, str) or not record_id.strip():
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "agent_record_id must be a non-empty string")
+        score, feedback = payload.get("score"), payload.get("feedback")
+        references, metadata = payload.get("references", []), payload.get("metadata", {})
+        if score is not None and (
+            isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score)
+        ):
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "score must be a finite number")
+        if feedback is not None and not isinstance(feedback, (str, dict)):
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "feedback must be a string or an object")
+        if not isinstance(metadata, dict):
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "metadata must be an object")
+        if not isinstance(references, list) or not all(isinstance(reference, str) for reference in references):
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "references must be a list of strings")
+        normalized = {
+            key: value
+            for key, value in (
+                ("score", None if score is None else float(score)),
+                ("feedback", feedback),
+                ("references", references),
+                ("metadata", metadata),
+            )
+            if value not in (None, [], {})
+        }
+        content = ("report", normalized)
+        stored = self.server.records.get((scenario, record_id))
+        if stored == content:
+            return {"agent_record_id": record_id, "scenario": scenario, "request_type": "report"}
+        if len(set(references)) != len(references):
+            raise _RefusedError(HTTPStatus.BAD_REQUEST, "report references must be unique")
+        for reference in references:
+            if self.server.records.get((scenario, reference), ("",))[0] != "inference":
+                raise _RefusedError(
+                    HTTPStatus.BAD_REQUEST,
+                    f"report reference {reference!r} must identify an existing inference in scenario {scenario!r}",
+                )
+        if stored is not None:
+            raise _RefusedError(HTTPStatus.CONFLICT, f"record {record_id!r} is stored with other content")
+        self.server.records[(scenario, record_id)] = content
+        return {"agent_record_id": record_id, "scenario": scenario, "request_type": "report"}
 
     def _import(self, body: bytes) -> list[dict[str, str]]:
         if self.path != "/reef/records/batch":

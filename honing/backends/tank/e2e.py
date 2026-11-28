@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import sys
 from collections.abc import Mapping, Sequence
@@ -228,9 +229,19 @@ def episode_runner(context: Any, command: Sequence[str] | None = None, concurren
     )
 
 
-def grader(context: Any) -> TankGrader:
+def grader(context: Any, reef_url: str | None = None, reef_scenario: str | None = None) -> TaskGrader:
+    """The tank grader. With ``reef_url`` and ``reef_scenario``, it also posts each episode's report to that Reef
+    scenario (#225), which must be the decision server's ``--reef-scenario``; the token is ``REEF_TOKEN``."""
     _, _, suite = _place(context)
-    return TankGrader(suite=suite)
+    if (reef_url is None) != (reef_scenario is None):
+        raise ContractError("the grader's reef_url and reef_scenario go together")
+    if reef_url is None or reef_scenario is None:
+        return TankGrader(suite=suite)
+    # Imported only here: reef_client is the optional `reef` extra.
+    from honing.backends.reef.reporter import ReefReporter, ReefReportingGrader
+
+    reporter = ReefReporter(reef_url, reef_scenario, token=os.environ.get("REEF_TOKEN"))
+    return ReefReportingGrader(TankGrader(suite=suite), reporter)
 
 
 def rollouts(context: Any) -> TankRolloutProvider:
@@ -455,7 +466,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ContractError as error:
         print(f"cannot start: {error}", file=sys.stderr)
         return 2
-    outcomes = run.campaign.run(run.scheduler)
+    try:
+        outcomes = run.campaign.run(run.scheduler)
+    finally:
+        # A grader that reports to Reef sends what is still waiting.
+        close = getattr(run.context.components["grader"], "close", None)
+        if close is not None:
+            close()
     summary = summarize(outcomes, run)
     (run.context.work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     for step in summary["steps"]:  # type: ignore[attr-defined]

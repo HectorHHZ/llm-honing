@@ -5,8 +5,9 @@ reaches it only from this package, through ``reef-client`` (the ``reef``
 extra), and never imports ``reef`` itself. See ``README.md`` here for the
 record format and the Reef code each module follows.
 
-``recorder`` (the decision server's recorder, #223) imports ``reef_client``,
-so it is not imported here: import ``honing.backends.reef.recorder`` itself.
+``recorder`` (the decision server's recorder, #223) and ``reporter`` (the
+grader's reports, #225) import ``reef_client``, so they are not imported here:
+import ``honing.backends.reef.recorder`` or ``.reporter`` itself.
 """
 
 from honing.backends.reef.provider import JOB_FORMAT, JOB_VERSION, ReefDataProvider, decisions_from_job
