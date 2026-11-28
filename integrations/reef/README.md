@@ -24,13 +24,26 @@ Reef stores artifacts with Git LFS, so `git lfs` must be on `PATH` or `reef serv
 python3.12 -m venv .reef-venv
 .reef-venv/bin/pip install "reef-infra @ git+https://github.com/Human-Agent-Society/reef@bc8c15081bfdbd2ea0a4ceacc045545f020da668"
 REEF_TOKEN=reef-local PYTHONPATH=. .reef-venv/bin/reef serve -c integrations/reef/deployment.yaml
-HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py tests/test_reef_reporter.py tests/test_reef_chat.py   # what the CI reef job runs
+HONING_REEF_BIN=.reef-venv/bin/reef pytest tests/test_reef_records.py tests/test_reef_provider.py tests/test_reef_recipe.py tests/test_reef_chat.py tests/test_reef_reporter.py tests/test_reef_dry_run.py   # what the CI reef job runs
+```
+
+`tests/test_reef_dry_run.py` runs the tank dry run with recording on
+(`configs/e2e/tank_dry_run_reef.json`) against this deployment and checks
+every stage of #137. To run the config by hand, start Reef from the
+repository root as above, create its `tank` scenario, then run the campaign:
+
+```bash
+curl -X POST -H "Authorization: Bearer reef-local" -H "Content-Type: application/json" \
+  -d '{"name": "tank"}' http://127.0.0.1:8977/reef/scenarios
+REEF_TOKEN=reef-local HONING_REEF_SPOOL=.reef/honing-spool \
+  python scripts/e2e/tank_campaign.py --config configs/e2e/tank_dry_run_reef.json
 ```
 
 ## The path of an episode
 
 1. The decision server records every answered request, and the grader posts
-   the episode's report (#223, #225).
+   the episode's report (#223, #225). Reef refuses at admission a report
+   that is not a `HoningEpisodeReport`: one with no finite score or no task.
 2. `DecisionEpisodeSamples` makes one `TrajectorySample` per report: one ATIF
    step per decision, in play order, with the record's `honing` payload, its
    id and the policy's choice under `extra.honing`. The score is the reward in
@@ -47,6 +60,21 @@ Reef runs one job at a time, so the next job's data is spooled once Honing
 consumed the last. Reef consumed a job's records when it submitted the job,
 so they never train again, even after a restart. `tests/test_reef_recipe.py`
 checks all of this against a real Reef, a restart included.
+
+## A stage of your own
+
+A deployment's `pipeline` section can name another class for either stage,
+with no change to Honing or to this recipe:
+
+```yaml
+pipeline:
+  record2sample:
+    module: my_recipe.stages:FilteredEpisodeSamples   # a DecisionEpisodeSamples subclass
+```
+
+The dry-run test does this with `tests/fakes/reef_recipe.py`'s
+`CenteredEpisodeSamples`, which rewards each episode with its score minus
+0.5, and checks that those rewards reach the trainer.
 
 ## What #137 asked, as Reef answered
 
@@ -74,6 +102,8 @@ A pull request that pins a later Reef updates these links.
 | --- | --- | --- |
 | `processor.py`, `DecisionEpisodeSamples` | [`ReportSamples.make_sample`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/samples/reports.py#L293) | Builds the trajectory from decision records, not chat payloads, and never goes stale |
 | `processor.py`, `DecisionJobData` | [`OpenClawRLJobData.make_job_data`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/recipes/openclawrl/processor.py#L140) | No record file and no source rewrite |
-| `recipe.py`, `HoningDecisionRecipe` | [`OpenClawRLRecipe`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/recipes/openclawrl/recipe.py) | Its jobs go to the spool backend |
+| `recipe.py`, `HoningDecisionRecipe` | [`OpenClawRLRecipe`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/recipes/openclawrl/recipe.py), [`Recipe.report_type`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/recipe/base.py#L118) | Its jobs go to the spool backend, and it names Honing's report type |
 | `report.py`, `HoningEpisodeReport` | [`ScoredRolloutReport`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/reports/scored_rollout.py#L11), [`ReportBase`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/core/reports/base.py#L61) | Requires `metadata.task` |
 | `backend.py`, `SpoolComponent`, `SpoolFacts`, `Deployment` | [`TrainingComponent`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/component.py#L506), [`tests/support/training_deployment.py`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/tests/support/training_deployment.py) | A job finishes when Honing marks it consumed, and saves no checkpoint |
+| `tests/fakes/reef_recipe.py`, `CenteredEpisodeSamples` | [`PipelineSettings`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/train/pipeline.py#L88) | Test only: Honing's stage with the score minus 0.5 as the reward, named in the deployment's `pipeline` section |
+| `tests/fakes/reef_recipe.py`, `EpisodeReportRecipe` | [`Recipe.report_type`](https://github.com/Human-Agent-Society/reef/blob/bc8c15081bfdbd2ea0a4ceacc045545f020da668/reef/recipe/base.py#L118) | Test only: records, trains nothing |
