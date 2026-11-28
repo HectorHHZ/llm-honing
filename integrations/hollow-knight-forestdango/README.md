@@ -15,7 +15,7 @@ every logged request work without the build; the native replay needs it.
 
 ## Research scope
 
-Primary category: **Reactive combat**. Capability tags: platform movement, navigation, combat.
+Primary category: **Platformers**. Capability tags: platform movement, navigation, combat.
 
 Move through King's Pass and fight its enemies with near-raw keys.
 
