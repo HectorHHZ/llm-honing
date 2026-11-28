@@ -109,15 +109,12 @@ class SpyGEPAMethod(GEPAMethod):
 class UntilBudgetSpent:
     """Harness moves until GEPA proposes nothing without running an episode, which here only its budget stop does.
 
-    A scheduler's history names a skip but not the episodes it spent, so this
-    one reads the commit record. It keeps no state of its own.
+    It reads only the campaign's history, whose last step carries what that
+    move spent, as a real scheduler would. It keeps no state of its own.
     """
 
     name = "until_budget_spent"
     state_schema_version = 1
-
-    def __init__(self, record_path: Path) -> None:
-        self._record_path = record_path
 
     def export_state(self) -> Mapping[str, object]:
         return {"schema_version": self.state_schema_version}
@@ -126,8 +123,11 @@ class UntilBudgetSpent:
         pass
 
     def next_move(self, state: CampaignState) -> Move:
-        last = json.loads(self._record_path.read_text().splitlines()[-1])
-        if last["op"] == "skip" and last["episodes_spent"] == 0:
+        if not state.history:
+            return MOVE
+        last = state.history[-1]
+        assert last.cost is not None, "a campaign records what every move spent"
+        if last.result == "skipped" and last.cost.episodes["method"] == 0:
             return Move(kind="stop")
         return MOVE
 
@@ -150,7 +150,10 @@ def _campaign(work_dir: Path) -> Run:
     campaign = fixture.campaign
     campaign.run(ScriptedScheduler([MOVE] * PHASE_ONE_MOVES))
     campaign.rollback(ROLLBACK_TO)
-    campaign.run(UntilBudgetSpent(campaign.chain.record_path), max_steps=200)
+    moves = len(campaign.run(UntilBudgetSpent(), max_steps=200))
+    # It stopped on the first move whose method ran no episode, long before max_steps.
+    spent = [step.cost.episodes["method"] for step in campaign.state().history[-moves:] if step.cost is not None]
+    assert len(spent) == moves < 200 and spent[-1] == 0 and 0 not in spent[:-1]
     runs = fixture.runner.runs
     # One more move once the budget is spent must not run anything either.
     assert campaign.advance(MOVE).skipped_reason is not None
