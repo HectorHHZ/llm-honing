@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from honing.backends.tank.faults import FAULTS, Fault, build, build_library, checksums, relabel
+from honing.backends.tank.faults import FAULTS, Fault, build, build_library, checksums, main, relabel
 from honing.backends.tank.harness import CONTROLLER_PATH, QUESTIONS_PATH
 from honing.backends.tank.scenarios import SEED_POOLS
 from honing.core import ContractError, DataContract, DirectionEditSpec, TrainingBatch
@@ -265,7 +265,9 @@ def _manifests(runs: Path) -> list[Mapping[str, Any]]:
 
 
 @pytest.mark.functional
-def test_the_gate_keeps_the_faults_the_clean_release_beats_on_fresh_val_seeds(tmp_path: Path) -> None:
+def test_the_gate_keeps_the_faults_the_clean_release_beats_on_fresh_val_seeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """The stand-in match ignores harness and controller, so only weaker weights can lose here."""
     config = json.loads(DRY_RUN.read_text())
     config["components"]["endpoints"] = {"factory": "tests.fakes.tank:ranked_endpoints"}
@@ -273,9 +275,9 @@ def test_the_gate_keeps_the_faults_the_clean_release_beats_on_fresh_val_seeds(tm
     path = tmp_path / "config.json"
     path.write_text(json.dumps(config))
 
-    run = _cli(path, tmp_path / "out")
-
-    assert run.returncode == 0, run.stderr
+    # In process, so coverage sees the gate: the dry run above runs the script itself.
+    assert main([f"--config={path}", f"--work-dir={tmp_path / 'out'}", f"--root={REPO}"]) == 0
+    stdout = capsys.readouterr().out
     rows = json.loads((tmp_path / "out/library/gate.json").read_text())
     assert [row["id"] for row in rows] == [fault.fault_id for fault in FAULTS]
     # The clean release (quality 0.6) is strong; the model source (0.5) and the reverse edit (0.3) are weak.
@@ -285,7 +287,7 @@ def test_the_gate_keeps_the_faults_the_clean_release_beats_on_fresh_val_seeds(tm
     seeds = [range(row["seeds"][0], row["seeds"][1] + 1) for row in rows]
     assert [len(block) for block in seeds] == [4] * len(FAULTS)
     assert seeds[0].start == SEED_POOLS["val"].start and all(a.stop == b.start for a, b in pairwise(seeds))
-    assert "| weights-reverse-fire-edit | weights | 1.000 | 0.000 |" in run.stdout
+    assert "| weights-reverse-fire-edit | weights | 1.000 | 0.000 |" in stdout
     # Each controller fault played its 8 rounds with its switch, and nothing else had one.
     switched = Counter(m["arguments"].get("controller-fault-file") for m in _manifests(tmp_path / "out/runs"))
     library = (tmp_path / "out/library").resolve()
