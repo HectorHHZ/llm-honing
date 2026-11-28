@@ -637,7 +637,7 @@ def _real_start(
     return start
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @linux
 def test_a_server_outlives_the_loop_and_the_thread_that_resolved_it_and_stops_on_close(
     tmp_path: Path, children: list[subprocess.Popen[bytes]]
@@ -677,7 +677,7 @@ asyncio.run(resolve_endpoint(endpoints, policy(write_checkpoint(Path(sys.argv[1]
 """  # exits without close()
 
 
-@pytest.mark.unit
+@pytest.mark.functional
 @linux
 def test_a_server_dies_with_the_process_that_started_it(tmp_path: Path) -> None:
     done = subprocess.run(
