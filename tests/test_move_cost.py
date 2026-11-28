@@ -510,7 +510,10 @@ def test_a_game_campaign_writes_its_summary_and_fails_when_its_spend_cannot_be_p
     e2e = importlib.import_module(module)
     campaign = types.SimpleNamespace(run=lambda scheduler: ())
     run = types.SimpleNamespace(
-        campaign=campaign, moves=(), context=types.SimpleNamespace(work_dir=tmp_path), scheduler=ScriptedScheduler(())
+        campaign=campaign,
+        moves=(),
+        context=types.SimpleNamespace(work_dir=tmp_path, components={"grader": None}),
+        scheduler=ScriptedScheduler(()),
     )
     stop = {"stopped": "unknown_cost", "reason": "chat model m returned no price"}
     summary = {"head": "r0000", "steps": [], "releases": "", "runs": "", "budget": stop}

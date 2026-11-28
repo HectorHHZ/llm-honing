@@ -392,7 +392,7 @@ def test_the_tank_campaign_closes_its_grader_when_the_campaign_ends(
     )
     monkeypatch.setattr(e2e, "build", lambda config, root, work_dir: built)
     monkeypatch.setattr(
-        e2e, "summarize", lambda outcomes, run: {"steps": [], "head": "r0", "releases": "", "runs": ""}
+        e2e, "summarize", lambda outcomes, run: {"steps": [], "head": "r0", "releases": "", "runs": "", "budget": None}
     )
     config = tmp_path / "config.json"
     config.write_text("{}")
