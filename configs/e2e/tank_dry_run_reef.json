@@ -1,0 +1,42 @@
+{
+  "description": "tank_dry_run.json with Reef recording on (#137, #228): its decision servers record every answered decision in Reef (#223), its grader posts every graded episode's report (#225), and the sft move trains on the job data Reef's recipe spools (#226, #227) instead of teacher rounds. Before it runs, a Reef of integrations/reef/deployment.yaml serves on reef_url with REEF_TOKEN, and HONING_REEF_SPOOL names its spool directory. tests/test_reef_dry_run.py runs it against a real Reef and checks every stage.",
+  "integration_dir": "integrations/tank-war",
+  "suite": "tasks/suite.jsonl",
+  "work_dir": "runs/tank-e2e-dry-run-reef",
+  "validation_tasks": {"split": "val", "limit": 4},
+  "gate": {"rounds": 8, "looks": 1, "min_effect": 0.0, "confidence": 0.3},
+  "harness_tasks": {"split": "train", "limit": 4},
+  "episode_budget": 6,
+  "samples_per_task": 2,
+  "budget": {"unit": "usd", "limit": 50.0, "gpu_hour_usd": 2.5},
+  "schedule": [
+    {"kind": "harness", "label": "gepa"},
+    {"kind": "train", "algorithm": "sft", "steps": 1, "contract": "typed_decisions"},
+    {"kind": "train", "algorithm": "grpo", "steps": 1, "contract": "typed_decisions"}
+  ],
+  "requires": {"env": ["REEF_TOKEN", "HONING_REEF_SPOOL"], "commands": ["node"], "paths": []},
+  "components": {
+    "model_source": {"factory": "tests.fakes.tank:model_source"},
+    "endpoints": {
+      "factory": "tests.fakes.tank:endpoints",
+      "args": {"reef_url": "http://127.0.0.1:8977", "reef_scenario": "tank"}
+    },
+    "runner": {"factory": "honing.backends.tank.e2e:episode_runner"},
+    "grader": {
+      "factory": "honing.backends.tank.e2e:grader",
+      "args": {"reef_url": "http://127.0.0.1:8977", "reef_scenario": "tank"}
+    },
+    "trainer": {"factory": "tests.fakes.tank:trainer"},
+    "data": {"factory": "honing.backends.reef.e2e:data", "args": {"spool_dir": "$HONING_REEF_SPOOL", "wait_s": 300}},
+    "rollout": {"factory": "honing.backends.tank.e2e:rollouts"},
+    "method": {
+      "factory": "honing.backends.tank.e2e:gepa_method",
+      "args": {
+        "chat": {"factory": "tests.fakes.tank:chat", "args": {"expect_decisions": true, "cost_per_call": 0.002}},
+        "traces": {"factory": "honing.backends.tank.e2e:trace_source"},
+        "max_metric_calls": 100,
+        "minibatch_size": 3
+      }
+    }
+  }
+}

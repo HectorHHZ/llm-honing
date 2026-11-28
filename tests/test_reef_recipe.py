@@ -44,10 +44,14 @@ SCENARIO = "tank"
 
 
 class Reef:
-    """One ``reef serve`` of ``integrations/reef/deployment.yaml``, with its state in ``directory``."""
+    """One ``reef serve`` of ``integrations/reef/deployment.yaml``, with its state in ``directory``.
 
-    def __init__(self, directory: Path) -> None:
+    ``overrides`` are ``reef serve`` options that change the deployment, such as another stage.
+    """
+
+    def __init__(self, directory: Path, *overrides: str) -> None:
         self.directory = directory
+        self.overrides = overrides
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
@@ -60,7 +64,15 @@ class Reef:
     def start(self) -> None:
         env = {**os.environ, "REEF_TOKEN": TOKEN, "PYTHONPATH": str(ROOT)}
         self.process = subprocess.Popen(
-            [str(REEF), "serve", "-c", str(ROOT / "integrations/reef/deployment.yaml"), "--reef.port", str(self.port)],
+            [
+                str(REEF),
+                "serve",
+                "-c",
+                str(ROOT / "integrations/reef/deployment.yaml"),
+                "--reef.port",
+                str(self.port),
+                *self.overrides,
+            ],
             cwd=self.directory,
             env=env,
             stdout=(self.directory / "serve.log").open("ab"),

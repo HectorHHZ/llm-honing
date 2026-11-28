@@ -362,33 +362,35 @@ def test_the_tank_grader_reports_with_the_reef_token_from_the_environment(
 
 @pytest.mark.unit
 @pytest.mark.parametrize("fails", [False, True], ids=["finishes", "raises"])
-def test_the_tank_campaign_closes_its_grader_when_the_campaign_ends(
+def test_the_tank_campaign_closes_its_decision_servers_then_its_grader_when_the_campaign_ends(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fails: bool
 ) -> None:
     from types import SimpleNamespace
 
     from honing.backends.tank import e2e
 
+    closed: list[str] = []
+
     class Closing:
-        closed = 0
+        def __init__(self, slot: str) -> None:
+            self.slot = slot
 
         def close(self) -> None:
-            self.closed += 1
-
-    closing = Closing()
+            closed.append(self.slot)
 
     def run(scheduler: object) -> list[object]:
-        assert closing.closed == 0, "closed before the campaign ended"
+        assert closed == [], "closed before the campaign ended"
         if fails:
             raise RuntimeError("the campaign failed")
         return []
 
     work = tmp_path / "work"
     work.mkdir()
+    components = {"grader": Closing("grader"), "endpoints": Closing("endpoints")}
     built = SimpleNamespace(
         campaign=SimpleNamespace(run=run),
         scheduler=None,
-        context=SimpleNamespace(work_dir=work, components={"grader": closing}),
+        context=SimpleNamespace(work_dir=work, components=components),
     )
     monkeypatch.setattr(e2e, "build", lambda config, root, work_dir: built)
     monkeypatch.setattr(
@@ -401,7 +403,8 @@ def test_the_tank_campaign_closes_its_grader_when_the_campaign_ends(
             e2e.main(["--config", str(config)])
     else:
         assert e2e.main(["--config", str(config)]) == 0
-    assert closing.closed == 1
+    # The records first: Reef refuses a report until the records it references are stored.
+    assert closed == ["endpoints", "grader"]
 
 
 @pytest.mark.functional

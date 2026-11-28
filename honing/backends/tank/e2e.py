@@ -469,10 +469,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         outcomes = run.campaign.run(run.scheduler)
     finally:
-        # A grader that reports to Reef sends what is still waiting.
-        close = getattr(run.context.components["grader"], "close", None)
-        if close is not None:
-            close()
+        # Decision servers that record in Reef send what is still waiting, then a grader that reports to it does:
+        # a report is refused until the records it references are stored.
+        for slot in ("endpoints", "grader"):
+            close = getattr(run.context.components.get(slot), "close", None)
+            if close is not None:
+                close()
     summary = summarize(outcomes, run)
     (run.context.work_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     for step in summary["steps"]:  # type: ignore[attr-defined]
